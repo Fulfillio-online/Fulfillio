@@ -1,0 +1,132 @@
+import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
+import { PrismaService } from '../../prisma/prisma.service';
+import { UserRole } from '@fulfillio/shared';
+
+@Injectable()
+export class AuthService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
+  ) {}
+
+  /**
+   * Register a new merchant user & tenant profile
+   */
+  async registerMerchant(data: {
+    businessName: string;
+    email: string;
+    phone?: string;
+    password: string;
+  }) {
+    const existing = await this.prisma.user.findUnique({
+      where: { email: data.email },
+    });
+
+    if (existing) {
+      throw new ConflictException(`User with email '${data.email}' already exists.`);
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(data.password, salt);
+
+    return this.prisma.$transaction(async (tx) => {
+      const merchant = await tx.merchant.create({
+        data: {
+          businessName: data.businessName,
+          email: data.email,
+          phone: data.phone,
+          status: 'PENDING',
+        },
+      });
+
+      const user = await tx.user.create({
+        data: {
+          merchantId: merchant.id,
+          name: data.businessName,
+          email: data.email,
+          passwordHash,
+          role: UserRole.MERCHANT,
+        },
+      });
+
+      return {
+        merchantId: merchant.id,
+        userId: user.id,
+        status: merchant.status,
+        message: 'Registration submitted. Account pending admin approval.',
+      };
+    });
+  }
+
+  /**
+   * Authenticate user with password and return JWT
+   */
+  async login(email: string, pass: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      include: { merchant: true },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials.');
+    }
+
+    const isValid = await bcrypt.compare(pass, user.passwordHash);
+    if (!isValid) {
+      throw new UnauthorizedException('Invalid credentials.');
+    }
+
+    const payload = {
+      sub: user.id,
+      merchantId: user.merchantId,
+      email: user.email,
+      role: user.role,
+    };
+
+    const accessToken = await this.jwtService.signAsync(payload, {
+      secret: this.configService.get<string>('JWT_ACCESS_SECRET', 'fulfillio_super_secret_access_key_change_in_production'),
+      expiresIn: '15m',
+    });
+
+    const refreshToken = await this.jwtService.signAsync(payload, {
+      secret: this.configService.get<string>('JWT_REFRESH_SECRET', 'fulfillio_super_secret_refresh_key_change_in_production'),
+      expiresIn: '7d',
+    });
+
+    return {
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        merchantId: user.merchantId,
+        merchantStatus: user.merchant?.status,
+      },
+    };
+  }
+
+  /**
+   * Generate a scoped API key for a merchant store integration
+   */
+  async generateApiKey(merchantId: string) {
+    const rawKey = `ful_live_${crypto.randomBytes(24).toString('hex')}`;
+    const apiKeyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
+
+    await this.prisma.merchant.update({
+      where: { id: merchantId },
+      data: { apiKeyHash },
+    });
+
+    return {
+      apiKey: rawKey,
+      note: 'Store this key safely; it will not be displayed again.',
+    };
+  }
+}

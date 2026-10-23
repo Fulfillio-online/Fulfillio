@@ -1,0 +1,62 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: fulfillio-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-fulfillio}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fulfillio_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-fulfillio_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fulfillio} -d ${POSTGRES_DB:-fulfillio_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - fulfillio-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: fulfillio-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - fulfillio-network
+
+  # Reverse Proxy with automatic HTTPS for fulfillio.online
+  caddy:
+    image: caddy:2-alpine
+    container_name: fulfillio-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - fulfillio-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  fulfillio-network:
+    driver: bridge

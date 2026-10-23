@@ -1,0 +1,17 @@
+{
+  "name": "fulfillio-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Fulfillio - Enterprise 3PL Warehouse Management System",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "test": "turbo run test"
+  },
+  "devDependencies": {
+    "turbo": "^2.11.10",
+    "typescript": "^5.7.0"
+  },
+  "packageManager": "pnpm@12.15.0"
+}

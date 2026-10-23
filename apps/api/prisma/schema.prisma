@@ -1,0 +1,250 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MerchantStatus {
+  PENDING
+  APPROVED
+  SUSPENDED
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  MERCHANT
+  WAREHOUSE_OPERATOR
+  COURIER_AGENT
+}
+
+enum OrderStatus {
+  PENDING
+  ALLOCATED
+  PICKING
+  PACKED
+  DISPATCHED
+  DELIVERED
+  RETURNED
+  CANCELLED
+}
+
+enum CourierProvider {
+  STEADFAST
+  PATHAO
+  REDX
+  PAPERFLY
+  CUSTOM
+}
+
+model Merchant {
+  id            String         @id @default(uuid())
+  businessName  String
+  email         String         @unique
+  phone         String?
+  status        MerchantStatus @default(PENDING)
+  apiKeyHash    String?
+  webhookUrl    String?
+  webhookSecret String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  users         User[]
+  products      Product[]
+  orders        Order[]
+  memoTemplates MemoTemplate[]
+  settlements   Settlement[]
+
+  @@map("merchants")
+}
+
+model User {
+  id           String    @id @default(uuid())
+  merchantId   String?
+  name         String
+  email        String    @unique
+  passwordHash String
+  role         UserRole  @default(MERCHANT)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  merchant     Merchant? @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@map("users")
+}
+
+model Product {
+  id          String           @id @default(uuid())
+  merchantId  String
+  title       String
+  description String?
+  baseSku     String
+  imageUrl    String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  merchant    Merchant         @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  variants    ProductVariant[]
+
+  @@unique([merchantId, baseSku])
+  @@index([merchantId])
+  @@map("products")
+}
+
+model ProductVariant {
+  id             String          @id @default(uuid())
+  productId      String
+  sku            String          @unique
+  barcode        String?         @unique
+  title          String
+  price          Decimal         @db.Decimal(10, 2)
+  attributes     Json?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  product        Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  inventoryItems InventoryItem[]
+  orderItems     OrderItem[]
+
+  @@index([productId])
+  @@map("product_variants")
+}
+
+model InventoryLocation {
+  id        String          @id @default(uuid())
+  zone      String
+  aisle     String
+  rack      String
+  shelf     String
+  binCode   String          @unique
+  createdAt DateTime        @default(now())
+
+  items     InventoryItem[]
+
+  @@map("inventory_locations")
+}
+
+model InventoryItem {
+  id               String            @id @default(uuid())
+  variantId        String
+  locationId       String
+  quantityAvailable Int             @default(0)
+  quantityReserved  Int             @default(0)
+  updatedAt        DateTime          @updatedAt
+
+  variant          ProductVariant    @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  location         InventoryLocation @relation(fields: [locationId], references: [id], onDelete: Restrict)
+
+  @@unique([variantId, locationId])
+  @@index([variantId])
+  @@index([locationId])
+  @@map("inventory_items")
+}
+
+model Order {
+  id              String          @id @default(uuid())
+  merchantId      String
+  externalOrderId String?
+  customerName    String
+  customerPhone   String
+  customerAddress String
+  city            String?
+  status          OrderStatus     @default(PENDING)
+  memoCode        String?         @default("MEMO-DEFAULT")
+  courierProvider CourierProvider?
+  consignmentId   String?
+  trackingCode    String?
+  totalAmount     Decimal         @db.Decimal(10, 2)
+  codAmount       Decimal         @default(0) @db.Decimal(10, 2)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  merchant        Merchant        @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  items           OrderItem[]
+  fulfillments    Fulfillment[]
+
+  @@index([merchantId, status])
+  @@index([memoCode])
+  @@index([trackingCode])
+  @@map("orders")
+}
+
+model OrderItem {
+  id                 String         @id @default(uuid())
+  orderId            String
+  variantId          String
+  quantity           Int
+  unitPrice          Decimal        @db.Decimal(10, 2)
+  isVerifiedAtPacking Boolean       @default(false)
+
+  order              Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variant            ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([variantId])
+  @@map("order_items")
+}
+
+model MemoTemplate {
+  id         String   @id @default(uuid())
+  merchantId String
+  memoCode   String
+  name       String
+  isDefault  Boolean  @default(false)
+  layout     Json     @db.JsonB
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@unique([merchantId, memoCode])
+  @@index([merchantId])
+  @@map("memo_templates")
+}
+
+enum FulfillmentStatus {
+  PENDING
+  PICKING
+  PACKING
+  SHIPPED
+  COMPLETED
+  CANCELLED
+}
+
+model Fulfillment {
+  id          String             @id @default(uuid())
+  merchantId  String
+  orderId     String
+  warehouseId String
+  assignedTo  String?
+  status      FulfillmentStatus  @default(PENDING)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  order       Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId, status])
+  @@index([orderId])
+  @@map("fulfillments")
+}
+
+model Settlement {
+  id                String   @id @default(uuid())
+  merchantId        String
+  cycleStart        DateTime
+  cycleEnd          DateTime
+  totalCodCollected Decimal  @db.Decimal(10, 2)
+  storageFees       Decimal  @db.Decimal(10, 2)
+  handlingFees      Decimal  @db.Decimal(10, 2)
+  netPayout         Decimal  @db.Decimal(10, 2)
+  isPaid            Boolean  @default(false)
+  createdAt         DateTime @default(now())
+
+  merchant          Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@map("settlements")
+}
