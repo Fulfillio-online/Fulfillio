@@ -48,5 +48,5 @@ caddy_data/
 caddy_config/
 
 # Workflows (ignored until PAT has workflow scope)
-.github/
+.github/workflows/
 
