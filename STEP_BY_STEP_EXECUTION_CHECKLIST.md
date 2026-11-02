@@ -162,6 +162,36 @@
 
 ---
 
+### 🔹 MODULE 10: Inbound Stock Receiving (ASN / WRO) & Damaged Quarantine
+*মার্চেন্ট ওয়্যারহাউজে মাল পাঠালে ডকে গুনে বুঝে নেওয়া ও ভালো/নষ্ট মাল আলাদা করা।*
+
+- **✅ কী কী ফাংশন থাকবে:**
+  - [x] মার্চেন্ট ড্যাশবোর্ডে **"Send Inventory to Warehouse (ASN)"** তৈরি (`POST /api/inbound`)।
+  - [x] ওয়্যারহাউজ ডকে কর্মী কর্তৃক ফিজিক্যাল কাউন্ট (`Good Sellable Units` বনাম `Damaged Quarantine Units`) এবং শেলফ বিন (`A-01-02`) অ্যাসাইন (`POST /api/inbound/:id/receive`)।
+  - [x] প্রতিটি স্টক মুভমেন্টের জন্য অডিট লগ (`InventoryAuditLog`) এবং কুরিয়ার রিটার্ন (`RTO`) ড্যামেজ কোয়ারেন্টাইন রাউটিং।
+
+---
+
+### 🔹 MODULE 11: 2-in-1 Unified 4x6" Thermal Sticker & Double-Print Lock
+*রিসেলারের মেমো এবং কুরিয়ার লেবেল একই ৪x৬ থার্মাল স্টিকারে প্রিন্ট।*
+
+- **✅ কী কী ফাংশন থাকবে:**
+  - [x] ডেডিকেটেড জিরো-মার্জিন ৪x৬ থার্মাল প্রিন্ট রুট (`/print/memo/[orderId]`) ও রি-ইউজেবল `UnifiedThermalSticker` কম্পোনেন্ট।
+  - [x] উপরের অংশে হোয়াইট-লেবেল রিসেলার মেমো এবং নিচের অংশে কুরিয়ার কনসাইনমেন্ট বারকোড ও হাব কোড।
+  - [x] ডাবল-প্রিন্ট লক (`isMemoPrinted`, `memoPrintedAt`) এবং প্যাকিং ম্যাটেরিয়াল খরচ (`POLY_SMALL`, `BOX_MEDIUM`) ট্র্যাকিং।
+
+---
+
+### 🔹 MODULE 12: Customer Fraud & BD Courier Ratio Shield + RBAC Security
+*ফেইক অর্ডার রোধে কাস্টমারের অতীত ডেলিভারি রেকর্ড যাচাই এবং কঠোর সিকিউরিটি।*
+
+- **✅ কী কী ফাংশন থাকবে:**
+  - [x] কাস্টমারের ফোন নম্বর দিয়ে Steadfast/Pathao/RedX ডেলিভারি সাকসেস রেশিও চেক (`GET /api/orders/fraud-check/:phone`) ও `FraudRatioBadge` ইউআই।
+  - [x] ঝুঁকিপূর্ণ অর্ডার অটোমেটিক `ON_HOLD_FRAUD` এবং স্টক না থাকলে ওয়েবহুক ক্র্যাশ না করে `ON_HOLD_STOCK` ব্যাকঅর্ডার কিউতে রাখা।
+  - [x] স্ট্রিক্ট `RolesGuard` (`@Roles(...)`), ওয়ার্কার ৪-ডিজিট ফাস্ট পিন লগইন (`POST /api/auth/worker-pin-login`) ও বাল্ক অর্ডার ইমপোর্ট (`POST /api/orders/bulk`)।
+
+---
+
 ## 🚀 আমরা যেভাবে ধাপে ধাপে কাজ করব (Working Protocol)
 
 প্রতিটি ছোট মডিউল নিয়ে কাজ করার সময় এই ৩টি সহজ নিয়ম মেনে চলা হবে:

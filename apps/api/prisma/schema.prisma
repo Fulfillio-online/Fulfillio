@@ -16,17 +16,21 @@ enum MerchantStatus {
 enum UserRole {
   SUPER_ADMIN
   MERCHANT
+  RESELLER
   WAREHOUSE_OPERATOR
   COURIER_AGENT
 }
 
 enum OrderStatus {
   PENDING
+  ON_HOLD_STOCK
+  ON_HOLD_FRAUD
   ALLOCATED
   PICKING
   PACKED
   DISPATCHED
   DELIVERED
+  PARTIAL_DELIVERED
   RETURNED
   CANCELLED
 }
@@ -39,24 +43,51 @@ enum CourierProvider {
   CUSTOM
 }
 
+enum InboundShipmentStatus {
+  DRAFT
+  IN_TRANSIT
+  ARRIVED_AT_DOCK
+  COMPLETED
+  CANCELLED
+}
+
+enum StockMovementReason {
+  INBOUND_ASN
+  ORDER_RESERVED
+  ORDER_CANCELLED
+  RETURN_RESTOCK
+  DAMAGED_QUARANTINE
+  MANUAL_ADJUSTMENT
+}
+
 model Merchant {
-  id            String         @id @default(uuid())
-  businessName  String
-  email         String         @unique
-  phone         String?
-  status        MerchantStatus @default(PENDING)
-  apiKeyHash    String?
-  webhookUrl    String?
-  webhookSecret String?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id                String         @id @default(uuid())
+  merchantCode      String         @unique @default("MC-101")
+  businessName      String
+  email             String         @unique
+  phone             String?
+  location          String?        @default("Dhaka, Bangladesh")
+  status            MerchantStatus @default(PENDING)
+  payoutAccount     Json?          @db.JsonB
+  socialChannels    Json?          @db.JsonB
+  baseHandlingFee   Decimal        @default(50.00) @db.Decimal(10, 2)
+  monthlyStorageFee Decimal        @default(2500.00) @db.Decimal(10, 2)
+  apiKeyHash        String?
+  webhookUrl        String?
+  webhookSecret     String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
-  users         User[]
-  products      Product[]
-  orders        Order[]
-  memoTemplates MemoTemplate[]
-  settlements   Settlement[]
+  users            User[]
+  products         Product[]
+  orders           Order[]
+  memoTemplates    MemoTemplate[]
+  settlements      Settlement[]
+  inboundShipments InboundShipment[]
+  auditLogs        InventoryAuditLog[]
 
+  @@index([merchantCode])
+  @@index([status])
   @@map("merchants")
 }
 
@@ -66,13 +97,14 @@ model User {
   name         String
   email        String    @unique
   passwordHash String
+  workerPin    String?
   role         UserRole  @default(MERCHANT)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
   merchant     Merchant? @relation(fields: [merchantId], references: [id], onDelete: Cascade)
 
-  @@index([merchantId])
+  @@index([merchantId, role])
   @@map("users")
 }
 
@@ -95,21 +127,26 @@ model Product {
 }
 
 model ProductVariant {
-  id             String          @id @default(uuid())
+  id             String                @id @default(uuid())
   productId      String
-  sku            String          @unique
-  barcode        String?         @unique
+  sku            String                @unique
+  barcode        String?               @unique
   title          String
-  price          Decimal         @db.Decimal(10, 2)
-  attributes     Json?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  price          Decimal               @db.Decimal(10, 2)
+  wholesalePrice Decimal?              @db.Decimal(10, 2)
+  defaultBinCode String?               @default("A-01-01")
+  attributes     Json?                 @db.JsonB
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
 
-  product        Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product        Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
   inventoryItems InventoryItem[]
   orderItems     OrderItem[]
+  inboundItems   InboundShipmentItem[]
+  auditLogs      InventoryAuditLog[]
 
   @@index([productId])
+  @@index([sku])
   @@map("product_variants")
 }
 
@@ -120,6 +157,7 @@ model InventoryLocation {
   rack      String
   shelf     String
   binCode   String          @unique
+  isDamaged Boolean         @default(false)
   createdAt DateTime        @default(now())
 
   items     InventoryItem[]
@@ -128,15 +166,17 @@ model InventoryLocation {
 }
 
 model InventoryItem {
-  id               String            @id @default(uuid())
-  variantId        String
-  locationId       String
-  quantityAvailable Int             @default(0)
-  quantityReserved  Int             @default(0)
-  updatedAt        DateTime          @updatedAt
+  id                String            @id @default(uuid())
+  variantId         String
+  locationId        String
+  quantityAvailable Int               @default(0)
+  quantityReserved  Int               @default(0)
+  quantityDamaged   Int               @default(0)
+  reorderPoint      Int               @default(10)
+  updatedAt         DateTime          @updatedAt
 
-  variant          ProductVariant    @relation(fields: [variantId], references: [id], onDelete: Cascade)
-  location         InventoryLocation @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  variant           ProductVariant    @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  location          InventoryLocation @relation(fields: [locationId], references: [id], onDelete: Restrict)
 
   @@unique([variantId, locationId])
   @@index([variantId])
@@ -144,44 +184,108 @@ model InventoryItem {
   @@map("inventory_items")
 }
 
-model Order {
-  id              String          @id @default(uuid())
-  merchantId      String
-  externalOrderId String?
-  customerName    String
-  customerPhone   String
-  customerAddress String
-  city            String?
-  status          OrderStatus     @default(PENDING)
-  memoCode        String?         @default("MEMO-DEFAULT")
-  courierProvider CourierProvider?
-  consignmentId   String?
-  trackingCode    String?
-  totalAmount     Decimal         @db.Decimal(10, 2)
-  codAmount       Decimal         @default(0) @db.Decimal(10, 2)
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+model InventoryAuditLog {
+  id                String              @id @default(uuid())
+  merchantId        String
+  variantId         String
+  quantityDelta     Int
+  reason            StockMovementReason
+  referenceId       String?
+  performedByUserId String?
+  notes             String?
+  createdAt         DateTime            @default(now())
 
-  merchant        Merchant        @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  items           OrderItem[]
-  fulfillments    Fulfillment[]
+  merchant          Merchant            @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  variant           ProductVariant      @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId, variantId, createdAt])
+  @@map("inventory_audit_logs")
+}
+
+model InboundShipment {
+  id                  String                @id @default(uuid())
+  merchantId          String
+  asnCode             String                @unique
+  status              InboundShipmentStatus @default(IN_TRANSIT)
+  carrierName         String
+  trackingReference   String?
+  expectedArrivalDate DateTime
+  receivedAt          DateTime?
+  receivedByWorkerId  String?
+  notes               String?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  merchant            Merchant              @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  items               InboundShipmentItem[]
+
+  @@index([merchantId, status])
+  @@index([asnCode])
+  @@map("inbound_shipments")
+}
+
+model InboundShipmentItem {
+  id                      String          @id @default(uuid())
+  inboundShipmentId       String
+  variantId               String
+  expectedQuantity        Int
+  receivedGoodQuantity    Int             @default(0)
+  receivedDamagedQuantity Int             @default(0)
+  assignedBinCode         String?         @default("A-01-01")
+
+  inboundShipment         InboundShipment @relation(fields: [inboundShipmentId], references: [id], onDelete: Cascade)
+  variant                 ProductVariant  @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@index([inboundShipmentId])
+  @@index([variantId])
+  @@map("inbound_shipment_items")
+}
+
+model Order {
+  id                String           @id @default(uuid())
+  merchantId        String
+  externalOrderId   String?
+  customerName      String
+  customerPhone     String
+  customerAddress   String
+  city              String?
+  status            OrderStatus      @default(PENDING)
+  memoCode          String?          @default("MEMO-DEFAULT")
+  isMemoPrinted     Boolean          @default(false)
+  memoPrintedAt     DateTime?
+  packagingType     String?          @default("POLY_SMALL")
+  packagingCost     Decimal          @default(5.00) @db.Decimal(10, 2)
+  customerRiskScore Int?             @default(92)
+  customerRiskLevel String?          @default("SAFE")
+  courierProvider   CourierProvider?
+  consignmentId     String?
+  trackingCode      String?
+  totalAmount       Decimal          @db.Decimal(10, 2)
+  codAmount         Decimal          @default(0) @db.Decimal(10, 2)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  merchant          Merchant         @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  items             OrderItem[]
+  fulfillments      Fulfillment[]
 
   @@index([merchantId, status])
   @@index([memoCode])
   @@index([trackingCode])
+  @@index([customerPhone])
   @@map("orders")
 }
 
 model OrderItem {
-  id                 String         @id @default(uuid())
-  orderId            String
-  variantId          String
-  quantity           Int
-  unitPrice          Decimal        @db.Decimal(10, 2)
-  isVerifiedAtPacking Boolean       @default(false)
+  id                  String         @id @default(uuid())
+  orderId             String
+  variantId           String
+  quantity            Int
+  unitPrice           Decimal        @db.Decimal(10, 2)
+  isVerifiedAtPacking Boolean        @default(false)
 
-  order              Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  variant            ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  order               Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variant             ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
 
   @@index([orderId])
   @@index([variantId])
@@ -215,16 +319,16 @@ enum FulfillmentStatus {
 }
 
 model Fulfillment {
-  id          String             @id @default(uuid())
+  id          String            @id @default(uuid())
   merchantId  String
   orderId     String
   warehouseId String
   assignedTo  String?
-  status      FulfillmentStatus  @default(PENDING)
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  status      FulfillmentStatus @default(PENDING)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
 
-  order       Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order       Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([merchantId, status])
   @@index([orderId])
@@ -239,12 +343,13 @@ model Settlement {
   totalCodCollected Decimal  @db.Decimal(10, 2)
   storageFees       Decimal  @db.Decimal(10, 2)
   handlingFees      Decimal  @db.Decimal(10, 2)
+  packagingFees     Decimal  @default(0) @db.Decimal(10, 2)
   netPayout         Decimal  @db.Decimal(10, 2)
   isPaid            Boolean  @default(false)
   createdAt         DateTime @default(now())
 
   merchant          Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
 
-  @@index([merchantId])
+  @@index([merchantId, isPaid])
   @@map("settlements")
 }

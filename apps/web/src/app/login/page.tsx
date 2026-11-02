@@ -73,7 +73,7 @@ export default function LoginPage() {
         </div>
 
         {/* Card Container */}
-        <div className="p-8 rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl space-y-6">
+        <div className="p-5 sm:p-8 rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl space-y-6">
           {/* Quick Role Switcher */}
           <div>
             <label className="text-xs font-semibold text-slate-400 block mb-2">

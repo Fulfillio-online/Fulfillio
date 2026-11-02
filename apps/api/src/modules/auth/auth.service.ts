@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
-import { UserRole } from '@fulfillio/shared';
+import { UserRole } from '@fulfillio/contracts';
 
 @Injectable()
 export class AuthService {
@@ -15,7 +15,7 @@ export class AuthService {
   ) {}
 
   /**
-   * Register a new merchant user & tenant profile
+   * Register a new merchant user & tenant profile with auto-generated Merchant Code (MC-101, MC-102...)
    */
   async registerMerchant(data: {
     businessName: string;
@@ -35,8 +35,12 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(data.password, salt);
 
     return this.prisma.$transaction(async (tx) => {
+      const count = await tx.merchant.count();
+      const merchantCode = `MC-${101 + count}`;
+
       const merchant = await tx.merchant.create({
         data: {
+          merchantCode,
           businessName: data.businessName,
           email: data.email,
           phone: data.phone,
@@ -56,6 +60,7 @@ export class AuthService {
 
       return {
         merchantId: merchant.id,
+        merchantCode: merchant.merchantCode,
         userId: user.id,
         status: merchant.status,
         message: 'Registration submitted. Account pending admin approval.',
@@ -81,20 +86,54 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials.');
     }
 
+    return this.issueTokens(user);
+  }
+
+  /**
+   * Fast 4-digit PIN authentication for Warehouse Handheld Operators
+   */
+  async loginWithWorkerPin(operatorCode: string, pin: string) {
+    if (!pin || pin.length < 4) {
+      throw new UnauthorizedException('Invalid 4-digit worker PIN.');
+    }
+
+    const user = await this.prisma.user.findFirst({
+      where: {
+        role: UserRole.WAREHOUSE_OPERATOR,
+        OR: [{ email: operatorCode }, { name: { contains: operatorCode, mode: 'insensitive' } }],
+      },
+      include: { merchant: true },
+    });
+
+    if (!user || (user.workerPin && user.workerPin !== pin)) {
+      throw new UnauthorizedException('Invalid operator code or PIN.');
+    }
+
+    return this.issueTokens(user);
+  }
+
+  private async issueTokens(user: any) {
     const payload = {
       sub: user.id,
       merchantId: user.merchantId,
+      merchantCode: user.merchant?.merchantCode || 'MC-101',
       email: user.email,
       role: user.role,
     };
 
     const accessToken = await this.jwtService.signAsync(payload, {
-      secret: this.configService.get<string>('JWT_ACCESS_SECRET', 'fulfillio_super_secret_access_key_change_in_production'),
+      secret: this.configService.get<string>(
+        'JWT_ACCESS_SECRET',
+        'fulfillio_super_secret_access_key_change_in_production',
+      ),
       expiresIn: '15m',
     });
 
     const refreshToken = await this.jwtService.signAsync(payload, {
-      secret: this.configService.get<string>('JWT_REFRESH_SECRET', 'fulfillio_super_secret_refresh_key_change_in_production'),
+      secret: this.configService.get<string>(
+        'JWT_REFRESH_SECRET',
+        'fulfillio_super_secret_refresh_key_change_in_production',
+      ),
       expiresIn: '7d',
     });
 
@@ -107,6 +146,7 @@ export class AuthService {
         email: user.email,
         role: user.role,
         merchantId: user.merchantId,
+        merchantCode: user.merchant?.merchantCode || 'MC-101',
         merchantStatus: user.merchant?.status,
       },
     };

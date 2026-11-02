@@ -10,6 +10,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { MerchantModule } from './modules/merchants/merchant.module';
 import { WarehousesModule } from './modules/warehouses/warehouses.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
+import { InboundModule } from './modules/inbound/inbound.module';
 import { OrderModule } from './modules/orders/order.module';
 import { FulfillmentModule } from './modules/fulfillment/fulfillment.module';
 import { PackingModule } from './modules/packing/packing.module';
@@ -35,6 +36,7 @@ import { QueueModule } from './modules/queue/queue.module';
     MerchantModule,
     WarehousesModule,
     InventoryModule,
+    InboundModule,
     OrderModule,
     FulfillmentModule,
     PackingModule,

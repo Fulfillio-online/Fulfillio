@@ -45,8 +45,12 @@ import {
   Tag,
   Minus,
   SlidersHorizontal,
-  RefreshCw
+  RefreshCw,
+  Menu
 } from 'lucide-react';
+import { InboundAsnManager } from '@/features/inbound/InboundAsnManager';
+import { FraudRatioBadge } from '@/components/ui/FraudRatioBadge';
+import { MerchantDirectoryManager } from '@/features/merchants/MerchantDirectoryManager';
 
 type MerchantTab =
   | 'overview'
@@ -60,7 +64,9 @@ type MerchantTab =
 
 export default function MerchantPortalPage() {
   const [activeTab, setActiveTab] = useState<MerchantTab>('profile');
+  const [merchantListResetTrigger, setMerchantListResetTrigger] = useState<number>(0);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   // Merchant Profile State (Module 02)
   const [profile, setProfile] = useState({
@@ -611,8 +617,213 @@ export default function MerchantPortalPage() {
 
   return (
     <div className="flex min-h-screen bg-slate-950 text-slate-100">
-      {/* Sidebar Navigation */}
-      <aside className="w-64 border-r border-slate-800 bg-slate-900/70 p-4 flex flex-col justify-between shrink-0">
+      {/* Mobile / Tablet Slide-Over Sidebar Drawer */}
+      {isMobileSidebarOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 flex">
+          <div
+            className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm"
+            onClick={() => setIsMobileSidebarOpen(false)}
+          />
+          <aside className="relative z-10 w-72 max-w-[85vw] border-r border-slate-800 bg-slate-900 p-4 flex flex-col justify-between overflow-y-auto">
+            <div>
+              {/* Logo + Close */}
+              <div className="flex items-center justify-between px-2 py-3 mb-4 border-b border-slate-800">
+                <div className="flex items-center gap-2.5">
+                  <div className="h-9 w-9 rounded-lg bg-emerald-600 flex items-center justify-center font-bold text-white text-lg">
+                    F
+                  </div>
+                  <div>
+                    <span className="font-extrabold text-lg tracking-tight block">Fulfillio</span>
+                    <span className="text-[10px] uppercase font-bold text-emerald-400 tracking-wider">
+                      Merchant Portal
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsMobileSidebarOpen(false)}
+                  className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                  aria-label="Close navigation menu"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Mobile Nav Items */}
+              <nav className="space-y-1">
+                <button
+                  onClick={() => {
+                    setActiveTab('profile');
+                    setMerchantListResetTrigger((prev) => prev + 1);
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    activeTab === 'profile'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`}
+                >
+                  <User className="h-4 w-4 shrink-0" />
+                  <span>Merchant List</span>
+                  <span className="ml-auto text-[10px] font-mono font-bold bg-slate-800 px-1.5 py-0.5 rounded text-emerald-400 border border-slate-700">
+                    4 Stores
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setActiveTab('overview');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    activeTab === 'overview'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`}
+                >
+                  <LayoutDashboard className="h-4 w-4 shrink-0" />
+                  Overview
+                </button>
+
+                <button
+                  onClick={() => {
+                    setActiveTab('products');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    activeTab === 'products'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`}
+                >
+                  <Package className="h-4 w-4 shrink-0" />
+                  Products & Stock
+                </button>
+
+                <button
+                  onClick={() => {
+                    setActiveTab('orders');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    activeTab === 'orders'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`}
+                >
+                  <ShoppingCart className="h-4 w-4 shrink-0" />
+                  Orders & Sync
+                </button>
+
+                <button
+                  onClick={() => {
+                    setActiveTab('memo-designer');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    activeTab === 'memo-designer'
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'text-indigo-400 hover:text-indigo-300 hover:bg-indigo-950/40 border border-indigo-900/40'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Layers className="h-4 w-4 shrink-0" />
+                    <span>Memo Code Designer</span>
+                  </div>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-bold uppercase">
+                    Unique
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setActiveTab('tracking');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    activeTab === 'tracking'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`}
+                >
+                  <Truck className="h-4 w-4 shrink-0" />
+                  Courier Tracking
+                </button>
+
+                <button
+                  onClick={() => {
+                    setActiveTab('billing');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    activeTab === 'billing'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`}
+                >
+                  <CreditCard className="h-4 w-4 shrink-0" />
+                  Payout & Billing
+                </button>
+
+                <button
+                  onClick={() => {
+                    setActiveTab('api-keys');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    activeTab === 'api-keys'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`}
+                >
+                  <Key className="h-4 w-4 shrink-0" />
+                  API Keys & Webhooks
+                </button>
+              </nav>
+            </div>
+
+            {/* Mobile Store & Nav Footer */}
+            <div className="border-t border-slate-800 pt-3 mt-4 space-y-2">
+              <div className="px-2">
+                <span className="text-xs font-semibold text-slate-200 block">{profile.storeName}</span>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                  <span className="text-[11px] text-emerald-400 font-medium">
+                    Store Verified ({profile.merchantCode})
+                  </span>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-xs text-slate-400 px-2">
+                <Link
+                  href="/admin"
+                  onClick={() => setIsMobileSidebarOpen(false)}
+                  className="hover:text-emerald-400 transition-colors"
+                >
+                  Admin Portal
+                </Link>
+                <Link
+                  href="/wms/packing"
+                  onClick={() => setIsMobileSidebarOpen(false)}
+                  className="hover:text-emerald-400 transition-colors"
+                >
+                  Packing Station
+                </Link>
+                <Link
+                  href="/"
+                  onClick={() => setIsMobileSidebarOpen(false)}
+                  className="hover:text-slate-200 transition-colors"
+                >
+                  Home
+                </Link>
+              </div>
+            </div>
+          </aside>
+        </div>
+      )}
+
+      {/* Desktop Sidebar Navigation */}
+      <aside className="hidden lg:flex w-64 border-r border-slate-800 bg-slate-900/70 p-4 flex-col justify-between shrink-0">
         <div>
           {/* Logo */}
           <div className="flex items-center gap-2.5 px-3 py-4 mb-4 border-b border-slate-800">
@@ -630,7 +841,11 @@ export default function MerchantPortalPage() {
           {/* Nav Items */}
           <nav className="space-y-1">
             <button
-              onClick={() => setActiveTab('profile')}
+              onClick={() => {
+                setActiveTab('profile');
+                setMerchantListResetTrigger((prev) => prev + 1);
+                setIsMobileSidebarOpen(false);
+              }}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === 'profile'
                   ? 'bg-emerald-600 text-white shadow-sm'
@@ -638,14 +853,17 @@ export default function MerchantPortalPage() {
               }`}
             >
               <User className="h-4 w-4" />
-              <span>Merchant Profile</span>
+              <span>Merchant List</span>
               <span className="ml-auto text-[10px] font-mono font-bold bg-slate-800 px-1.5 py-0.5 rounded text-emerald-400 border border-slate-700">
-                {profile.merchantCode}
+                4 Stores
               </span>
             </button>
 
             <button
-              onClick={() => setActiveTab('overview')}
+              onClick={() => {
+                setActiveTab('overview');
+                setIsMobileSidebarOpen(false);
+              }}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === 'overview'
                   ? 'bg-emerald-600 text-white shadow-sm'
@@ -657,7 +875,10 @@ export default function MerchantPortalPage() {
             </button>
 
             <button
-              onClick={() => setActiveTab('products')}
+              onClick={() => {
+                setActiveTab('products');
+                setIsMobileSidebarOpen(false);
+              }}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === 'products'
                   ? 'bg-emerald-600 text-white shadow-sm'
@@ -669,7 +890,10 @@ export default function MerchantPortalPage() {
             </button>
 
             <button
-              onClick={() => setActiveTab('orders')}
+              onClick={() => {
+                setActiveTab('orders');
+                setIsMobileSidebarOpen(false);
+              }}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === 'orders'
                   ? 'bg-emerald-600 text-white shadow-sm'
@@ -682,7 +906,10 @@ export default function MerchantPortalPage() {
 
             {/* Core Feature Tab */}
             <button
-              onClick={() => setActiveTab('memo-designer')}
+              onClick={() => {
+                setActiveTab('memo-designer');
+                setIsMobileSidebarOpen(false);
+              }}
               className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === 'memo-designer'
                   ? 'bg-indigo-600 text-white shadow-sm'
@@ -699,7 +926,10 @@ export default function MerchantPortalPage() {
             </button>
 
             <button
-              onClick={() => setActiveTab('tracking')}
+              onClick={() => {
+                setActiveTab('tracking');
+                setIsMobileSidebarOpen(false);
+              }}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === 'tracking'
                   ? 'bg-emerald-600 text-white shadow-sm'
@@ -711,7 +941,10 @@ export default function MerchantPortalPage() {
             </button>
 
             <button
-              onClick={() => setActiveTab('billing')}
+              onClick={() => {
+                setActiveTab('billing');
+                setIsMobileSidebarOpen(false);
+              }}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === 'billing'
                   ? 'bg-emerald-600 text-white shadow-sm'
@@ -723,7 +956,10 @@ export default function MerchantPortalPage() {
             </button>
 
             <button
-              onClick={() => setActiveTab('api-keys')}
+              onClick={() => {
+                setActiveTab('api-keys');
+                setIsMobileSidebarOpen(false);
+              }}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === 'api-keys'
                   ? 'bg-emerald-600 text-white shadow-sm'
@@ -758,22 +994,30 @@ export default function MerchantPortalPage() {
       </aside>
 
       {/* Main Content View */}
-      <main className="flex-1 flex flex-col overflow-y-auto">
+      <main className="flex-1 min-w-0 flex flex-col overflow-x-hidden">
         {/* Top Header */}
-        <header className="h-16 border-b border-slate-800 px-8 flex items-center justify-between bg-slate-900/40 sticky top-0 z-20 backdrop-blur">
-          <div className="flex items-center gap-2">
-            <span className="text-slate-500 text-sm">Merchant Portal</span>
-            <ChevronRight className="h-4 w-4 text-slate-600" />
-            <span className="font-bold text-sm uppercase tracking-wide text-slate-200">
+        <header className="h-16 border-b border-slate-800 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-2 bg-slate-900/40 sticky top-0 z-20 backdrop-blur">
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              type="button"
+              onClick={() => setIsMobileSidebarOpen(true)}
+              className="lg:hidden p-2 -ml-1 rounded-lg border border-slate-800 bg-slate-900 text-slate-300 hover:text-white hover:bg-slate-800 transition-colors shrink-0"
+              aria-label="Open navigation menu"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            <span className="text-slate-500 text-sm hidden sm:inline">Merchant Portal</span>
+            <ChevronRight className="h-4 w-4 text-slate-600 hidden sm:inline shrink-0" />
+            <span className="font-bold text-xs sm:text-sm uppercase tracking-wide text-slate-200 truncate">
               {activeTab === 'profile' ? 'Profile' : activeTab.replace('-', ' ')}
             </span>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <Link
               href="/wms/packing"
               target="_blank"
-              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors flex items-center gap-1.5"
+              className="hidden md:flex text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors items-center gap-1.5"
             >
               <span>Packing Station</span>
               <ExternalLink className="h-3 w-3" />
@@ -781,14 +1025,15 @@ export default function MerchantPortalPage() {
 
             <button
               onClick={() => setActiveTab('memo-designer')}
-              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors flex items-center gap-1.5"
+              className="text-xs font-semibold px-2.5 sm:px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors flex items-center gap-1.5"
             >
-              <Plus className="h-3.5 w-3.5" />
-              <span>Create Memo</span>
+              <Plus className="h-3.5 w-3.5 shrink-0" />
+              <span className="hidden sm:inline">Create Memo</span>
+              <span className="sm:hidden">Memo</span>
             </button>
 
             {/* Notification Bell */}
-            <button className="h-9 w-9 rounded-lg border border-slate-800 bg-slate-900 flex items-center justify-center text-slate-400 hover:text-slate-200 transition-colors relative">
+            <button className="h-9 w-9 rounded-lg border border-slate-800 bg-slate-900 flex items-center justify-center text-slate-400 hover:text-slate-200 transition-colors relative shrink-0">
               <Bell className="h-4 w-4" />
               <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-emerald-500" />
             </button>
@@ -797,9 +1042,9 @@ export default function MerchantPortalPage() {
             <div className="relative">
               <button
                 onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                className="flex items-center gap-2.5 p-1.5 pr-3 rounded-lg border border-slate-800 bg-slate-900 hover:bg-slate-800 transition-colors text-left"
+                className="flex items-center gap-2 sm:gap-2.5 p-1.5 pr-2 sm:pr-3 rounded-lg border border-slate-800 bg-slate-900 hover:bg-slate-800 transition-colors text-left"
               >
-                <div className="h-7 w-7 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-xs font-bold text-white shadow-sm">
+                <div className="h-7 w-7 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-xs font-bold text-white shadow-sm shrink-0">
                   SA
                 </div>
                 <div className="hidden sm:block">
@@ -810,7 +1055,7 @@ export default function MerchantPortalPage() {
                     {profile.merchantCode}
                   </span>
                 </div>
-                <ChevronDown className="h-3.5 w-3.5 text-slate-400 ml-1" />
+                <ChevronDown className="h-3.5 w-3.5 text-slate-400 ml-0.5 sm:ml-1" />
               </button>
 
               {/* Dropdown Panel */}
@@ -877,16 +1122,26 @@ export default function MerchantPortalPage() {
 
         {/* Global Notification Toast */}
         {profileNotification && (
-          <div className="fixed bottom-6 right-6 z-50 bg-emerald-600 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 text-sm font-semibold animate-in slide-in-from-bottom duration-300">
-            <CheckCircle2 className="h-4 w-4" />
+          <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:bottom-6 sm:right-6 z-50 bg-emerald-600 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 text-sm font-semibold animate-in slide-in-from-bottom duration-300">
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
             <span>{profileNotification}</span>
           </div>
         )}
 
         {/* Dynamic Section Contents */}
-        <div className="p-8 space-y-6">
-          {/* ================= 0. MERCHANT PROFILE (MODULE 02 - REFERENCE UI MATCH) ================= */}
+        <div className="p-4 sm:p-6 lg:p-8 space-y-6">
+          {/* ================= 0. MERCHANT LIST & DRILL-DOWN PROFILE (5 TABS + GRID/LIST PRODUCTS) ================= */}
           {activeTab === 'profile' && (
+            <MerchantDirectoryManager
+              onNavigateTab={(tab) => {
+                setActiveTab(tab);
+                setIsMobileSidebarOpen(false);
+              }}
+              resetTrigger={merchantListResetTrigger}
+            />
+          )}
+
+          {false && activeTab === 'profile' && (
             <div className="space-y-6 max-w-6xl">
               {/* Header Title & Action */}
               <div className="flex items-center justify-between">
@@ -1615,43 +1870,43 @@ export default function MerchantPortalPage() {
           {activeTab === 'overview' && (
             <div className="space-y-6">
               <div>
-                <h1 className="text-2xl font-bold tracking-tight">Merchant Store Performance</h1>
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Merchant Store Performance</h1>
                 <p className="text-sm text-slate-400">
                   Real-time inventory levels, orders fulfilled by Fulfillio, and COD settlement balance.
                 </p>
               </div>
 
               {/* KPI Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="p-5 rounded-xl bg-slate-900 border border-slate-800">
                   <span className="text-xs uppercase font-semibold text-slate-400">Total Fulfillments</span>
-                  <div className="text-3xl font-bold mt-2">1,842</div>
+                  <div className="text-2xl sm:text-3xl font-bold mt-2">1,842</div>
                   <span className="text-xs text-emerald-400 mt-1 inline-block">99.8% on-time dispatch</span>
                 </div>
 
                 <div className="p-5 rounded-xl bg-slate-900 border border-slate-800">
                   <span className="text-xs uppercase font-semibold text-slate-400">Warehouse In-Stock</span>
-                  <div className="text-3xl font-bold mt-2">183 Units</div>
+                  <div className="text-2xl sm:text-3xl font-bold mt-2">183 Units</div>
                   <span className="text-xs text-slate-400 mt-1 inline-block">Across 3 active SKUs</span>
                 </div>
 
                 <div className="p-5 rounded-xl bg-slate-900 border border-slate-800">
                   <span className="text-xs uppercase font-semibold text-slate-400">Active Memo Codes</span>
-                  <div className="text-3xl font-bold text-indigo-400 mt-2">{memoList.length} Designs</div>
+                  <div className="text-2xl sm:text-3xl font-bold text-indigo-400 mt-2">{memoList.length} Designs</div>
                   <span className="text-xs text-slate-400 mt-1 inline-block">1 Default A4 / 1 Thermal</span>
                 </div>
 
                 <div className="p-5 rounded-xl bg-slate-900 border border-slate-800">
                   <span className="text-xs uppercase font-semibold text-slate-400">Available COD Balance</span>
-                  <div className="text-3xl font-bold text-emerald-400 mt-2">৳ 184,500</div>
+                  <div className="text-2xl sm:text-3xl font-bold text-emerald-400 mt-2">৳ 184,500</div>
                   <span className="text-xs text-slate-400 mt-1 inline-block">Disbursement on Friday</span>
                 </div>
               </div>
 
               {/* Quick Info Banner */}
-              <div className="p-5 rounded-xl bg-gradient-to-r from-indigo-950/60 to-slate-900 border border-indigo-800/50 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-12 w-12 rounded-xl bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400">
+              <div className="p-5 rounded-xl bg-gradient-to-r from-indigo-950/60 to-slate-900 border border-indigo-800/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-start sm:items-center gap-4">
+                  <div className="h-12 w-12 rounded-xl bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 shrink-0">
                     <Sparkles className="h-6 w-6" />
                   </div>
                   <div>
@@ -1664,7 +1919,7 @@ export default function MerchantPortalPage() {
 
                 <button
                   onClick={() => setActiveTab('memo-designer')}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-lg transition-colors shrink-0"
+                  className="w-full sm:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-lg transition-colors shrink-0 text-center"
                 >
                   Manage Memo Designs
                 </button>
@@ -1677,8 +1932,8 @@ export default function MerchantPortalPage() {
             <div className="space-y-6">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                  <h1 className="text-2xl font-bold tracking-tight text-slate-100 flex items-center gap-2">
-                    <Package className="h-6 w-6 text-emerald-400" />
+                  <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-100 flex items-center gap-2">
+                    <Package className="h-6 w-6 text-emerald-400 shrink-0" />
                     <span>Products & 2-Part SKU Inventory</span>
                   </h1>
                   <p className="text-sm text-slate-400 mt-0.5">
@@ -1686,14 +1941,34 @@ export default function MerchantPortalPage() {
                   </p>
                 </div>
 
-                <button
-                  onClick={() => setIsAddProductOpen(true)}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold flex items-center gap-2 transition-colors shadow-sm shrink-0"
-                >
-                  <Plus className="h-4 w-4" />
-                  <span>Add Single Product</span>
-                </button>
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                  <Link
+                    href="/print/memo/ORD-9041?memoCode=MEMO-DARAZ-BD"
+                    className="px-3.5 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors flex-1 sm:flex-initial"
+                  >
+                    <Printer className="h-3.5 w-3.5 shrink-0" />
+                    <span>2-in-1 4x6&quot; Thermal Preview</span>
+                  </Link>
+                  <button
+                    onClick={() => setIsAddProductOpen(true)}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors shadow-sm shrink-0 flex-1 sm:flex-initial"
+                  >
+                    <Plus className="h-4 w-4 shrink-0" />
+                    <span>Add Single Product</span>
+                  </button>
+                </div>
               </div>
+
+              {/* Module 14: Inbound ASN Stock Sending & Receiving Manager */}
+              <InboundAsnManager
+                mode="MERCHANT"
+                merchantCode={profile.merchantCode}
+                onStockReceived={(sku, good, dmg) =>
+                  showNotification(
+                    `Dock Putaway Complete for ${sku}: +${good} Sellable added (${dmg} Quarantine)`,
+                  )
+                }
+              />
 
               {/* Filters & Search Toolbar */}
               <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex flex-col sm:flex-row gap-3 items-center justify-between">
@@ -1708,7 +1983,7 @@ export default function MerchantPortalPage() {
                   />
                 </div>
 
-                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
                   <span className="text-xs text-slate-400">Stock Filter:</span>
                   <select
                     value={stockFilter}
@@ -1724,116 +1999,118 @@ export default function MerchantPortalPage() {
 
               {/* Products Table */}
               <div className="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden shadow-sm">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-800/80 text-slate-400 text-xs uppercase tracking-wider font-semibold border-b border-slate-800">
-                    <tr>
-                      <th className="p-4">Product Name & Variant</th>
-                      <th className="p-4">2-Part SKU Code</th>
-                      <th className="p-4">Barcode</th>
-                      <th className="p-4">Storage Bin</th>
-                      <th className="p-4">Warehouse Stock</th>
-                      <th className="p-4 text-right">Unit Price</th>
-                      <th className="p-4 text-center">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800">
-                    {products
-                      .filter((p) => {
-                        const matchSearch =
-                          p.title.toLowerCase().includes(productSearch.toLowerCase()) ||
-                          p.sku.toLowerCase().includes(productSearch.toLowerCase()) ||
-                          p.barcode.includes(productSearch);
-                        if (!matchSearch) return false;
-                        if (stockFilter === 'IN_STOCK') return p.stock > 20;
-                        if (stockFilter === 'LOW_STOCK') return p.stock <= 20;
-                        return true;
-                      })
-                      .map((p) => (
-                        <tr key={p.id} className="hover:bg-slate-800/40 transition-colors">
-                          <td className="p-4">
-                            <div className="font-semibold text-slate-200">{p.title}</div>
-                            <div className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
-                              <span className="px-1.5 py-0.2 rounded bg-slate-800 text-[10px] text-slate-300 border border-slate-700">
-                                {p.variantLabel}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="p-4">
-                            <span className="font-mono text-xs font-bold text-emerald-400 bg-slate-950 px-2 py-1 rounded border border-slate-800">
-                              {p.sku}
-                            </span>
-                          </td>
-                          <td className="p-4 font-mono text-xs text-slate-300">
-                            <div className="flex items-center gap-1.5">
-                              <Barcode className="h-3.5 w-3.5 text-slate-500" />
-                              <span>{p.barcode}</span>
-                            </div>
-                          </td>
-                          <td className="p-4 font-mono text-xs font-bold text-amber-400">
-                            <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">
-                              {p.bin}
-                            </span>
-                          </td>
-                          <td className="p-4">
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => handleAdjustStock(p.id, -1)}
-                                className="h-6 w-6 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-xs font-bold transition-colors"
-                                title="Decrease Stock"
-                              >
-                                <Minus className="h-3 w-3" />
-                              </button>
-                              <span className="font-bold text-sm text-slate-100 min-w-7 text-center">
-                                {p.stock}
-                              </span>
-                              <button
-                                onClick={() => handleAdjustStock(p.id, 1)}
-                                className="h-6 w-6 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-xs font-bold transition-colors"
-                                title="Increase Stock"
-                              >
-                                <Plus className="h-3 w-3" />
-                              </button>
-                              {p.reserved > 0 && (
-                                <span className="text-[10px] text-slate-500 ml-1">
-                                  ({p.reserved} reserved)
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[680px] text-left text-sm">
+                    <thead className="bg-slate-800/80 text-slate-400 text-xs uppercase tracking-wider font-semibold border-b border-slate-800">
+                      <tr>
+                        <th className="p-4">Product Name & Variant</th>
+                        <th className="p-4">2-Part SKU Code</th>
+                        <th className="p-4">Barcode</th>
+                        <th className="p-4">Storage Bin</th>
+                        <th className="p-4">Warehouse Stock</th>
+                        <th className="p-4 text-right">Unit Price</th>
+                        <th className="p-4 text-center">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800">
+                      {products
+                        .filter((p) => {
+                          const matchSearch =
+                            p.title.toLowerCase().includes(productSearch.toLowerCase()) ||
+                            p.sku.toLowerCase().includes(productSearch.toLowerCase()) ||
+                            p.barcode.includes(productSearch);
+                          if (!matchSearch) return false;
+                          if (stockFilter === 'IN_STOCK') return p.stock > 20;
+                          if (stockFilter === 'LOW_STOCK') return p.stock <= 20;
+                          return true;
+                        })
+                        .map((p) => (
+                          <tr key={p.id} className="hover:bg-slate-800/40 transition-colors">
+                            <td className="p-4">
+                              <div className="font-semibold text-slate-200">{p.title}</div>
+                              <div className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
+                                <span className="px-1.5 py-0.2 rounded bg-slate-800 text-[10px] text-slate-300 border border-slate-700">
+                                  {p.variantLabel}
                                 </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="p-4 text-right font-bold text-slate-100">৳ {p.price.toLocaleString()}</td>
-                          <td className="p-4 text-center">
-                            <div className="flex items-center justify-center gap-1.5">
-                              <button
-                                onClick={() => {
-                                  setBarcodeProduct(p);
-                                  setIsBarcodeModalOpen(true);
-                                }}
-                                className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors"
-                                title="Print Barcode Thermal Label"
-                              >
-                                <Printer className="h-3.5 w-3.5" />
-                                <span>Sticker</span>
-                              </button>
+                              </div>
+                            </td>
+                            <td className="p-4">
+                              <span className="font-mono text-xs font-bold text-emerald-400 bg-slate-950 px-2 py-1 rounded border border-slate-800">
+                                {p.sku}
+                              </span>
+                            </td>
+                            <td className="p-4 font-mono text-xs text-slate-300">
+                              <div className="flex items-center gap-1.5">
+                                <Barcode className="h-3.5 w-3.5 text-slate-500" />
+                                <span>{p.barcode}</span>
+                              </div>
+                            </td>
+                            <td className="p-4 font-mono text-xs font-bold text-amber-400">
+                              <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                                {p.bin}
+                              </span>
+                            </td>
+                            <td className="p-4">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => handleAdjustStock(p.id, -1)}
+                                  className="h-6 w-6 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-xs font-bold transition-colors"
+                                  title="Decrease Stock"
+                                >
+                                  <Minus className="h-3 w-3" />
+                                </button>
+                                <span className="font-bold text-sm text-slate-100 min-w-7 text-center">
+                                  {p.stock}
+                                </span>
+                                <button
+                                  onClick={() => handleAdjustStock(p.id, 1)}
+                                  className="h-6 w-6 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-xs font-bold transition-colors"
+                                  title="Increase Stock"
+                                >
+                                  <Plus className="h-3 w-3" />
+                                </button>
+                                {p.reserved > 0 && (
+                                  <span className="text-[10px] text-slate-500 ml-1">
+                                    ({p.reserved} reserved)
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-4 text-right font-bold text-slate-100">৳ {p.price.toLocaleString()}</td>
+                            <td className="p-4 text-center">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button
+                                  onClick={() => {
+                                    setBarcodeProduct(p);
+                                    setIsBarcodeModalOpen(true);
+                                  }}
+                                  className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors"
+                                  title="Print Barcode Thermal Label"
+                                >
+                                  <Printer className="h-3.5 w-3.5" />
+                                  <span>Sticker</span>
+                                </button>
 
-                              <button
-                                onClick={() => handleDeleteProduct(p.id)}
-                                className="p-1 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
-                                title="Remove Product"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
+                                <button
+                                  onClick={() => handleDeleteProduct(p.id)}
+                                  className="p-1 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                                  title="Remove Product"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
               {/* MODAL: Add Single Product with 2-Part SKU Generator */}
               {isAddProductOpen && (
                 <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 space-y-5 shadow-2xl animate-in zoom-in-95 duration-200">
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 space-y-5 shadow-2xl animate-in zoom-in-95 duration-200">
                     <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                       <div>
                         <h3 className="font-bold text-base text-slate-100">
@@ -1866,7 +2143,7 @@ export default function MerchantPortalPage() {
                         />
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                           <label className="text-xs font-semibold text-slate-400 block mb-1">
                             Base SKU Code (Your Internal Code)
@@ -1894,7 +2171,7 @@ export default function MerchantPortalPage() {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div>
                           <label className="text-xs font-semibold text-slate-400 block mb-1">
                             Unit Price (৳)
@@ -2093,7 +2370,7 @@ export default function MerchantPortalPage() {
               {/* MODAL: Print Thermal Barcode Sticker */}
               {isBarcodeModalOpen && barcodeProduct && (
                 <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-4 sm:p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
                     <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                       <div className="flex items-center gap-2">
                         <Printer className="h-4 w-4 text-emerald-400" />
@@ -2210,8 +2487,8 @@ export default function MerchantPortalPage() {
             <div className="space-y-6">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                  <h1 className="text-2xl font-bold tracking-tight text-slate-100 flex items-center gap-2">
-                    <ShoppingCart className="h-6 w-6 text-emerald-400" />
+                  <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-100 flex items-center gap-2">
+                    <ShoppingCart className="h-6 w-6 text-emerald-400 shrink-0" />
                     <span>Order Lifecycle & Reseller Attribution</span>
                   </h1>
                   <p className="text-sm text-slate-400 mt-0.5">
@@ -2221,7 +2498,7 @@ export default function MerchantPortalPage() {
 
                 <button
                   onClick={() => setIsCreateOrderOpen(true)}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold flex items-center gap-2 transition-colors shadow-sm shrink-0"
+                  className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors shadow-sm shrink-0"
                 >
                   <Plus className="h-4 w-4" />
                   <span>Create Manual Order</span>
@@ -2230,78 +2507,94 @@ export default function MerchantPortalPage() {
 
               {/* Orders Table */}
               <div className="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden shadow-sm">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-800/80 text-slate-400 text-xs uppercase tracking-wider font-semibold border-b border-slate-800">
-                    <tr>
-                      <th className="p-4">Order ID & Date</th>
-                      <th className="p-4">Customer Details</th>
-                      <th className="p-4">Items Ordered</th>
-                      <th className="p-4">Reseller Memo Code</th>
-                      <th className="p-4">Courier</th>
-                      <th className="p-4">Status</th>
-                      <th className="p-4 text-right">COD Total</th>
-                      <th className="p-4 text-center">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800">
-                    {orders.map((o) => (
-                      <tr key={o.id} className="hover:bg-slate-800/40 transition-colors">
-                        <td className="p-4">
-                          <span className="font-mono text-xs font-bold text-slate-200 block">{o.id}</span>
-                          <span className="text-[11px] text-slate-500">{o.date}</span>
-                        </td>
-                        <td className="p-4">
-                          <div className="font-semibold text-slate-200">{o.customer}</div>
-                          <div className="text-xs text-slate-400">{o.phone}</div>
-                          <div className="text-[11px] text-slate-500 truncate max-w-xs">{o.address}</div>
-                        </td>
-                        <td className="p-4">
-                          <span className="text-xs font-medium text-slate-200 block">{o.items}</span>
-                          <span className="text-[10px] text-emerald-400 font-mono">Qty: {o.qty}</span>
-                        </td>
-                        <td className="p-4">
-                          <span className="font-mono text-xs px-2.5 py-1 rounded bg-indigo-950/80 text-indigo-300 border border-indigo-800/60 font-semibold inline-block">
-                            {o.memoCode}
-                          </span>
-                        </td>
-                        <td className="p-4 text-xs font-semibold text-slate-300">{o.courier}</td>
-                        <td className="p-4">
-                          <span
-                            className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
-                              o.status === 'PACKED'
-                                ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/30'
-                                : o.status === 'DISPATCHED'
-                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                                : o.status === 'CANCELLED'
-                                ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
-                                : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
-                            }`}
-                          >
-                            {o.status}
-                          </span>
-                        </td>
-                        <td className="p-4 text-right font-bold text-slate-200">৳ {o.amount.toLocaleString()}</td>
-                        <td className="p-4 text-center">
-                          {o.status !== 'CANCELLED' && o.status !== 'DISPATCHED' && (
-                            <button
-                              onClick={() => handleCancelOrder(o.id)}
-                              className="px-2 py-1 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded text-xs transition-colors"
-                              title="Cancel order and restore reserved stock"
-                            >
-                              Cancel
-                            </button>
-                          )}
-                        </td>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[680px] text-left text-sm">
+                    <thead className="bg-slate-800/80 text-slate-400 text-xs uppercase tracking-wider font-semibold border-b border-slate-800">
+                      <tr>
+                        <th className="p-4">Order ID & Date</th>
+                        <th className="p-4">Customer Details</th>
+                        <th className="p-4">Items Ordered</th>
+                        <th className="p-4">Reseller Memo Code</th>
+                        <th className="p-4">Courier</th>
+                        <th className="p-4">Status</th>
+                        <th className="p-4 text-right">COD Total</th>
+                        <th className="p-4 text-center">Action</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800">
+                      {orders.map((o) => (
+                        <tr key={o.id} className="hover:bg-slate-800/40 transition-colors">
+                          <td className="p-4">
+                            <span className="font-mono text-xs font-bold text-slate-200 block">{o.id}</span>
+                            <span className="text-[11px] text-slate-500">{o.date}</span>
+                          </td>
+                          <td className="p-4">
+                            <div className="font-semibold text-slate-200">{o.customer}</div>
+                            <div className="text-xs text-slate-400">{o.phone}</div>
+                            <div className="text-[11px] text-slate-500 truncate max-w-xs mb-1">{o.address}</div>
+                            <FraudRatioBadge
+                              successRatio={o.phone.endsWith('000') ? 32 : 94}
+                              compact={false}
+                            />
+                          </td>
+                          <td className="p-4">
+                            <span className="text-xs font-medium text-slate-200 block">{o.items}</span>
+                            <span className="text-[10px] text-emerald-400 font-mono">Qty: {o.qty}</span>
+                          </td>
+                          <td className="p-4">
+                            <span className="font-mono text-xs px-2.5 py-1 rounded bg-indigo-950/80 text-indigo-300 border border-indigo-800/60 font-semibold inline-block">
+                              {o.memoCode}
+                            </span>
+                          </td>
+                          <td className="p-4 text-xs font-semibold text-slate-300">{o.courier}</td>
+                          <td className="p-4">
+                            <span
+                              className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                                o.status === 'PACKED'
+                                  ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/30'
+                                  : o.status === 'DISPATCHED'
+                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                                  : o.status === 'CANCELLED'
+                                  ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
+                                  : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                              }`}
+                            >
+                              {o.status}
+                            </span>
+                          </td>
+                          <td className="p-4 text-right font-bold text-slate-200">৳ {o.amount.toLocaleString()}</td>
+                          <td className="p-4 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <Link
+                                href={`/print/memo/${o.id}?memoCode=${encodeURIComponent(o.memoCode)}&customerName=${encodeURIComponent(o.customer)}&customerPhone=${encodeURIComponent(o.phone)}&customerAddress=${encodeURIComponent(o.address)}&codAmount=${o.amount}`}
+                                className="px-2 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 rounded text-xs font-semibold flex items-center gap-1 transition-colors"
+                                title="Open 2-in-1 4x6 Thermal Sticker"
+                              >
+                                <Printer className="h-3 w-3" />
+                                <span>4x6 Slip</span>
+                              </Link>
+                              {o.status !== 'CANCELLED' && o.status !== 'DISPATCHED' && (
+                                <button
+                                  onClick={() => handleCancelOrder(o.id)}
+                                  className="px-2 py-1 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded text-xs transition-colors"
+                                  title="Cancel order and restore reserved stock"
+                                >
+                                  Cancel
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
               {/* MODAL: Create Manual Order */}
               {isCreateOrderOpen && (
                 <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 space-y-5 shadow-2xl animate-in zoom-in-95 duration-200">
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6 space-y-5 shadow-2xl animate-in zoom-in-95 duration-200">
                     <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                       <div>
                         <h3 className="font-bold text-base text-slate-100">Create Manual Order</h3>
@@ -2332,7 +2625,7 @@ export default function MerchantPortalPage() {
                         />
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                           <label className="text-xs font-semibold text-slate-400 block mb-1">
                             Phone Number
@@ -2382,8 +2675,8 @@ export default function MerchantPortalPage() {
                           Product & Warehouse Stock Reservation:
                         </span>
 
-                        <div className="grid grid-cols-3 gap-2">
-                          <div className="col-span-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          <div className="sm:col-span-2">
                             <label className="text-[11px] font-semibold text-slate-400 block mb-1">
                               Select SKU
                             </label>
@@ -2479,8 +2772,8 @@ export default function MerchantPortalPage() {
             <div className="space-y-6">
               <div className="flex justify-between items-start">
                 <div>
-                  <h1 className="text-2xl font-bold tracking-tight text-slate-100 flex items-center gap-2">
-                    <Layers className="h-6 w-6 text-indigo-400" />
+                  <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-100 flex items-center gap-2">
+                    <Layers className="h-6 w-6 text-indigo-400 shrink-0" />
                     <span>Reseller Memo Designer (4x6 Thermal Focus)</span>
                   </h1>
                   <p className="text-sm text-slate-400 mt-0.5">
@@ -2491,15 +2784,15 @@ export default function MerchantPortalPage() {
 
               {memoSavedAlert && (
                 <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm font-semibold flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4" />
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
                   <span>Reseller memo template successfully saved and compiled for edge thermal printers!</span>
                 </div>
               )}
 
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
                 {/* Form Editor */}
                 <div className="lg:col-span-6 space-y-4">
-                  <form onSubmit={handleSaveMemo} className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4 shadow-sm">
+                  <form onSubmit={handleSaveMemo} className="p-4 sm:p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4 shadow-sm">
                     <h3 className="font-bold text-base text-slate-200 border-b border-slate-800 pb-3 flex items-center gap-2">
                       <Sparkles className="h-4 w-4 text-indigo-400" />
                       <span>Reseller Slip Configuration</span>
@@ -2519,7 +2812,7 @@ export default function MerchantPortalPage() {
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="text-xs font-semibold text-slate-400 block mb-1">
                           Template Purpose
@@ -2549,7 +2842,7 @@ export default function MerchantPortalPage() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="text-xs font-semibold text-slate-400 block mb-1">
                           Reseller Contact Phone
@@ -2612,7 +2905,7 @@ export default function MerchantPortalPage() {
                       <label className="text-xs font-semibold text-slate-400 block mb-1.5">
                         Brand Accent Color:
                       </label>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         {[
                           { color: '#4f46e5', label: 'Indigo' },
                           { color: '#ea580c', label: 'Orange' },
@@ -2638,7 +2931,7 @@ export default function MerchantPortalPage() {
                     <div className="pt-2 flex justify-end">
                       <button
                         type="submit"
-                        className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors flex items-center gap-1.5 shadow-md"
+                        className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-md"
                       >
                         <Sparkles className="h-4 w-4" />
                         <span>Save Reseller Memo</span>
@@ -2649,8 +2942,8 @@ export default function MerchantPortalPage() {
 
                 {/* Live 4x6 Thermal Slip Preview */}
                 <div className="lg:col-span-6 space-y-4">
-                  <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4 shadow-sm">
-                    <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="p-4 sm:p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4 shadow-sm">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
                       <div>
                         <h3 className="font-bold text-base text-slate-200">
                           Thermal 4x6 Slip Real Preview
@@ -2664,7 +2957,7 @@ export default function MerchantPortalPage() {
                         onClick={() => {
                           showNotification(`Triggered 4x6 thermal test print for ${designerCode}!`);
                         }}
-                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-700"
+                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-slate-700 shrink-0"
                       >
                         <Printer className="h-3.5 w-3.5" />
                         <span>Print 4x6 Test</span>
@@ -2672,62 +2965,60 @@ export default function MerchantPortalPage() {
                     </div>
 
                     {/* Realistic 4x6 Thermal Label Simulation */}
-                    <div className="mx-auto w-[310px] bg-white text-black p-5 rounded-lg shadow-2xl font-mono text-[11px] leading-tight space-y-3 border-2 border-slate-300">
-                      {/* Top Brand Banner */}
-                      <div
-                        className="p-2 text-center text-white rounded font-bold"
-                        style={{ backgroundColor: resellerColor }}
-                      >
-                        <span className="text-sm tracking-wide block uppercase">{resellerStoreName}</span>
-                        <span className="text-[10px] opacity-90 block">{resellerPhone}</span>
-                      </div>
-
-                      <div className="text-center">
-                        <div className="inline-block border border-black px-2 py-0.5 font-bold text-[10px] bg-slate-100">
-                          CODE: {designerCode || 'DEFAULT'}
+                    <div className="overflow-x-auto">
+                      <div className="mx-auto w-full max-w-[310px] bg-white text-black p-5 rounded-lg shadow-2xl font-mono text-[11px] leading-tight space-y-3 border-2 border-slate-300">
+                        {/* Top Brand Banner */}
+                        <div
+                          className="p-2 text-center text-white rounded font-bold"
+                          style={{ backgroundColor: resellerColor }}
+                        >
+                          <span className="text-sm tracking-wide block uppercase">{resellerStoreName}</span>
+                          <span className="text-[10px] opacity-90 block">{resellerPhone}</span>
                         </div>
-                      </div>
 
-                      <div className="border-b border-black pb-2 space-y-1">
-                        <div className="flex justify-between text-[10px]">
-                          <span>Order: #ORD-9824</span>
-                          <span>24 Oct 2026</span>
+                        <div className="text-center">
+                          <div className="inline-block border border-black px-2 py-0.5 font-bold text-[10px] bg-slate-100">
+                            CODE: {designerCode || 'DEFAULT'}
+                          </div>
                         </div>
-                        <div className="font-bold">Customer: Tariqul Islam (01812345678)</div>
-                        <div className="text-[10px] text-gray-700">Dhanmondi, Dhaka</div>
-                      </div>
 
-                      <table className="w-full text-left text-[10px]">
-                        <thead>
-                          <tr className="border-b border-black">
-                            <th className="py-1">Item / SKU</th>
-                            <th className="text-center py-1">Qty</th>
-                            <th className="text-right py-1">Price</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr className="border-b border-gray-200">
-                            <td className="py-1">
+                        <div className="border-b border-black pb-2 space-y-1">
+                          <div className="flex justify-between text-[10px]">
+                            <span>Order: #ORD-9824</span>
+                            <span>24 Oct 2026</span>
+                          </div>
+                          <div className="font-bold">Customer: Tariqul Islam (01812345678)</div>
+                          <div className="text-[10px] text-gray-700">Dhanmondi, Dhaka</div>
+                        </div>
+
+                        <div className="w-full text-left text-[10px]">
+                          <div className="grid grid-cols-12 border-b border-black font-bold py-1">
+                            <span className="col-span-7">Item / SKU</span>
+                            <span className="col-span-2 text-center">Qty</span>
+                            <span className="col-span-3 text-right">Price</span>
+                          </div>
+                          <div className="grid grid-cols-12 border-b border-gray-200 py-1 items-center">
+                            <div className="col-span-7">
                               <div>Heavyweight Hoodie (XL)</div>
                               <span className="text-[9px] text-gray-500 font-bold">MC-101-HOODIE-BLK-XL</span>
-                            </td>
-                            <td className="text-center py-1">1</td>
-                            <td className="text-right py-1">৳ 3,450</td>
-                          </tr>
-                        </tbody>
-                      </table>
+                            </div>
+                            <span className="col-span-2 text-center">1</span>
+                            <span className="col-span-3 text-right">৳ 3,450</span>
+                          </div>
+                        </div>
 
-                      <div className="border-t-2 border-black pt-2 flex justify-between font-black text-xs">
-                        <span>Total Payable (COD):</span>
-                        <span>৳ 3,450</span>
-                      </div>
+                        <div className="border-t-2 border-black pt-2 flex justify-between font-black text-xs">
+                          <span>Total Payable (COD):</span>
+                          <span>৳ 3,450</span>
+                        </div>
 
-                      <div className="text-center pt-2 border-t border-dashed border-gray-400 text-[9px] text-gray-600">
-                        {resellerNote}
-                      </div>
+                        <div className="text-center pt-2 border-t border-dashed border-gray-400 text-[9px] text-gray-600">
+                          {resellerNote}
+                        </div>
 
-                      <div className="text-center text-[9px] text-gray-500 font-bold">
-                        Return: {resellerAddress}
+                        <div className="text-center text-[9px] text-gray-500 font-bold">
+                          Return: {resellerAddress}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -2736,9 +3027,9 @@ export default function MerchantPortalPage() {
 
               {/* Active Reseller Memo Cards Grid */}
               <div className="space-y-4 pt-4">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
                   <h3 className="font-bold text-lg text-slate-100 flex items-center gap-2">
-                    <Layers className="h-5 w-5 text-indigo-400" />
+                    <Layers className="h-5 w-5 text-indigo-400 shrink-0" />
                     <span>Active Reseller Memo Templates ({memoList.length})</span>
                   </h3>
                   <span className="text-xs text-slate-400">
@@ -2746,7 +3037,7 @@ export default function MerchantPortalPage() {
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {memoList.map((memo) => (
                     <div
                       key={memo.id}
@@ -2821,30 +3112,30 @@ export default function MerchantPortalPage() {
           {activeTab === 'tracking' && (
             <div className="space-y-6">
               <div>
-                <h1 className="text-2xl font-bold tracking-tight">Steadfast & Pathao Courier Live Tracking</h1>
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Steadfast & Pathao Courier Live Tracking</h1>
                 <p className="text-sm text-slate-400">
                   Consignment status synced automatically via courier webhook events.
                 </p>
               </div>
 
-              <div className="p-6 rounded-xl bg-slate-900 border border-slate-800 space-y-4">
-                <div className="flex items-center justify-between">
+              <div className="p-4 sm:p-6 rounded-xl bg-slate-900 border border-slate-800 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
                     <span className="text-xs font-semibold text-slate-400">Consignment: CID-88491024</span>
                     <h3 className="text-lg font-bold text-slate-200">Steadfast Courier Delivery</h3>
                   </div>
-                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                  <span className="w-fit px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
                     IN TRANSIT
                   </span>
                 </div>
 
                 <div className="border-l-2 border-emerald-500 pl-4 space-y-3 text-xs">
-                  <div className="flex gap-4 items-center">
-                    <span className="text-slate-500 w-28">10:45 AM Today</span>
+                  <div className="flex flex-col sm:flex-row sm:gap-4 sm:items-center">
+                    <span className="text-slate-500 sm:w-28">10:45 AM Today</span>
                     <span className="font-medium text-slate-300">Package handed over to Steadfast driver</span>
                   </div>
-                  <div className="flex gap-4 items-center">
-                    <span className="text-slate-500 w-28">09:30 AM Today</span>
+                  <div className="flex flex-col sm:flex-row sm:gap-4 sm:items-center">
+                    <span className="text-slate-500 sm:w-28">09:30 AM Today</span>
                     <span className="font-medium text-slate-300">Packed and verified at Fulfillio Station #3</span>
                   </div>
                 </div>
@@ -2856,8 +3147,8 @@ export default function MerchantPortalPage() {
           {activeTab === 'billing' && (
             <div className="space-y-6">
               <div>
-                <h1 className="text-2xl font-bold tracking-tight text-slate-100 flex items-center gap-2">
-                  <CreditCard className="h-6 w-6 text-emerald-400" />
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-100 flex items-center gap-2">
+                  <CreditCard className="h-6 w-6 text-emerald-400 shrink-0" />
                   <span>Billing & COD Settlement Statements</span>
                 </h1>
                 <p className="text-sm text-slate-400 mt-0.5">
@@ -2865,7 +3156,7 @@ export default function MerchantPortalPage() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-sm">
                   <span className="text-xs uppercase font-semibold text-slate-400">Gross COD Collected</span>
                   <div className="text-2xl font-bold text-emerald-400 mt-2">৳ 198,400</div>
@@ -2887,60 +3178,62 @@ export default function MerchantPortalPage() {
 
               {/* Itemized Settlement History Table */}
               <div className="rounded-2xl border border-slate-800 bg-slate-900 overflow-hidden shadow-sm">
-                <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+                <div className="p-4 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <h3 className="font-bold text-sm text-slate-100 flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-emerald-400" />
+                    <FileText className="h-4 w-4 text-emerald-400 shrink-0" />
                     <span>Weekly Settlement Statements</span>
                   </h3>
                   <span className="text-xs text-slate-400">Directly deposited to BRAC Bank (A/C: 1501204892019001)</span>
                 </div>
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-800/80 text-slate-400 text-xs uppercase tracking-wider font-semibold border-b border-slate-800">
-                    <tr>
-                      <th className="p-4">Settlement Cycle</th>
-                      <th className="p-4">Orders</th>
-                      <th className="p-4">Gross COD</th>
-                      <th className="p-4">3PL Pick & Pack</th>
-                      <th className="p-4">Storage Fees</th>
-                      <th className="p-4 font-bold text-emerald-400">Net Disbursed</th>
-                      <th className="p-4">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800">
-                    <tr className="hover:bg-slate-800/40 transition-colors">
-                      <td className="p-4">
-                        <span className="font-bold text-slate-200 block text-xs">15 Oct 2026 - 21 Oct 2026</span>
-                        <span className="text-[11px] font-mono text-slate-500">SETTLE-2026-W42</span>
-                      </td>
-                      <td className="p-4 font-mono text-xs text-slate-300">228 Orders</td>
-                      <td className="p-4 font-bold text-slate-200">৳ 198,400</td>
-                      <td className="p-4 text-xs text-rose-400">- ৳ 11,400</td>
-                      <td className="p-4 text-xs text-rose-400">- ৳ 2,500</td>
-                      <td className="p-4 font-bold text-emerald-400">৳ 184,500</td>
-                      <td className="p-4">
-                        <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                          Disbursed (Friday)
-                        </span>
-                      </td>
-                    </tr>
-                    <tr className="hover:bg-slate-800/40 transition-colors">
-                      <td className="p-4">
-                        <span className="font-bold text-slate-200 block text-xs">08 Oct 2026 - 14 Oct 2026</span>
-                        <span className="text-[11px] font-mono text-slate-500">SETTLE-2026-W41</span>
-                      </td>
-                      <td className="p-4 font-mono text-xs text-slate-300">195 Orders</td>
-                      <td className="p-4 font-bold text-slate-200">৳ 162,100</td>
-                      <td className="p-4 text-xs text-rose-400">- ৳ 9,750</td>
-                      <td className="p-4 text-xs text-rose-400">- ৳ 2,500</td>
-                      <td className="p-4 font-bold text-emerald-400">৳ 149,850</td>
-                      <td className="p-4">
-                        <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
-                          Settled & Paid
-                        </span>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[680px] text-left text-sm">
+                    <thead className="bg-slate-800/80 text-slate-400 text-xs uppercase tracking-wider font-semibold border-b border-slate-800">
+                      <tr>
+                        <th className="p-4">Settlement Cycle</th>
+                        <th className="p-4">Orders</th>
+                        <th className="p-4">Gross COD</th>
+                        <th className="p-4">3PL Pick & Pack</th>
+                        <th className="p-4">Storage Fees</th>
+                        <th className="p-4 font-bold text-emerald-400">Net Disbursed</th>
+                        <th className="p-4">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800">
+                      <tr className="hover:bg-slate-800/40 transition-colors">
+                        <td className="p-4">
+                          <span className="font-bold text-slate-200 block text-xs">15 Oct 2026 - 21 Oct 2026</span>
+                          <span className="text-[11px] font-mono text-slate-500">SETTLE-2026-W42</span>
+                        </td>
+                        <td className="p-4 font-mono text-xs text-slate-300">228 Orders</td>
+                        <td className="p-4 font-bold text-slate-200">৳ 198,400</td>
+                        <td className="p-4 text-xs text-rose-400">- ৳ 11,400</td>
+                        <td className="p-4 text-xs text-rose-400">- ৳ 2,500</td>
+                        <td className="p-4 font-bold text-emerald-400">৳ 184,500</td>
+                        <td className="p-4">
+                          <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                            Disbursed (Friday)
+                          </span>
+                        </td>
+                      </tr>
+                      <tr className="hover:bg-slate-800/40 transition-colors">
+                        <td className="p-4">
+                          <span className="font-bold text-slate-200 block text-xs">08 Oct 2026 - 14 Oct 2026</span>
+                          <span className="text-[11px] font-mono text-slate-500">SETTLE-2026-W41</span>
+                        </td>
+                        <td className="p-4 font-mono text-xs text-slate-300">195 Orders</td>
+                        <td className="p-4 font-bold text-slate-200">৳ 162,100</td>
+                        <td className="p-4 text-xs text-rose-400">- ৳ 9,750</td>
+                        <td className="p-4 text-xs text-rose-400">- ৳ 2,500</td>
+                        <td className="p-4 font-bold text-emerald-400">৳ 149,850</td>
+                        <td className="p-4">
+                          <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                            Settled & Paid
+                          </span>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
@@ -2949,15 +3242,15 @@ export default function MerchantPortalPage() {
           {activeTab === 'api-keys' && (
             <div className="space-y-6">
               <div>
-                <h1 className="text-2xl font-bold tracking-tight">API Key & Webhook Integration</h1>
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight">API Key & Webhook Integration</h1>
                 <p className="text-sm text-slate-400">
                   Connect your WooCommerce, Shopify, or custom store to Fulfillio using REST APIs.
                 </p>
               </div>
 
-              <div className="p-6 rounded-xl bg-slate-900 border border-slate-800 space-y-4">
+              <div className="p-4 sm:p-6 rounded-xl bg-slate-900 border border-slate-800 space-y-4">
                 <h3 className="font-bold text-base text-slate-200">Active Production API Key</h3>
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <input
                     type="password"
                     value="ful_live_948a9f82d1c34a98b29f01e847c210ab"
@@ -2966,7 +3259,7 @@ export default function MerchantPortalPage() {
                   />
                   <button
                     onClick={() => navigator.clipboard.writeText('ful_live_948a9f82d1c34a98b29f01e847c210ab')}
-                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-semibold rounded-lg border border-slate-700 flex items-center gap-1.5 transition-colors"
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-semibold rounded-lg border border-slate-700 flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <Copy className="h-3.5 w-3.5" />
                     Copy

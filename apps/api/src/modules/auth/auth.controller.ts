@@ -1,6 +1,9 @@
 import { Controller, Post, Body, UseGuards, Request, Get } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { UserRole } from '@fulfillio/contracts';
 
 @Controller('auth')
 export class AuthController {
@@ -24,8 +27,14 @@ export class AuthController {
     return this.authService.login(body.email, body.password);
   }
 
+  @Post('worker-pin-login')
+  async workerPinLogin(@Body() body: { operatorCode: string; pin: string }) {
+    return this.authService.loginWithWorkerPin(body.operatorCode, body.pin);
+  }
+
   @Post('api-keys')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.MERCHANT, UserRole.SUPER_ADMIN)
   async generateApiKey(@Request() req: any) {
     return this.authService.generateApiKey(req.user.merchantId);
   }

@@ -14,8 +14,53 @@
   }
 }
 
+html,
 body {
   color: var(--foreground);
   background: var(--background);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+/* Smooth horizontal touch scrolling for responsive tables on Mobile & Tablet */
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
+@media print {
+  @page {
+    size: 4in 6in;
+    margin: 0mm;
+  }
+
+  body.printing-single-invoice {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body.printing-single-invoice > *:not(#fulfillio-print-invoice-root),
+  body.printing-single-invoice .fulfillio-screen-only {
+    display: none !important;
+  }
+
+  body.printing-single-invoice > #fulfillio-print-invoice-root,
+  body.printing-single-invoice #fulfillio-print-invoice-root {
+    display: block !important;
+    width: auto !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+  }
+
+  .fulfillio-thermal-page-break {
+    page-break-after: always;
+    break-after: page;
+  }
+  .fulfillio-thermal-page-break:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
 }

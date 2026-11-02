@@ -7,7 +7,7 @@ export class MerchantService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Get merchant profile, payout setup & identity info
+   * Get merchant profile, payout setup & identity info from PostgreSQL
    */
   async getProfile(merchantId: string) {
     const merchant = await this.prisma.merchant.findUnique({
@@ -22,36 +22,49 @@ export class MerchantService {
     }
 
     const primaryUser = merchant.users[0];
+    const defaultPayout = {
+      provider: 'BRAC Bank PLC',
+      accountHolder: primaryUser?.name || merchant.businessName,
+      accountNumber: '1501204892019001',
+      branchName: 'Banani Branch',
+      routingNumber: '060271829',
+      bkashMerchantNumber: '+880 1711-000000',
+      chequeLeafUrl: '/uploads/cheque-sample.png',
+      frequency: 'Weekly',
+      status: 'VERIFIED',
+    };
 
     return {
       id: merchant.id,
-      merchantCode: `MC-${merchant.id.substring(0, 4).toUpperCase()}`,
+      merchantCode: merchant.merchantCode,
       businessName: merchant.businessName,
       ownerName: primaryUser?.name || merchant.businessName,
       email: merchant.email,
       phone: merchant.phone || '+880 1711-000000',
-      location: 'Dhaka, Bangladesh',
+      location: merchant.location || 'Dhaka, Bangladesh',
       status: merchant.status,
       verified: merchant.status === 'APPROVED',
+      baseHandlingFee: Number(merchant.baseHandlingFee),
+      monthlyStorageFee: Number(merchant.monthlyStorageFee),
       webhookUrl: merchant.webhookUrl,
-      payoutAccount: {
-        provider: 'BRAC Bank PLC',
-        accountHolder: primaryUser?.name || merchant.businessName,
-        accountNumber: '1501204892019001',
-        branchName: 'Banani Branch',
-        routingNumber: '060271829',
-        frequency: 'Weekly',
-        status: 'VERIFIED',
-      },
-      socialChannels: [
-        { id: '1', platform: 'Facebook', url: `https://facebook.com/${merchant.businessName.toLowerCase().replace(/\s+/g, '')}` },
-        { id: '2', platform: 'Instagram', url: `https://instagram.com/${merchant.businessName.toLowerCase().replace(/\s+/g, '')}` },
+      payoutAccount: (merchant.payoutAccount as Record<string, any>) || defaultPayout,
+      socialChannels: (merchant.socialChannels as Array<any>) || [
+        {
+          id: '1',
+          platform: 'Facebook',
+          url: `https://facebook.com/${merchant.businessName.toLowerCase().replace(/\s+/g, '')}`,
+        },
+        {
+          id: '2',
+          platform: 'Instagram',
+          url: `https://instagram.com/${merchant.businessName.toLowerCase().replace(/\s+/g, '')}`,
+        },
       ],
     };
   }
 
   /**
-   * Update merchant profile & initiate payout review
+   * Update merchant profile, payout account & social channels in PostgreSQL
    */
   async updateProfile(merchantId: string, data: any) {
     const updated = await this.prisma.merchant.update({
@@ -59,6 +72,9 @@ export class MerchantService {
       data: {
         ...(data.businessName && { businessName: data.businessName }),
         ...(data.phone && { phone: data.phone }),
+        ...(data.location && { location: data.location }),
+        ...(data.payoutAccount && { payoutAccount: data.payoutAccount }),
+        ...(data.socialChannels && { socialChannels: data.socialChannels }),
       },
     });
 
@@ -67,6 +83,29 @@ export class MerchantService {
       merchant: updated,
       payoutStatus: data.payoutAccount ? 'PENDING_REVIEW' : 'UNCHANGED',
     };
+  }
+
+  /**
+   * Super Admin: Approve/Suspend merchant & set custom 3PL fee rates
+   */
+  async updateMerchantStatusAndRates(
+    merchantId: string,
+    payload: {
+      status?: 'PENDING' | 'APPROVED' | 'SUSPENDED';
+      baseHandlingFee?: number;
+      monthlyStorageFee?: number;
+    },
+  ) {
+    return this.prisma.merchant.update({
+      where: { id: merchantId },
+      data: {
+        ...(payload.status && { status: payload.status }),
+        ...(payload.baseHandlingFee !== undefined && { baseHandlingFee: payload.baseHandlingFee }),
+        ...(payload.monthlyStorageFee !== undefined && {
+          monthlyStorageFee: payload.monthlyStorageFee,
+        }),
+      },
+    });
   }
 
   /**
@@ -94,20 +133,23 @@ export class MerchantService {
    * Get merchant overview stats
    */
   async getDashboardStats(merchantId: string) {
-    const [totalOrders, pendingOrders, totalProducts, memoTemplates] = await Promise.all([
-      this.prisma.order.count({ where: { merchantId } }),
-      this.prisma.order.count({ where: { merchantId, status: 'PENDING' } }),
-      this.prisma.product.count({ where: { merchantId } }),
-      this.prisma.memoTemplate.findMany({
-        where: { merchantId },
-        select: { id: true, memoCode: true, name: true, isDefault: true, updatedAt: true },
-      }),
-    ]);
+    const [totalOrders, pendingOrders, totalProducts, memoTemplates, inboundShipments] =
+      await Promise.all([
+        this.prisma.order.count({ where: { merchantId } }),
+        this.prisma.order.count({ where: { merchantId, status: 'PENDING' } }),
+        this.prisma.product.count({ where: { merchantId } }),
+        this.prisma.memoTemplate.findMany({
+          where: { merchantId },
+          select: { id: true, memoCode: true, name: true, isDefault: true, updatedAt: true },
+        }),
+        this.prisma.inboundShipment.count({ where: { merchantId } }),
+      ]);
 
     return {
       totalOrders,
       pendingOrders,
       totalProducts,
+      inboundShipments,
       memoTemplates,
     };
   }

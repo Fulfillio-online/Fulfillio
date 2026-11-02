@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import {
   LayoutDashboard,
@@ -25,6 +26,7 @@ import {
   FileText,
   BadgeDollarSign,
   ChevronRight,
+  ChevronDown,
   Printer,
   Eye,
   Building2,
@@ -34,13 +36,24 @@ import {
   X,
   Tag,
   Copy,
+  Menu,
+  Package,
 } from 'lucide-react';
+import { MerchantDirectoryManager } from '@/features/merchants/MerchantDirectoryManager';
+import { WarehouseOrdersPipeline, PipelineMainTab } from '@/features/warehouse/WarehouseOrdersPipeline';
+import { WarehouseProductsManager, WarehouseProductSubTab } from '@/features/warehouse/WarehouseProductsManager';
+import { WarehouseDeliveryTracker } from '@/features/warehouse/WarehouseDeliveryTracker';
+import { WarehouseReturnsManager, WarehouseStockCycleManager } from '@/features/warehouse/WarehouseReturnsManager';
+import { CourierIntegrationManager } from '@/features/warehouse/CourierIntegrationManager';
+import { UnifiedThermalSticker } from '@/features/thermal-print/UnifiedThermalSticker';
 
 type SectionType =
   | 'dashboard'
   | 'merchants'
   | 'memos'
+  | 'warehouse-products'
   | 'warehouse-orders'
+  | 'warehouse-delivery'
   | 'warehouse-pick'
   | 'warehouse-dispatch'
   | 'warehouse-returns'
@@ -50,8 +63,26 @@ type SectionType =
 
 export default function AdminPanelPage() {
   const [activeSection, setActiveSection] = useState<SectionType>('dashboard');
+  const [warehouseProductTab, setWarehouseProductTab] = useState<WarehouseProductSubTab>('all');
+  const [warehouseOrderTab, setWarehouseOrderTab] = useState<PipelineMainTab>('all');
+  const [isProductsExpanded, setIsProductsExpanded] = useState(false);
+  const [isOrdersExpanded, setIsOrdersExpanded] = useState(false);
+  const [merchantListResetTrigger, setMerchantListResetTrigger] = useState<number>(0);
   const [selectedMerchant, setSelectedMerchant] = useState<any | null>(null);
   const [memoFilter, setMemoFilter] = useState<string>('ALL');
+  const [printingMemo, setPrintingMemo] = useState<any | null>(null);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+  const handlePrintSingleMemo = (memo: any) => {
+    setPrintingMemo(memo);
+    if (typeof document !== 'undefined') {
+      document.body.classList.add('printing-single-invoice');
+      setTimeout(() => {
+        window.print();
+        document.body.classList.remove('printing-single-invoice');
+      }, 80);
+    }
+  };
 
   // Mock State for Merchants with Full Profile Data
   const [merchants, setMerchants] = useState([
@@ -300,20 +331,42 @@ export default function AdminPanelPage() {
 
   return (
     <div className="flex min-h-screen bg-slate-950 text-slate-100">
-      {/* Sidebar Navigation */}
-      <aside className="w-64 border-r border-slate-800 bg-slate-900/60 p-4 flex flex-col justify-between shrink-0">
+      {/* Mobile / Tablet Backdrop Overlay */}
+      {isMobileSidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-slate-950/80 backdrop-blur-sm lg:hidden"
+          onClick={() => setIsMobileSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar Navigation (Slide-over Drawer on Mobile/Tablet, Fixed Sidebar on Desktop) */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 w-72 border-r border-slate-800 bg-slate-900 p-4 flex flex-col justify-between shrink-0 overflow-y-auto transition-transform duration-200 lg:static lg:w-64 lg:bg-slate-900/60 lg:translate-x-0 ${
+          isMobileSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
+        }`}
+      >
         <div>
           {/* Logo & Header */}
-          <div className="flex items-center gap-2.5 px-3 py-4 mb-4 border-b border-slate-800">
-            <div className="h-9 w-9 rounded-lg bg-emerald-600 flex items-center justify-center font-bold text-white text-lg">
-              F
+          <div className="flex items-center justify-between gap-2.5 px-3 py-4 mb-4 border-b border-slate-800">
+            <div className="flex items-center gap-2.5">
+              <div className="h-9 w-9 rounded-lg bg-emerald-600 flex items-center justify-center font-bold text-white text-lg">
+                F
+              </div>
+              <div>
+                <span className="font-extrabold text-lg tracking-tight block">Fulfillio</span>
+                <span className="text-[10px] uppercase font-bold text-emerald-400 tracking-wider">
+                  Admin Control Panel
+                </span>
+              </div>
             </div>
-            <div>
-              <span className="font-extrabold text-lg tracking-tight block">Fulfillio</span>
-              <span className="text-[10px] uppercase font-bold text-emerald-400 tracking-wider">
-                Admin Control Panel
-              </span>
-            </div>
+            <button
+              type="button"
+              onClick={() => setIsMobileSidebarOpen(false)}
+              className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+              aria-label="Close sidebar"
+            >
+              <X className="h-5 w-5" />
+            </button>
           </div>
 
           {/* Navigation Links */}
@@ -325,7 +378,10 @@ export default function AdminPanelPage() {
               </span>
               <div className="mt-2 space-y-1">
                 <button
-                  onClick={() => setActiveSection('dashboard')}
+                  onClick={() => {
+                    setActiveSection('dashboard');
+                    setIsMobileSidebarOpen(false);
+                  }}
                   className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     activeSection === 'dashboard'
                       ? 'bg-emerald-600 text-white shadow-sm'
@@ -345,7 +401,11 @@ export default function AdminPanelPage() {
               </span>
               <div className="mt-2 space-y-1">
                 <button
-                  onClick={() => setActiveSection('merchants')}
+                  onClick={() => {
+                    setActiveSection('merchants');
+                    setMerchantListResetTrigger((prev) => prev + 1);
+                    setIsMobileSidebarOpen(false);
+                  }}
                   className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     activeSection === 'merchants'
                       ? 'bg-emerald-600 text-white shadow-sm'
@@ -353,11 +413,14 @@ export default function AdminPanelPage() {
                   }`}
                 >
                   <Users className="h-4 w-4" />
-                  Merchants Profile
+                  Merchant List
                 </button>
 
                 <button
-                  onClick={() => setActiveSection('memos')}
+                  onClick={() => {
+                    setActiveSection('memos');
+                    setIsMobileSidebarOpen(false);
+                  }}
                   className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     activeSection === 'memos'
                       ? 'bg-emerald-600 text-white shadow-sm'
@@ -365,7 +428,7 @@ export default function AdminPanelPage() {
                   }`}
                 >
                   <Printer className="h-4 w-4" />
-                  Reseller Memo Cards
+                  Memo / Invoice
                 </button>
               </div>
             </div>
@@ -376,34 +439,173 @@ export default function AdminPanelPage() {
                 Warehouse Section
               </span>
               <div className="mt-2 space-y-1">
-                <button
-                  onClick={() => setActiveSection('warehouse-orders')}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    activeSection === 'warehouse-orders'
-                      ? 'bg-emerald-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                  }`}
-                >
-                  <Boxes className="h-4 w-4" />
-                  All Orders (Stock Status)
-                </button>
+                {/* 1. Primary Products Option (Above Orders) + Sub-Navigation (All Products, Product Approval, Warehouse Bins) */}
+                <div className="space-y-1">
+                  <button
+                    onClick={() => {
+                      if (activeSection !== 'warehouse-products') {
+                        setActiveSection('warehouse-products');
+                        setIsProductsExpanded(true);
+                      } else {
+                        setIsProductsExpanded((prev) => !prev);
+                      }
+                      setIsMobileSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      activeSection === 'warehouse-products'
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                    }`}
+                  >
+                    <span className="flex items-center gap-3">
+                      <Package className="h-4 w-4" />
+                      Products
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/20">
+                        SKUs &amp; Bins
+                      </span>
+                      {isProductsExpanded ? (
+                        <ChevronDown className="h-3.5 w-3.5 text-white/80" />
+                      ) : (
+                        <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
+                      )}
+                    </div>
+                  </button>
 
+                  {/* Sub-options under Products: only visible when clicked / expanded */}
+                  {isProductsExpanded && (
+                    <div className="ml-4 pl-3 border-l border-slate-800 space-y-0.5 py-1">
+                      {([
+                        { id: 'all', label: 'All Products' },
+                        { id: 'approval', label: 'Product Approval' },
+                        { id: 'bins', label: 'Warehouse Bins' },
+                      ] as { id: WarehouseProductSubTab; label: string }[]).map((sub) => {
+                        const isSubActive =
+                          activeSection === 'warehouse-products' && warehouseProductTab === sub.id;
+                        return (
+                          <button
+                            key={sub.id}
+                            onClick={() => {
+                              setActiveSection('warehouse-products');
+                              setWarehouseProductTab(sub.id);
+                              setIsProductsExpanded(true);
+                              setIsMobileSidebarOpen(false);
+                            }}
+                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                              isSubActive
+                                ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 font-semibold'
+                                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                            }`}
+                          >
+                            <span>{sub.label}</span>
+                            {isSubActive && (
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. Primary Orders Option + Sub-Navigation (All Orders, Pick, Pack, Dispatch) */}
+                <div className="space-y-1">
+                  <button
+                    onClick={() => {
+                      if (activeSection !== 'warehouse-orders') {
+                        setActiveSection('warehouse-orders');
+                        setIsOrdersExpanded(true);
+                      } else {
+                        setIsOrdersExpanded((prev) => !prev);
+                      }
+                      setIsMobileSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      activeSection === 'warehouse-orders'
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                    }`}
+                  >
+                    <span className="flex items-center gap-3">
+                      <Boxes className="h-4 w-4" />
+                      Orders
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/20">
+                        Pipeline
+                      </span>
+                      {isOrdersExpanded ? (
+                        <ChevronDown className="h-3.5 w-3.5 text-white/80" />
+                      ) : (
+                        <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
+                      )}
+                    </div>
+                  </button>
+
+                  {/* Sub-options under Orders: only visible when clicked / expanded */}
+                  {isOrdersExpanded && (
+                    <div className="ml-4 pl-3 border-l border-slate-800 space-y-0.5 py-1">
+                      {([
+                        { id: 'all', label: 'All Orders' },
+                        { id: 'pick', label: 'Pick' },
+                        { id: 'pack', label: 'Pack' },
+                        { id: 'dispatch', label: 'Dispatch' },
+                      ] as { id: PipelineMainTab; label: string }[]).map((sub) => {
+                        const isSubActive =
+                          activeSection === 'warehouse-orders' && warehouseOrderTab === sub.id;
+                        return (
+                          <button
+                            key={sub.id}
+                            onClick={() => {
+                              setActiveSection('warehouse-orders');
+                              setWarehouseOrderTab(sub.id);
+                              setIsOrdersExpanded(true);
+                              setIsMobileSidebarOpen(false);
+                            }}
+                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                              isSubActive
+                                ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 font-semibold'
+                                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                            }`}
+                          >
+                            <span>{sub.label}</span>
+                            {isSubActive && (
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. Dedicated Post-Dispatch Delivery & Merchant Parcel Tracker (Separate from Orders Pipeline) */}
                 <button
-                  onClick={() => setActiveSection('warehouse-pick')}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    activeSection === 'warehouse-pick'
+                  onClick={() => {
+                    setActiveSection('warehouse-delivery');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    activeSection === 'warehouse-delivery'
                       ? 'bg-emerald-600 text-white shadow-sm'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                   }`}
                 >
-                  <ClipboardList className="h-4 w-4" />
-                  Wave Pick Lists
+                  <span className="flex items-center gap-3">
+                    <Truck className="h-4 w-4" />
+                    Delivery & Dispatch
+                  </span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/20">
+                    Tracker
+                  </span>
                 </button>
 
                 {/* Direct Link to Packing Station */}
                 <Link
                   href="/wms/packing"
                   target="_blank"
+                  onClick={() => setIsMobileSidebarOpen(false)}
                   className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium text-emerald-400 hover:bg-emerald-950/40 border border-emerald-900/40 transition-colors"
                 >
                   <div className="flex items-center gap-3">
@@ -414,19 +616,10 @@ export default function AdminPanelPage() {
                 </Link>
 
                 <button
-                  onClick={() => setActiveSection('warehouse-dispatch')}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    activeSection === 'warehouse-dispatch'
-                      ? 'bg-emerald-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                  }`}
-                >
-                  <Truck className="h-4 w-4" />
-                  Courier Dispatch
-                </button>
-
-                <button
-                  onClick={() => setActiveSection('warehouse-returns')}
+                  onClick={() => {
+                    setActiveSection('warehouse-returns');
+                    setIsMobileSidebarOpen(false);
+                  }}
                   className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     activeSection === 'warehouse-returns'
                       ? 'bg-emerald-600 text-white shadow-sm'
@@ -438,7 +631,10 @@ export default function AdminPanelPage() {
                 </button>
 
                 <button
-                  onClick={() => setActiveSection('warehouse-stock')}
+                  onClick={() => {
+                    setActiveSection('warehouse-stock');
+                    setIsMobileSidebarOpen(false);
+                  }}
                   className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     activeSection === 'warehouse-stock'
                       ? 'bg-emerald-600 text-white shadow-sm'
@@ -458,7 +654,10 @@ export default function AdminPanelPage() {
               </span>
               <div className="mt-2 space-y-1">
                 <button
-                  onClick={() => setActiveSection('billing')}
+                  onClick={() => {
+                    setActiveSection('billing');
+                    setIsMobileSidebarOpen(false);
+                  }}
                   className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     activeSection === 'billing'
                       ? 'bg-emerald-600 text-white shadow-sm'
@@ -470,7 +669,10 @@ export default function AdminPanelPage() {
                 </button>
 
                 <button
-                  onClick={() => setActiveSection('settings-couriers')}
+                  onClick={() => {
+                    setActiveSection('settings-couriers');
+                    setIsMobileSidebarOpen(false);
+                  }}
                   className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     activeSection === 'settings-couriers'
                       ? 'bg-emerald-600 text-white shadow-sm'
@@ -510,19 +712,27 @@ export default function AdminPanelPage() {
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col overflow-y-auto">
+      <main className="flex-1 min-w-0 flex flex-col overflow-x-hidden">
         {/* Top Bar */}
-        <header className="h-16 border-b border-slate-800 px-8 flex items-center justify-between bg-slate-900/40 sticky top-0 z-10 backdrop-blur">
-          <div className="flex items-center gap-2">
-            <span className="text-slate-500 text-sm">Fulfillio 3PL</span>
-            <ChevronRight className="h-4 w-4 text-slate-600" />
-            <span className="font-bold text-sm uppercase tracking-wide text-slate-200">
+        <header className="h-16 border-b border-slate-800 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3 bg-slate-900/40 sticky top-0 z-10 backdrop-blur">
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              type="button"
+              onClick={() => setIsMobileSidebarOpen(true)}
+              className="lg:hidden p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-200 hover:text-emerald-400 shrink-0"
+              aria-label="Open navigation menu"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            <span className="hidden sm:inline text-slate-500 text-sm">Fulfillio 3PL</span>
+            <ChevronRight className="hidden sm:inline h-4 w-4 text-slate-600" />
+            <span className="font-bold text-xs sm:text-sm uppercase tracking-wide text-slate-200 truncate">
               {activeSection.replace('-', ' ')}
             </span>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="relative">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <div className="relative hidden md:block">
               <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
               <input
                 type="text"
@@ -531,15 +741,16 @@ export default function AdminPanelPage() {
               />
             </div>
 
-            <div className="flex items-center gap-2 text-xs bg-emerald-950/60 text-emerald-300 border border-emerald-800/60 px-3 py-1.5 rounded-lg">
+            <div className="flex items-center gap-2 text-xs bg-emerald-950/60 text-emerald-300 border border-emerald-800/60 px-2.5 sm:px-3 py-1.5 rounded-lg shrink-0">
               <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>All 3PL Nodes Healthy</span>
+              <span className="hidden sm:inline">All 3PL Nodes Healthy</span>
+              <span className="sm:hidden">Live</span>
             </div>
           </div>
         </header>
 
         {/* Section Content */}
-        <div className="p-8 space-y-6">
+        <div className="p-4 sm:p-6 lg:p-8 space-y-6">
           {/* ================= 1. DASHBOARD OVERVIEW ================= */}
           {activeSection === 'dashboard' && (
             <div className="space-y-6">
@@ -597,7 +808,7 @@ export default function AdminPanelPage() {
                     <span className="text-xs text-slate-500 font-mono">Live Sync</span>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-4 text-center">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
                     <div className="p-4 rounded-lg bg-slate-800/60 border border-slate-700/60">
                       <span className="text-xs text-slate-400 font-medium">1. Wave Picking</span>
                       <div className="text-xl font-bold text-slate-100 mt-1">42 Waves</div>
@@ -824,8 +1035,12 @@ export default function AdminPanelPage() {
             </div>
           )}
 
-          {/* ================= 2. MERCHANT PROFILES SECTION ================= */}
+          {/* ================= 2. MERCHANT LIST & DRILL-DOWN PROFILE SECTION ================= */}
           {activeSection === 'merchants' && (
+            <MerchantDirectoryManager resetTrigger={merchantListResetTrigger} />
+          )}
+
+          {false && activeSection === 'merchants' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <div>
@@ -1101,14 +1316,14 @@ export default function AdminPanelPage() {
             </div>
           )}
 
-          {/* ================= 2.1 RESELLER MEMO CARDS SECTION ================= */}
+          {/* ================= 2.1 MEMO / INVOICE SECTION ================= */}
           {activeSection === 'memos' && (
             <div className="space-y-6">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                  <h1 className="text-2xl font-bold tracking-tight">Reseller Memo & Thermal Labels</h1>
+                  <h1 className="text-2xl font-bold tracking-tight">Memo / Invoice</h1>
                   <p className="text-sm text-slate-400">
-                    All custom branded invoice slips designed by merchants for their resellers. View as cards with 4x6 thermal sticker preview.
+                    All custom branded 4x6&quot; invoice &amp; memo slips designed by merchants. Click Print Test to print only the selected 4x6&quot; invoice.
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1221,8 +1436,8 @@ export default function AdminPanelPage() {
                             Copy Code
                           </button>
                           <button
-                            onClick={() => window.print()}
-                            className="px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white flex items-center gap-1 transition-colors shadow-sm"
+                            onClick={() => handlePrintSingleMemo(memo)}
+                            className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white flex items-center gap-1 transition-colors shadow-sm"
                           >
                             <Printer className="h-3 w-3" />
                             Print Test
@@ -1232,6 +1447,41 @@ export default function AdminPanelPage() {
                     </div>
                   ))}
               </div>
+
+              {/* Isolated 4x6" Print Portal for Admin Memo / Invoice Section */}
+              {printingMemo &&
+                typeof document !== 'undefined' &&
+                createPortal(
+                  <div id="fulfillio-print-invoice-root" className="hidden">
+                    <UnifiedThermalSticker
+                      orderId="ORD-9824"
+                      memoCode={printingMemo.code}
+                      resellerName={printingMemo.resellerName}
+                      resellerPhone={printingMemo.phone}
+                      resellerAddress={printingMemo.address}
+                      brandColor={printingMemo.color}
+                      footerTerms={printingMemo.note}
+                      customerName="Tariqul Islam"
+                      customerPhone="01711-234567"
+                      customerAddress="Banani Block-D, Dhaka"
+                      city="Dhaka"
+                      codAmount={3450}
+                      courierProvider="STEADFAST"
+                      consignmentId="CN-982401"
+                      trackingCode="TRK-STE-982401"
+                      packagingType="POLY_SMALL"
+                      items={printingMemo.sampleItems.map((it: any, idx: number) => ({
+                        sku: `${printingMemo.merchantCode}-ITEM-0${idx + 1}`,
+                        title: it.name,
+                        color: 'STD',
+                        size: 'XL',
+                        qty: it.qty,
+                        price: Number(String(it.price).replace(/[^\d]/g, '')) || 1800,
+                      }))}
+                    />
+                  </div>,
+                  document.body,
+                )}
             </div>
           )}
 
@@ -1382,62 +1632,28 @@ export default function AdminPanelPage() {
             </div>
           )}
 
-          {/* ================= 3. WAREHOUSE: ORDERS ================= */}
-          {activeSection === 'warehouse-orders' && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h1 className="text-2xl font-bold tracking-tight">Warehouse Order Stream</h1>
-                  <p className="text-sm text-slate-400">
-                    Incoming orders from merchant plugins with real-time stock allocation and assigned Memo Codes.
-                  </p>
-                </div>
-              </div>
+          {/* ================= 3.0 WAREHOUSE: PRODUCTS (All Products, Product Approval, Warehouse Bins) ================= */}
+          {activeSection === 'warehouse-products' && (
+            <WarehouseProductsManager
+              activeTab={warehouseProductTab}
+              onTabChange={setWarehouseProductTab}
+            />
+          )}
 
-              {/* Order Table */}
-              <div className="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-800/80 text-slate-400 text-xs uppercase tracking-wider font-semibold border-b border-slate-800">
-                    <tr>
-                      <th className="p-4">Order ID</th>
-                      <th className="p-4">Merchant</th>
-                      <th className="p-4">Customer</th>
-                      <th className="p-4">Stock Availability</th>
-                      <th className="p-4">Memo Code</th>
-                      <th className="p-4">Status</th>
-                      <th className="p-4 text-right">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800">
-                    {orders.map((ord) => (
-                      <tr key={ord.id} className="hover:bg-slate-800/40 transition-colors">
-                        <td className="p-4 font-mono font-bold text-emerald-400">{ord.id}</td>
-                        <td className="p-4 text-slate-300 font-medium">{ord.merchant}</td>
-                        <td className="p-4 text-slate-400">{ord.customer}</td>
-                        <td className="p-4">
-                          <span
-                            className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                              ord.stockStatus === 'AVAILABLE'
-                                ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                                : 'bg-rose-950 text-rose-400 border border-rose-800'
-                            }`}
-                          >
-                            {ord.stockStatus === 'AVAILABLE' ? 'Stock Reserved' : 'Stock Out'}
-                          </span>
-                        </td>
-                        <td className="p-4 font-mono text-xs text-indigo-400 font-semibold">{ord.memoCode}</td>
-                        <td className="p-4">
-                          <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-xs font-medium border border-slate-700">
-                            {ord.orderStatus}
-                          </span>
-                        </td>
-                        <td className="p-4 text-right font-bold text-slate-200">{ord.amount}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+          {/* ================= 3.1 WAREHOUSE: ORDERS PIPELINE (All Orders, Pick, Pack, Dispatch) ================= */}
+          {activeSection === 'warehouse-orders' && (
+            <WarehouseOrdersPipeline
+              activeTab={warehouseOrderTab}
+              onTabChange={setWarehouseOrderTab}
+              onOpenDeliveryTracker={() => setActiveSection('warehouse-delivery')}
+            />
+          )}
+
+          {/* ================= 3.2 WAREHOUSE: DELIVERY & DISPATCH TRACKER (Post-Dispatch Parcel Status & Merchant Stats) ================= */}
+          {activeSection === 'warehouse-delivery' && (
+            <WarehouseDeliveryTracker
+              onOpenReturns={() => setActiveSection('warehouse-returns')}
+            />
           )}
 
           {/* ================= MERCHANT PROFILE DETAILS MODAL ================= */}
@@ -1960,34 +2176,14 @@ export default function AdminPanelPage() {
             </div>
           )}
 
-          {/* ================= 6. WAREHOUSE: RETURNS ================= */}
+          {/* ================= 6. WAREHOUSE: RETURNS & RTO INTAKE (Auto-Restock to Bin) ================= */}
           {activeSection === 'warehouse-returns' && (
-            <div className="space-y-6">
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight">Returns & RTO Intake</h1>
-                <p className="text-sm text-slate-400">
-                  Scan returned parcel tracking barcodes, perform damage inspection, and restock units into inventory.
-                </p>
-              </div>
-
-              <div className="p-6 rounded-xl bg-slate-900 border border-slate-800 text-center py-12">
-                <RotateCcw className="h-10 w-10 text-slate-500 mx-auto mb-3" />
-                <h3 className="font-bold text-lg">Inbound RTO Scanner Station</h3>
-                <p className="text-sm text-slate-400 max-w-md mx-auto mt-1 mb-6">
-                  Scan return consignment barcode to initiate condition assessment and restock to return bins.
-                </p>
-                <div className="max-w-md mx-auto flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="Scan Return Consignment ID..."
-                    className="flex-1 px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm font-mono focus:outline-none focus:border-emerald-500"
-                  />
-                  <button className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg text-sm transition-colors">
-                    Intake
-                  </button>
-                </div>
-              </div>
-            </div>
+            <WarehouseReturnsManager
+              onOpenProducts={() => {
+                setActiveSection('warehouse-products');
+                setWarehouseProductTab('all');
+              }}
+            />
           )}
 
           {/* ================= MERCHANT PROFILE DETAILS MODAL ================= */}
@@ -2137,43 +2333,11 @@ export default function AdminPanelPage() {
             </div>
           )}
 
-          {/* ================= 7. WAREHOUSE: STOCK ADJUSTMENT ================= */}
+          {/* ================= 7. WAREHOUSE: STOCK ADJUSTMENT & CYCLE COUNTS ================= */}
           {activeSection === 'warehouse-stock' && (
-            <div className="space-y-6">
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight">Stock Adjustments & Cycle Counts</h1>
-                <p className="text-sm text-slate-400">
-                  Perform auditable cycle counts and log inventory adjustments with supervisor reason codes.
-                </p>
-              </div>
-
-              <div className="p-6 rounded-xl bg-slate-900 border border-slate-800 space-y-4">
-                <div className="flex justify-between items-center">
-                  <h3 className="font-bold text-base">Recent Stock Adjustment Audit Log</h3>
-                  <button className="px-4 py-1.5 rounded-lg bg-emerald-600 text-xs font-semibold text-white hover:bg-emerald-500">
-                    + New Cycle Count
-                  </button>
-                </div>
-
-                <div className="divide-y divide-slate-800 text-sm">
-                  <div className="py-3 flex justify-between items-center">
-                    <div>
-                      <span className="font-semibold text-slate-200">HOODIE-BLK-XL (BIN: A-01-02-03)</span>
-                      <p className="text-xs text-slate-400">Reason: Damaged in transit packaging</p>
-                    </div>
-                    <span className="font-mono font-bold text-rose-400">-1 Unit</span>
-                  </div>
-
-                  <div className="py-3 flex justify-between items-center">
-                    <div>
-                      <span className="font-semibold text-slate-200">CAP-NVY-OS (BIN: B-04-01-01)</span>
-                      <p className="text-xs text-slate-400">Reason: Weekly cycle count surplus</p>
-                    </div>
-                    <span className="font-mono font-bold text-emerald-400">+5 Units</span>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <WarehouseStockCycleManager
+              onOpenReturns={() => setActiveSection('warehouse-returns')}
+            />
           )}
 
           {/* ================= MERCHANT PROFILE DETAILS MODAL ================= */}
@@ -2503,64 +2667,7 @@ export default function AdminPanelPage() {
           )}
 
           {/* ================= 9. SETTINGS: COURIER INTEGRATION ================= */}
-          {activeSection === 'settings-couriers' && (
-            <div className="space-y-6">
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight">Courier API Integrations</h1>
-                <p className="text-sm text-slate-400">
-                  Manage third-party courier credentials, automatic consignment booking, and tracking webhooks.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {couriers.map((courier) => (
-                  <div key={courier.code} className="p-6 rounded-xl bg-slate-900 border border-slate-800 space-y-4">
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-lg bg-slate-800 flex items-center justify-center font-bold text-emerald-400">
-                          {courier.code.substring(0, 2)}
-                        </div>
-                        <div>
-                          <h3 className="font-bold text-base">{courier.name}</h3>
-                          <span className="text-xs text-slate-500 font-mono">REST API + Webhook</span>
-                        </div>
-                      </div>
-                      <span
-                        className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                          courier.status === 'CONNECTED'
-                            ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                            : 'bg-slate-800 text-slate-400 border border-slate-700'
-                        }`}
-                      >
-                        {courier.status}
-                      </span>
-                    </div>
-
-                    <div className="space-y-2 text-xs">
-                      <div>
-                        <span className="text-slate-400 block mb-1">API Key / Secret:</span>
-                        <input
-                          type="password"
-                          value="••••••••••••••••••••••••"
-                          readOnly
-                          className="w-full px-3 py-1.5 bg-slate-800 border border-slate-700 rounded text-slate-300 font-mono"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="pt-2 flex justify-end gap-2">
-                      <button className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 border border-slate-700">
-                        Test Connection
-                      </button>
-                      <button className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white">
-                        Configure
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {activeSection === 'settings-couriers' && <CourierIntegrationManager />}
 
           {/* ================= MERCHANT PROFILE DETAILS MODAL ================= */}
           {selectedMerchant && (

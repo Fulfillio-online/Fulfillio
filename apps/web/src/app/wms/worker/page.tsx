@@ -17,10 +17,13 @@ import {
   Barcode,
   ArrowRight,
   AlertCircle,
-  Smartphone
+  Smartphone,
+  Boxes,
+  RotateCcw
 } from 'lucide-react';
+import { InboundAsnManager } from '@/features/inbound/InboundAsnManager';
 
-type WorkerTab = 'pick' | 'pack' | 'courier';
+type WorkerTab = 'pick' | 'pack' | 'courier' | 'dock';
 
 export default function WarehouseWorkerApp() {
   const [activeTab, setActiveTab] = useState<WorkerTab>('pick');
@@ -186,7 +189,7 @@ export default function WarehouseWorkerApp() {
   const selectedPackCount = packList.filter((o) => o.selectedForPack).length;
 
   return (
-    <div className="flex flex-col min-h-screen bg-slate-950 text-slate-100 max-w-lg mx-auto border-x border-slate-800 shadow-2xl">
+    <div className="flex flex-col min-h-screen bg-slate-950 text-slate-100 max-w-lg md:max-w-2xl lg:max-w-4xl w-full mx-auto border-x border-slate-800 shadow-2xl">
       {/* Mobile App Header */}
       <header className="p-4 bg-slate-900 border-b border-slate-800 sticky top-0 z-30">
         <div className="flex items-center justify-between">
@@ -229,8 +232,8 @@ export default function WarehouseWorkerApp() {
           <span className="font-semibold text-slate-300">{worker.shift}</span>
         </div>
 
-        {/* 3 Main Action Tabs */}
-        <nav className="grid grid-cols-3 gap-1.5 mt-3 pt-2 border-t border-slate-800">
+        {/* 4 Main Action Tabs */}
+        <nav className="grid grid-cols-4 gap-1.5 mt-3 pt-2 border-t border-slate-800">
           <button
             onClick={() => setActiveTab('pick')}
             className={`py-2 px-1 rounded-lg text-xs font-bold transition-colors flex flex-col items-center gap-1 relative ${
@@ -241,7 +244,7 @@ export default function WarehouseWorkerApp() {
           >
             <div className="flex items-center gap-1">
               <PackageCheck className="h-4 w-4" />
-              <span>1. Pick List</span>
+              <span>1. Pick</span>
             </div>
             {pickList.length > 0 && (
               <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-slate-900/80 text-emerald-300 font-bold">
@@ -260,7 +263,7 @@ export default function WarehouseWorkerApp() {
           >
             <div className="flex items-center gap-1">
               <Printer className="h-4 w-4" />
-              <span>2. Pack & Print</span>
+              <span>2. Pack</span>
             </div>
             {packList.length > 0 && (
               <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-slate-900/80 text-emerald-300 font-bold">
@@ -279,13 +282,30 @@ export default function WarehouseWorkerApp() {
           >
             <div className="flex items-center gap-1">
               <Truck className="h-4 w-4" />
-              <span>3. Handover</span>
+              <span>3. Dispatch</span>
             </div>
             {packedWaitingCourier.length > 0 && (
               <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-slate-900/80 text-emerald-300 font-bold">
                 {packedWaitingCourier.length}
               </span>
             )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('dock')}
+            className={`py-2 px-1 rounded-lg text-xs font-bold transition-colors flex flex-col items-center gap-1 relative ${
+              activeTab === 'dock'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+            }`}
+          >
+            <div className="flex items-center gap-1">
+              <Boxes className="h-4 w-4" />
+              <span>4. ASN/RTO</span>
+            </div>
+            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-slate-900/80 text-indigo-300 font-bold">
+              New
+            </span>
           </button>
         </nav>
       </header>
@@ -579,6 +599,52 @@ export default function WarehouseWorkerApp() {
                   <span>Pathao Courier Rider (09:30 AM)</span>
                   <span className="font-semibold text-emerald-400">8 Parcels (Signed)</span>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ================= TAB 4: INBOUND ASN & COURIER RTO INTAKE ================= */}
+        {activeTab === 'dock' && (
+          <div className="space-y-4">
+            <InboundAsnManager
+              mode="WAREHOUSE"
+              onStockReceived={(sku, good, dmg) =>
+                showToast(`Received ${sku}: +${good} Sellable, ${dmg} Quarantine`)
+              }
+            />
+
+            {/* Courier Return (RTO) Quarantine & Restock Card */}
+            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                  <RotateCcw className="w-4 h-4 text-amber-400" />
+                  <span>Courier Return (RTO) Intake</span>
+                </h3>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                  Quarantine Guard
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">
+                Inspect returned courier parcels. Undamaged units return to sellable shelf; damaged units route to Quarantine Bin.
+              </p>
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  onClick={() =>
+                    showToast('RTO Restocked: +1 MC-101-HOODIE-BLK-XL to Sellable Shelf A-01-02')
+                  }
+                  className="py-2.5 px-3 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 text-xs font-bold"
+                >
+                  ✓ Good → Restock Shelf
+                </button>
+                <button
+                  onClick={() =>
+                    showToast('RTO Damaged: Routed 1 unit to Quarantine Bin DMG-01')
+                  }
+                  className="py-2.5 px-3 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/40 text-rose-300 text-xs font-bold"
+                >
+                  ⚠ Damaged → Quarantine
+                </button>
               </div>
             </div>
           </div>
