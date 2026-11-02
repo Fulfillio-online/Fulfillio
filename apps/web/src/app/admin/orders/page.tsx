@@ -3,9 +3,9 @@
 import React, { Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
-  WarehouseOrdersPipeline,
+  OrdersPipelineManager,
   PipelineMainTab,
-} from '@/features/warehouse/WarehouseOrdersPipeline';
+} from '@/features/orders';
 
 function OrdersPipelineContent() {
   const searchParams = useSearchParams();
@@ -22,7 +22,7 @@ function OrdersPipelineContent() {
   };
 
   return (
-    <WarehouseOrdersPipeline
+    <OrdersPipelineManager
       activeTab={activeTab}
       onTabChange={handleTabChange}
       onOpenDeliveryTracker={() => router.push('/admin/delivery')}
