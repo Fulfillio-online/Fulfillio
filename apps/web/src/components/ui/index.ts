@@ -5,3 +5,5 @@ export * from './Input';
 export * from './StatCard';
 export * from './Modal';
 export * from './FraudRatioBadge';
+export * from './StatusBadge';
+export * from './TabsNav';
