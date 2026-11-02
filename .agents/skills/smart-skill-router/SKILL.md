@@ -107,3 +107,48 @@ At the start of working on a user task, briefly identify which skills from the 9
 | **UI Redesign / Clean-up** (e.g., *"ড্যাশবোর্ড ক্লিন করো, অযথা অপশন কমাও"*) | `#11 writing-plans` $\rightarrow$ `#5 frontend-design` + `#6 vercel-react-best-practices` $\rightarrow$ `#12 executing-plans` |
 | **Database + Backend API** (e.g., *"নতুন ইনভেন্টরি বা বিলিং টেবিল ও API যোগ করো"*) | `#10 bmad-architecture` $\rightarrow$ `#7 supabase-postgres-best-practices` $\rightarrow$ `#14 test-driven-development` $\rightarrow$ `#12 executing-plans` |
 | **Bug / Calculation / Print Issue** (e.g., *"মেমো প্রিন্ট দিলে পুরো পেজ প্রিন্ট হয় কেন?"*) | `#13 systematic-debugging` $\rightarrow$ `#11 writing-plans` $\rightarrow$ `#12 executing-plans` + `#14 test-driven-development` |
+
+---
+
+## 5. Mandatory Architecture & Code Quality Standards (SRP & Reusability)
+
+EVERY code generation, refactoring, or feature implementation across Frontend, Backend, and Database MUST strictly obey these Single Responsibility Principle (SRP) and Reusability rules:
+
+### A. Frontend Architecture Standards (Next.js 15 & React)
+1. **File Size Hard Ceiling (Max 300–400 Lines):**
+   - **NEVER** write monster single-file components (1,000+ lines).
+   - If a component exceeds 350 lines, immediately decompose it into dedicated sub-components.
+2. **Feature-Sliced Directory Structure:**
+   Every feature in `apps/web/src/features/<feature-name>/` MUST follow this structure:
+   - `types.ts`: All TypeScript interfaces, filter types, enums, and view models.
+   - `mockData.ts` (or `api.ts`): Mock seed data, storage keys (`localStorage`), pure data manipulation/resizing helpers.
+   - `components/`: Specific sub-components (KPI cards, tables, drawer sidebars, modal dialogues, tab views).
+   - `components/<sub-tab>/`: If a drawer or dashboard has sub-tabs, each tab lives in its own file.
+   - `<FeatureManager>.tsx`: A lean orchestrator (< 200 lines) holding top-level state, URL params, and rendering the sub-components.
+3. **Reusable Atomic UI Primitives (`apps/web/src/components/ui/`):**
+   - Do NOT duplicate badges, tabs, stat cards, or table headers across different screens.
+   - Extract generic widgets into `components/ui/` (e.g., `StatusBadge`, `TabsNav`, `StatCard`, `Button`, `Badge`, `Card`, `SearchInput`).
+4. **App Router Sub-Routing:**
+   - Instead of huge tab switches on a single page, decompose modules into clean Next.js sub-routes (e.g., `/admin/products`, `/admin/orders`, `/admin/merchants`, `/admin/returns`) with shared layouts.
+
+### B. Backend Architecture Standards (NestJS 11 Modular Monolith)
+1. **Strict 3-Tier Layer Separation:**
+   - `*.controller.ts`: Handles HTTP routing, Swagger docs, validation pipes, and `@UseGuards(JwtAuthGuard, RolesGuard)`. NO business logic.
+   - `*.service.ts`: Handles business validation, calculations, state machine transitions, and orchestrating repositories.
+   - `*.repository.ts` / Prisma Queries: Pure data access with mandatory tenant isolation filters (`where: { merchantId }`).
+2. **Data Contracts & DTOs:**
+   - DTOs validated via `class-validator` and `class-transformer`.
+   - Shared enums and interfaces live in `packages/contracts/src/index.ts` so both frontend and backend share exact types.
+3. **Asynchronous Jobs & Queues:**
+   - Producers stay inside the feature domain service (`queue.service.ts`).
+   - Consumers/Processors live inside `apps/worker/src/`. Never block HTTP endpoints with PDF generation or external webhooks.
+
+### C. Database Architecture Standards (PostgreSQL 16 & Prisma)
+1. **Tenant Isolation:**
+   - Every merchant-owned table MUST include `merchantId String`.
+   - Composite indexes MUST be declared for common query patterns: `@@index([merchantId, status])`, `@@index([merchantId, createdAt])`.
+2. **Concurrency & Inventory Safety:**
+   - Stock allocations and reservations MUST use atomic operations or database transactions (`FOR UPDATE` locking / `decrement`) to prevent double-selling.
+3. **Schema Normalization:**
+   - Do not dump structured relational entities into unindexed JSONB blobs unless specifically required (e.g., custom memo invoice visual templates).
+

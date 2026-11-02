@@ -7,3 +7,4 @@ export * from './Modal';
 export * from './FraudRatioBadge';
 export * from './StatusBadge';
 export * from './TabsNav';
+export * from './SearchInput';

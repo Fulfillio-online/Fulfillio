@@ -3,9 +3,9 @@
 import React, { Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
-  WarehouseProductsManager,
+  ProductsManager,
   WarehouseProductSubTab,
-} from '@/features/warehouse/WarehouseProductsManager';
+} from '@/features/products';
 
 function ProductsContent() {
   const searchParams = useSearchParams();
@@ -20,7 +20,7 @@ function ProductsContent() {
   };
 
   return (
-    <WarehouseProductsManager
+    <ProductsManager
       activeTab={activeTab}
       onTabChange={handleTabChange}
     />
