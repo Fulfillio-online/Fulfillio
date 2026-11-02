@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { CheckCircle2, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Plus, Minus } from 'lucide-react';
 import { Modal } from '@/components/ui';
 import { WarehouseBin, WarehouseProductItem } from '../../types';
 
@@ -29,12 +29,12 @@ export function ApprovalActionModal({
   bins,
   onConfirm,
 }: ApprovalActionModalProps) {
-  const [approvalQty, setApprovalQty] = useState<number>(50);
+  const [approvalQty, setApprovalQty] = useState<number | ''>(50);
   const [approvalSelectedBin, setApprovalSelectedBin] = useState<string>('A-01-02');
 
   useEffect(() => {
     if (approvalData) {
-      setApprovalQty(approvalData.product.stock || 50);
+      setApprovalQty(approvalData.product.stock ?? 50);
       setApprovalSelectedBin(approvalData.selectedBin || bins[0]?.code || 'A-01-02');
     }
   }, [approvalData, bins]);
@@ -43,11 +43,26 @@ export function ApprovalActionModal({
 
   const isApprove = approvalData.mode === 'APPROVE';
 
+  const handleDecrement = () => {
+    setApprovalQty((prev) => {
+      const current = typeof prev === 'number' ? prev : 1;
+      return Math.max(1, current - 1);
+    });
+  };
+
+  const handleIncrement = () => {
+    setApprovalQty((prev) => {
+      const current = typeof prev === 'number' ? prev : 0;
+      return current + 1;
+    });
+  };
+
   const handleConfirm = () => {
+    const finalQty = typeof approvalQty === 'number' && approvalQty > 0 ? approvalQty : 1;
     onConfirm(
       approvalData.mode,
       approvalData.product,
-      Math.max(1, approvalQty || 1),
+      finalQty,
       approvalSelectedBin || 'A-01-02'
     );
   };
@@ -101,15 +116,51 @@ export function ApprovalActionModal({
               <label className="block text-xs font-bold text-slate-300 mb-1.5">
                 Received &amp; Approved Quantity (Units) *
               </label>
-              <div className="relative">
-                <input
-                  type="number"
-                  min={1}
-                  value={approvalQty}
-                  onChange={(e) => setApprovalQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm font-mono font-bold text-emerald-400 focus:outline-none focus:border-emerald-500"
-                />
-                <span className="absolute right-3.5 top-2.5 text-xs text-slate-500 font-semibold">pcs</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleDecrement}
+                  className="w-10 h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 hover:text-white flex items-center justify-center font-bold text-base transition-colors shrink-0 cursor-pointer select-none"
+                  title="Decrease quantity"
+                >
+                  <Minus className="w-4 h-4" />
+                </button>
+                <div className="relative flex-1">
+                  <input
+                    type="number"
+                    min={1}
+                    value={approvalQty}
+                    placeholder="Enter quantity"
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '') {
+                        setApprovalQty('');
+                      } else {
+                        const parsed = parseInt(val, 10);
+                        if (!isNaN(parsed)) {
+                          setApprovalQty(Math.max(0, parsed));
+                        }
+                      }
+                    }}
+                    onBlur={() => {
+                      if (approvalQty === '' || approvalQty < 1) {
+                        setApprovalQty(1);
+                      }
+                    }}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm font-mono font-bold text-emerald-400 focus:outline-none focus:border-emerald-500 pr-12"
+                  />
+                  <span className="absolute right-3.5 top-2.5 text-xs text-slate-500 font-semibold pointer-events-none select-none">
+                    pcs
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleIncrement}
+                  className="w-10 h-10 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 hover:text-white flex items-center justify-center font-bold text-base transition-colors shrink-0 cursor-pointer select-none"
+                  title="Increase quantity"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
               </div>
               <span className="text-[11px] text-slate-400 mt-1 block">
                 Merchant submitted: <strong>{approvalData.product.stock} pcs</strong>. You can edit/verify the actual physical received count.

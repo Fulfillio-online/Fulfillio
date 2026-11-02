@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import {
   LayoutDashboard,
   Users,
@@ -199,22 +199,12 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
                   {/* Sub-options under Products */}
                   {isProductsExpanded && (
-                    <div className="ml-4 pl-3 border-l border-slate-800 space-y-0.5 py-1">
-                      {[
-                        { tab: 'all', label: 'All Products' },
-                        { tab: 'approval', label: 'Product Approval' },
-                        { tab: 'bins', label: 'Warehouse Bins' },
-                      ].map((sub) => (
-                        <Link
-                          key={sub.tab}
-                          href={`/admin/products?tab=${sub.tab}`}
-                          onClick={() => setIsMobileSidebarOpen(false)}
-                          className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 transition-colors"
-                        >
-                          <span>{sub.label}</span>
-                        </Link>
-                      ))}
-                    </div>
+                    <Suspense fallback={<div className="ml-4 pl-3 border-l border-slate-800 py-1" />}>
+                      <ProductsSubNav
+                        pathname={pathname}
+                        onItemClick={() => setIsMobileSidebarOpen(false)}
+                      />
+                    </Suspense>
                   )}
                 </div>
 
@@ -254,23 +244,12 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
                   {/* Sub-options under Orders */}
                   {isOrdersExpanded && (
-                    <div className="ml-4 pl-3 border-l border-slate-800 space-y-0.5 py-1">
-                      {[
-                        { tab: 'all', label: 'All Orders' },
-                        { tab: 'pick', label: 'Pick' },
-                        { tab: 'pack', label: 'Pack' },
-                        { tab: 'dispatch', label: 'Dispatch' },
-                      ].map((sub) => (
-                        <Link
-                          key={sub.tab}
-                          href={`/admin/orders?tab=${sub.tab}`}
-                          onClick={() => setIsMobileSidebarOpen(false)}
-                          className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 transition-colors"
-                        >
-                          <span>{sub.label}</span>
-                        </Link>
-                      ))}
-                    </div>
+                    <Suspense fallback={<div className="ml-4 pl-3 border-l border-slate-800 py-1" />}>
+                      <OrdersSubNav
+                        pathname={pathname}
+                        onItemClick={() => setIsMobileSidebarOpen(false)}
+                      />
+                    </Suspense>
                   )}
                 </div>
 
@@ -440,6 +419,93 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           {children}
         </div>
       </main>
+    </div>
+  );
+}
+
+function ProductsSubNav({
+  pathname,
+  onItemClick,
+}: {
+  pathname: string;
+  onItemClick: () => void;
+}) {
+  const searchParams = useSearchParams();
+  const isProductsRoute = pathname.startsWith('/admin/products');
+  const currentTab = searchParams.get('tab') || 'all';
+
+  const subOptions = [
+    { tab: 'all', label: 'All Products' },
+    { tab: 'approval', label: 'Product Approval' },
+    { tab: 'bins', label: 'Warehouse Bins' },
+  ];
+
+  return (
+    <div className="ml-4 pl-3 border-l border-slate-800 space-y-0.5 py-1">
+      {subOptions.map((sub) => {
+        const isActive = isProductsRoute && currentTab === sub.tab;
+        return (
+          <Link
+            key={sub.tab}
+            href={`/admin/products?tab=${sub.tab}`}
+            onClick={onItemClick}
+            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-medium transition-all ${
+              isActive
+                ? 'bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/40 shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+            }`}
+          >
+            <span>{sub.label}</span>
+            {isActive && (
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400" />
+            )}
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
+function OrdersSubNav({
+  pathname,
+  onItemClick,
+}: {
+  pathname: string;
+  onItemClick: () => void;
+}) {
+  const searchParams = useSearchParams();
+  const isOrdersRoute = pathname.startsWith('/admin/orders');
+  const currentTab = searchParams.get('tab') || 'all';
+
+  const subOptions = [
+    { tab: 'all', label: 'All Orders' },
+    { tab: 'pick', label: 'Pick' },
+    { tab: 'pack', label: 'Pack' },
+    { tab: 'dispatch', label: 'Dispatch' },
+  ];
+
+  return (
+    <div className="ml-4 pl-3 border-l border-slate-800 space-y-0.5 py-1">
+      {subOptions.map((sub) => {
+        const isActive = isOrdersRoute && currentTab === sub.tab;
+        return (
+          <Link
+            key={sub.tab}
+            href={`/admin/orders?tab=${sub.tab}`}
+            onClick={onItemClick}
+            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-medium transition-all ${
+              isActive
+                ? 'bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/40 shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+            }`}
+          >
+            <span>{sub.label}</span>
+            {isActive && (
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400" />
+            )}
+          </Link>
+        );
+      })}
     </div>
   );
 }

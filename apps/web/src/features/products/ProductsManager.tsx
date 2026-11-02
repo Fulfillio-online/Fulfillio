@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Package, CheckCircle2, MapPin, Plus, Box } from 'lucide-react';
+import { Package, CheckCircle2, Plus } from 'lucide-react';
 import {
   WarehouseBin,
   WarehouseProductItem,
@@ -178,8 +178,6 @@ export function ProductsManager({
     triggerToast(`Warehouse Bin ${newBin.code} created successfully.`);
   };
 
-  const approvedCount = products.filter((p) => p.status === 'APPROVED').length;
-  const pendingCount = products.filter((p) => p.status === 'PENDING_APPROVAL').length;
 
   return (
     <div className="space-y-6 text-slate-100">
@@ -199,67 +197,15 @@ export function ProductsManager({
           </div>
         </div>
 
-        {/* 3 Sub-Tabs + Add Product button */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex bg-slate-950 p-1 rounded-xl border border-slate-800">
-            <button
-              type="button"
-              onClick={() => handleSelectTab('all')}
-              className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer ${
-                subTab === 'all'
-                  ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/25'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Package className="w-4 h-4" />
-              <span>All Products</span>
-              <span className="px-1.5 py-0.5 text-[11px] rounded-md bg-slate-900/70 text-emerald-300 font-mono">
-                {approvedCount}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleSelectTab('approval')}
-              className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer ${
-                subTab === 'approval'
-                  ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/25'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <CheckCircle2 className="w-4 h-4" />
-              <span>Pending Approval</span>
-              {pendingCount > 0 && (
-                <span className="px-1.5 py-0.5 text-[11px] rounded-md bg-amber-500/20 border border-amber-500/40 text-amber-300 font-mono">
-                  {pendingCount}
-                </span>
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleSelectTab('bins')}
-              className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer ${
-                subTab === 'bins'
-                  ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/25'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <MapPin className="w-4 h-4" />
-              <span>Warehouse Bins</span>
-              <span className="px-1.5 py-0.5 text-[11px] rounded-md bg-slate-900/70 text-slate-300 font-mono">
-                {bins.length}
-              </span>
-            </button>
-          </div>
-
+        {/* Action Button */}
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setAddProductModalOpen(true)}
             className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-semibold flex items-center gap-2 shadow-lg shadow-emerald-600/20 transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            <span>+ Add Product (Under Merchant)</span>
+            <span>Add Product (Under Merchant)</span>
           </button>
         </div>
       </div>
@@ -285,7 +231,6 @@ export function ProductsManager({
       <ProductsStatsOverview
         products={products}
         bins={bins}
-        onSelectTab={handleSelectTab}
       />
 
       {/* Active Tab View */}
