@@ -110,11 +110,12 @@ export function OrdersPackTab({
                   </td>
                 </tr>
               ) : (
-                orders.map((order) => (
+                orders.map((order, idx) => (
                   <OrdersTableRow
                     key={order.id}
                     order={order}
                     isSelected={selectedIds.includes(order.id)}
+                    isNearBottom={idx > 0 && idx >= orders.length - 2}
                     onToggleSelect={onToggleSelectRow}
                     onPreviewMemo={onPreviewMemo}
                     onInlineCourierChange={onInlineCourierChange}

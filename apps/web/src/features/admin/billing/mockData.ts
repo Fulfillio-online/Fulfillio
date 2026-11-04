@@ -1,5 +1,8 @@
 import { MerchantFinancialProfile, SettlementTransaction } from './types';
 
+export const STORAGE_KEY_BILLING_TRANSACTIONS = 'fulfillio_settlement_transactions';
+export const STORAGE_KEY_BILLING_PROFILES = 'fulfillio_billing_profiles';
+
 export const MERCHANT_FINANCIAL_PROFILES: Record<string, MerchantFinancialProfile> = {
   'MC-101': {
     merchantId: 'm-101',
@@ -155,7 +158,7 @@ export const INITIAL_SETTLEMENT_TRANSACTIONS: SettlementTransaction[] = [
       accountHolder: 'Sabbir Ahmed',
     },
     amount: 20000,
-    status: 'UNPAID',
+    status: 'PAID',
     remarks: 'Merchant withdrawal request',
   },
 
@@ -235,7 +238,7 @@ export const INITIAL_SETTLEMENT_TRANSACTIONS: SettlementTransaction[] = [
       accountHolder: 'Rashedul Anam',
     },
     amount: 30000,
-    status: 'UNPAID',
+    status: 'PAID',
     remarks: 'Nagad direct payment queued',
   },
 
@@ -255,7 +258,7 @@ export const INITIAL_SETTLEMENT_TRANSACTIONS: SettlementTransaction[] = [
       accountHolder: 'Farhana Yeasmin',
     },
     amount: 45000,
-    status: 'UNPAID',
+    status: 'PAID',
     remarks: 'Disbursement pending verification',
   },
 ];

@@ -18,6 +18,7 @@ import { CourierPartner, WarehousePipelineOrder } from '../../types';
 export interface OrdersTableRowProps {
   order: WarehousePipelineOrder;
   isSelected: boolean;
+  isNearBottom?: boolean;
   onToggleSelect: (id: string) => void;
   onPreviewMemo: (order: WarehousePipelineOrder) => void;
   onInlineCourierChange: (orderId: string, newCourier: CourierPartner) => void;
@@ -33,6 +34,7 @@ export interface OrdersTableRowProps {
 export function OrdersTableRow({
   order,
   isSelected,
+  isNearBottom = false,
   onToggleSelect,
   onPreviewMemo,
   onInlineCourierChange,
@@ -244,7 +246,11 @@ export function OrdersTableRow({
           </button>
 
           {isMenuOpen && (
-            <div className="absolute right-0 mt-1.5 w-52 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl py-1.5 z-50 text-left font-sans text-xs">
+            <div
+              className={`absolute right-0 ${
+                isNearBottom ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
+              } w-52 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl py-1.5 z-[100] text-left font-sans text-xs`}
+            >
               {/* Preview Memo */}
               <button
                 type="button"

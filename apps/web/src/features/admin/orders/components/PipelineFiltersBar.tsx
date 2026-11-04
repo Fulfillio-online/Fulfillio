@@ -15,6 +15,14 @@ import { CourierPartner, OrderStage, PipelineMainTab, WarehousePipelineOrder } f
 
 interface PipelineFiltersBarProps {
   activeTab: PipelineMainTab;
+  onTabChange?: (tab: PipelineMainTab) => void;
+  counts?: {
+    all: number;
+    pickReady: number;
+    pickWaiting: number;
+    pack: number;
+    dispatch: number;
+  };
   searchQuery: string;
   onSearchChange: (query: string) => void;
   merchantFilter: string;
@@ -40,6 +48,8 @@ interface PipelineFiltersBarProps {
 
 export function PipelineFiltersBar({
   activeTab,
+  onTabChange,
+  counts,
   searchQuery,
   onSearchChange,
   merchantFilter,
@@ -67,6 +77,29 @@ export function PipelineFiltersBar({
     <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3 shadow-md">
       {/* Left Filters */}
       <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
+        {/* Stage Selector */}
+        {onTabChange && (
+          <select
+            value={activeTab}
+            onChange={(e) => onTabChange(e.target.value as PipelineMainTab)}
+            aria-label="Filter by Pipeline Stage"
+            className="px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-emerald-400 focus:outline-none focus:border-emerald-500 cursor-pointer shadow-sm"
+          >
+            <option value="all">
+              All Orders {counts ? `(${counts.all})` : ''}
+            </option>
+            <option value="pick">
+              1. Pick List {counts ? `(${counts.pickReady + counts.pickWaiting})` : ''}
+            </option>
+            <option value="pack">
+              2. Pack &amp; Print {counts ? `(${counts.pack})` : ''}
+            </option>
+            <option value="dispatch">
+              3. Courier Dispatch {counts ? `(${counts.dispatch})` : ''}
+            </option>
+          </select>
+        )}
+
         <div className="flex-1 sm:flex-initial sm:w-64 min-w-[190px]">
           <SearchInput
             value={searchQuery}

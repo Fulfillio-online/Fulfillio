@@ -14,6 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Search,
+  AlertTriangle,
 } from 'lucide-react';
 import { WarehouseBin, WarehouseProductItem } from '../../types';
 import { Modal } from '@/components/ui/Modal';
@@ -26,6 +27,11 @@ interface ProductsApprovalTabProps {
     product: WarehouseProductItem,
     selectedBin: string
   ) => void;
+  onBulkApprove?: (
+    productIds: string[],
+    binSelections: Record<string, string>
+  ) => void;
+  onBulkReject?: (productIds: string[]) => void;
   onSwitchToAllTab: () => void;
 }
 
@@ -33,6 +39,8 @@ export function ProductsApprovalTab({
   products,
   bins,
   onOpenApprovalModal,
+  onBulkApprove,
+  onBulkReject,
   onSwitchToAllTab,
 }: ProductsApprovalTabProps) {
   const pendingProducts = useMemo(
@@ -47,6 +55,13 @@ export function ProductsApprovalTab({
   // Pagination & Rows limit
   const [pageSize, setPageSize] = useState<number>(10);
   const [currentPage, setCurrentPage] = useState<number>(1);
+
+  // Bulk Selection
+  const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
+
+  // Bulk Confirmation Modals
+  const [bulkApproveModalOpen, setBulkApproveModalOpen] = useState(false);
+  const [bulkRejectModalOpen, setBulkRejectModalOpen] = useState(false);
 
   // Actions Dropdown state
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
@@ -111,6 +126,32 @@ export function ProductsApprovalTab({
   const startIndex = (safePage - 1) * pageSize;
   const paginatedProducts = filteredProducts.slice(startIndex, startIndex + pageSize);
 
+  // Bulk Selection Helpers
+  const isAllPageSelected =
+    paginatedProducts.length > 0 &&
+    paginatedProducts.every((p) => selectedProductIds.has(p.id));
+
+  const toggleSelect = (id: string) => {
+    setSelectedProductIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllPage = () => {
+    setSelectedProductIds((prev) => {
+      const next = new Set(prev);
+      if (isAllPageSelected) {
+        paginatedProducts.forEach((p) => next.delete(p.id));
+      } else {
+        paginatedProducts.forEach((p) => next.add(p.id));
+      }
+      return next;
+    });
+  };
+
   const toggleExpand = (id: string) => {
     setExpandedItemIds((prev) => {
       const next = new Set(prev);
@@ -131,6 +172,24 @@ export function ProductsApprovalTab({
     setPageSize(newSize);
     setCurrentPage(1);
     setActiveMenuId(null);
+  };
+
+  // Bulk Approve Execution
+  const handleConfirmBulkApprove = () => {
+    const ids = Array.from(selectedProductIds);
+    if (ids.length === 0) return;
+    onBulkApprove?.(ids, pendingBinSelection);
+    setSelectedProductIds(new Set());
+    setBulkApproveModalOpen(false);
+  };
+
+  // Bulk Reject Execution
+  const handleConfirmBulkReject = () => {
+    const ids = Array.from(selectedProductIds);
+    if (ids.length === 0) return;
+    onBulkReject?.(ids);
+    setSelectedProductIds(new Set());
+    setBulkRejectModalOpen(false);
   };
 
   return (
@@ -206,6 +265,96 @@ export function ProductsApprovalTab({
         </div>
       </div>
 
+      {/* Bulk Action Bar (Visible when 1+ pending products selected) */}
+      {selectedProductIds.size > 0 && (
+        <div className="bg-slate-900 border border-emerald-500/50 rounded-2xl p-3 sm:p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xl animate-in fade-in-50 duration-200">
+          <div className="flex items-center gap-3">
+            <span className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 font-mono font-bold flex items-center justify-center text-xs">
+              {selectedProductIds.size}
+            </span>
+            <div className="text-xs sm:text-sm">
+              <span className="text-white font-bold">{selectedProductIds.size}</span>
+              <span className="text-slate-400"> pending submissions selected</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedProductIds(new Set())}
+              className="text-xs text-slate-400 hover:text-white underline underline-offset-2 ml-2 cursor-pointer"
+            >
+              Deselect All
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Bulk Actions Dropdown */}
+            <div className="relative inline-flex items-center text-left" data-dropdown-container>
+              <button
+                type="button"
+                onClick={() =>
+                  setActiveMenuId(activeMenuId === 'bulk-actions-approval' ? null : 'bulk-actions-approval')
+                }
+                className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+              >
+                <span>Bulk Actions</span>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                    activeMenuId === 'bulk-actions-approval' ? 'rotate-180 text-emerald-400' : 'text-slate-400'
+                  }`}
+                />
+              </button>
+
+              {activeMenuId === 'bulk-actions-approval' && (
+                <div className="absolute right-0 top-full mt-1.5 w-60 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl py-1.5 z-[100] text-left font-sans text-xs">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveMenuId(null);
+                      setBulkApproveModalOpen(true);
+                    }}
+                    className="w-full px-3.5 py-2 text-left text-emerald-300 hover:bg-emerald-950/40 flex items-center gap-2.5 transition-colors cursor-pointer"
+                  >
+                    <Check className="w-4 h-4 text-emerald-400 pointer-events-none" />
+                    <span>Approve Selected ({selectedProductIds.size})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveMenuId(null);
+                      setBulkRejectModalOpen(true);
+                    }}
+                    className="w-full px-3.5 py-2 text-left text-rose-300 hover:bg-rose-950/40 flex items-center gap-2.5 transition-colors cursor-pointer border-t border-slate-800/80"
+                  >
+                    <XCircle className="w-4 h-4 text-rose-400 pointer-events-none" />
+                    <span>Reject Selected ({selectedProductIds.size})</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Direct Approve Button */}
+            <button
+              type="button"
+              onClick={() => setBulkApproveModalOpen(true)}
+              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-emerald-600/20 transition-all cursor-pointer"
+            >
+              <Check className="w-4 h-4 pointer-events-none" />
+              <span>Approve Selected ({selectedProductIds.size})</span>
+            </button>
+
+            {/* Direct Reject Button */}
+            <button
+              type="button"
+              onClick={() => setBulkRejectModalOpen(true)}
+              className="px-3.5 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/40 text-rose-300 hover:text-white active:scale-95 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+            >
+              <XCircle className="w-4 h-4 pointer-events-none" />
+              <span>Reject ({selectedProductIds.size})</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {pendingProducts.length === 0 ? (
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center space-y-3">
           <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto">
@@ -233,19 +382,35 @@ export function ProductsApprovalTab({
         <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
           {/* 1. Mobile Accordion Card View (Visible on < md) */}
           <div className="block md:hidden p-3 space-y-2.5">
-            {paginatedProducts.map((item) => {
+            {paginatedProducts.map((item, idx) => {
+              const isNearBottom = idx > 0 && idx >= paginatedProducts.length - 2;
               const chosenBin =
                 pendingBinSelection[item.id] || item.binCode || bins[0]?.code || 'A-01-02';
+              const isSelected = selectedProductIds.has(item.id);
               const isExpanded = expandedItemIds.has(item.id);
               const isMenuOpen = activeMenuId === `mobile-${item.id}`;
 
               return (
                 <div
                   key={item.id}
-                  className="rounded-xl border border-slate-800 bg-slate-950/70 p-3.5 space-y-2.5 transition-all shadow-sm"
+                  className={`rounded-xl border transition-all shadow-sm overflow-hidden p-3.5 space-y-2.5 ${
+                    isSelected
+                      ? 'border-emerald-500/50 bg-emerald-950/20'
+                      : 'border-slate-800 bg-slate-950/70'
+                  }`}
                 >
-                  {/* Row 1: Product Thumbnail + Title + Status + Accordion Toggle */}
+                  {/* Row 1: Checkbox + Product Thumbnail + Title + Status + Accordion Toggle */}
                   <div className="flex items-center justify-between gap-2.5">
+                    <div className="pt-0.5" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelect(item.id)}
+                        aria-label={`Select ${item.title}`}
+                        className="w-4 h-4 rounded bg-slate-950 border-slate-700 text-emerald-500 focus:ring-emerald-500 cursor-pointer accent-emerald-500"
+                      />
+                    </div>
+
                     <div
                       className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer"
                       onClick={() => toggleExpand(item.id)}
@@ -272,7 +437,7 @@ export function ProductsApprovalTab({
                       <button
                         type="button"
                         onClick={() => toggleExpand(item.id)}
-                        className="p-1 rounded-lg text-slate-400 hover:text-white"
+                        className="p-1 rounded-lg text-slate-400 hover:text-white cursor-pointer"
                         aria-label="Toggle details"
                       >
                         <ChevronDown
@@ -319,7 +484,7 @@ export function ProductsApprovalTab({
                     </div>
 
                     {/* Actions Dropdown */}
-                    <div className="relative inline-block" data-dropdown-container>
+                    <div className="relative inline-flex items-center justify-end text-left" data-dropdown-container>
                       <button
                         type="button"
                         onClick={() =>
@@ -336,16 +501,20 @@ export function ProductsApprovalTab({
                       </button>
 
                       {isMenuOpen && (
-                        <div className="absolute right-0 bottom-full mb-1.5 w-48 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl py-1.5 z-50 text-left text-xs">
+                        <div
+                          className={`absolute right-0 ${
+                            isNearBottom ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
+                          } w-52 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl py-1.5 z-[100] text-left text-xs pointer-events-auto`}
+                        >
                           <button
                             type="button"
                             onClick={() => {
                               setActiveMenuId(null);
                               setViewingProduct(item);
                             }}
-                            className="w-full px-3 py-2 text-left text-slate-200 hover:bg-slate-800 flex items-center gap-2 transition-colors cursor-pointer"
+                            className="w-full px-3.5 py-2 text-left text-slate-200 hover:bg-slate-800 flex items-center gap-2 transition-colors cursor-pointer"
                           >
-                            <Eye className="w-4 h-4 text-emerald-400" />
+                            <Eye className="w-4 h-4 text-emerald-400 pointer-events-none" />
                             <span>View Details</span>
                           </button>
                           <button
@@ -354,9 +523,9 @@ export function ProductsApprovalTab({
                               setActiveMenuId(null);
                               onOpenApprovalModal('APPROVE', item, chosenBin);
                             }}
-                            className="w-full px-3 py-2 text-left text-emerald-300 hover:bg-emerald-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer"
+                            className="w-full px-3.5 py-2 text-left text-emerald-300 hover:bg-emerald-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer"
                           >
-                            <Check className="w-4 h-4 text-emerald-400" />
+                            <Check className="w-4 h-4 text-emerald-400 pointer-events-none" />
                             <span>Approve &amp; Assign Bin</span>
                           </button>
                           <button
@@ -365,9 +534,9 @@ export function ProductsApprovalTab({
                               setActiveMenuId(null);
                               onOpenApprovalModal('REJECT', item, chosenBin);
                             }}
-                            className="w-full px-3 py-2 text-left text-rose-300 hover:bg-rose-950/40 flex items-center gap-2 transition-colors cursor-pointer"
+                            className="w-full px-3.5 py-2 text-left text-rose-300 hover:bg-rose-950/40 flex items-center gap-2 transition-colors cursor-pointer border-t border-slate-800/80"
                           >
-                            <XCircle className="w-4 h-4 text-rose-400" />
+                            <XCircle className="w-4 h-4 text-rose-400 pointer-events-none" />
                             <span>Reject / QC Fail</span>
                           </button>
                         </div>
@@ -400,32 +569,56 @@ export function ProductsApprovalTab({
           </div>
 
           {/* 2. Desktop Full Table View (Visible on md and larger) */}
-          <div className="hidden md:block overflow-x-auto">
+          <div className="hidden md:block overflow-x-auto overflow-y-visible">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-800 bg-slate-950/70 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                  <th className="py-3.5 pl-5 pr-3">Product</th>
-                  <th className="py-3.5 px-3">Merchant</th>
-                  <th className="py-3.5 px-3">SKU &amp; Variant</th>
-                  <th className="py-3.5 px-3">Received Qty &amp; Price</th>
-                  <th className="py-3.5 px-3">Target Bin</th>
-                  <th className="py-3.5 px-3">Submitted</th>
-                  <th className="py-3.5 pl-3 pr-5 text-right">Actions</th>
+                  <th className="py-3.5 pl-4 pr-2 w-10 align-middle">
+                    <input
+                      type="checkbox"
+                      checked={isAllPageSelected}
+                      onChange={toggleSelectAllPage}
+                      aria-label="Select all pending products on this page"
+                      className="w-4 h-4 rounded bg-slate-950 border-slate-700 text-emerald-500 focus:ring-emerald-500 cursor-pointer accent-emerald-500"
+                    />
+                  </th>
+                  <th className="py-3.5 px-3 align-middle">Product</th>
+                  <th className="py-3.5 px-3 align-middle">Merchant</th>
+                  <th className="py-3.5 px-3 align-middle">SKU &amp; Variant</th>
+                  <th className="py-3.5 px-3 align-middle">Received Qty &amp; Price</th>
+                  <th className="py-3.5 px-3 align-middle">Target Bin</th>
+                  <th className="py-3.5 px-3 align-middle">Submitted</th>
+                  <th className="py-3.5 pl-3 pr-5 text-right align-middle">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 text-xs">
-                {paginatedProducts.map((item) => {
+                {paginatedProducts.map((item, idx) => {
+                  const isNearBottom = idx > 0 && idx >= paginatedProducts.length - 2;
                   const chosenBin =
                     pendingBinSelection[item.id] || item.binCode || bins[0]?.code || 'A-01-02';
+                  const isSelected = selectedProductIds.has(item.id);
                   const isMenuOpen = activeMenuId === `desktop-${item.id}`;
 
                   return (
                     <tr
                       key={item.id}
-                      className="hover:bg-slate-800/40 transition-colors group"
+                      className={`hover:bg-slate-800/40 transition-colors group ${
+                        isSelected ? 'bg-emerald-950/15' : ''
+                      }`}
                     >
+                      {/* Checkbox */}
+                      <td className="py-3 pl-4 pr-2 w-10 align-middle" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelect(item.id)}
+                          aria-label={`Select ${item.title}`}
+                          className="w-4 h-4 rounded bg-slate-950 border-slate-700 text-emerald-500 focus:ring-emerald-500 cursor-pointer accent-emerald-500"
+                        />
+                      </td>
+
                       {/* Product Thumbnail & Title */}
-                      <td className="py-3 pl-5 pr-3">
+                      <td className="py-3 px-3 align-middle">
                         <div className="flex items-center gap-3">
                           <img
                             src={item.imageUrl}
@@ -450,7 +643,7 @@ export function ProductsApprovalTab({
                       </td>
 
                       {/* Merchant */}
-                      <td className="py-3 px-3">
+                      <td className="py-3 px-3 align-middle">
                         <div className="font-semibold text-slate-200">{item.merchantName}</div>
                         <div className="font-mono text-[11px] font-bold text-emerald-400">
                           {item.merchantCode}
@@ -458,7 +651,7 @@ export function ProductsApprovalTab({
                       </td>
 
                       {/* SKU & Variant */}
-                      <td className="py-3 px-3">
+                      <td className="py-3 px-3 align-middle">
                         <div className="font-mono font-bold text-emerald-400 text-xs" title={item.fullSku}>
                           {item.fullSku}
                         </div>
@@ -468,7 +661,7 @@ export function ProductsApprovalTab({
                       </td>
 
                       {/* Received Qty & Price */}
-                      <td className="py-3 px-3">
+                      <td className="py-3 px-3 align-middle">
                         <div className="font-mono font-bold text-cyan-300 text-xs">
                           {item.stock} <span className="text-[10px] font-normal text-slate-400">units</span>
                         </div>
@@ -478,7 +671,7 @@ export function ProductsApprovalTab({
                       </td>
 
                       {/* Target Bin Assignment */}
-                      <td className="py-3 px-3">
+                      <td className="py-3 px-3 align-middle">
                         <select
                           value={chosenBin}
                           onChange={(e) =>
@@ -499,16 +692,16 @@ export function ProductsApprovalTab({
                       </td>
 
                       {/* Submitted At */}
-                      <td className="py-3 px-3 whitespace-nowrap text-slate-400 text-xs">
+                      <td className="py-3 px-3 whitespace-nowrap text-slate-400 text-xs align-middle">
                         <div className="flex items-center gap-1.5">
                           <Clock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                           <span>{item.submittedAt}</span>
                         </div>
                       </td>
 
-                      {/* Actions Single Dropdown */}
-                      <td className="py-3 pl-3 pr-5 text-right">
-                        <div className="relative inline-block text-left" data-dropdown-container>
+                      {/* Actions Single Dropdown (Truly Floating Without Baseline Shift) */}
+                      <td className="py-3 pl-3 pr-5 text-right align-middle">
+                        <div className="relative inline-flex items-center justify-end text-left align-middle" data-dropdown-container>
                           <button
                             type="button"
                             onClick={() =>
@@ -525,7 +718,11 @@ export function ProductsApprovalTab({
                           </button>
 
                           {isMenuOpen && (
-                            <div className="absolute right-0 mt-1.5 w-52 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl py-1.5 z-50 text-left font-sans text-xs">
+                            <div
+                              className={`absolute right-0 ${
+                                isNearBottom ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
+                              } w-52 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl py-1.5 z-[100] text-left font-sans text-xs pointer-events-auto`}
+                            >
                               {/* 1. View Details */}
                               <button
                                 type="button"
@@ -535,7 +732,7 @@ export function ProductsApprovalTab({
                                 }}
                                 className="w-full px-3.5 py-2 text-left text-slate-200 hover:bg-slate-800 flex items-center gap-2.5 transition-colors cursor-pointer"
                               >
-                                <Eye className="w-4 h-4 text-emerald-400" />
+                                <Eye className="w-4 h-4 text-emerald-400 pointer-events-none" />
                                 <span>View Details</span>
                               </button>
 
@@ -548,7 +745,7 @@ export function ProductsApprovalTab({
                                 }}
                                 className="w-full px-3.5 py-2 text-left text-emerald-300 hover:bg-emerald-950/40 font-semibold flex items-center gap-2.5 transition-colors cursor-pointer"
                               >
-                                <Check className="w-4 h-4 text-emerald-400" />
+                                <Check className="w-4 h-4 text-emerald-400 pointer-events-none" />
                                 <span>Approve &amp; Assign Bin</span>
                               </button>
 
@@ -561,7 +758,7 @@ export function ProductsApprovalTab({
                                 }}
                                 className="w-full px-3.5 py-2 text-left text-rose-300 hover:bg-rose-950/40 flex items-center gap-2.5 transition-colors cursor-pointer border-t border-slate-800/80"
                               >
-                                <XCircle className="w-4 h-4 text-rose-400" />
+                                <XCircle className="w-4 h-4 text-rose-400 pointer-events-none" />
                                 <span>Reject / QC Fail</span>
                               </button>
                             </div>
@@ -743,7 +940,7 @@ export function ProductsApprovalTab({
                 }}
                 className="px-4 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
               >
-                <XCircle className="w-4 h-4 text-rose-400" />
+                <XCircle className="w-4 h-4 text-rose-400 pointer-events-none" />
                 <span>Reject / QC Fail</span>
               </button>
               <button
@@ -760,13 +957,97 @@ export function ProductsApprovalTab({
                 }}
                 className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-emerald-600/20 cursor-pointer transition-colors"
               >
-                <Check className="w-4 h-4" />
+                <Check className="w-4 h-4 pointer-events-none" />
                 <span>Approve &amp; Assign Bin</span>
               </button>
             </div>
           </div>
         </Modal>
       )}
+
+      {/* Bulk Approve Confirmation Modal */}
+      <Modal
+        isOpen={bulkApproveModalOpen}
+        onClose={() => setBulkApproveModalOpen(false)}
+        title="Confirm Bulk Approval & Bin Assignment"
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3.5">
+            <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border bg-emerald-500/15 border-emerald-500/30 text-emerald-400">
+              <CheckCircle2 className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-sm text-slate-200 font-semibold">
+                Confirm approving {selectedProductIds.size} selected products?
+              </p>
+              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                All {selectedProductIds.size} products will be assigned their target warehouse bins and activated into the live inventory catalog.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-800">
+            <button
+              type="button"
+              onClick={() => setBulkApproveModalOpen(false)}
+              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmBulkApprove}
+              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-emerald-600/20 cursor-pointer transition-colors"
+            >
+              <Check className="w-4 h-4 pointer-events-none" />
+              <span>Approve {selectedProductIds.size} Products</span>
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Bulk Reject Confirmation Modal */}
+      <Modal
+        isOpen={bulkRejectModalOpen}
+        onClose={() => setBulkRejectModalOpen(false)}
+        title="Confirm Bulk Rejection"
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3.5">
+            <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border bg-rose-500/15 border-rose-500/30 text-rose-400">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-sm text-slate-200 font-semibold">
+                Are you sure you want to reject {selectedProductIds.size} product submissions?
+              </p>
+              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                These submissions will be marked as rejected/QC failed and will not be added to active inventory.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-800">
+            <button
+              type="button"
+              onClick={() => setBulkRejectModalOpen(false)}
+              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmBulkReject}
+              className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-rose-600/20 cursor-pointer transition-colors"
+            >
+              <XCircle className="w-4 h-4 pointer-events-none" />
+              <span>Reject {selectedProductIds.size} Submissions</span>
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

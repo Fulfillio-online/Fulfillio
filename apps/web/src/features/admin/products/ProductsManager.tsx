@@ -62,7 +62,9 @@ export function ProductsManager({
         const savedProds = localStorage.getItem(STORAGE_KEY_PRODUCTS);
         if (savedProds) {
           const parsed = JSON.parse(savedProds);
-          if (Array.isArray(parsed) && parsed.length > 0) setProducts(parsed);
+          if (Array.isArray(parsed)) {
+            setProducts(parsed);
+          }
         } else {
           localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(INITIAL_PRODUCTS));
         }
@@ -81,8 +83,16 @@ export function ProductsManager({
     };
 
     loadFromStorage();
-    window.addEventListener('fulfillio-warehouse-sync', loadFromStorage);
-    return () => window.removeEventListener('fulfillio-warehouse-sync', loadFromStorage);
+
+    const handleWarehouseSync = (e: Event) => {
+      const ce = e as CustomEvent;
+      // Do not sync if this event was dispatched by this component itself
+      if (ce.detail?.source === 'ProductsManager') return;
+      loadFromStorage();
+    };
+
+    window.addEventListener('fulfillio-warehouse-sync', handleWarehouseSync);
+    return () => window.removeEventListener('fulfillio-warehouse-sync', handleWarehouseSync);
   }, []);
 
   useEffect(() => {
@@ -113,17 +123,29 @@ export function ProductsManager({
   };
 
   const handleAdjustStock = (productId: string, delta: number) => {
-    setProducts((prev) =>
-      prev.map((p) =>
+    setProducts((prev) => {
+      const next = prev.map((p) =>
         p.id === productId ? { ...p, stock: Math.max(0, p.stock + delta) } : p
-      )
-    );
+      );
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
   };
 
   const handleChangeProductBin = (productId: string, nextBinCode: string) => {
-    setProducts((prev) =>
-      prev.map((p) => (p.id === productId ? { ...p, binCode: nextBinCode } : p))
-    );
+    setProducts((prev) => {
+      const next = prev.map((p) => (p.id === productId ? { ...p, binCode: nextBinCode } : p));
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
     const prod = products.find((p) => p.id === productId);
     if (prod) {
       triggerToast(`Updated bin location for ${prod.fullSku} to ${nextBinCode}`);
@@ -137,47 +159,181 @@ export function ProductsManager({
     finalBin: string
   ) => {
     if (mode === 'APPROVE') {
-      setProducts((prev) =>
-        prev.map((p) =>
+      setProducts((prev) => {
+        const next = prev.map((p) =>
           p.id === product.id
             ? {
                 ...p,
-                status: 'APPROVED',
+                status: 'APPROVED' as const,
                 binCode: finalBin,
                 stock: finalQty,
                 submittedAt: 'Approved just now',
               }
             : p
-        )
-      );
+        );
+        try {
+          localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        } catch {
+          // ignore
+        }
+        return next;
+      });
 
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new Event('fulfillio-warehouse-sync'));
+        window.dispatchEvent(
+          new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
+        );
       }
 
       triggerToast(
         `Approved "${product.title}" (${product.fullSku}) under ${product.merchantCode} with ${finalQty} units in Bin ${finalBin}.`
       );
     } else {
-      setProducts((prev) => prev.filter((p) => p.id !== product.id));
+      setProducts((prev) => {
+        const next = prev.filter((p) => p.id !== product.id);
+        try {
+          localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        } catch {
+          // ignore
+        }
+        return next;
+      });
       triggerToast(`Rejected product submission "${product.title}" (${product.fullSku}).`);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
+        );
+      }
     }
 
     setApprovalModalData(null);
   };
 
+  const handleBulkApprove = (
+    productIds: string[],
+    binSelections: Record<string, string>
+  ) => {
+    const idSet = new Set(productIds);
+    setProducts((prev) => {
+      const next = prev.map((p) =>
+        idSet.has(p.id)
+          ? {
+              ...p,
+              status: 'APPROVED' as const,
+              binCode: binSelections[p.id] || p.binCode || bins[0]?.code || 'A-01-02',
+              submittedAt: 'Approved just now',
+            }
+          : p
+      );
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+
+    triggerToast(`Successfully approved ${productIds.length} products into active catalog.`);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
+      );
+    }
+  };
+
+  const handleBulkReject = (productIds: string[]) => {
+    const idSet = new Set(productIds);
+    setProducts((prev) => {
+      const next = prev.filter((p) => !idSet.has(p.id));
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+
+    triggerToast(`Rejected ${productIds.length} product submissions.`);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
+      );
+    }
+  };
+
   const handleAddProduct = (newProduct: WarehouseProductItem) => {
-    setProducts((prev) => [newProduct, ...prev]);
+    setProducts((prev) => {
+      const next = [newProduct, ...prev];
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
     triggerToast(
       `Added ${newProduct.fullSku} under ${newProduct.merchantCode} in Bin ${newProduct.binCode}.`
     );
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
+      );
+    }
+  };
+
+  const handleDeleteProduct = (productId: string) => {
+    const prod = products.find((p) => p.id === productId);
+    setProducts((prev) => {
+      const next = prev.filter((p) => p.id !== productId);
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+    if (prod) {
+      triggerToast(`Product "${prod.title}" (${prod.fullSku}) deleted successfully.`);
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
+      );
+    }
+  };
+
+  const handleDeleteProducts = (productIds: string[]) => {
+    const idSet = new Set(productIds);
+    const count = productIds.length;
+    setProducts((prev) => {
+      const next = prev.filter((p) => !idSet.has(p.id));
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+    triggerToast(`Successfully deleted ${count} products.`);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
+      );
+    }
   };
 
   const handleCreateBin = (newBin: WarehouseBin) => {
-    setBins((prev) => [newBin, ...prev]);
+    setBins((prev) => {
+      const next = [newBin, ...prev];
+      try {
+        localStorage.setItem(STORAGE_KEY_BINS, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
     triggerToast(`Warehouse Bin ${newBin.code} created successfully.`);
   };
-
 
   return (
     <div className="space-y-6 text-slate-100">
@@ -242,6 +398,8 @@ export function ProductsManager({
           onOpenStockAdjustModal={(prod) => setStockAdjustProduct(prod)}
           onChangeProductBin={handleChangeProductBin}
           onOpenAddProduct={() => setAddProductModalOpen(true)}
+          onDeleteProduct={handleDeleteProduct}
+          onDeleteProducts={handleDeleteProducts}
         />
       )}
 
@@ -252,6 +410,8 @@ export function ProductsManager({
           onOpenApprovalModal={(mode, product, selectedBin) =>
             setApprovalModalData({ mode, product, selectedBin })
           }
+          onBulkApprove={handleBulkApprove}
+          onBulkReject={handleBulkReject}
           onSwitchToAllTab={() => handleSelectTab('all')}
         />
       )}

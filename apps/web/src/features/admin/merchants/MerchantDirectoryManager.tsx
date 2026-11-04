@@ -64,7 +64,7 @@ export function MerchantDirectoryManager({
 
   const selectedMerchant = merchants.find((m) => m.id === selectedMerchantId) || null;
 
-  // Toggle active / suspend status
+  // Toggle active / suspend status for a single merchant
   const handleToggleStatus = (merchantId: string, currentStatus: string) => {
     const nextStatus: MerchantRecord['status'] = currentStatus === 'Active' ? 'Suspended' : 'Active';
     const updated = merchants.map((m) =>
@@ -77,6 +77,26 @@ export function MerchantDirectoryManager({
       console.warn('Could not save to localStorage', err);
     }
     triggerToast(`Status changed to ${nextStatus}`);
+  };
+
+  // Bulk update status for multiple merchants
+  const handleBulkUpdateStatus = (merchantIds: string[], nextStatus: 'Active' | 'Suspended') => {
+    const updated = merchants.map((m) =>
+      merchantIds.includes(m.id)
+        ? { ...m, status: nextStatus, verified: nextStatus === 'Active' }
+        : m,
+    );
+    setMerchants(updated);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    } catch (err) {
+      console.warn('Could not save to localStorage', err);
+    }
+    triggerToast(
+      `${nextStatus === 'Active' ? 'Approved' : 'Suspended'} ${merchantIds.length} merchant${
+        merchantIds.length > 1 ? 's' : ''
+      }`,
+    );
   };
 
   // Update merchant profile
@@ -137,12 +157,13 @@ export function MerchantDirectoryManager({
             productsCount={productsList.length}
           />
 
-          {/* Searchable & Filterable Merchant Table */}
+          {/* Searchable & Filterable Merchant Table with Multi-Select and Bulk Actions */}
           <MerchantTable
             merchants={merchants}
             productsList={productsList}
             onSelectMerchant={(m) => setSelectedMerchantId(m.id)}
             onToggleStatus={handleToggleStatus}
+            onBulkUpdateStatus={handleBulkUpdateStatus}
           />
         </div>
       ) : (

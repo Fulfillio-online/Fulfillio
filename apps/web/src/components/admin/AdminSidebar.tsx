@@ -15,6 +15,7 @@ import {
   SlidersHorizontal,
   CreditCard,
   Settings,
+  HandCoins,
   ChevronDown,
   ChevronRight,
   ExternalLink,
@@ -28,15 +29,11 @@ interface AdminSidebarProps {
 export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
   const pathname = usePathname();
   const [isProductsExpanded, setIsProductsExpanded] = useState(false);
-  const [isOrdersExpanded, setIsOrdersExpanded] = useState(false);
 
   // Auto-expand when active route matches
   useEffect(() => {
     if (pathname.startsWith('/admin/products')) {
       setIsProductsExpanded(true);
-    }
-    if (pathname.startsWith('/admin/orders')) {
-      setIsOrdersExpanded(true);
     }
   }, [pathname]);
 
@@ -179,50 +176,24 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                 )}
               </div>
 
-              {/* Orders Collapsible Option + Sub-tabs */}
-              <div className="space-y-1">
-                <div
-                  onClick={() => setIsOrdersExpanded((prev) => !prev)}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer select-none ${
-                    isCurrent('/admin/orders')
-                      ? 'bg-emerald-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                  }`}
-                >
-                  <Link
-                    href="/admin/orders"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setIsOrdersExpanded(true);
-                      onClose();
-                    }}
-                    className="flex items-center gap-3 flex-1"
-                  >
-                    <Boxes className="h-4 w-4" />
-                    <span>Orders</span>
-                  </Link>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/20">
-                      Pipeline
-                    </span>
-                    {isOrdersExpanded ? (
-                      <ChevronDown className="h-3.5 w-3.5 text-white/80" />
-                    ) : (
-                      <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
-                    )}
-                  </div>
-                </div>
-
-                {/* Sub-options under Orders */}
-                {isOrdersExpanded && (
-                  <Suspense fallback={<div className="ml-4 pl-3 border-l border-slate-800 py-1" />}>
-                    <OrdersSubNav
-                      pathname={pathname}
-                      onItemClick={onClose}
-                    />
-                  </Suspense>
-                )}
-              </div>
+              {/* Orders Single Link */}
+              <Link
+                href="/admin/orders"
+                onClick={onClose}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  isCurrent('/admin/orders')
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                <span className="flex items-center gap-3">
+                  <Boxes className="h-4 w-4" />
+                  <span>Orders</span>
+                </span>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/20">
+                  Pipeline
+                </span>
+              </Link>
 
               {/* Delivery & Dispatch Tracker */}
               <Link
@@ -281,6 +252,19 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
               Financials &amp; Settings
             </span>
             <div className="mt-2 space-y-1">
+              <Link
+                href="/admin/payouts"
+                onClick={onClose}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  isCurrent('/admin/payouts')
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                <HandCoins className="h-4 w-4" />
+                <span>Payment Requests</span>
+              </Link>
+
               <Link
                 href="/admin/billing"
                 onClick={onClose}
@@ -373,46 +357,4 @@ function ProductsSubNav({
   );
 }
 
-function OrdersSubNav({
-  pathname,
-  onItemClick,
-}: {
-  pathname: string;
-  onItemClick: () => void;
-}) {
-  const searchParams = useSearchParams();
-  const isOrdersRoute = pathname.startsWith('/admin/orders');
-  const currentTab = searchParams.get('tab') || 'all';
 
-  const subOptions = [
-    { tab: 'all', label: 'All Orders' },
-    { tab: 'pick', label: 'Pick' },
-    { tab: 'pack', label: 'Pack' },
-    { tab: 'dispatch', label: 'Dispatch' },
-  ];
-
-  return (
-    <div className="ml-4 pl-3 border-l border-slate-800 space-y-0.5 py-1">
-      {subOptions.map((sub) => {
-        const isActive = isOrdersRoute && currentTab === sub.tab;
-        return (
-          <Link
-            key={sub.tab}
-            href={`/admin/orders?tab=${sub.tab}`}
-            onClick={onItemClick}
-            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-medium transition-all ${
-              isActive
-                ? 'bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/40 shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
-            }`}
-          >
-            <span>{sub.label}</span>
-            {isActive && (
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400" />
-            )}
-          </Link>
-        );
-      })}
-    </div>
-  );
-}

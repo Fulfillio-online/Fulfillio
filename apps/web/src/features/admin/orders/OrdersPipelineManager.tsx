@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Truck, Plus, CheckCircle2, ExternalLink } from 'lucide-react';
+import { Truck, Plus, CheckCircle2, ExternalLink, ChevronLeft, ChevronRight } from 'lucide-react';
 import {
   CourierPartner,
   OrderStage,
@@ -47,6 +47,10 @@ export function OrdersPipelineManager({
   const [stageFilter, setStageFilter] = useState<'ALL' | OrderStage>('ALL');
   const [courierFilter, setCourierFilter] = useState<string>('ALL');
 
+  // Pagination & Rows limit
+  const [pageSize, setPageSize] = useState<number>(10);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+
   // Modals & Printing State
   const [toast, setToast] = useState<string | null>(null);
   const [previewMemoOrder, setPreviewMemoOrder] = useState<WarehousePipelineOrder | null>(null);
@@ -54,6 +58,68 @@ export function OrdersPipelineManager({
   const [printingOrders, setPrintingOrders] = useState<WarehousePipelineOrder[]>([]);
   const [pendingAction, setPendingAction] = useState<PendingConfirmationAction | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+
+  // Hydrate orders from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_ORDERS);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setOrders(parsed);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load orders from localStorage:', e);
+    }
+  }, []);
+
+  // Sync orders with external changes
+  useEffect(() => {
+    const handleSync = (e: Event) => {
+      const customEvent = e as CustomEvent<{ source?: string }>;
+      if (customEvent.detail?.source === 'OrdersPipelineManager') return;
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY_ORDERS);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setOrders(parsed);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to sync orders:', err);
+      }
+    };
+    window.addEventListener('fulfillio-warehouse-sync', handleSync);
+    return () => window.removeEventListener('fulfillio-warehouse-sync', handleSync);
+  }, []);
+
+  // Helper to update orders state and persist to localStorage
+  const updateOrdersAndPersist = (
+    updater: (prev: WarehousePipelineOrder[]) => WarehousePipelineOrder[]
+  ) => {
+    setOrders((prev) => {
+      const next = updater(prev);
+      try {
+        localStorage.setItem(STORAGE_KEY_ORDERS, JSON.stringify(next));
+        window.dispatchEvent(
+          new CustomEvent('fulfillio-warehouse-sync', {
+            detail: { source: 'OrdersPipelineManager' },
+          })
+        );
+      } catch (e) {
+        console.error('Failed to save orders to localStorage:', e);
+      }
+      return next;
+    });
+  };
+
+  // Reset page when any filter or page size changes
+  useEffect(() => {
+    setCurrentPage(1);
+    setSelectedIds([]);
+  }, [searchQuery, merchantFilter, courierFilter, stageFilter, activeTab, pickSubFilter, pageSize]);
 
   // Sync tab props
   useEffect(() => {
@@ -141,11 +207,18 @@ export function OrdersPipelineManager({
     [orders]
   );
 
+  // Pagination calculations
+  const totalItems = filteredOrders.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const safePage = Math.min(Math.max(1, currentPage), totalPages);
+  const startIndex = (safePage - 1) * pageSize;
+  const paginatedOrders = filteredOrders.slice(startIndex, startIndex + pageSize);
+
   const allVisibleSelected =
-    filteredOrders.length > 0 && filteredOrders.every((o) => selectedIds.includes(o.id));
+    paginatedOrders.length > 0 && paginatedOrders.every((o) => selectedIds.includes(o.id));
 
   const toggleSelectAll = () => {
-    setSelectedIds(allVisibleSelected ? [] : filteredOrders.map((o) => o.id));
+    setSelectedIds(allVisibleSelected ? [] : paginatedOrders.map((o) => o.id));
   };
 
   const toggleSelectRow = (id: string) => {
@@ -155,7 +228,7 @@ export function OrdersPipelineManager({
   };
 
   const handleInlineCourierChange = (orderId: string, newCourier: CourierPartner) => {
-    setOrders((prev) =>
+    updateOrdersAndPersist((prev) =>
       prev.map((o) => {
         if (o.id !== orderId) return o;
         const updatedTracking = o.isCourierBooked
@@ -177,7 +250,7 @@ export function OrdersPipelineManager({
 
     switch (action.type) {
       case 'MARK_PICKED':
-        setOrders((prev) =>
+        updateOrdersAndPersist((prev) =>
           prev.map((o) => (ids.includes(o.id) ? { ...o, stage: 'PACK', holdReason: undefined } : o))
         );
         setSelectedIds([]);
@@ -186,7 +259,7 @@ export function OrdersPipelineManager({
 
       case 'MARK_WAITING': {
         const reason = holdReasonInput?.trim() || 'Item not found in assigned Bin';
-        setOrders((prev) =>
+        updateOrdersAndPersist((prev) =>
           prev.map((o) => (ids.includes(o.id) ? { ...o, stage: 'WAITING', holdReason: reason } : o))
         );
         setSelectedIds([]);
@@ -195,7 +268,7 @@ export function OrdersPipelineManager({
       }
 
       case 'RESUME_PICK':
-        setOrders((prev) =>
+        updateOrdersAndPersist((prev) =>
           prev.map((o) => (ids.includes(o.id) ? { ...o, stage: 'PICK', holdReason: undefined } : o))
         );
         setSelectedIds([]);
@@ -205,7 +278,7 @@ export function OrdersPipelineManager({
 
       case 'PRINT_AND_PACK':
         triggerIsolatedPrint('MEMOS', action.orders);
-        setOrders((prev) =>
+        updateOrdersAndPersist((prev) =>
           prev.map((o) =>
             ids.includes(o.id) ? { ...o, stage: 'DISPATCH', isMemoPrinted: true } : o
           )
@@ -217,7 +290,7 @@ export function OrdersPipelineManager({
         break;
 
       case 'BOOK_COURIER':
-        setOrders((prev) =>
+        updateOrdersAndPersist((prev) =>
           prev.map((o) => {
             if (!ids.includes(o.id)) return o;
             const finalCourier: CourierPartner =
@@ -240,7 +313,7 @@ export function OrdersPipelineManager({
         break;
 
       case 'CONFIRM_HANDOVER':
-        setOrders((prev) =>
+        updateOrdersAndPersist((prev) =>
           prev.map((o) => {
             if (!ids.includes(o.id)) return o;
             const prefix = o.courier.slice(0, 3).toUpperCase();
@@ -262,7 +335,7 @@ export function OrdersPipelineManager({
         break;
 
       case 'CANCEL_ORDER':
-        setOrders((prev) =>
+        updateOrdersAndPersist((prev) =>
           prev.map((o) =>
             ids.includes(o.id)
               ? { ...o, stage: 'CANCELLED', stockAvailable: o.stockAvailable + o.qty }
@@ -349,6 +422,8 @@ export function OrdersPipelineManager({
       {/* Filters & Bulk Action Bar */}
       <PipelineFiltersBar
         activeTab={activeTab}
+        onTabChange={handleSelectTab}
+        counts={counts}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         merchantFilter={merchantFilter}
@@ -385,7 +460,7 @@ export function OrdersPipelineManager({
       {/* Tab Views */}
       {activeTab === 'all' && (
         <OrdersAllTab
-          orders={filteredOrders}
+          orders={paginatedOrders}
           selectedIds={selectedIds}
           onToggleSelectRow={toggleSelectRow}
           onToggleSelectAll={toggleSelectAll}
@@ -406,7 +481,7 @@ export function OrdersPipelineManager({
 
       {activeTab === 'pick' && (
         <OrdersPickTab
-          orders={filteredOrders}
+          orders={paginatedOrders}
           selectedIds={selectedIds}
           onToggleSelectRow={toggleSelectRow}
           onToggleSelectAll={toggleSelectAll}
@@ -433,7 +508,7 @@ export function OrdersPipelineManager({
 
       {activeTab === 'pack' && (
         <OrdersPackTab
-          orders={filteredOrders}
+          orders={paginatedOrders}
           selectedIds={selectedIds}
           onToggleSelectRow={toggleSelectRow}
           onToggleSelectAll={toggleSelectAll}
@@ -454,7 +529,7 @@ export function OrdersPipelineManager({
 
       {activeTab === 'dispatch' && (
         <OrdersDispatchTab
-          orders={filteredOrders}
+          orders={paginatedOrders}
           selectedIds={selectedIds}
           onToggleSelectRow={toggleSelectRow}
           onToggleSelectAll={toggleSelectAll}
@@ -473,6 +548,68 @@ export function OrdersPipelineManager({
         />
       )}
 
+      {/* Pagination & Limit Selector */}
+      {filteredOrders.length > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 bg-slate-900 border border-slate-800 rounded-2xl shadow-sm text-xs text-slate-400">
+          <div className="flex items-center gap-3">
+            <span>
+              Showing <span className="font-bold text-white">{startIndex + 1}</span> to{' '}
+              <span className="font-bold text-white">
+                {Math.min(startIndex + pageSize, totalItems)}
+              </span>{' '}
+              of <span className="font-bold text-white">{totalItems}</span> orders
+            </span>
+
+            <div className="flex items-center gap-1.5 border-l border-slate-800 pl-3">
+              <span>Show</span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                aria-label="Rows per page"
+                className="px-2 py-1 rounded-lg bg-slate-950 border border-slate-800 text-xs font-semibold text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+              <span>rows</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400 font-medium">
+              Page <span className="text-white font-bold">{safePage}</span> of{' '}
+              <span className="text-white font-bold">{totalPages}</span>
+            </span>
+
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                disabled={safePage <= 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                aria-label="Previous page"
+                className="p-1.5 rounded-lg border border-slate-800 bg-slate-950 text-slate-300 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                disabled={safePage >= totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                aria-label="Next page"
+                className="p-1.5 rounded-lg border border-slate-800 bg-slate-950 text-slate-300 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modals */}
       <ActionConfirmModal
         isOpen={Boolean(pendingAction)}
@@ -486,7 +623,7 @@ export function OrdersPipelineManager({
         onClose={() => setIsCreateModalOpen(false)}
         ordersCount={orders.length}
         onCreateOrder={(newOrder) => {
-          setOrders((prev) => [newOrder, ...prev]);
+          updateOrdersAndPersist((prev) => [newOrder, ...prev]);
           showToast(`Order ${newOrder.id} created & sent to 1. Pick List!`);
         }}
       />
