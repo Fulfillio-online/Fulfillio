@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Param, Body, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Param, Body, UseGuards, Query } from '@nestjs/common';
 import { PackingService } from './packing.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -11,7 +11,30 @@ export class PackingController {
   ) {}
 
   /**
-   * Fetch active packing order and items for verification
+   * Fetch active packing queue for packing station
+   */
+  @Get('queue')
+  async getPackingQueue(@Query('merchantId') merchantId?: string) {
+    return this.packingService.getPackingQueue(merchantId);
+  }
+
+  /**
+   * Batch print thermal invoices and mark orders as PACKED
+   */
+  @Post('batch-print')
+  @UseGuards(JwtAuthGuard)
+  async batchPrint(
+    @Body()
+    body: {
+      orderIds: string[];
+      packagingType?: string;
+    },
+  ) {
+    return this.packingService.batchPrintAndMarkPacked(body.orderIds, body.packagingType);
+  }
+
+  /**
+   * Fetch single order and items for verification
    */
   @Get('orders/:id')
   async getOrderForPacking(@Param('id') orderId: string) {
