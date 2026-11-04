@@ -1,21 +1,63 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import * as crypto from 'crypto';
-import { PrismaService } from '../../prisma/prisma.service';
+import { MerchantRepository } from './merchant.repository';
+import { MerchantStatus } from '@fulfillio/contracts';
 
 @Injectable()
 export class MerchantService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly merchantRepository: MerchantRepository) {}
+
+  /**
+   * Super Admin: List all merchants with filtering & pagination
+   */
+  async listMerchants(options: {
+    status?: MerchantStatus;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const page = Math.max(1, Number(options.page || 1));
+    const limit = Math.min(100, Math.max(1, Number(options.limit || 20)));
+    const offset = (page - 1) * limit;
+
+    const [items, total] = await Promise.all([
+      this.merchantRepository.findAll({
+        status: options.status,
+        search: options.search,
+        limit,
+        offset,
+      }),
+      this.merchantRepository.countAll({
+        status: options.status,
+        search: options.search,
+      }),
+    ]);
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  /**
+   * Super Admin: Get single merchant detail by ID
+   */
+  async getMerchantDetail(id: string) {
+    const merchant = await this.merchantRepository.findById(id);
+    if (!merchant) {
+      throw new NotFoundException(`Merchant with ID '${id}' not found`);
+    }
+    return merchant;
+  }
 
   /**
    * Get merchant profile, payout setup & identity info from PostgreSQL
    */
   async getProfile(merchantId: string) {
-    const merchant = await this.prisma.merchant.findUnique({
-      where: { id: merchantId },
-      include: {
-        users: { select: { name: true, email: true, role: true } },
-      },
-    });
+    const merchant = await this.merchantRepository.findById(merchantId);
 
     if (!merchant) {
       throw new NotFoundException(`Merchant ${merchantId} not found`);
@@ -67,15 +109,12 @@ export class MerchantService {
    * Update merchant profile, payout account & social channels in PostgreSQL
    */
   async updateProfile(merchantId: string, data: any) {
-    const updated = await this.prisma.merchant.update({
-      where: { id: merchantId },
-      data: {
-        ...(data.businessName && { businessName: data.businessName }),
-        ...(data.phone && { phone: data.phone }),
-        ...(data.location && { location: data.location }),
-        ...(data.payoutAccount && { payoutAccount: data.payoutAccount }),
-        ...(data.socialChannels && { socialChannels: data.socialChannels }),
-      },
+    const updated = await this.merchantRepository.update(merchantId, {
+      ...(data.businessName && { businessName: data.businessName }),
+      ...(data.phone && { phone: data.phone }),
+      ...(data.location && { location: data.location }),
+      ...(data.payoutAccount && { payoutAccount: data.payoutAccount }),
+      ...(data.socialChannels && { socialChannels: data.socialChannels }),
     });
 
     return {
@@ -96,15 +135,12 @@ export class MerchantService {
       monthlyStorageFee?: number;
     },
   ) {
-    return this.prisma.merchant.update({
-      where: { id: merchantId },
-      data: {
-        ...(payload.status && { status: payload.status }),
-        ...(payload.baseHandlingFee !== undefined && { baseHandlingFee: payload.baseHandlingFee }),
-        ...(payload.monthlyStorageFee !== undefined && {
-          monthlyStorageFee: payload.monthlyStorageFee,
-        }),
-      },
+    return this.merchantRepository.update(merchantId, {
+      ...(payload.status && { status: payload.status }),
+      ...(payload.baseHandlingFee !== undefined && { baseHandlingFee: payload.baseHandlingFee }),
+      ...(payload.monthlyStorageFee !== undefined && {
+        monthlyStorageFee: payload.monthlyStorageFee,
+      }),
     });
   }
 
@@ -114,12 +150,9 @@ export class MerchantService {
   async configureWebhook(merchantId: string, webhookUrl: string) {
     const webhookSecret = `whsec_${crypto.randomBytes(20).toString('hex')}`;
 
-    const merchant = await this.prisma.merchant.update({
-      where: { id: merchantId },
-      data: {
-        webhookUrl,
-        webhookSecret,
-      },
+    const merchant = await this.merchantRepository.update(merchantId, {
+      webhookUrl,
+      webhookSecret,
     });
 
     return {
@@ -133,24 +166,6 @@ export class MerchantService {
    * Get merchant overview stats
    */
   async getDashboardStats(merchantId: string) {
-    const [totalOrders, pendingOrders, totalProducts, memoTemplates, inboundShipments] =
-      await Promise.all([
-        this.prisma.order.count({ where: { merchantId } }),
-        this.prisma.order.count({ where: { merchantId, status: 'PENDING' } }),
-        this.prisma.product.count({ where: { merchantId } }),
-        this.prisma.memoTemplate.findMany({
-          where: { merchantId },
-          select: { id: true, memoCode: true, name: true, isDefault: true, updatedAt: true },
-        }),
-        this.prisma.inboundShipment.count({ where: { merchantId } }),
-      ]);
-
-    return {
-      totalOrders,
-      pendingOrders,
-      totalProducts,
-      inboundShipments,
-      memoTemplates,
-    };
+    return this.merchantRepository.getDashboardCounts(merchantId);
   }
 }

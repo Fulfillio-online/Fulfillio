@@ -1,10 +1,10 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
+import { MemoEngineRepository } from './memo-engine.repository';
 import { MemoTemplateLayout, MemoPaperSize } from '@fulfillio/shared';
 
 @Injectable()
 export class MemoEngineService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly memoRepo: MemoEngineRepository) {}
 
   /**
    * Create or update a custom memo design with a unique Memo Code
@@ -18,36 +18,30 @@ export class MemoEngineService {
       layout: MemoTemplateLayout;
     },
   ) {
-    const existing = await this.prisma.memoTemplate.findUnique({
-      where: {
-        merchantId_memoCode: {
-          merchantId,
-          memoCode: data.memoCode.toUpperCase(),
-        },
-      },
-    });
+    const existing = await this.memoRepo.findByCode(merchantId, data.memoCode);
 
     if (existing) {
       throw new ConflictException(`Memo Code '${data.memoCode}' already exists for this merchant.`);
     }
 
     if (data.isDefault) {
-      // Unset previous defaults
-      await this.prisma.memoTemplate.updateMany({
-        where: { merchantId, isDefault: true },
-        data: { isDefault: false },
-      });
+      await this.memoRepo.unsetDefault(merchantId);
     }
 
-    return this.prisma.memoTemplate.create({
-      data: {
-        merchantId,
-        memoCode: data.memoCode.toUpperCase(),
-        name: data.name,
-        isDefault: data.isDefault ?? false,
-        layout: data.layout as any,
-      },
+    return this.memoRepo.create({
+      merchantId,
+      memoCode: data.memoCode,
+      name: data.name,
+      isDefault: data.isDefault ?? false,
+      layout: data.layout,
     });
+  }
+
+  /**
+   * List templates for merchant
+   */
+  async listTemplates(merchantId: string) {
+    return this.memoRepo.listByMerchant(merchantId);
   }
 
   /**
@@ -55,22 +49,11 @@ export class MemoEngineService {
    */
   async resolveTemplate(merchantId: string, memoCode?: string) {
     if (memoCode) {
-      const template = await this.prisma.memoTemplate.findUnique({
-        where: {
-          merchantId_memoCode: {
-            merchantId,
-            memoCode: memoCode.toUpperCase(),
-          },
-        },
-      });
+      const template = await this.memoRepo.findByCode(merchantId, memoCode);
       if (template) return template;
     }
 
-    // Fallback to default template
-    const defaultTemplate = await this.prisma.memoTemplate.findFirst({
-      where: { merchantId, isDefault: true },
-    });
-
+    const defaultTemplate = await this.memoRepo.findDefault(merchantId);
     if (defaultTemplate) return defaultTemplate;
 
     // Standard fallback layout if merchant has not designed any template yet
@@ -101,21 +84,7 @@ export class MemoEngineService {
    * Compile order data with template into printable payload
    */
   async compileInvoice(orderId: string) {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-      include: {
-        merchant: true,
-        items: {
-          include: {
-            variant: {
-              include: {
-                product: true,
-              },
-            },
-          },
-        },
-      },
-    });
+    const order = await this.memoRepo.findOrderWithItemsAndMerchant(orderId);
 
     if (!order) {
       throw new NotFoundException(`Order with id '${orderId}' not found.`);

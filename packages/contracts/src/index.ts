@@ -11,6 +11,12 @@ export enum UserRole {
   COURIER_AGENT = 'COURIER_AGENT',
 }
 
+export enum MerchantStatus {
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  SUSPENDED = 'SUSPENDED',
+}
+
 export enum OrderStatus {
   PENDING = 'PENDING',
   ON_HOLD_STOCK = 'ON_HOLD_STOCK',

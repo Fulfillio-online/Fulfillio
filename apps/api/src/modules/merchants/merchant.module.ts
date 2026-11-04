@@ -1,12 +1,11 @@
 import { Module } from '@nestjs/common';
-import { MerchantService } from './merchant.service';
 import { MerchantController } from './merchant.controller';
-import { AuthModule } from '../auth/auth.module';
+import { MerchantService } from './merchant.service';
+import { MerchantRepository } from './merchant.repository';
 
 @Module({
-  imports: [AuthModule],
   controllers: [MerchantController],
-  providers: [MerchantService],
-  exports: [MerchantService],
+  providers: [MerchantService, MerchantRepository],
+  exports: [MerchantService, MerchantRepository],
 })
 export class MerchantModule {}

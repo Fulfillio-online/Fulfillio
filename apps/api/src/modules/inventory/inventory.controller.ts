@@ -1,17 +1,14 @@
-import { Controller, Post, Get, Body, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Get, Param, Body, UseGuards, Request } from '@nestjs/common';
 import { InventoryService } from './inventory.service';
-import { PrismaService } from '../../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
-import { StockMovementReason } from '@fulfillio/contracts';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { UserRole } from '@fulfillio/contracts';
 
 @Controller('inventory')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class InventoryController {
-  constructor(
-    private readonly inventoryService: InventoryService,
-    private readonly prisma: PrismaService,
-  ) {}
+  constructor(private readonly inventoryService: InventoryService) {}
 
   /**
    * Create a new Product with 2-Part SKU variants ([MerchantCode]-[BaseSKU]-[Variant])
@@ -39,11 +36,23 @@ export class InventoryController {
   }
 
   /**
-   * List all products & stock levels for the authenticated merchant
+   * List all products & stock levels for the authenticated merchant (or all if admin)
    */
   @Get('products')
   async listProducts(@Request() req: any) {
-    return this.inventoryService.listMerchantProducts(req.user.merchantId);
+    const isMerchant = req.user?.role === UserRole.MERCHANT;
+    const effectiveMerchantId = isMerchant ? req.user.merchantId : undefined;
+    return this.inventoryService.listMerchantProducts(effectiveMerchantId);
+  }
+
+  /**
+   * Get single product detail
+   */
+  @Get('products/:id')
+  async getProductById(@Request() req: any, @Param('id') id: string) {
+    const isMerchant = req.user?.role === UserRole.MERCHANT;
+    const effectiveMerchantId = isMerchant ? req.user.merchantId : undefined;
+    return this.inventoryService.getProductById(id, effectiveMerchantId);
   }
 
   /**
@@ -51,13 +60,16 @@ export class InventoryController {
    */
   @Get('audit-logs')
   async listAuditLogs(@Request() req: any) {
-    return this.inventoryService.listAuditLogs(req.user.merchantId);
+    const isMerchant = req.user?.role === UserRole.MERCHANT;
+    const effectiveMerchantId = isMerchant ? req.user.merchantId : undefined;
+    return this.inventoryService.listAuditLogs(effectiveMerchantId);
   }
 
   /**
    * Register a physical warehouse bin location
    */
   @Post('locations')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.WAREHOUSE_OPERATOR)
   async createLocation(
     @Body()
     body: {
@@ -69,23 +81,15 @@ export class InventoryController {
       isDamaged?: boolean;
     },
   ) {
-    return this.prisma.inventoryLocation.create({
-      data: {
-        zone: body.zone,
-        aisle: body.aisle,
-        rack: body.rack,
-        shelf: body.shelf,
-        binCode: body.binCode.toUpperCase(),
-        isDamaged: body.isDamaged ?? false,
-      },
-    });
+    return this.inventoryService.createLocation(body);
   }
 
+  /**
+   * List warehouse bin locations
+   */
   @Get('locations')
   async listLocations() {
-    return this.prisma.inventoryLocation.findMany({
-      orderBy: { binCode: 'asc' },
-    });
+    return this.inventoryService.listLocations();
   }
 
   /**
@@ -103,46 +107,10 @@ export class InventoryController {
       reason?: string;
     },
   ) {
-    return this.prisma.$transaction(async (tx) => {
-      const item = await tx.inventoryItem.upsert({
-        where: {
-          variantId_locationId: {
-            variantId: body.variantId,
-            locationId: body.locationId,
-          },
-        },
-        update: body.isDamaged
-          ? { quantityDamaged: { increment: body.quantityDelta } }
-          : { quantityAvailable: { increment: body.quantityDelta } },
-        create: {
-          variantId: body.variantId,
-          locationId: body.locationId,
-          quantityAvailable: body.isDamaged ? 0 : Math.max(0, body.quantityDelta),
-          quantityDamaged: body.isDamaged ? Math.max(0, body.quantityDelta) : 0,
-          quantityReserved: 0,
-        },
-      });
-
-      if (req.user?.merchantId) {
-        await tx.inventoryAuditLog.create({
-          data: {
-            merchantId: req.user.merchantId,
-            variantId: body.variantId,
-            quantityDelta: body.quantityDelta,
-            reason: body.isDamaged
-              ? StockMovementReason.DAMAGED_QUARANTINE
-              : StockMovementReason.MANUAL_ADJUSTMENT,
-            performedByUserId: req.user.sub,
-            notes: body.reason || 'Manual warehouse stock adjustment',
-          },
-        });
-      }
-
-      return {
-        item,
-        reason: body.reason,
-        adjustedAt: new Date().toISOString(),
-      };
+    return this.inventoryService.adjustStock({
+      ...body,
+      merchantId: req.user?.merchantId,
+      performedByUserId: req.user?.sub,
     });
   }
 }

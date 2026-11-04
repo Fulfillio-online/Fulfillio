@@ -1,15 +1,11 @@
 import { Controller, Post, Get, Param, Body, UseGuards, Request } from '@nestjs/common';
 import { MemoEngineService } from './memo-engine.service';
-import { PrismaService } from '../../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { MemoTemplateLayout } from '@fulfillio/shared';
 
 @Controller('memos')
 export class MemoEngineController {
-  constructor(
-    private readonly memoEngineService: MemoEngineService,
-    private readonly prisma: PrismaService,
-  ) {}
+  constructor(private readonly memoEngineService: MemoEngineService) {}
 
   /**
    * Save a custom memo template with unique memo_code
@@ -37,10 +33,7 @@ export class MemoEngineController {
   @UseGuards(JwtAuthGuard)
   async listTemplates(@Request() req: any) {
     const merchantId = req.user.merchantId;
-    return this.prisma.memoTemplate.findMany({
-      where: { merchantId },
-      orderBy: { createdAt: 'desc' },
-    });
+    return this.memoEngineService.listTemplates(merchantId);
   }
 
   /**

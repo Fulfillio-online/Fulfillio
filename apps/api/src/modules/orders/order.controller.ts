@@ -1,12 +1,88 @@
-import { Controller, Post, Get, Param, Body, UseGuards, Request } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Patch,
+  Param,
+  Query,
+  Body,
+  UseGuards,
+  Request,
+} from '@nestjs/common';
 import { OrderService } from './order.service';
 import { ApiKeyGuard } from '../auth/guards/api-key.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { PackagingType } from '@fulfillio/contracts';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { PackagingType, OrderStatus, UserRole } from '@fulfillio/contracts';
 
 @Controller('orders')
 export class OrderController {
   constructor(private readonly orderService: OrderService) {}
+
+  /**
+   * List orders with pagination, search, status filtering, and multi-tenant security
+   */
+  @Get()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  async listOrders(
+    @Request() req: any,
+    @Query('status') status?: OrderStatus,
+    @Query('search') search?: string,
+    @Query('merchantId') merchantIdQuery?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    // If MERCHANT role, always enforce their own merchantId
+    const isMerchant = req.user?.role === UserRole.MERCHANT;
+    const effectiveMerchantId = isMerchant ? req.user.merchantId : merchantIdQuery;
+
+    return this.orderService.listOrders({
+      merchantId: effectiveMerchantId,
+      status,
+      search,
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 20,
+    });
+  }
+
+  /**
+   * Get single order by ID with line items and fulfillments
+   */
+  @Get(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  async getOrderById(@Request() req: any, @Param('id') id: string) {
+    const isMerchant = req.user?.role === UserRole.MERCHANT;
+    const effectiveMerchantId = isMerchant ? req.user.merchantId : undefined;
+    return this.orderService.getOrderById(id, effectiveMerchantId);
+  }
+
+  /**
+   * Update order status
+   */
+  @Patch(':id/status')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  async updateStatus(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body('status') status: OrderStatus,
+  ) {
+    const isMerchant = req.user?.role === UserRole.MERCHANT;
+    const effectiveMerchantId = isMerchant ? req.user.merchantId : undefined;
+    return this.orderService.updateOrderStatus(id, status, effectiveMerchantId);
+  }
+
+  /**
+   * Packing station line item barcode scan verification
+   */
+  @Post(':id/items/:itemId/verify')
+  @UseGuards(JwtAuthGuard)
+  async verifyItem(
+    @Param('id') orderId: string,
+    @Param('itemId') itemId: string,
+    @Body('isVerified') isVerified?: boolean,
+  ) {
+    return this.orderService.verifyOrderItem(orderId, itemId, isVerified ?? true);
+  }
 
   /**
    * Check customer phone number against BD Courier Fraud & Delivery Ratio Shield

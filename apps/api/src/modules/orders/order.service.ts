@@ -1,5 +1,5 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
+import { OrderRepository } from './order.repository';
 import { InventoryService } from '../inventory/inventory.service';
 import {
   OrderStatus,
@@ -12,7 +12,7 @@ import {
 @Injectable()
 export class OrderService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly orderRepository: OrderRepository,
     private readonly inventoryService: InventoryService,
   ) {}
 
@@ -25,15 +25,11 @@ export class OrderService {
 
     // Check internal historical orders for this customer phone
     const [deliveredInternal, cancelledInternal] = await Promise.all([
-      this.prisma.order.count({
-        where: { customerPhone: { contains: cleanPhone }, status: OrderStatus.DELIVERED },
-      }),
-      this.prisma.order.count({
-        where: {
-          customerPhone: { contains: cleanPhone },
-          status: { in: [OrderStatus.RETURNED, OrderStatus.CANCELLED] },
-        },
-      }),
+      this.orderRepository.countCustomerOrders(cleanPhone, OrderStatus.DELIVERED),
+      this.orderRepository.countCustomerOrders(cleanPhone, [
+        OrderStatus.RETURNED,
+        OrderStatus.CANCELLED,
+      ]),
     ]);
 
     // Deterministic cross-courier history simulation enriched by internal history
@@ -75,8 +71,77 @@ export class OrderService {
   }
 
   /**
+   * List orders with filtering, pagination, and multi-tenant security
+   */
+  async listOrders(options: {
+    merchantId?: string;
+    status?: OrderStatus;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const page = Math.max(1, Number(options.page || 1));
+    const limit = Math.min(100, Math.max(1, Number(options.limit || 20)));
+    const offset = (page - 1) * limit;
+
+    const [items, total] = await Promise.all([
+      this.orderRepository.findManyWithFilters({
+        merchantId: options.merchantId,
+        status: options.status,
+        search: options.search,
+        limit,
+        offset,
+      }),
+      this.orderRepository.countWithFilters({
+        merchantId: options.merchantId,
+        status: options.status,
+        search: options.search,
+      }),
+    ]);
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  /**
+   * Get single order by ID
+   */
+  async getOrderById(id: string, merchantId?: string) {
+    const order = await this.orderRepository.findById(id, merchantId);
+    if (!order) {
+      throw new NotFoundException(`Order with ID '${id}' not found`);
+    }
+    return order;
+  }
+
+  /**
+   * Update order status
+   */
+  async updateOrderStatus(id: string, status: OrderStatus, merchantId?: string) {
+    const order = await this.getOrderById(id, merchantId);
+    return this.orderRepository.updateStatus(order.id, status);
+  }
+
+  /**
+   * Verify an order item barcode at packing station
+   */
+  async verifyOrderItem(orderId: string, itemId: string, isVerified: boolean = true) {
+    const order = await this.orderRepository.findById(orderId);
+    if (!order) {
+      throw new NotFoundException(`Order '${orderId}' not found.`);
+    }
+
+    await this.orderRepository.verifyOrderItem(orderId, itemId, isVerified);
+    return { success: true, orderId, itemId, isVerified };
+  }
+
+  /**
    * Ingest an order from Merchant Portal, WooCommerce, Shopify, or REST API
-   * Supports Fraud Ratio check & graceful ON_HOLD_STOCK backorder queue
    */
   async createOrder(
     merchantId: string,
@@ -100,7 +165,7 @@ export class OrderService {
     // 1. Evaluate Customer Fraud Ratio
     const fraudReport = await this.evaluateCustomerFraudRatio(payload.customerPhone);
 
-    // 2. Attempt atomic stock reservation (or route to ON_HOLD_STOCK if backorder enabled)
+    // 2. Attempt atomic stock reservation
     let targetStatus: OrderStatus =
       fraudReport.riskLevel === FraudRiskLevel.HIGH_RISK_FRAUD
         ? OrderStatus.ON_HOLD_FRAUD
@@ -121,32 +186,20 @@ export class OrderService {
     }
 
     // 3. Create order record with Merchant's Reseller Memo Code & Fraud Score
-    const order = await this.prisma.order.create({
-      data: {
-        merchantId,
-        externalOrderId: payload.externalOrderId,
-        customerName: payload.customerName,
-        customerPhone: payload.customerPhone,
-        customerAddress: payload.customerAddress,
-        city: payload.city,
-        memoCode: payload.memoCode ? payload.memoCode.toUpperCase() : 'MEMO-DEFAULT',
-        status: targetStatus,
-        customerRiskScore: fraudReport.successRatio,
-        customerRiskLevel: fraudReport.riskLevel,
-        totalAmount: payload.totalAmount,
-        codAmount: payload.codAmount ?? 0,
-        items: {
-          create: payload.items.map((i) => ({
-            variantId: i.variantId,
-            quantity: i.quantity,
-            unitPrice: i.unitPrice,
-            isVerifiedAtPacking: false,
-          })),
-        },
-      },
-      include: {
-        items: true,
-      },
+    const order = await this.orderRepository.createOrderWithItems({
+      merchantId,
+      externalOrderId: payload.externalOrderId,
+      customerName: payload.customerName,
+      customerPhone: payload.customerPhone,
+      customerAddress: payload.customerAddress,
+      city: payload.city,
+      memoCode: payload.memoCode ? payload.memoCode.toUpperCase() : 'MEMO-DEFAULT',
+      status: targetStatus,
+      customerRiskScore: fraudReport.successRatio,
+      customerRiskLevel: fraudReport.riskLevel,
+      totalAmount: payload.totalAmount,
+      codAmount: payload.codAmount ?? 0,
+      items: payload.items,
     });
 
     return {
@@ -203,7 +256,7 @@ export class OrderService {
   }
 
   /**
-   * Lock 4x6 Thermal Memo Print & record Packaging Material Cost (Prevents Double Packing)
+   * Lock 4x6 Thermal Memo Print & record Packaging Material Cost
    */
   async lockBatchMemoPrintAndPack(
     orderIds: string[],
@@ -215,30 +268,14 @@ export class OrderService {
 
     const packCost = PACKAGING_COSTS[packagingType] ?? 5;
 
-    const alreadyPrinted = await this.prisma.order.findMany({
-      where: {
-        id: { in: orderIds },
-        isMemoPrinted: true,
-      },
-      select: { id: true, customerName: true },
-    });
-
+    const alreadyPrinted = await this.orderRepository.findPrintedOrders(orderIds);
     if (alreadyPrinted.length > 0) {
       throw new BadRequestException(
         `Double-Print Prevention Lock: ${alreadyPrinted.length} order(s) have already been printed!`,
       );
     }
 
-    await this.prisma.order.updateMany({
-      where: { id: { in: orderIds } },
-      data: {
-        status: OrderStatus.PACKED,
-        isMemoPrinted: true,
-        memoPrintedAt: new Date(),
-        packagingType,
-        packagingCost: packCost,
-      },
-    });
+    await this.orderRepository.lockBatchMemoPrintAndPack(orderIds, packagingType, packCost);
 
     return {
       packedCount: orderIds.length,
@@ -252,10 +289,7 @@ export class OrderService {
    * Cancel order and release reserved stock
    */
   async cancelOrder(orderId: string) {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-      include: { items: true },
-    });
+    const order = await this.orderRepository.findById(orderId);
 
     if (!order) {
       throw new NotFoundException(`Order '${orderId}' not found.`);
@@ -276,51 +310,23 @@ export class OrderService {
       );
     }
 
-    return this.prisma.order.update({
-      where: { id: orderId },
-      data: { status: OrderStatus.CANCELLED },
-    });
+    return this.orderRepository.updateStatus(orderId, OrderStatus.CANCELLED);
   }
 
   /**
    * Generate an optimized Wave Pick List for warehouse operators.
    */
   async generateWavePickList(orderIds?: string[]) {
-    const whereClause: any = {
-      status: OrderStatus.ALLOCATED,
-    };
-    if (orderIds && orderIds.length > 0) {
-      whereClause.id = { in: orderIds };
-    }
-
-    const orders = await this.prisma.order.findMany({
-      where: whereClause,
-      include: {
-        items: {
-          include: {
-            variant: {
-              include: {
-                product: true,
-                inventoryItems: {
-                  include: {
-                    location: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    });
+    const orders = await this.orderRepository.findAllocatedOrders(orderIds);
 
     if (orders.length === 0) {
       throw new BadRequestException('No allocated orders available to generate pick list.');
     }
 
-    await this.prisma.order.updateMany({
-      where: { id: { in: orders.map((o) => o.id) } },
-      data: { status: OrderStatus.PICKING },
-    });
+    await this.orderRepository.updateOrderStatusMany(
+      orders.map((o) => o.id),
+      OrderStatus.PICKING,
+    );
 
     const locationMap = new Map<
       string,

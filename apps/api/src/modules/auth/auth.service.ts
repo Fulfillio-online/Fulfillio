@@ -3,13 +3,13 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
-import { PrismaService } from '../../prisma/prisma.service';
+import { AuthRepository } from './auth.repository';
 import { UserRole } from '@fulfillio/contracts';
 
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly authRepo: AuthRepository,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
   ) {}
@@ -23,10 +23,7 @@ export class AuthService {
     phone?: string;
     password: string;
   }) {
-    const existing = await this.prisma.user.findUnique({
-      where: { email: data.email },
-    });
-
+    const existing = await this.authRepo.findUserByEmail(data.email);
     if (existing) {
       throw new ConflictException(`User with email '${data.email}' already exists.`);
     }
@@ -34,49 +31,24 @@ export class AuthService {
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(data.password, salt);
 
-    return this.prisma.$transaction(async (tx) => {
-      const count = await tx.merchant.count();
-      const merchantCode = `MC-${101 + count}`;
-
-      const merchant = await tx.merchant.create({
-        data: {
-          merchantCode,
-          businessName: data.businessName,
-          email: data.email,
-          phone: data.phone,
-          status: 'PENDING',
-        },
-      });
-
-      const user = await tx.user.create({
-        data: {
-          merchantId: merchant.id,
-          name: data.businessName,
-          email: data.email,
-          passwordHash,
-          role: UserRole.MERCHANT,
-        },
-      });
-
-      return {
-        merchantId: merchant.id,
-        merchantCode: merchant.merchantCode,
-        userId: user.id,
-        status: merchant.status,
-        message: 'Registration submitted. Account pending admin approval.',
-      };
+    const result = await this.authRepo.registerMerchantWithUser({
+      businessName: data.businessName,
+      email: data.email,
+      phone: data.phone,
+      passwordHash,
     });
+
+    return {
+      ...result,
+      message: 'Registration submitted. Account pending admin approval.',
+    };
   }
 
   /**
    * Authenticate user with password and return JWT
    */
   async login(email: string, pass: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { email },
-      include: { merchant: true },
-    });
-
+    const user = await this.authRepo.findUserByEmail(email);
     if (!user) {
       throw new UnauthorizedException('Invalid credentials.');
     }
@@ -97,14 +69,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid 4-digit worker PIN.');
     }
 
-    const user = await this.prisma.user.findFirst({
-      where: {
-        role: UserRole.WAREHOUSE_OPERATOR,
-        OR: [{ email: operatorCode }, { name: { contains: operatorCode, mode: 'insensitive' } }],
-      },
-      include: { merchant: true },
-    });
-
+    const user = await this.authRepo.findOperatorByCodeOrEmail(operatorCode);
     if (!user || (user.workerPin && user.workerPin !== pin)) {
       throw new UnauthorizedException('Invalid operator code or PIN.');
     }
@@ -159,10 +124,7 @@ export class AuthService {
     const rawKey = `ful_live_${crypto.randomBytes(24).toString('hex')}`;
     const apiKeyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
 
-    await this.prisma.merchant.update({
-      where: { id: merchantId },
-      data: { apiKeyHash },
-    });
+    await this.authRepo.updateMerchantApiKey(merchantId, apiKeyHash);
 
     return {
       apiKey: rawKey,
