@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
-import { WarehouseReturnsManager } from '@/features/warehouse/WarehouseReturnsManager';
+import { WarehouseReturnsManager } from '@/features/returns';
 
 export default function AdminReturnsPage() {
   const router = useRouter();
