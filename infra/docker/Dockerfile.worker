@@ -1,0 +1,49 @@
+# ==========================================
+# Fulfillio Background Worker Dockerfile
+# Standalone BullMQ Worker + Puppeteer (Chromium)
+# ==========================================
+
+FROM node:20-slim AS base
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
+
+# Install Chromium dependencies for Puppeteer
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    chromium \
+    fonts-ipafont-gothic \
+    fonts-wqy-zenhei \
+    fonts-thai-tlwg \
+    fonts-kacst \
+    fonts-freefont-ttf \
+    libxss1 \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+
+WORKDIR /app
+
+# Stage 1: Dependencies & Build
+FROM base AS builder
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json turbo.json ./
+COPY apps/worker ./apps/worker
+COPY apps/api/prisma ./apps/api/prisma
+COPY packages ./packages
+
+RUN pnpm install --frozen-lockfile
+RUN cd apps/api && pnpm exec prisma generate
+RUN pnpm --filter=@fulfillio/contracts build
+RUN pnpm --filter=@fulfillio/shared build
+RUN pnpm --filter=@fulfillio/worker build
+
+# Stage 2: Production Runner
+FROM base AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/packages ./packages
+COPY --from=builder /app/apps/worker ./apps/worker
+
+CMD ["node", "apps/worker/dist/main.js"]

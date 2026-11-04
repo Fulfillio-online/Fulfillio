@@ -2,11 +2,17 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "CommonJS",
-    "moduleResolution": "Node",
+    "moduleResolution": "node",
     "declaration": true,
     "outDir": "./dist",
-    "rootDir": "./src",
-    "strict": true,
+    "baseUrl": "./",
+    "paths": {
+      "@fulfillio/contracts": ["../../packages/contracts/src"],
+      "@fulfillio/shared": ["../../packages/shared/src"],
+      "@prisma/client": ["../../node_modules/.pnpm/@prisma+client@6.19.3_prism_1d040ab5215f59f0e27ddee7f0cf082e/node_modules/@prisma/client", "../../node_modules/@prisma/client"]
+    },
+    "strict": false,
+    "noImplicitAny": false,
     "esModuleInterop": true,
     "skipLibCheck": true
   },

@@ -9,9 +9,12 @@
   },
   "dependencies": {
     "@fulfillio/contracts": "workspace:*",
+    "@fulfillio/shared": "workspace:*",
+    "@prisma/client": "^6.3.0",
     "bullmq": "^5.41.0",
     "dotenv": "^16.4.7",
-    "ioredis": "^5.4.2"
+    "ioredis": "^5.4.2",
+    "puppeteer": "^24.2.1"
   },
   "devDependencies": {
     "@types/node": "^22.13.0",

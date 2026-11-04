@@ -125,11 +125,12 @@ export function MerchantSidebar({
           </div>
 
           <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-xs text-slate-400 px-2">
-            <Link href="/admin" className="hover:text-emerald-400 transition-colors">
-              Admin Portal
-            </Link>
-            <Link href="/" className="hover:text-slate-200 transition-colors">
-              Home
+            <span className="text-slate-500 text-[11px]">Merchant Mode</span>
+            <Link
+              href="/login"
+              className="text-rose-400 hover:text-rose-300 font-semibold transition-colors flex items-center gap-1"
+            >
+              Sign Out
             </Link>
           </div>
         </div>

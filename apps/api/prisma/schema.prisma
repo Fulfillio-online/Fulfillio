@@ -85,6 +85,7 @@ model Merchant {
   settlements      Settlement[]
   inboundShipments InboundShipment[]
   auditLogs        InventoryAuditLog[]
+  webhookDeliveryLogs WebhookDeliveryLog[]
 
   @@index([merchantCode])
   @@index([status])
@@ -352,4 +353,26 @@ model Settlement {
 
   @@index([merchantId, isPaid])
   @@map("settlements")
+}
+
+model WebhookDeliveryLog {
+  id           String    @id @default(uuid())
+  merchantId   String
+  event        String
+  payload      Json      @db.JsonB
+  endpointUrl  String
+  attempts     Int       @default(1)
+  statusCode   Int?
+  responseBody String?
+  isSuccess    Boolean   @default(false)
+  failedReason String?
+  nextRetryAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  merchant     Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId, isSuccess])
+  @@index([createdAt])
+  @@map("webhook_delivery_logs")
 }

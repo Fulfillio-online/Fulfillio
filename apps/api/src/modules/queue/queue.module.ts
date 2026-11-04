@@ -2,10 +2,12 @@ import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { QueueService } from './queue.service';
-import { PdfProcessor } from './pdf.processor';
-import { WebhookProcessor } from './webhook.processor';
-import { MemoEngineModule } from '../memo-engine/memo-engine.module';
 
+/**
+ * QueueModule (apps/api)
+ * Producer-only module: Enqueues jobs to Redis (jobs.pdf, jobs.webhooks, jobs.couriers).
+ * All worker consumers are strictly isolated in `apps/worker` to protect API throughput.
+ */
 @Module({
   imports: [
     BullModule.forRootAsync({
@@ -24,9 +26,8 @@ import { MemoEngineModule } from '../memo-engine/memo-engine.module';
       { name: 'jobs.webhooks' },
       { name: 'jobs.couriers' },
     ),
-    MemoEngineModule,
   ],
-  providers: [QueueService, PdfProcessor, WebhookProcessor],
+  providers: [QueueService],
   exports: [QueueService, BullModule],
 })
 export class QueueModule {}

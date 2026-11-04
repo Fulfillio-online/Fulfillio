@@ -44,11 +44,12 @@ export function WorkerHeader({
 
         <div className="flex items-center gap-2">
           <Link
-            href="/"
-            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-colors"
-            title="Exit App"
+            href="/login"
+            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-rose-300 transition-colors flex items-center gap-1.5 text-xs font-semibold"
+            title="Operator Sign Out"
           >
             <LogOut className="h-4 w-4" />
+            <span className="hidden sm:inline">Sign Out</span>
           </Link>
         </div>
       </div>

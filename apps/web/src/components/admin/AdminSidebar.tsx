@@ -323,25 +323,18 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
         </nav>
       </div>
 
-      {/* User Badge & Switcher */}
+      {/* User Badge & Sign Out */}
       <div className="border-t border-slate-800 pt-3 space-y-2 text-xs text-slate-400">
         <div className="flex items-center justify-between">
           <div>
             <span className="font-semibold text-slate-200 block">Super Admin</span>
             <span>admin@fulfillio.online</span>
           </div>
-          <Link href="/" className="hover:text-emerald-400 transition-colors">
-            Exit
-          </Link>
-        </div>
-
-        <div className="pt-2 border-t border-slate-800/60">
           <Link
-            href="/merchant"
-            className="w-full flex items-center justify-between p-2 rounded-lg bg-indigo-950/40 hover:bg-indigo-900/60 border border-indigo-800/40 text-indigo-300 font-semibold transition-colors"
+            href="/login"
+            className="text-rose-400 hover:text-rose-300 font-semibold transition-colors"
           >
-            <span>Open Merchant Portal</span>
-            <ExternalLink className="h-3 w-3" />
+            Sign Out
           </Link>
         </div>
       </div>
