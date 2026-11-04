@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CourierProvider } from '@fulfillio/contracts';
+import { OrderStatus } from '@prisma/client';
 
 @Injectable()
 export class ShippingRepository {
@@ -26,6 +27,49 @@ export class ShippingRepository {
       include: {
         merchant: true,
       },
+    });
+  }
+
+  async getOrderByTrackingCode(trackingCode: string) {
+    return this.prisma.order.findFirst({
+      where: { trackingCode },
+      include: {
+        merchant: {
+          select: {
+            merchantCode: true,
+            businessName: true,
+          },
+        },
+        items: {
+          include: {
+            variant: true,
+          },
+        },
+      },
+    });
+  }
+
+  async updateStatusByTrackingOrConsignment(
+    trackingCode?: string,
+    consignmentId?: string,
+    status?: OrderStatus,
+  ) {
+    if (!status) return null;
+
+    const existing = await this.prisma.order.findFirst({
+      where: {
+        OR: [
+          ...(trackingCode ? [{ trackingCode }] : []),
+          ...(consignmentId ? [{ consignmentId }] : []),
+        ],
+      },
+    });
+
+    if (!existing) return null;
+
+    return this.prisma.order.update({
+      where: { id: existing.id },
+      data: { status },
     });
   }
 }
