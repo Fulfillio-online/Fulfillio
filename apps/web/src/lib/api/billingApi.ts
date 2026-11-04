@@ -2,7 +2,7 @@ import { fetchApi } from './client';
 
 export const billingApi = {
   /**
-   * List merchant COD settlements
+   * List merchant COD settlements / disbursement ledger
    */
   getSettlements: (merchantId?: string) => {
     return fetchApi('/billing/settlements', { params: { merchantId } });
@@ -24,6 +24,22 @@ export const billingApi = {
     cycleEnd: string;
   }) => {
     return fetchApi('/billing/generate-cycle', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * Admin: Record an on-demand, partial or installment disbursement
+   */
+  disburse: (data: {
+    merchantId: string;
+    amount: number;
+    paymentMethod?: string;
+    paidAt?: string;
+    notes?: string;
+  }) => {
+    return fetchApi('/billing/disburse', {
       method: 'POST',
       body: JSON.stringify(data),
     });

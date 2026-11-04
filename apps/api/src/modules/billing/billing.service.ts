@@ -52,6 +52,35 @@ export class BillingService {
     });
   }
 
+  async recordDisbursement(data: {
+    merchantId: string;
+    amount: number;
+    paymentMethod?: string;
+    paidAt?: Date;
+    notes?: string;
+  }) {
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { id: data.merchantId },
+    });
+
+    if (!merchant) {
+      throw new NotFoundException(`Merchant '${data.merchantId}' not found.`);
+    }
+
+    const txDate = data.paidAt || new Date();
+
+    return this.repository.createSettlement({
+      merchantId: data.merchantId,
+      cycleStart: txDate,
+      cycleEnd: txDate,
+      totalCodCollected: data.amount,
+      storageFees: 0,
+      handlingFees: 0,
+      packagingFees: 0,
+      netPayout: data.amount,
+    });
+  }
+
   async getSettlementHistory(merchantId?: string) {
     return this.repository.getMerchantSettlements(merchantId);
   }

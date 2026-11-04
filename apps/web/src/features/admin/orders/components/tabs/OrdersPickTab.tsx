@@ -4,6 +4,7 @@ import React from 'react';
 import { ClipboardList, AlertTriangle, MapPin } from 'lucide-react';
 import { CourierPartner, WarehousePipelineOrder } from '../../types';
 import { OrdersTableRow } from './OrdersTableRow';
+import { OrdersMobileCard } from './OrdersMobileCard';
 
 interface OrdersPickTabProps {
   orders: WarehousePipelineOrder[];
@@ -49,16 +50,16 @@ export function OrdersPickTab({
 }: OrdersPickTabProps) {
   return (
     <div className="space-y-4">
-      {/* Sub-filter Bar: Ready vs Waiting */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/95 p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
-        <div className="flex flex-wrap items-center gap-2">
+      {/* Pick Sub-tabs (Ready to Pick vs Not in Bin Waiting) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-slate-900 border border-slate-800">
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => onPickSubFilterChange('READY')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all border cursor-pointer ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
               pickSubFilter === 'READY'
-                ? 'bg-emerald-600 text-white border-emerald-500 shadow-md'
-                : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
+                ? 'bg-emerald-500 text-slate-950 font-black shadow-md'
+                : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'
             }`}
           >
             <ClipboardList className="w-3.5 h-3.5" />
@@ -68,14 +69,14 @@ export function OrdersPickTab({
           <button
             type="button"
             onClick={() => onPickSubFilterChange('WAITING')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all border cursor-pointer ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
               pickSubFilter === 'WAITING'
-                ? 'bg-amber-600 text-white border-amber-500 shadow-md'
-                : 'bg-slate-950 text-amber-300 border-amber-500/30 hover:border-amber-500/60'
+                ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'
             }`}
           >
             <AlertTriangle className="w-3.5 h-3.5" />
-            <span>Waiting / Not Found in Bin ({counts.pickWaiting})</span>
+            <span>Not in Bin / Hold ({counts.pickWaiting})</span>
           </button>
         </div>
 
@@ -90,8 +91,38 @@ export function OrdersPickTab({
       </div>
 
       {/* Orders Table */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900 overflow-hidden shadow-lg">
-        <div className="overflow-x-auto">
+      <div className="rounded-2xl border border-slate-800 bg-slate-900 overflow-hidden shadow-lg p-3 sm:p-0">
+        {/* 1. Mobile Collapsible List */}
+        <div className="block md:hidden space-y-2.5">
+          {orders.length === 0 ? (
+            <div className="p-8 text-center text-xs text-slate-400">
+              {pickSubFilter === 'READY'
+                ? 'No orders are currently waiting to be picked.'
+                : 'No orders are currently on hold/waiting in bin.'}
+            </div>
+          ) : (
+            orders.map((order) => (
+              <OrdersMobileCard
+                key={order.id}
+                order={order}
+                isSelected={selectedIds.includes(order.id)}
+                onToggleSelect={onToggleSelectRow}
+                onPreviewMemo={onPreviewMemo}
+                onInlineCourierChange={onInlineCourierChange}
+                onMarkWaiting={onMarkWaiting}
+                onMarkPicked={onMarkPicked}
+                onResumePick={onResumePick}
+                onPrintAndPack={onPrintAndPack}
+                onBookCourier={onBookCourier}
+                onConfirmHandover={onConfirmHandover}
+                onCancelOrder={onCancelOrder}
+              />
+            ))
+          )}
+        </div>
+
+        {/* 2. Desktop Full Table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full min-w-[960px] text-left text-sm">
             <thead className="bg-slate-950/80 text-slate-400 text-xs uppercase border-b border-slate-800">
               <tr>
@@ -105,7 +136,7 @@ export function OrdersPickTab({
                   />
                 </th>
                 <th className="p-4">Order ID &amp; Merchant</th>
-                <th className="p-4">Product, Variant &amp; 2-Part SKU</th>
+                <th className="p-4">Product, Variant &amp; SKU</th>
                 <th className="p-4">Bin Location &amp; Stock</th>
                 <th className="p-4">Memo / Invoice</th>
                 <th className="p-4">Customer &amp; Courier</th>

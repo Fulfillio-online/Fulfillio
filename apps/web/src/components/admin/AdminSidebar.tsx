@@ -47,7 +47,7 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-50 w-72 border-r border-slate-800 bg-slate-900 p-4 flex flex-col justify-between shrink-0 overflow-y-auto transition-transform duration-200 lg:static lg:w-64 lg:bg-slate-900/60 lg:translate-x-0 ${
+      className={`fixed inset-y-0 left-0 z-50 w-72 border-r border-slate-800 bg-slate-900 p-4 flex flex-col justify-between shrink-0 overflow-y-auto transition-transform duration-200 lg:static lg:h-full lg:w-64 lg:bg-slate-900/60 lg:translate-x-0 ${
         isOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
       }`}
     >
@@ -243,19 +243,7 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                 </span>
               </Link>
 
-              {/* Packing Station Direct Link */}
-              <Link
-                href="/wms/packing"
-                target="_blank"
-                onClick={onClose}
-                className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium text-emerald-400 hover:bg-emerald-950/40 border border-emerald-900/40 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <PackageCheck className="h-4 w-4" />
-                  <span>Packing Station</span>
-                </div>
-                <ExternalLink className="h-3 w-3" />
-              </Link>
+            
 
               {/* Returns & RTO */}
               <Link

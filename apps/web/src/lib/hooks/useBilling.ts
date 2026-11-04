@@ -31,6 +31,23 @@ export function useBillingOverview(merchantId?: string) {
   });
 }
 
+export function useRecordDisbursement() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {
+      merchantId: string;
+      amount: number;
+      paymentMethod?: string;
+      paidAt?: string;
+      notes?: string;
+    }) => billingApi.disburse(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settlements'] });
+      queryClient.invalidateQueries({ queryKey: ['billingOverview'] });
+    },
+  });
+}
+
 export function useMarkSettlementPaid() {
   const queryClient = useQueryClient();
   return useMutation({

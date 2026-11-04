@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   MapPin,
   Eye,
@@ -11,10 +11,11 @@ import {
   Truck,
   CheckCircle2,
   XCircle,
+  ChevronDown,
 } from 'lucide-react';
 import { CourierPartner, WarehousePipelineOrder } from '../../types';
 
-interface OrdersTableRowProps {
+export interface OrdersTableRowProps {
   order: WarehousePipelineOrder;
   isSelected: boolean;
   onToggleSelect: (id: string) => void;
@@ -43,6 +44,23 @@ export function OrdersTableRow({
   onConfirmHandover,
   onCancelOrder,
 }: OrdersTableRowProps) {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    };
+    if (isMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isMenuOpen]);
+
   return (
     <tr
       className={`transition-colors ${
@@ -77,34 +95,39 @@ export function OrdersTableRow({
         </span>
       </td>
 
-      {/* Product Thumbnail + Title, Variant & 2-Part SKU */}
+      {/* Product Thumbnail + Variant (Image, Size, Color, Qty in row 1; SKU and Title in row 2) */}
       <td className="p-4">
-        <div className="flex items-start gap-3">
-          <img
-            src={order.productImage}
-            alt={order.productTitle}
-            className="h-10 w-10 rounded-xl object-cover border border-slate-700 bg-slate-950 shrink-0"
-          />
-          <div className="min-w-0">
-            <div className="text-xs font-bold text-slate-100 leading-snug">
-              {order.productTitle}
-            </div>
-            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-              <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-[11px] text-slate-300">
-                {order.color} / <strong>{order.size}</strong>
+        <div>
+          {/* Row 1: Image, Size, Color, and Quantity all together in one row */}
+          <div className="flex items-center gap-2.5">
+            <img
+              src={order.productImage}
+              alt={order.productTitle}
+              className="h-10 w-10 rounded-lg object-cover border border-slate-700 bg-slate-950 shrink-0"
+            />
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-[11px] font-semibold text-slate-200">
+                {order.size} · {order.color}
               </span>
               <span className="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-[11px] font-mono font-bold text-emerald-400">
                 Qty: {order.qty}
               </span>
             </div>
-            <span className="text-[11px] font-mono text-slate-400 block mt-1">
+          </div>
+
+          {/* Row 2: One line SKU, and next line Product Title */}
+          <div className="mt-2 space-y-0.5">
+            <div className="font-mono text-xs font-bold text-emerald-400 tracking-wide">
               {order.sku}
-            </span>
+            </div>
+            <div className="text-xs font-bold text-slate-100 leading-snug line-clamp-1">
+              {order.productTitle}
+            </div>
           </div>
         </div>
       </td>
 
-      {/* Bin Location & Stock Availability */}
+      {/* Bin Location & Stock Availability (Without "Bin:" text) */}
       <td className="p-4">
         <div className="flex flex-col items-start gap-1.5">
           <span
@@ -115,7 +138,7 @@ export function OrdersTableRow({
             }`}
           >
             <MapPin className="w-3.5 h-3.5 shrink-0" />
-            <span>Bin: {order.bin}</span>
+            <span>{order.bin}</span>
           </span>
 
           <span
@@ -130,10 +153,10 @@ export function OrdersTableRow({
         </div>
       </td>
 
-      {/* Reseller Memo Code */}
+      {/* Reseller Memo Code (Without redundant "MEMO" prefix) */}
       <td className="p-4">
         <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/30 inline-block">
-          {order.memoCode}
+          {order.memoCode.replace(/^MEMO-?/i, '')}
         </span>
         <span className="text-[11px] text-slate-400 block mt-1">
           {order.resellerName}
@@ -204,106 +227,151 @@ export function OrdersTableRow({
         )}
       </td>
 
-      {/* Actions */}
+      {/* Actions Dropdown Menu */}
       <td className="p-4 text-right">
-        <div className="flex items-center justify-end gap-1.5 flex-wrap">
+        <div className="relative inline-block text-left" ref={menuRef}>
           <button
             type="button"
-            onClick={() => onPreviewMemo(order)}
-            className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 flex items-center gap-1 cursor-pointer"
-            title="View or Print 4x6 Invoice"
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
           >
-            <Eye className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Memo</span>
+            <span>Actions</span>
+            <ChevronDown
+              className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                isMenuOpen ? 'rotate-180 text-emerald-400' : 'text-slate-400'
+              }`}
+            />
           </button>
 
-          {order.stage === 'PICK' && (
-            <>
+          {isMenuOpen && (
+            <div className="absolute right-0 mt-1.5 w-52 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl py-1.5 z-50 text-left font-sans text-xs">
+              {/* Preview Memo */}
               <button
                 type="button"
-                onClick={() => onMarkWaiting(order)}
-                className="px-2.5 py-1.5 rounded-lg bg-amber-950/70 hover:bg-amber-900/80 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center gap-1 cursor-pointer"
-                title="Put on Waiting/Hold if item is not found in the assigned Bin"
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  onPreviewMemo(order);
+                }}
+                className="w-full px-3 py-2 text-left text-slate-200 hover:bg-slate-800 flex items-center gap-2 transition-colors cursor-pointer"
               >
-                <AlertTriangle className="w-3.5 h-3.5" />
-                <span>Not Found / Hold</span>
+                <Eye className="w-4 h-4 text-emerald-400" />
+                <span>View / Print Memo</span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => onMarkPicked(order)}
-                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white flex items-center gap-1 cursor-pointer"
-              >
-                <span>Mark Picked</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </>
-          )}
+              {/* Stage Specific Actions */}
+              {order.stage === 'PICK' && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      onMarkPicked(order);
+                    }}
+                    className="w-full px-3 py-2 text-left text-emerald-300 hover:bg-emerald-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <ArrowRight className="w-4 h-4 text-emerald-400" />
+                    <span>Mark Picked</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      onMarkWaiting(order);
+                    }}
+                    className="w-full px-3 py-2 text-left text-amber-300 hover:bg-amber-950/40 flex items-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <AlertTriangle className="w-4 h-4 text-amber-400" />
+                    <span>Not Found / Hold</span>
+                  </button>
+                </>
+              )}
 
-          {order.stage === 'WAITING' && (
-            <>
-              <button
-                type="button"
-                onClick={() => onResumePick(order)}
-                className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/40 text-xs font-bold flex items-center gap-1 cursor-pointer"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>Found → Resume Pick</span>
-              </button>
+              {order.stage === 'WAITING' && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      onResumePick(order);
+                    }}
+                    className="w-full px-3 py-2 text-left text-emerald-300 hover:bg-emerald-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <RefreshCw className="w-4 h-4 text-emerald-400" />
+                    <span>Found → Resume Pick</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      onMarkPicked(order);
+                    }}
+                    className="w-full px-3 py-2 text-left text-slate-200 hover:bg-slate-800 flex items-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <ArrowRight className="w-4 h-4 text-slate-400" />
+                    <span>Mark Picked</span>
+                  </button>
+                </>
+              )}
 
-              <button
-                type="button"
-                onClick={() => onMarkPicked(order)}
-                className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white flex items-center gap-1 cursor-pointer"
-              >
-                <span>Mark Picked</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </>
-          )}
+              {order.stage === 'PACK' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    onPrintAndPack(order);
+                  }}
+                  className="w-full px-3 py-2 text-left text-emerald-300 hover:bg-emerald-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer"
+                >
+                  <Printer className="w-4 h-4 text-emerald-400" />
+                  <span>Print 4x6&quot; &amp; Pack</span>
+                </button>
+              )}
 
-          {order.stage === 'PACK' && (
-            <button
-              type="button"
-              onClick={() => onPrintAndPack(order)}
-              className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Print 4x6&quot; &amp; Pack</span>
-            </button>
-          )}
+              {order.stage === 'DISPATCH' && !order.isCourierBooked && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    onBookCourier(order);
+                  }}
+                  className="w-full px-3 py-2 text-left text-amber-300 hover:bg-amber-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer"
+                >
+                  <Truck className="w-4 h-4 text-amber-400" />
+                  <span>Book Courier</span>
+                </button>
+              )}
 
-          {order.stage === 'DISPATCH' && !order.isCourierBooked && (
-            <button
-              type="button"
-              onClick={() => onBookCourier(order)}
-              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-xs font-bold text-white flex items-center gap-1 cursor-pointer"
-            >
-              <Truck className="w-3.5 h-3.5" />
-              <span>Book Courier</span>
-            </button>
-          )}
+              {order.stage === 'DISPATCH' && order.isCourierBooked && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    onConfirmHandover(order);
+                  }}
+                  className="w-full px-3 py-2 text-left text-emerald-300 hover:bg-emerald-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span>Confirm Handover</span>
+                </button>
+              )}
 
-          {order.stage === 'DISPATCH' && order.isCourierBooked && (
-            <button
-              type="button"
-              onClick={() => onConfirmHandover(order)}
-              className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white flex items-center gap-1 cursor-pointer"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>Confirm Handover</span>
-            </button>
-          )}
-
-          {(order.stage === 'PICK' || order.stage === 'WAITING' || order.stage === 'PACK') && (
-            <button
-              type="button"
-              onClick={() => onCancelOrder(order)}
-              className="p-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-800/60 cursor-pointer"
-              title="Cancel Order & Restore Stock"
-            >
-              <XCircle className="w-3.5 h-3.5" />
-            </button>
+              {/* Cancel Order */}
+              {(order.stage === 'PICK' || order.stage === 'WAITING' || order.stage === 'PACK') && (
+                <div className="border-t border-slate-800 my-1 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      onCancelOrder(order);
+                    }}
+                    className="w-full px-3 py-2 text-left text-rose-400 hover:bg-rose-950/40 flex items-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <XCircle className="w-4 h-4 text-rose-400" />
+                    <span>Cancel Order</span>
+                  </button>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </td>

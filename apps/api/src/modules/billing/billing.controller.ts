@@ -11,7 +11,7 @@ export class BillingController {
   constructor(private readonly billingService: BillingService) {}
 
   /**
-   * Get billing settlements history
+   * Get billing settlements history / disbursement ledger
    */
   @Get('settlements')
   async getSettlements(@Request() req: any, @Query('merchantId') merchantId?: string) {
@@ -39,6 +39,27 @@ export class BillingController {
     @Body('ordersCount') ordersCount?: number,
   ) {
     return this.billingService.calculateMerchantSettlement(merchantId, grossCod, ordersCount);
+  }
+
+  /**
+   * Record an on-demand / partial / installment disbursement
+   */
+  @Post('disburse')
+  @Roles(UserRole.SUPER_ADMIN)
+  async disburse(
+    @Body('merchantId') merchantId: string,
+    @Body('amount') amount: number,
+    @Body('paymentMethod') paymentMethod?: string,
+    @Body('paidAt') paidAt?: string,
+    @Body('notes') notes?: string,
+  ) {
+    return this.billingService.recordDisbursement({
+      merchantId,
+      amount,
+      paymentMethod,
+      paidAt: paidAt ? new Date(paidAt) : new Date(),
+      notes,
+    });
   }
 
   /**

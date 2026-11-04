@@ -12,7 +12,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   return (
-    <div className="flex min-h-screen bg-slate-950 text-slate-100">
+    <div className="flex h-screen w-full overflow-hidden bg-slate-950 text-slate-100">
       {/* Mobile / Tablet Backdrop Overlay */}
       {isMobileSidebarOpen && (
         <div
@@ -21,19 +21,19 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         />
       )}
 
-      {/* Modular Sidebar Navigation */}
+      {/* Modular Sidebar Navigation: 100% Fixed height, independently scrollable */}
       <AdminSidebar
         isOpen={isMobileSidebarOpen}
         onClose={() => setIsMobileSidebarOpen(false)}
       />
 
-      {/* Main Content Area */}
-      <main className="flex-1 min-w-0 flex flex-col overflow-x-hidden">
+      {/* Main Content Area: Independently scrollable, stays beside fixed sidebar */}
+      <main className="flex-1 h-full min-w-0 flex flex-col overflow-y-auto overflow-x-hidden">
         {/* Modular Top Header */}
         <AdminHeader onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)} />
 
         {/* Dynamic Page Content */}
-        <div className="p-4 sm:p-6 lg:p-8 space-y-6">
+        <div className="p-4 sm:p-6 lg:p-8 space-y-6 flex-1">
           {children}
         </div>
       </main>
