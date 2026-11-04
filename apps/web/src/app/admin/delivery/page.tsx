@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
-import { WarehouseDeliveryTracker } from '@/features/warehouse/WarehouseDeliveryTracker';
+import { WarehouseDeliveryTracker } from '@/features/delivery';
 
 export default function AdminDeliveryPage() {
   const router = useRouter();
