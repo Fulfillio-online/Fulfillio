@@ -51,6 +51,35 @@ services:
     networks:
       - fulfillio-network
 
+  # Background Asynchronous Job Worker (PDF rendering, Courier booking, Webhooks)
+  worker:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.worker
+    container_name: fulfillio-worker
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-fulfillio}:${POSTGRES_PASSWORD:-fulfillio_secret}@postgres:5432/${POSTGRES_DB:-fulfillio_db}?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      INVOICES_DIR: /app/uploads/invoices
+      STEADFAST_API_KEY: ${STEADFAST_API_KEY:-}
+      STEADFAST_SECRET_KEY: ${STEADFAST_SECRET_KEY:-}
+      PATHAO_CLIENT_ID: ${PATHAO_CLIENT_ID:-}
+      PATHAO_CLIENT_SECRET: ${PATHAO_CLIENT_SECRET:-}
+      REDX_API_TOKEN: ${REDX_API_TOKEN:-}
+    volumes:
+      - ./uploads/invoices:/app/uploads/invoices
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - fulfillio-network
+
 volumes:
   postgres_data:
   redis_data:

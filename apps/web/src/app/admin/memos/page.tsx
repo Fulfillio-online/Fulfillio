@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Copy, Printer } from 'lucide-react';
-import { UnifiedThermalSticker } from '@/features/thermal-print/UnifiedThermalSticker';
+import { UnifiedThermalSticker } from '@/features/shared/thermal-print/UnifiedThermalSticker';
 
 const INITIAL_MEMOS = [
   {

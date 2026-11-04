@@ -3,7 +3,7 @@
 import React from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { Printer, ArrowLeft } from 'lucide-react';
-import { UnifiedThermalSticker } from '@/features/thermal-print/UnifiedThermalSticker';
+import { UnifiedThermalSticker } from '@/features/shared/thermal-print/UnifiedThermalSticker';
 
 export default function DedicatedThermalMemoPrintPage() {
   const params = useParams();

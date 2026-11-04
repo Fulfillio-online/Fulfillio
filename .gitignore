@@ -46,6 +46,8 @@ postgres_data/
 redis_data/
 caddy_data/
 caddy_config/
+uploads/invoices/*
+!uploads/invoices/.gitkeep
 
 # Workflows (ignored until PAT has workflow scope)
 .github/workflows/

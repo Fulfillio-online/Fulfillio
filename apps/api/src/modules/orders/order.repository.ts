@@ -43,6 +43,11 @@ export class OrderRepository {
             variant: {
               include: {
                 product: true,
+                inventoryItems: {
+                  include: {
+                    location: true,
+                  },
+                },
               },
             },
           },

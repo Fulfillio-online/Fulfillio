@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import {
   ProductsManager,
   WarehouseProductSubTab,
-} from '@/features/products';
+} from '@/features/admin/products';
 
 function ProductsContent() {
   const searchParams = useSearchParams();

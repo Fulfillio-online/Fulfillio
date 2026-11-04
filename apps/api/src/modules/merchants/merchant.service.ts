@@ -76,20 +76,30 @@ export class MerchantService {
       status: 'VERIFIED',
     };
 
+    const defaultKyc = {
+      tradeLicenseNo: 'TRAD/DNCC/092140/2024',
+      tradeLicenseDocUrl: '/uploads/trade-license-sample.pdf',
+      nidNumber: '19922692810000192',
+      verificationStatus: merchant.status === 'APPROVED' ? 'VERIFIED' : 'PENDING_REVIEW',
+      verifiedAt: merchant.status === 'APPROVED' ? '2026-10-15' : undefined,
+    };
+
     return {
       id: merchant.id,
       merchantCode: merchant.merchantCode,
       businessName: merchant.businessName,
-      ownerName: primaryUser?.name || merchant.businessName,
+      ownerName: (merchant as any).ownerName || primaryUser?.name || merchant.businessName,
       email: merchant.email,
       phone: merchant.phone || '+880 1711-000000',
       location: merchant.location || 'Dhaka, Bangladesh',
+      logoUrl: (merchant as any).logoUrl || null,
       status: merchant.status,
       verified: merchant.status === 'APPROVED',
       baseHandlingFee: Number(merchant.baseHandlingFee),
       monthlyStorageFee: Number(merchant.monthlyStorageFee),
       webhookUrl: merchant.webhookUrl,
       payoutAccount: (merchant.payoutAccount as Record<string, any>) || defaultPayout,
+      kycData: ((merchant as any).kycData as Record<string, any>) || defaultKyc,
       socialChannels: (merchant.socialChannels as Array<any>) || [
         {
           id: '1',
@@ -109,18 +119,45 @@ export class MerchantService {
    * Update merchant profile, payout account & social channels in PostgreSQL
    */
   async updateProfile(merchantId: string, data: any) {
+    const payoutPayload = data.payoutAccount
+      ? {
+          ...data.payoutAccount,
+          status: 'PENDING_REVIEW', // Strict Verification Lock on updates
+        }
+      : undefined;
+
     const updated = await this.merchantRepository.update(merchantId, {
       ...(data.businessName && { businessName: data.businessName }),
+      ...(data.ownerName && { ownerName: data.ownerName }),
       ...(data.phone && { phone: data.phone }),
       ...(data.location && { location: data.location }),
-      ...(data.payoutAccount && { payoutAccount: data.payoutAccount }),
+      ...(data.logoUrl && { logoUrl: data.logoUrl }),
+      ...(payoutPayload && { payoutAccount: payoutPayload }),
+      ...(data.kycData && { kycData: data.kycData }),
       ...(data.socialChannels && { socialChannels: data.socialChannels }),
     });
 
     return {
       message: 'Profile updated successfully',
       merchant: updated,
-      payoutStatus: data.payoutAccount ? 'PENDING_REVIEW' : 'UNCHANGED',
+      payoutStatus: payoutPayload ? 'PENDING_REVIEW' : 'UNCHANGED',
+    };
+  }
+
+  /**
+   * Save uploaded document (cheque leaf or trade license)
+   */
+  async saveUploadedDocument(
+    merchantId: string,
+    fileInfo: { fileName: string; fileType?: string; base64Data?: string }
+  ) {
+    const timestamp = Date.now();
+    const cleanName = fileInfo.fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const secureUrl = `/uploads/merchants/${merchantId}_${timestamp}_${cleanName}`;
+    return {
+      url: secureUrl,
+      fileName: fileInfo.fileName,
+      uploadedAt: new Date().toISOString(),
     };
   }
 

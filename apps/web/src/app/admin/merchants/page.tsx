@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { MerchantDirectoryManager } from '@/features/merchants/MerchantDirectoryManager';
+import { MerchantDirectoryManager } from '@/features/admin/merchants/MerchantDirectoryManager';
 
 export default function AdminMerchantsPage() {
   return (

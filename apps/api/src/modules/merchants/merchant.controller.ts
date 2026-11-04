@@ -58,6 +58,14 @@ export class MerchantController {
     return this.merchantService.updateProfile(req.user.merchantId, body);
   }
 
+  @Post('profile/upload')
+  async uploadDocument(
+    @Request() req: any,
+    @Body() body: { fileName: string; fileType?: string; base64Data?: string }
+  ) {
+    return this.merchantService.saveUploadedDocument(req.user.merchantId, body);
+  }
+
   @Patch(':id/status-and-rates')
   @Roles(UserRole.SUPER_ADMIN)
   async updateStatusAndRates(

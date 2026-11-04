@@ -46,7 +46,7 @@ export default function LoginPage() {
       } else if (selectedRole === 'MERCHANT') {
         router.push('/merchant');
       } else {
-        router.push('/wms/worker');
+        router.push('/wms/pick');
       }
     }, 600);
   };

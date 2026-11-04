@@ -64,11 +64,14 @@ model Merchant {
   id                String         @id @default(uuid())
   merchantCode      String         @unique @default("MC-101")
   businessName      String
+  ownerName         String?        @default("Store Owner")
   email             String         @unique
   phone             String?
   location          String?        @default("Dhaka, Bangladesh")
+  logoUrl           String?
   status            MerchantStatus @default(PENDING)
   payoutAccount     Json?          @db.JsonB
+  kycData           Json?          @db.JsonB
   socialChannels    Json?          @db.JsonB
   baseHandlingFee   Decimal        @default(50.00) @db.Decimal(10, 2)
   monthlyStorageFee Decimal        @default(2500.00) @db.Decimal(10, 2)

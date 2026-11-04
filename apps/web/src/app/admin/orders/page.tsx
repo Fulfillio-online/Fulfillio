@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import {
   OrdersPipelineManager,
   PipelineMainTab,
-} from '@/features/orders';
+} from '@/features/admin/orders';
 
 function OrdersPipelineContent() {
   const searchParams = useSearchParams();

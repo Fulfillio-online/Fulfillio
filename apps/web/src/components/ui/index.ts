@@ -8,3 +8,6 @@ export * from './FraudRatioBadge';
 export * from './StatusBadge';
 export * from './TabsNav';
 export * from './SearchInput';
+export * from './VerificationStatusBadge';
+export * from './DocumentUploadDropzone';
+export * from './DocumentViewerModal';

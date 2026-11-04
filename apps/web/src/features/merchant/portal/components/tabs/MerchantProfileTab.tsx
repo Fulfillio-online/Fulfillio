@@ -1,0 +1,1 @@
+export { MerchantProfileTab } from '../../profile';

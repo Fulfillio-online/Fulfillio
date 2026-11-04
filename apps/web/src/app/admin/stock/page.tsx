@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
-import { WarehouseStockCycleManager } from '@/features/stock';
+import { WarehouseStockCycleManager } from '@/features/admin/stock';
 
 export default function AdminStockCyclePage() {
   const router = useRouter();

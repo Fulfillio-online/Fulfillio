@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { CourierIntegrationManager } from '@/features/couriers';
+import { CourierIntegrationManager } from '@/features/admin/couriers';
 
 export default function AdminCouriersPage() {
   return (
