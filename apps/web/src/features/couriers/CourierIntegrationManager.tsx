@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Truck, Plus, CheckCircle2 } from 'lucide-react';
+import { Truck, Plus, CheckCircle2, Sliders, Activity } from 'lucide-react';
 import {
   CourierConnectionStatus,
   CourierDiagnosticTestResult,
@@ -13,8 +13,10 @@ import { CourierCard } from './components/CourierCard';
 import { ConfigureCourierModal } from './components/modals/ConfigureCourierModal';
 import { DiagnosticTestModal } from './components/modals/DiagnosticTestModal';
 import { AddCourierModal } from './components/modals/AddCourierModal';
+import { CourierSimulatorConsole } from './components/CourierSimulatorConsole';
 
 export function CourierIntegrationManager() {
+  const [activeTab, setActiveTab] = useState<'INTEGRATIONS' | 'SIMULATOR'>('INTEGRATIONS');
   const [couriers, setCouriers] = useState<CourierIntegrationItem[]>(INITIAL_COURIERS);
   const [editingCourier, setEditingCourier] = useState<CourierIntegrationItem | null>(null);
   const [testingCourier, setTestingCourier] = useState<CourierDiagnosticTestResult | null>(null);
@@ -122,21 +124,54 @@ export function CourierIntegrationManager() {
           </div>
           <div>
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
-              Courier API Integrations &amp; Webhook Routing
+              Courier API Integrations &amp; Sandbox Simulator
             </h1>
             <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
-              Configure Steadfast, Pathao, RedX, and partner API credentials, pickup hub IDs, delivery rates, and pipeline courier override rules.
+              Configure Steadfast, Pathao, RedX credentials or run local simulation with realistic consignment dispatch &amp; tracking.
             </p>
           </div>
         </div>
 
+        <div className="flex items-center gap-2.5 self-start lg:self-auto">
+          {activeTab === 'INTEGRATIONS' && (
+            <button
+              type="button"
+              onClick={() => setIsAddModalOpen(true)}
+              className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white flex items-center gap-1.5 shadow-lg shadow-emerald-950/50 transition-colors cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>+ Add Courier Partner</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Mode Navigation Tabs */}
+      <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
         <button
           type="button"
-          onClick={() => setIsAddModalOpen(true)}
-          className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white flex items-center gap-1.5 shadow-lg shadow-emerald-950/50 transition-colors cursor-pointer self-start lg:self-auto"
+          onClick={() => setActiveTab('INTEGRATIONS')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
+            activeTab === 'INTEGRATIONS'
+              ? 'bg-emerald-600 text-white shadow'
+              : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
+          }`}
         >
-          <Plus className="w-4 h-4" />
-          <span>+ Add Courier Partner</span>
+          <Sliders className="w-3.5 h-3.5" />
+          <span>Live API Credentials &amp; Status</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('SIMULATOR')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
+            activeTab === 'SIMULATOR'
+              ? 'bg-indigo-600 text-white shadow'
+              : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
+          }`}
+        >
+          <Activity className="w-3.5 h-3.5" />
+          <span>Internal Sandbox &amp; Webhook Simulator</span>
         </button>
       </div>
 
@@ -157,20 +192,28 @@ export function CourierIntegrationManager() {
         </div>
       )}
 
-      {/* Summary Cards */}
-      <CourierStatsCards couriers={couriers} />
+      {/* TAB 1: INTEGRATIONS */}
+      {activeTab === 'INTEGRATIONS' && (
+        <div className="space-y-6">
+          <CourierStatsCards couriers={couriers} />
 
-      {/* Courier Cards Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {couriers.map((courier) => (
-          <CourierCard
-            key={courier.id}
-            courier={courier}
-            onTestConnection={handleTestConnection}
-            onConfigure={setEditingCourier}
-          />
-        ))}
-      </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {couriers.map((courier) => (
+              <CourierCard
+                key={courier.id}
+                courier={courier}
+                onTestConnection={handleTestConnection}
+                onConfigure={setEditingCourier}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: SIMULATOR (TanStack Query Powered) */}
+      {activeTab === 'SIMULATOR' && (
+        <CourierSimulatorConsole />
+      )}
 
       {/* Modals */}
       <ConfigureCourierModal
@@ -196,3 +239,5 @@ export function CourierIntegrationManager() {
     </div>
   );
 }
+
+export default CourierIntegrationManager;
