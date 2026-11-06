@@ -8,17 +8,20 @@ import {
   MerchantProfileData,
   ResellerMemo,
 } from './types';
+import { StockRequestItem } from './products/types';
 import {
   INITIAL_MERCHANT_ASNS,
   INITIAL_MERCHANT_MEMOS,
   INITIAL_MERCHANT_ORDERS,
   INITIAL_MERCHANT_PRODUCTS,
   INITIAL_MERCHANT_PROFILE,
+  INITIAL_STOCK_REQUESTS,
   STORAGE_KEY_MERCHANT_ASNS,
   STORAGE_KEY_MERCHANT_MEMOS,
   STORAGE_KEY_MERCHANT_ORDERS,
   STORAGE_KEY_MERCHANT_PRODUCTS,
   STORAGE_KEY_MERCHANT_PROFILE,
+  STORAGE_KEY_STOCK_REQUESTS,
 } from './mockData';
 import { merchantApi } from './api';
 
@@ -28,6 +31,7 @@ interface MerchantContextType {
   orders: MerchantOrderItem[];
   memoList: ResellerMemo[];
   asns: MerchantAsnRecord[];
+  stockRequests: StockRequestItem[];
   toastMessage: string | null;
   isMobileSidebarOpen: boolean;
   setIsMobileSidebarOpen: (open: boolean) => void;
@@ -37,8 +41,16 @@ interface MerchantContextType {
   adjustStock: (id: string, delta: number) => void;
   deleteProduct: (id: string) => void;
   addProducts: (newItems: MerchantProductItem[]) => void;
+  updateProduct: (id: string, updated: Partial<MerchantProductItem>) => void;
+  toggleProductStatus: (id: string) => void;
+  bulkUpdateStatus: (ids: string[], status: 'PUBLISHED' | 'DRAFT') => void;
+  bulkDeleteProducts: (ids: string[]) => void;
+  requestStockAdd: (productId: string, requestedQty: number, note?: string) => void;
+  approveStockRequest: (requestId: string) => void;
+  cancelStockRequest: (requestId: string) => void;
   createOrder: (order: MerchantOrderItem, productId: string, qty: number) => void;
   cancelOrder: (orderId: string) => void;
+  updateOrderStatus: (orderId: string, status: MerchantOrderItem['status']) => void;
   createAsn: (newAsn: MerchantAsnRecord) => void;
   saveMemo: (newMemo: ResellerMemo) => void;
   setDefaultMemo: (id: string) => void;
@@ -53,6 +65,17 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
   const [orders, setOrders] = useState<MerchantOrderItem[]>(INITIAL_MERCHANT_ORDERS);
   const [memoList, setMemoList] = useState<ResellerMemo[]>(INITIAL_MERCHANT_MEMOS);
   const [asns, setAsns] = useState<MerchantAsnRecord[]>(INITIAL_MERCHANT_ASNS);
+  const [stockRequests, setStockRequests] = useState<StockRequestItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(STORAGE_KEY_STOCK_REQUESTS);
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch {}
+      }
+    }
+    return INITIAL_STOCK_REQUESTS;
+  });
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
@@ -140,6 +163,122 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     showToast(`Generated ${newItems.length} product SKU(s) successfully.`);
   };
 
+  const updateProduct = (id: string, updated: Partial<MerchantProductItem>) => {
+    setProducts((prev) => {
+      const next = prev.map((p) => (p.id === id ? { ...p, ...updated } : p));
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
+      }
+      return next;
+    });
+    showToast('Product updated successfully.');
+  };
+
+  const toggleProductStatus = (id: string) => {
+    setProducts((prev) => {
+      const next = prev.map((p) => {
+        if (p.id !== id) return p;
+        const newStatus = p.status === 'DRAFT' ? ('PUBLISHED' as const) : ('DRAFT' as const);
+        return { ...p, status: newStatus };
+      });
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
+      }
+      return next;
+    });
+    showToast('Product status updated.');
+  };
+
+  const bulkUpdateStatus = (ids: string[], status: 'PUBLISHED' | 'DRAFT') => {
+    setProducts((prev) => {
+      const next = prev.map((p) => (ids.includes(p.id) ? { ...p, status } : p));
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
+      }
+      return next;
+    });
+    showToast(`Updated ${ids.length} products to ${status.toLowerCase()}.`);
+  };
+
+  const bulkDeleteProducts = (ids: string[]) => {
+    setProducts((prev) => {
+      const next = prev.filter((p) => !ids.includes(p.id));
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
+      }
+      return next;
+    });
+    showToast(`Removed ${ids.length} products.`);
+  };
+
+  const requestStockAdd = (productId: string, requestedQty: number, note?: string) => {
+    const product = products.find((p) => p.id === productId);
+    if (!product || requestedQty <= 0) return;
+
+    const newReq: StockRequestItem = {
+      id: `sr-${Date.now()}`,
+      productId,
+      productTitle: product.title,
+      productSku: product.sku,
+      requestedQty,
+      currentStock: product.stock,
+      status: 'PENDING_APPROVAL',
+      note: note || 'Merchant requested restock',
+      createdAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
+      imageUrl: product.imageUrl,
+    };
+
+    setStockRequests((prev) => {
+      const next = [newReq, ...prev];
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY_STOCK_REQUESTS, JSON.stringify(next));
+      }
+      return next;
+    });
+
+    showToast(`Stock request (+${requestedQty} units) submitted for Admin Approval.`);
+  };
+
+  const approveStockRequest = (requestId: string) => {
+    const req = stockRequests.find((r) => r.id === requestId);
+    if (!req || req.status === 'APPROVED') return;
+
+    // Credit stock to product
+    setProducts((prev) => {
+      const next = prev.map((p) =>
+        p.id === req.productId ? { ...p, stock: p.stock + req.requestedQty } : p
+      );
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
+      }
+      return next;
+    });
+
+    // Mark request as APPROVED
+    setStockRequests((prev) => {
+      const next = prev.map((r) =>
+        r.id === requestId ? { ...r, status: 'APPROVED' as const } : r
+      );
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY_STOCK_REQUESTS, JSON.stringify(next));
+      }
+      return next;
+    });
+
+    showToast(`Admin approved: +${req.requestedQty} units added to ${req.productSku}.`);
+  };
+
+  const cancelStockRequest = (requestId: string) => {
+    setStockRequests((prev) => {
+      const next = prev.filter((r) => r.id !== requestId);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY_STOCK_REQUESTS, JSON.stringify(next));
+      }
+      return next;
+    });
+    showToast('Stock request cancelled.');
+  };
+
   const createOrder = (order: MerchantOrderItem, productId: string, qty: number) => {
     setProducts((prev) => {
       const next = prev.map((p) =>
@@ -190,6 +329,18 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       return next;
     });
     showToast(`Order ${orderId} cancelled & stock restored.`);
+  };
+
+  const updateOrderStatus = (orderId: string, status: MerchantOrderItem['status']) => {
+    setOrders((prev) => {
+      const next = prev.map((o) => (o.id === orderId ? { ...o, status } : o));
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY_MERCHANT_ORDERS, JSON.stringify(next));
+      }
+      return next;
+    });
+    merchantApi.updateOrderStatus?.(orderId, status).catch(() => {});
+    showToast(`Order ${orderId} status updated to ${status}.`);
   };
 
   const createAsn = (newAsn: MerchantAsnRecord) => {
@@ -245,6 +396,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
         orders,
         memoList,
         asns,
+        stockRequests,
         toastMessage,
         isMobileSidebarOpen,
         setIsMobileSidebarOpen,
@@ -254,8 +406,16 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
         adjustStock,
         deleteProduct,
         addProducts,
+        updateProduct,
+        toggleProductStatus,
+        bulkUpdateStatus,
+        bulkDeleteProducts,
+        requestStockAdd,
+        approveStockRequest,
+        cancelStockRequest,
         createOrder,
         cancelOrder,
+        updateOrderStatus,
         createAsn,
         saveMemo,
         setDefaultMemo,

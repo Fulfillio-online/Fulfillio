@@ -5,6 +5,7 @@ import { X, Printer } from 'lucide-react';
 import { MerchantProductItem } from '../../types';
 
 interface PrintBarcodeModalProps {
+  isOpen?: boolean;
   product: MerchantProductItem | null;
   storeName: string;
   onClose: () => void;
@@ -12,6 +13,7 @@ interface PrintBarcodeModalProps {
 }
 
 export function PrintBarcodeModal({
+  isOpen,
   product,
   storeName,
   onClose,
@@ -19,7 +21,7 @@ export function PrintBarcodeModal({
 }: PrintBarcodeModalProps) {
   const [barcodeCopies, setBarcodeCopies] = useState(10);
 
-  if (!product) return null;
+  if (!product || (isOpen !== undefined && !isOpen)) return null;
 
   const handlePrint = () => {
     onClose();
@@ -29,14 +31,25 @@ export function PrintBarcodeModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-4 sm:p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
+    <div
+      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer"
+      onClick={onClose}
+    >
+      <div
+        className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-4 sm:p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-200 cursor-default"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div className="flex items-center gap-2">
             <Printer className="h-4 w-4 text-emerald-400" />
             <h3 className="font-bold text-base text-slate-100">Print Thermal Barcode Label</h3>
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-300 p-1">
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-slate-500 hover:text-slate-300 p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+            aria-label="Close modal"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -104,14 +117,14 @@ export function PrintBarcodeModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300"
+              className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="button"
               onClick={handlePrint}
-              className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-sm flex items-center gap-1.5"
+              className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <Printer className="h-4 w-4" />
               <span>Print Label Now</span>

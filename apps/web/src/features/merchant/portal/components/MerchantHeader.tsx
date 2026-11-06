@@ -6,8 +6,6 @@ import { usePathname } from 'next/navigation';
 import {
   Menu,
   ChevronRight,
-  ExternalLink,
-  Plus,
   Bell,
   ChevronDown,
   User,
@@ -78,25 +76,6 @@ export function MerchantHeader({
       </div>
 
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-        <Link
-          href="/wms/packing"
-          target="_blank"
-          className="hidden md:flex text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors items-center gap-1.5"
-        >
-          <span>Packing Station</span>
-          <ExternalLink className="h-3 w-3" />
-        </Link>
-
-        <Link
-          href="/merchant/memos"
-          onClick={() => onSelectTab?.('memo-designer')}
-          className="text-xs font-semibold px-2.5 sm:px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
-        >
-          <Plus className="h-3.5 w-3.5 shrink-0" />
-          <span className="hidden sm:inline">Create Memo</span>
-          <span className="sm:hidden">Memo</span>
-        </Link>
-
         {/* Notification Bell */}
         <button
           type="button"

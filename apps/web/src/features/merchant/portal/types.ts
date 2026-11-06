@@ -74,19 +74,51 @@ export interface ResellerMemo {
   created: string;
 }
 
+export interface OrderLineItem {
+  id: string;
+  title: string;
+  variant: string;
+  sku: string;
+  price: number;
+  quantity: number;
+  total: number;
+  imageUrl?: string;
+}
+
+export interface OrderTimelineEvent {
+  title: string;
+  description: string;
+  timestamp: string;
+  isCompleted: boolean;
+}
+
 export interface MerchantOrderItem {
   id: string;
+  orderNumber?: string;
   date: string;
   customer: string;
   phone: string;
   address: string;
+  customerInitials?: string;
+  customerEmail?: string;
   productId: string;
   items: string;
   qty: number;
   amount: number;
+  subtotal?: number;
+  deliveryFee?: number;
+  discount?: number;
   memoCode: string;
-  status: 'PENDING' | 'ALLOCATED' | 'PICKED' | 'PACKED' | 'DISPATCHED' | 'CANCELLED';
+  status: 'PENDING' | 'ALLOCATED' | 'PICKED' | 'PACKED' | 'DISPATCHED' | 'DELIVERED' | 'CANCELLED';
   courier: string;
+  courierStatus?: string;
+  trackingId?: string;
+  consignmentId?: string;
+  paymentMethod?: string;
+  paymentStatus?: 'Paid' | 'Unpaid';
+  transactionId?: string;
+  lineItems?: OrderLineItem[];
+  timeline?: OrderTimelineEvent[];
 }
 
 export interface MerchantProductItem {
@@ -98,7 +130,23 @@ export interface MerchantProductItem {
   stock: number;
   reserved: number;
   price: number;
+  costPrice?: number;
+  profit?: number;
+  profitMargin?: number;
   bin: string;
+  category?: string;
+  subcategory?: string;
+  productType?: 'FASHION' | 'ELECTRONICS' | 'BEAUTY' | 'GROCERY' | 'STANDARD';
+  description?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  keyFeatures?: string[];
+  colors?: { id: string; name: string; hex: string; imageUrl?: string }[];
+  sizes?: string[];
+  variantsList?: { id: string; variantSku: string; color?: string; size?: string; stock: number }[];
+  imageUrl?: string;
+  status?: 'PUBLISHED' | 'DRAFT' | 'ARCHIVED';
+  totalOrders?: number;
 }
 
 export interface MerchantAsnItem {

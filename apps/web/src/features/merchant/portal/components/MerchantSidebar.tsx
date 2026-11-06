@@ -36,25 +36,25 @@ export function MerchantSidebar({
   const navItems = [
     {
       id: 'overview' as MerchantTab,
-      label: 'Dashboard Overview',
+      label: 'Overview',
       href: '/merchant',
       icon: LayoutDashboard,
     },
     {
       id: 'products' as MerchantTab,
-      label: 'Product Master & 2-Part SKU',
+      label: 'Products',
       href: '/merchant/products',
       icon: Package,
     },
     {
       id: 'orders' as MerchantTab,
-      label: 'Orders & Reseller Attribution',
+      label: 'Orders',
       href: '/merchant/orders',
       icon: ShoppingCart,
     },
     {
       id: 'memo-designer' as MerchantTab,
-      label: 'Custom Memo / Invoice Slip',
+      label: 'Memos',
       href: '/merchant/memos',
       icon: Layers,
     },

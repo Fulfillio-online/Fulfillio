@@ -98,7 +98,25 @@ export const merchantApi = {
       const local = localStorage.getItem(STORAGE_KEY_MERCHANT_PRODUCTS);
       if (local) {
         try {
-          return JSON.parse(local);
+          const parsed = JSON.parse(local);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed.map((p: any) => {
+              const price = Number(p.price) || 0;
+              const costPrice = p.costPrice !== undefined ? Number(p.costPrice) : Math.round(price * 0.52);
+              const profit = p.profit !== undefined ? Number(p.profit) : (price - costPrice);
+              const profitMargin = p.profitMargin !== undefined ? Number(p.profitMargin) : (price > 0 ? Math.round((profit / price) * 100) : 0);
+              return {
+                ...p,
+                price,
+                costPrice,
+                profit,
+                profitMargin,
+                category: p.category || 'Apparel',
+                status: p.status || (p.stock === 0 ? 'DRAFT' : 'PUBLISHED'),
+                totalOrders: p.totalOrders ?? 0,
+              };
+            });
+          }
         } catch {}
       }
     }
@@ -212,6 +230,14 @@ export const merchantApi = {
       body: JSON.stringify(payload),
     });
     return remote || null;
+  },
+
+  async updateOrderStatus(id: string, status: string): Promise<boolean> {
+    const remote = await safeFetch(`/orders/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+    return Boolean(remote);
   },
 
   async getWebhookLogs(): Promise<MerchantWebhookLog[]> {

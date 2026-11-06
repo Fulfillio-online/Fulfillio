@@ -26,7 +26,7 @@ import { merchantApi } from './api';
 import { MerchantSidebar } from './components/MerchantSidebar';
 import { MerchantHeader } from './components/MerchantHeader';
 import { MerchantOverviewTab } from './components/tabs/MerchantOverviewTab';
-import { MerchantProductsTab } from './components/tabs/MerchantProductsTab';
+import { MerchantProductsTab } from './products';
 import { MerchantOrdersTab } from './components/tabs/MerchantOrdersTab';
 import { MerchantMemoDesignerTab } from './components/tabs/MerchantMemoDesignerTab';
 import { MerchantInboundAsnTab } from './components/tabs/MerchantInboundAsnTab';
@@ -172,6 +172,54 @@ function MerchantPortalInner() {
     });
   };
 
+  const handleUpdateProduct = (id: string, updated: Partial<MerchantProductItem>) => {
+    setProducts((prev) => {
+      const next = prev.map((p) => (p.id === id ? { ...p, ...updated } : p));
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
+      }
+      return next;
+    });
+    showToast('Product updated.');
+  };
+
+  const handleToggleStatus = (id: string) => {
+    setProducts((prev) => {
+      const next = prev.map((p) => {
+        if (p.id !== id) return p;
+        const newStatus = p.status === 'DRAFT' ? ('PUBLISHED' as const) : ('DRAFT' as const);
+        return { ...p, status: newStatus };
+      });
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
+      }
+      return next;
+    });
+    showToast('Status updated.');
+  };
+
+  const handleBulkUpdateStatus = (ids: string[], status: 'PUBLISHED' | 'DRAFT') => {
+    setProducts((prev) => {
+      const next = prev.map((p) => (ids.includes(p.id) ? { ...p, status } : p));
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
+      }
+      return next;
+    });
+    showToast(`Updated ${ids.length} products to ${status.toLowerCase()}.`);
+  };
+
+  const handleBulkDelete = (ids: string[]) => {
+    setProducts((prev) => {
+      const next = prev.filter((p) => !ids.includes(p.id));
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
+      }
+      return next;
+    });
+    showToast(`Removed ${ids.length} products.`);
+  };
+
   const handleCreateOrder = (
     order: MerchantOrderItem,
     productId: string,
@@ -315,11 +363,15 @@ function MerchantPortalInner() {
           {activeTab === 'products' && (
             <MerchantProductsTab
               products={products}
+              orders={orders}
               merchantCode={profile.merchantCode}
               storeName={profile.storeName}
-              onAdjustStock={handleAdjustStock}
               onDeleteProduct={handleDeleteProduct}
               onAddProducts={handleAddProducts}
+              onUpdateProduct={handleUpdateProduct}
+              onToggleStatus={handleToggleStatus}
+              onBulkUpdateStatus={handleBulkUpdateStatus}
+              onBulkDelete={handleBulkDelete}
               onTriggerToast={showToast}
             />
           )}
