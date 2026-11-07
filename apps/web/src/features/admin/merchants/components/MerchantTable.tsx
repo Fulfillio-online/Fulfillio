@@ -47,6 +47,18 @@ export function MerchantTable({
   // Row-level Actions dropdown
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
 
+  // Mobile Collapsible Accordion State
+  const [expandedMerchantIds, setExpandedMerchantIds] = useState<Set<string>>(new Set());
+
+  const toggleExpand = (id: string) => {
+    setExpandedMerchantIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   // Close dropdown on outside click
   useEffect(() => {
     if (!isBulkMenuOpen && !activeMenuId) return;
@@ -257,9 +269,224 @@ export function MerchantTable({
         </div>
       )}
 
-      {/* Table Container */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-xl overflow-hidden">
-        <div className="overflow-x-auto">
+      {/* Merchant Display: Mobile Collapsible Cards & Desktop Table */}
+      <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-xl overflow-visible p-3 sm:p-0">
+        {/* 1. Mobile Collapsible List (Visible on mobile screens < md) */}
+        <div className="block md:hidden space-y-2.5">
+          {filteredMerchants.length === 0 ? (
+            <div className="py-10 text-center text-slate-400 text-xs">
+              No merchants found matching your search.
+            </div>
+          ) : (
+            filteredMerchants.map((merchant, idx) => {
+              const skuCount = getProductCount(merchant.merchantCode);
+              const isSelected = selectedMerchantIds.has(merchant.id);
+              const isExpanded = expandedMerchantIds.has(merchant.id);
+              const isMenuOpen = activeMenuId === `mobile-${merchant.id}`;
+              const isNearBottom = idx > 0 && idx === filteredMerchants.length - 1;
+
+              return (
+                <div
+                  key={merchant.id}
+                  className={`relative rounded-xl border transition-colors shadow-sm ${
+                    isMenuOpen ? 'z-50' : 'z-0'
+                  } ${
+                    isSelected
+                      ? 'border-emerald-500/50 bg-emerald-950/20'
+                      : 'border-slate-800 bg-slate-950/60'
+                  }`}
+                >
+                  {/* Collapsed Header Summary */}
+                  <div className="p-3 sm:p-3.5 flex items-start gap-2.5 sm:gap-3 select-none">
+                    <div className="pt-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => handleToggleSelect(merchant.id)}
+                        aria-label={`Select ${merchant.storeName}`}
+                        className="w-4 h-4 rounded bg-slate-950 border-slate-700 text-emerald-500 focus:ring-emerald-500 cursor-pointer accent-emerald-500"
+                      />
+                    </div>
+
+                    <div
+                      onClick={() => toggleExpand(merchant.id)}
+                      className={`w-11 h-11 rounded-xl bg-gradient-to-br ${merchant.avatarBg} flex items-center justify-center text-white font-bold text-sm shadow-md shrink-0 mt-0.5 cursor-pointer`}
+                    >
+                      {merchant.avatarInitials}
+                    </div>
+
+                    <div
+                      className="min-w-0 flex-1 space-y-1 cursor-pointer"
+                      onClick={() => toggleExpand(merchant.id)}
+                    >
+                      {/* Row 1: Store Name + Verified Badge + Status Badge */}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                          <span className="font-bold text-white text-sm sm:text-[15px] leading-tight truncate">
+                            {merchant.storeName}
+                          </span>
+                          {merchant.verified && (
+                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                          )}
+                        </div>
+                        <div className="shrink-0">
+                          <StatusBadge status={merchant.status} />
+                        </div>
+                      </div>
+
+                      {/* Row 2: Merchant Code & Owner Name */}
+                      <div className="flex items-center gap-1.5 text-xs truncate">
+                        <span className="font-mono font-bold text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/20 text-[11px] shrink-0">
+                          {merchant.merchantCode}
+                        </span>
+                        <span className="text-slate-500 shrink-0">·</span>
+                        <span className="text-slate-300 font-medium truncate">
+                          {merchant.ownerName}
+                        </span>
+                      </div>
+
+                      {/* Row 3: Phone & Active SKUs Count + Accordion Toggle Button */}
+                      <div className="flex items-center justify-between gap-2 pt-0.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono text-[11px] text-slate-300 flex items-center gap-1">
+                            <Phone className="w-3 h-3 text-slate-500 shrink-0" />
+                            {merchant.phone}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-md bg-slate-900 border border-slate-800 font-mono text-[11px] font-bold text-emerald-400">
+                            {skuCount} SKUs
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleExpand(merchant.id);
+                          }}
+                          aria-label="Toggle merchant details"
+                          className="p-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer shrink-0"
+                        >
+                          <ChevronDown
+                            className={`w-4 h-4 transition-transform duration-200 ${
+                              isExpanded ? 'rotate-180 text-emerald-400' : ''
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Expanded Row Details */}
+                  {isExpanded && (
+                    <div className="relative z-20 px-3.5 pb-3.5 pt-2 border-t border-slate-800/80 bg-slate-900/60 rounded-b-xl text-xs space-y-2.5 font-sans">
+                      <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
+                        <div>
+                          <span className="text-slate-400 block text-[10px] uppercase font-semibold">
+                            Location &amp; Email
+                          </span>
+                          <div className="text-slate-200 flex items-center gap-1 mt-0.5 truncate">
+                            <MapPin className="w-3 h-3 text-slate-500 shrink-0" />
+                            <span className="truncate">{merchant.location}</span>
+                          </div>
+                          <div className="text-slate-400 font-mono text-[10px] truncate mt-0.5">
+                            {merchant.email}
+                          </div>
+                        </div>
+
+                        <div>
+                          <span className="text-slate-400 block text-[10px] uppercase font-semibold">
+                            Bank / COD Payout
+                          </span>
+                          <div className="flex items-center gap-1 font-medium text-slate-200 mt-0.5 truncate">
+                            <Landmark className="w-3 h-3 text-emerald-400 shrink-0" />
+                            <span className="truncate">{merchant.payoutAccount.provider}</span>
+                          </div>
+                          <div className="text-[10px] text-emerald-400 font-mono mt-0.5 truncate">
+                            A/C ••••{merchant.payoutAccount.accountNumber.slice(-4)} · bKash: {merchant.payoutAccount.bkashNumber}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Actions Dropdown on Mobile */}
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-800/80">
+                        <span className="text-[11px] text-slate-400">Manage Merchant:</span>
+                        <div
+                          className="relative inline-flex items-center justify-end text-left"
+                          data-dropdown-container
+                        >
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setActiveMenuId(isMenuOpen ? null : `mobile-${merchant.id}`)
+                            }
+                            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+                          >
+                            <span>Actions</span>
+                            <ChevronDown
+                              className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                                isMenuOpen ? 'rotate-180 text-emerald-400' : 'text-slate-400'
+                              }`}
+                            />
+                          </button>
+
+                          {isMenuOpen && (
+                            <div
+                              className={`absolute right-0 ${
+                                isNearBottom ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
+                              } w-48 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl py-1.5 z-[100] text-left font-sans text-xs pointer-events-auto`}
+                            >
+                              {/* 1. View Profile */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveMenuId(null);
+                                  onSelectMerchant(merchant);
+                                }}
+                                className="w-full px-3.5 py-2 text-left text-slate-200 hover:bg-slate-800/80 font-semibold flex items-center gap-2.5 transition-colors cursor-pointer"
+                              >
+                                <Eye className="w-4 h-4 text-indigo-400 shrink-0 pointer-events-none" />
+                                <span>View Profile</span>
+                              </button>
+
+                              {/* 2. Toggle Status (Suspend / Approve) */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveMenuId(null);
+                                  onToggleStatus(merchant.id, merchant.status);
+                                }}
+                                className={`w-full px-3.5 py-2 text-left font-semibold flex items-center gap-2.5 transition-colors cursor-pointer border-t border-slate-800/80 ${
+                                  merchant.status === 'Active'
+                                    ? 'text-rose-400 hover:bg-rose-950/40'
+                                    : 'text-emerald-400 hover:bg-emerald-950/40'
+                                }`}
+                              >
+                                {merchant.status === 'Active' ? (
+                                  <>
+                                    <Ban className="w-4 h-4 text-rose-400 shrink-0 pointer-events-none" />
+                                    <span>Suspend Merchant</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Check className="w-4 h-4 text-emerald-400 shrink-0 pointer-events-none" />
+                                    <span>Approve Merchant</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* 2. Desktop Full Table (Visible on md screens and larger) */}
+        <div className="hidden md:block overflow-x-auto overflow-y-visible">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-950/80 text-slate-400 uppercase tracking-wider font-bold border-b border-slate-800 text-[11px]">
               <tr>
@@ -295,7 +522,8 @@ export function MerchantTable({
                 filteredMerchants.map((merchant, idx) => {
                   const skuCount = getProductCount(merchant.merchantCode);
                   const isSelected = selectedMerchantIds.has(merchant.id);
-                  const isNearBottom = idx >= filteredMerchants.length - 2;
+                  const isMenuOpen = activeMenuId === `desktop-${merchant.id}`;
+                  const isNearBottom = idx > 0 && idx >= filteredMerchants.length - 2;
 
                   return (
                     <tr
@@ -392,7 +620,7 @@ export function MerchantTable({
                           <button
                             type="button"
                             onClick={() =>
-                              setActiveMenuId(activeMenuId === merchant.id ? null : merchant.id)
+                              setActiveMenuId(isMenuOpen ? null : `desktop-${merchant.id}`)
                             }
                             className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm ml-auto"
                             title="Actions menu"
@@ -400,12 +628,12 @@ export function MerchantTable({
                             <span>Actions</span>
                             <ChevronDown
                               className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                                activeMenuId === merchant.id ? 'rotate-180 text-emerald-400' : 'text-slate-400'
+                                isMenuOpen ? 'rotate-180 text-emerald-400' : 'text-slate-400'
                               }`}
                             />
                           </button>
 
-                          {activeMenuId === merchant.id && (
+                          {isMenuOpen && (
                             <div
                               className={`absolute right-0 ${
                                 isNearBottom ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
