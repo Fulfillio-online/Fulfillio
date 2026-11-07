@@ -66,7 +66,7 @@ export function MerchantSidebar({
     },
     {
       id: 'billing' as MerchantTab,
-      label: 'Payout & Billing',
+      label: 'Earnings & Payouts',
       href: '/merchant/billing',
       icon: CreditCard,
     },
