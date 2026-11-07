@@ -453,67 +453,73 @@ export function AddEditProductModal({
                     key={c.id}
                     className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-3"
                   >
-                    <div className="flex items-center gap-3">
-                      {/* Color box / hex picker */}
-                      <input
-                        type="color"
-                        value={c.hex}
-                        onChange={(e) => {
-                          const hex = e.target.value;
-                          setColors(colors.map((item) => (item.id === c.id ? { ...item, hex } : item)));
-                        }}
-                        className="h-8 w-8 rounded-lg cursor-pointer bg-transparent border-0 shrink-0"
-                        title="Choose color"
-                      />
-                      <input
-                        type="text"
-                        value={c.name}
-                        onChange={(e) => {
-                          const name = e.target.value;
-                          setColors(colors.map((item) => (item.id === c.id ? { ...item, name } : item)));
-                        }}
-                        placeholder="Color Name (e.g. Charcoal Grey)"
-                        className="flex-1 px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
-                      />
-
-                      {/* Thumbnail Preview */}
-                      <div className="relative h-9 w-9 rounded-lg bg-slate-950 border border-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
-                        {c.imageUrl ? (
-                          <Image
-                            src={c.imageUrl}
-                            alt={c.name}
-                            fill
-                            sizes="36px"
-                            className="object-cover"
-                          />
-                        ) : (
-                          <Package className="h-4 w-4 text-slate-600" />
+                    {/* Responsive Color Row */}
+                    <div className="space-y-2.5">
+                      <div className="flex items-center gap-2.5">
+                        <input
+                          type="color"
+                          value={c.hex}
+                          onChange={(e) => {
+                            const hex = e.target.value;
+                            setColors(colors.map((item) => (item.id === c.id ? { ...item, hex } : item)));
+                          }}
+                          className="h-8 w-8 rounded-lg cursor-pointer bg-transparent border-0 shrink-0"
+                          title="Choose color"
+                        />
+                        <input
+                          type="text"
+                          value={c.name}
+                          onChange={(e) => {
+                            const name = e.target.value;
+                            setColors(colors.map((item) => (item.id === c.id ? { ...item, name } : item)));
+                          }}
+                          placeholder="Color Name (e.g. Charcoal Grey)"
+                          className="flex-1 px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500 min-w-0"
+                        />
+                        {colors.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveColor(c.id)}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 transition-colors cursor-pointer shrink-0"
+                            title="Remove color"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
                         )}
                       </div>
 
-                      {/* Upload Image Button */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveColorUploadId(c.id);
-                          colorFileInputRef.current?.click();
-                        }}
-                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-700 shrink-0"
-                      >
-                        <UploadCloud className="h-3.5 w-3.5 text-emerald-400" />
-                        <span>Upload Image</span>
-                      </button>
+                      <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-800/60">
+                        <div className="flex items-center gap-2">
+                          <div className="relative h-8 w-8 rounded-lg bg-slate-950 border border-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
+                            {c.imageUrl ? (
+                              <Image
+                                src={c.imageUrl}
+                                alt={c.name}
+                                fill
+                                sizes="32px"
+                                className="object-cover"
+                              />
+                            ) : (
+                              <Package className="h-4 w-4 text-slate-600" />
+                            )}
+                          </div>
+                          <span className="text-[11px] text-slate-400">
+                            {c.imageUrl ? 'Photo attached' : 'No photo'}
+                          </span>
+                        </div>
 
-                      {/* Delete Color */}
-                      {colors.length > 1 && (
                         <button
                           type="button"
-                          onClick={() => handleRemoveColor(c.id)}
-                          className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 transition-colors cursor-pointer shrink-0"
+                          onClick={() => {
+                            setActiveColorUploadId(c.id);
+                            colorFileInputRef.current?.click();
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-700 shrink-0"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <UploadCloud className="h-3.5 w-3.5 text-emerald-400" />
+                          <span>Upload Image</span>
                         </button>
-                      )}
+                      </div>
                     </div>
 
                     {/* Per-color sizes customization with custom size adder */}
@@ -524,10 +530,10 @@ export function AddEditProductModal({
                         </div>
 
                         {/* Custom size input */}
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 w-full sm:w-auto">
                           <input
                             type="text"
-                            placeholder="+ Custom Size (e.g. 4XL, Free Size)"
+                            placeholder="+ Custom Size (e.g. 4XL)"
                             value={customSizeInputs[c.id] || ''}
                             onChange={(e) =>
                               setCustomSizeInputs({ ...customSizeInputs, [c.id]: e.target.value })
@@ -538,7 +544,7 @@ export function AddEditProductModal({
                                 handleAddCustomSizeToColor(c.id);
                               }
                             }}
-                            className="px-2.5 py-1 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 w-44"
+                            className="flex-1 sm:flex-initial px-2.5 py-1 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 w-full sm:w-44"
                           />
                           <button
                             type="button"
@@ -546,7 +552,7 @@ export function AddEditProductModal({
                             className="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors shrink-0"
                           >
                             <Plus className="h-3 w-3" />
-                            <span>Add Size</span>
+                            <span>Add</span>
                           </button>
                         </div>
                       </div>
@@ -596,7 +602,7 @@ export function AddEditProductModal({
             <span className="text-xs font-bold text-slate-200 uppercase tracking-wider block">
               Key Features
             </span>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <input
                 type="text"
                 value={newFeatureText}
@@ -613,7 +619,7 @@ export function AddEditProductModal({
               <button
                 type="button"
                 onClick={handleAddFeature}
-                className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition-colors cursor-pointer"
+                className="w-full sm:w-auto px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition-colors cursor-pointer text-center"
               >
                 Add Feature
               </button>
@@ -686,17 +692,17 @@ export function AddEditProductModal({
           </div>
 
           {/* Bottom Actions */}
-          <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-3">
+          <div className="pt-4 border-t border-slate-800 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5 sm:gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
+              className="w-full sm:w-auto px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer text-center"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors cursor-pointer shadow-md flex items-center gap-1.5"
+              className="w-full sm:w-auto px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors cursor-pointer shadow-md flex items-center justify-center gap-1.5"
             >
               <Check className="h-4 w-4" />
               <span>{isEdit ? 'Save Changes' : 'Publish Product'}</span>

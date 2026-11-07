@@ -427,16 +427,16 @@ export function ProductForm({
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-16">
       {/* Top Header Bar */}
-      <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
         <div>
           <Link
             href="/merchant/products"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-emerald-400 transition-colors mb-2"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-emerald-400 transition-colors mb-1.5"
           >
             <ArrowLeft className="h-4 w-4" />
             <span>Back to products</span>
           </Link>
-          <h1 className="text-2xl font-extrabold text-slate-100 tracking-tight">
+          <h1 className="text-xl sm:text-2xl font-extrabold text-slate-100 tracking-tight">
             {isEdit ? 'Edit Product' : 'Create New Product'}
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">
@@ -444,17 +444,17 @@ export function ProductForm({
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
           <Link
             href="/merchant/products"
-            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
+            className="flex-1 sm:flex-initial text-center px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
           >
             Cancel
           </Link>
           <button
             type="button"
             onClick={handleSubmit}
-            className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors cursor-pointer shadow-md shadow-emerald-900/30 flex items-center gap-1.5"
+            className="flex-1 sm:flex-initial justify-center px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors cursor-pointer shadow-md shadow-emerald-900/30 flex items-center gap-1.5"
           >
             <Check className="h-4 w-4" />
             <span>{isEdit ? 'Save Changes' : 'Publish Product'}</span>
@@ -464,7 +464,7 @@ export function ProductForm({
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Section 1: Basic Information */}
-        <div className="space-y-4 p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-sm">
+        <div className="space-y-4 p-4 sm:p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-sm">
           <div className="flex items-center gap-2 text-xs font-bold text-slate-200 uppercase tracking-wider">
             <Tag className="h-4 w-4 text-emerald-400" />
             <span>Basic Information</span>
@@ -541,8 +541,8 @@ export function ProductForm({
         </div>
 
         {/* Section 2: Declared Product Value */}
-        <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-sm space-y-3">
-          <div className="flex items-center justify-between">
+        <div className="p-4 sm:p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-sm space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
             <div className="flex items-center gap-2 text-xs font-bold text-slate-200 uppercase tracking-wider">
               <ShieldAlert className="h-4 w-4 text-emerald-400" />
               <span>Product Declared Value (৳ BDT)</span>
@@ -574,7 +574,7 @@ export function ProductForm({
         </div>
 
         {/* Section 3: Product Type & Dynamic Variant Attributes (Placed right after Declared Value!) */}
-        <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-sm space-y-5">
+        <div className="p-4 sm:p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-sm space-y-5">
           <div>
             <div className="flex items-center gap-2 text-xs font-bold text-slate-200 uppercase tracking-wider">
               <Sparkles className="h-4 w-4 text-emerald-400" />
@@ -586,7 +586,7 @@ export function ProductForm({
           </div>
 
           {/* Product Type Cards Selector */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
             {[
               {
                 id: 'FASHION' as const,
@@ -674,66 +674,82 @@ export function ProductForm({
                     return (
                       <div
                         key={c.id}
-                        className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-3"
+                        className="p-3 sm:p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-3"
                       >
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="color"
-                            value={c.hex}
-                            onChange={(e) => {
-                              const hex = e.target.value;
-                              setColors(colors.map((item) => (item.id === c.id ? { ...item, hex } : item)));
-                            }}
-                            className="h-8 w-8 rounded-lg cursor-pointer bg-transparent border-0 shrink-0"
-                            title="Choose color"
-                          />
-                          <input
-                            type="text"
-                            value={c.name}
-                            onChange={(e) => {
-                              const name = e.target.value;
-                              setColors(colors.map((item) => (item.id === c.id ? { ...item, name } : item)));
-                            }}
-                            placeholder="Color Name (e.g. Black)"
-                            className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
-                          />
-
-                          <div className="relative h-9 w-9 rounded-lg bg-slate-900 border border-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
-                            {c.imageUrl ? (
-                              <Image
-                                src={c.imageUrl}
-                                alt={c.name}
-                                fill
-                                sizes="36px"
-                                className="object-cover"
-                              />
-                            ) : (
-                              <Package className="h-4 w-4 text-slate-600" />
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3">
+                          {/* Row 1 on mobile: Color picker & Color name */}
+                          <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                            <input
+                              type="color"
+                              value={c.hex}
+                              onChange={(e) => {
+                                const hex = e.target.value;
+                                setColors(colors.map((item) => (item.id === c.id ? { ...item, hex } : item)));
+                              }}
+                              className="h-8 w-8 rounded-lg cursor-pointer bg-transparent border-0 shrink-0"
+                              title="Choose color"
+                            />
+                            <input
+                              type="text"
+                              value={c.name}
+                              onChange={(e) => {
+                                const name = e.target.value;
+                                setColors(colors.map((item) => (item.id === c.id ? { ...item, name } : item)));
+                              }}
+                              placeholder="Color Name (e.g. Black)"
+                              className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                            />
+                            {colors.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveColor(c.id)}
+                                className="sm:hidden p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-slate-900 transition-colors cursor-pointer shrink-0"
+                                title="Delete color"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
                             )}
                           </div>
 
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setActiveColorUploadId(c.id);
-                              colorFileInputRef.current?.click();
-                            }}
-                            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-700 shrink-0"
-                          >
-                            <UploadCloud className="h-3.5 w-3.5 text-emerald-400" />
-                            <span>Upload Image</span>
-                          </button>
+                          {/* Row 2 on mobile: Photo Preview & Upload Button */}
+                          <div className="flex items-center gap-2 w-full sm:w-auto">
+                            <div className="relative h-9 w-9 rounded-lg bg-slate-900 border border-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
+                              {c.imageUrl ? (
+                                <Image
+                                  src={c.imageUrl}
+                                  alt={c.name}
+                                  fill
+                                  sizes="36px"
+                                  className="object-cover"
+                                />
+                              ) : (
+                                <Package className="h-4 w-4 text-slate-600" />
+                              )}
+                            </div>
 
-                          {colors.length > 1 && (
                             <button
                               type="button"
-                              onClick={() => handleRemoveColor(c.id)}
-                              className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 transition-colors cursor-pointer shrink-0"
-                              title="Delete color"
+                              onClick={() => {
+                                setActiveColorUploadId(c.id);
+                                colorFileInputRef.current?.click();
+                              }}
+                              className="flex-1 sm:flex-initial justify-center px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-700"
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <UploadCloud className="h-3.5 w-3.5 text-emerald-400" />
+                              <span>Upload Image</span>
                             </button>
-                          )}
+
+                            {colors.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveColor(c.id)}
+                                className="hidden sm:inline-flex p-1.5 rounded-lg text-slate-500 hover:text-rose-400 transition-colors cursor-pointer shrink-0"
+                                title="Delete color"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
                         </div>
 
                         {/* Per-color sizes customization with custom size adder */}
@@ -744,10 +760,10 @@ export function ProductForm({
                             </div>
 
                             {/* Custom size input */}
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1.5 w-full sm:w-auto">
                               <input
                                 type="text"
-                                placeholder="+ Custom Size (e.g. 4XL, Free Size)"
+                                placeholder="+ Custom Size (e.g. 4XL)"
                                 value={customSizeInputs[c.id] || ''}
                                 onChange={(e) =>
                                   setCustomSizeInputs({ ...customSizeInputs, [c.id]: e.target.value })
@@ -758,12 +774,12 @@ export function ProductForm({
                                     handleAddCustomSizeToColor(c.id);
                                   }
                                 }}
-                                className="px-2.5 py-1 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 w-48"
+                                className="px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 flex-1 sm:w-44"
                               />
                               <button
                                 type="button"
                                 onClick={() => handleAddCustomSizeToColor(c.id)}
-                                className="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors shrink-0"
+                                className="px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors shrink-0"
                               >
                                 <Plus className="h-3 w-3" />
                                 <span>Add Size</span>
@@ -968,7 +984,7 @@ export function ProductForm({
                     </span>
                   ))}
                 </div>
-                <div className="flex gap-2 max-w-xs">
+                <div className="flex gap-2 w-full sm:max-w-xs">
                   <input
                     type="text"
                     value={newPackInput}
@@ -996,7 +1012,7 @@ export function ProductForm({
           {/* 5. VARIANT INVENTORY GRID: Custom Stock per Variant pairing (From Image 1 & 4) */}
           {productType !== 'STANDARD' && generatedVariants.length > 0 && (
             <div className="space-y-3 pt-3 border-t border-slate-800">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
                   <span className="text-xs font-bold text-slate-200 uppercase tracking-wider block">
                     Variant Inventory Grid
@@ -1005,7 +1021,7 @@ export function ProductForm({
                     Configure initial stock count for each Color, Size, and Specification pairing.
                   </p>
                 </div>
-                <div className="text-right">
+                <div className="text-left sm:text-right">
                   <span className="text-xs text-slate-400">Total Computed Stock:</span>
                   <span className="ml-1.5 font-mono text-emerald-400 font-extrabold text-sm">
                     {computedTotalStock} units
@@ -1013,8 +1029,56 @@ export function ProductForm({
                 </div>
               </div>
 
-              <div className="rounded-xl border border-slate-800 overflow-hidden bg-slate-950">
-                <table className="w-full text-left text-xs">
+              {/* Mobile Card List for Variants */}
+              <div className="block sm:hidden space-y-2.5">
+                {generatedVariants.map((v) => (
+                  <div
+                    key={v.id}
+                    className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2 text-xs"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-emerald-400 font-mono font-semibold text-[11px]">
+                        {v.variantSku}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveVariant(v.id)}
+                        className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-slate-900 transition-colors cursor-pointer"
+                        title="Exclude this variant"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-300">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-slate-400 font-sans">
+                          {v.color || v.attributeName || 'Standard'}
+                        </span>
+                        <span className="text-slate-600">•</span>
+                        <span className="px-2 py-0.5 rounded bg-slate-850 text-slate-200 border border-slate-700/80 font-mono text-[11px]">
+                          {v.size || v.attributeValue || 'Default'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-slate-500 font-medium">Stock:</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={v.stock}
+                          onChange={(e) =>
+                            handleStockChange(v.id, Number(e.target.value) || 0)
+                          }
+                          className="w-20 px-2.5 py-1 text-right bg-slate-900 border border-slate-700 rounded-lg text-xs font-bold text-slate-100 focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop Table View */}
+              <div className="hidden sm:block rounded-xl border border-slate-800 overflow-x-auto bg-slate-950">
+                <table className="w-full text-left text-xs min-w-[500px]">
                   <thead className="bg-slate-900/90 text-slate-400 font-semibold border-b border-slate-800 uppercase text-[10px]">
                     <tr>
                       <th className="p-3">Variant SKU</th>
@@ -1079,18 +1143,18 @@ export function ProductForm({
                 value={standardStock}
                 onChange={(e) => setStandardStock(e.target.value)}
                 placeholder="50"
-                className="w-48 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs font-bold text-slate-200 focus:outline-none focus:border-emerald-500"
+                className="w-full sm:w-48 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs font-bold text-slate-200 focus:outline-none focus:border-emerald-500"
               />
             </div>
           )}
         </div>
 
         {/* Section 4: Key Features (Bullet points) */}
-        <div className="space-y-3 p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-sm">
+        <div className="space-y-3 p-4 sm:p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-sm">
           <span className="text-xs font-bold text-slate-200 uppercase tracking-wider block">
             Key Features
           </span>
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <input
               type="text"
               value={newFeatureText}
@@ -1107,7 +1171,7 @@ export function ProductForm({
             <button
               type="button"
               onClick={handleAddFeature}
-              className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition-colors cursor-pointer"
+              className="w-full sm:w-auto px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition-colors cursor-pointer text-center"
             >
               Add Feature
             </button>
@@ -1133,11 +1197,11 @@ export function ProductForm({
         </div>
 
         {/* Section 6: Visibility Status */}
-        <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-sm space-y-2">
+        <div className="p-4 sm:p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-sm space-y-2">
           <label className="block text-xs font-semibold text-slate-300">
             Storefront Visibility
           </label>
-          <div className="flex gap-3 max-w-xs">
+          <div className="flex gap-2.5 sm:gap-3 w-full sm:max-w-xs">
             <button
               type="button"
               onClick={() => setStatus('PUBLISHED')}
@@ -1164,16 +1228,16 @@ export function ProductForm({
         </div>
 
         {/* Bottom Actions */}
-        <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-3">
+        <div className="pt-4 border-t border-slate-800 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5 sm:gap-3">
           <Link
             href="/merchant/products"
-            className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
+            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer text-center"
           >
             Cancel
           </Link>
           <button
             type="submit"
-            className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors cursor-pointer shadow-md flex items-center gap-1.5"
+            className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors cursor-pointer shadow-md flex items-center justify-center gap-1.5"
           >
             <Check className="h-4 w-4" />
             <span>{isEdit ? 'Save Changes' : 'Publish Product'}</span>

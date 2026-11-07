@@ -12,6 +12,8 @@ import {
   FileText,
   Eye,
   Package,
+  CheckSquare,
+  Square,
 } from 'lucide-react';
 import { ProductTableProps } from '../types';
 
@@ -33,7 +35,213 @@ export function ProductTable({
 
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden shadow-sm">
-      <div className="overflow-x-auto">
+      {/* ============================================================== */}
+      {/* 1. MOBILE RESPONSIVE CARDS VIEW (Visible on screens < 768px)  */}
+      {/* ============================================================== */}
+      <div className="block md:hidden">
+        {/* Mobile "Select All" Bar */}
+        <div className="p-3 bg-slate-950/70 border-b border-slate-800 flex items-center justify-between text-xs">
+          <button
+            type="button"
+            onClick={onToggleSelectAll}
+            className="flex items-center gap-2 text-slate-300 font-semibold hover:text-white transition-colors"
+          >
+            {isAllSelected ? (
+              <CheckSquare className="h-4 w-4 text-emerald-400" />
+            ) : (
+              <Square className="h-4 w-4 text-slate-500" />
+            )}
+            <span>Select All ({products.length} products)</span>
+          </button>
+
+          {selectedIds.length > 0 && (
+            <span className="text-[11px] font-mono text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+              {selectedIds.length} selected
+            </span>
+          )}
+        </div>
+
+        {/* Mobile Product Cards List */}
+        <div className="divide-y divide-slate-800/80">
+          {products.map((p) => {
+            const isSelected = selectedIds.includes(p.id);
+            const isPublished = p.status === 'PUBLISHED' || (!p.status && p.stock > 0);
+            const isLowStock = p.stock <= 30 && p.stock > 0;
+            const isOutOfStock = p.stock === 0;
+
+            return (
+              <div
+                key={p.id}
+                className={`p-3.5 space-y-3 transition-colors ${
+                  isSelected ? 'bg-emerald-950/15' : 'hover:bg-slate-850/40'
+                }`}
+              >
+                {/* Top Row: Checkbox + Thumbnail + Title & SKU */}
+                <div className="flex items-start gap-3">
+                  {/* Select Checkbox */}
+                  <div className="pt-1 shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => onToggleSelect(p.id)}
+                      aria-label={`Select ${p.title}`}
+                      className="rounded border-slate-700 bg-slate-800 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-0 cursor-pointer h-4 w-4"
+                    />
+                  </div>
+
+                  {/* Thumbnail */}
+                  <Link
+                    href={`/merchant/products/${p.id}`}
+                    className="relative h-14 w-14 rounded-xl bg-slate-950 border border-slate-800 overflow-hidden shrink-0 flex items-center justify-center cursor-pointer hover:border-emerald-500 transition-colors"
+                  >
+                    {p.imageUrl ? (
+                      <Image
+                        src={p.imageUrl}
+                        alt={p.title}
+                        fill
+                        sizes="56px"
+                        className="object-cover"
+                      />
+                    ) : (
+                      <Package className="h-6 w-6 text-slate-500" />
+                    )}
+                  </Link>
+
+                  {/* Title, Category & SKU */}
+                  <div className="min-w-0 flex-1">
+                    <Link
+                      href={`/merchant/products/${p.id}`}
+                      className="font-semibold text-slate-100 hover:text-emerald-400 transition-colors text-xs leading-snug line-clamp-2 block cursor-pointer"
+                    >
+                      {p.title}
+                    </Link>
+
+                    <div className="flex items-center gap-1.5 mt-1 text-[11px] text-slate-400 flex-wrap">
+                      {p.category && (
+                        <span className="text-slate-400 font-medium">{p.category}</span>
+                      )}
+                      <span className="font-mono text-[10px] text-slate-300 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
+                        {p.sku}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Middle Row: Price & Stock Status Badges */}
+                <div className="flex items-center justify-between text-xs bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/80">
+                  <div>
+                    <span className="text-[10px] uppercase text-slate-500 font-semibold block">
+                      Declared Value
+                    </span>
+                    <span className="text-sm font-extrabold text-emerald-400 font-mono">
+                      ৳{p.price.toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div className="text-right">
+                    <span className="text-[10px] uppercase text-slate-500 font-semibold block">
+                      Warehouse Stock
+                    </span>
+                    <div>
+                      {isOutOfStock ? (
+                        <span className="text-[11px] font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20">
+                          Out of stock
+                        </span>
+                      ) : isLowStock ? (
+                        <span className="text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                          {p.stock} pcs left
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-slate-200 font-bold font-mono">
+                          {p.stock} pcs available
+                        </span>
+                      )}
+                      {p.reserved > 0 && (
+                        <span className="text-[10px] text-slate-500 block">
+                          ({p.reserved} reserved)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bottom Row: Quick Action Buttons on Mobile */}
+                <div className="flex items-center justify-between gap-1.5 pt-1">
+                  {/* Status Toggle */}
+                  <button
+                    type="button"
+                    onClick={() => onToggleStatus(p.id)}
+                    className={`text-[11px] font-semibold px-2.5 py-1.5 rounded-lg border transition-all flex items-center gap-1 cursor-pointer shrink-0 ${
+                      isPublished
+                        ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                        : 'bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border-emerald-500/40'
+                    }`}
+                  >
+                    {isPublished ? (
+                      <>
+                        <FileText className="h-3 w-3 text-slate-400" />
+                        <span>Draft</span>
+                      </>
+                    ) : (
+                      <>
+                        <Eye className="h-3 w-3 text-emerald-400" />
+                        <span>Publish</span>
+                      </>
+                    )}
+                  </button>
+
+                  {/* Actions Group */}
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => onManageStock(p)}
+                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/80 transition-colors"
+                      title="Manage Stock"
+                      aria-label="Manage Stock"
+                    >
+                      <Layers className="h-3.5 w-3.5 text-emerald-400" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => onPrintBarcode(p)}
+                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/80 transition-colors"
+                      title="Print Barcode"
+                      aria-label="Print Barcode"
+                    >
+                      <Printer className="h-3.5 w-3.5 text-indigo-400" />
+                    </button>
+
+                    <Link
+                      href={`/merchant/products/${p.id}/edit`}
+                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/80 transition-colors"
+                      title="Edit Product"
+                      aria-label="Edit Product"
+                    >
+                      <Edit2 className="h-3.5 w-3.5 text-slate-300" />
+                    </Link>
+
+                    <button
+                      type="button"
+                      onClick={() => onRequestDelete(p)}
+                      className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition-colors"
+                      title="Delete Product"
+                      aria-label="Delete Product"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ============================================================== */}
+      {/* 2. DESKTOP / TABLET DATA TABLE VIEW (Visible on screens >= 768px) */}
+      {/* ============================================================== */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full min-w-[760px] text-left text-sm">
           <thead className="bg-slate-950/60 text-slate-400 text-xs uppercase tracking-wider font-semibold border-b border-slate-800">
             <tr>
@@ -130,7 +338,7 @@ export function ProductTable({
                     </div>
                   </td>
 
-                  {/* Stock (Clean display without jumping +/- buttons!) */}
+                  {/* Stock */}
                   <td className="p-4">
                     <div>
                       {isOutOfStock ? (

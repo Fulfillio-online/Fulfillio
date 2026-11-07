@@ -30,13 +30,13 @@ export function ProductToolbar({
       </div>
 
       {/* Filters & View Toggles */}
-      <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap justify-between sm:justify-end">
+      <div className="flex items-center gap-2 w-full sm:w-auto">
         {/* Category Dropdown */}
-        <div className="relative">
+        <div className="relative flex-1 sm:flex-initial">
           <select
             value={selectedCategory}
             onChange={(e) => onCategoryChange(e.target.value)}
-            className="appearance-none pl-3 pr-8 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs font-medium text-slate-300 focus:outline-none focus:border-emerald-500 cursor-pointer"
+            className="w-full appearance-none pl-3 pr-8 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs font-medium text-slate-300 focus:outline-none focus:border-emerald-500 cursor-pointer"
           >
             <option value="ALL">All Category</option>
             {categories.map((cat) => (
@@ -49,11 +49,11 @@ export function ProductToolbar({
         </div>
 
         {/* Sort Dropdown */}
-        <div className="relative">
+        <div className="relative flex-1 sm:flex-initial">
           <select
             value={sortOption}
             onChange={(e) => onSortChange(e.target.value as ProductSortOption)}
-            className="appearance-none pl-3 pr-8 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs font-medium text-slate-300 focus:outline-none focus:border-emerald-500 cursor-pointer"
+            className="w-full appearance-none pl-3 pr-8 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs font-medium text-slate-300 focus:outline-none focus:border-emerald-500 cursor-pointer"
           >
             <option value="NEWEST">Newest</option>
             <option value="PRICE_ASC">Price: Low to High</option>
@@ -65,7 +65,7 @@ export function ProductToolbar({
         </div>
 
         {/* Grid vs List View Mode Toggle */}
-        <div className="flex items-center border border-slate-800 rounded-lg bg-slate-900 p-0.5">
+        <div className="flex items-center border border-slate-800 rounded-lg bg-slate-900 p-0.5 shrink-0">
           <button
             type="button"
             onClick={() => onViewModeChange('LIST')}
