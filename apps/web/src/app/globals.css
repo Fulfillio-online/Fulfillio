@@ -28,6 +28,15 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
+/* Hide scrollbar for clean mobile swiping */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 @media print {
   @page {
     size: 4in 6in;

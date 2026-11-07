@@ -20,6 +20,7 @@ import {
 import { FraudRatioBadge } from '@/components/ui/FraudRatioBadge';
 import { MerchantOrderItem, MerchantProductItem, ResellerMemo } from '../../types';
 import { CreateManualOrderModal } from '../modals/CreateManualOrderModal';
+import { MerchantExpandableCard } from '../common/MerchantExpandableCard';
 
 interface MerchantOrdersTabProps {
   orders: MerchantOrderItem[];
@@ -320,7 +321,7 @@ export function MerchantOrdersTab({
         </div>
 
         {/* Tab Filters */}
-        <div className="flex items-center gap-1.5 overflow-x-auto border-t border-slate-800/80 pt-3 pb-1 -mx-1 px-1">
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar border-t border-slate-800/80 pt-3 pb-1 -mx-1 px-1">
           <button
             onClick={() => {
               setActiveTab('ALL');
@@ -389,7 +390,7 @@ export function MerchantOrdersTab({
         </div>
 
         {/* Mobile Orders Card View (block md:hidden) */}
-        <div className="block md:hidden space-y-3">
+        <div className="block md:hidden space-y-2.5">
           {paginatedOrders.length === 0 ? (
             <div className="py-12 text-center text-slate-500 bg-slate-950/60 rounded-xl border border-slate-800">
               <Package className="h-8 w-8 mx-auto text-slate-600 mb-2" />
@@ -397,102 +398,119 @@ export function MerchantOrdersTab({
             </div>
           ) : (
             paginatedOrders.map((o) => (
-              <div
+              <MerchantExpandableCard
                 key={o.id}
-                onClick={() => router.push(`/merchant/orders/${o.id}`)}
-                className="bg-slate-950/80 hover:bg-slate-900 border border-slate-800 rounded-xl p-3.5 space-y-3 transition-colors cursor-pointer shadow-sm active:border-emerald-500/50"
-              >
-                {/* Card Header: Order Number, Items badge, & Status Badge */}
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 bg-slate-800/80 rounded-lg text-emerald-400 shrink-0">
-                      <Package className="h-4 w-4" />
+                statusBadge={getStatusBadge(o.status)}
+                row1={
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <div className="p-1 bg-slate-800 rounded text-emerald-400 shrink-0">
+                      <Package className="h-3 w-3" />
                     </div>
-                    <div>
-                      <span className="font-mono font-bold text-slate-100 text-xs block">
-                        {o.orderNumber || `#${o.id}`}
-                      </span>
-                      <span className="text-[10px] text-slate-500 font-medium">
-                        {o.date} • {o.qty || 1} {o.qty === 1 ? 'item' : 'items'}
-                      </span>
-                    </div>
-                  </div>
-                  <div>{getStatusBadge(o.status)}</div>
-                </div>
-
-                {/* Customer Details & Courier */}
-                <div className="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800/70 text-xs space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-slate-200">{o.customer}</span>
-                    <span className="text-[11px] font-semibold text-slate-300 px-2 py-0.5 rounded bg-slate-800/90 border border-slate-700/60">
-                      {o.courier}
+                    <span className="font-mono font-bold text-slate-100 text-xs">
+                      {o.orderNumber || `#${o.id}`}
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-sans">
+                      · {o.date}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between text-[11px] text-slate-400">
-                    <span className="font-mono">{o.phone}</span>
-                    <span>Fee: ৳{o.deliveryFee ?? 60}</span>
+                }
+                row2={
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="font-bold text-xs text-slate-100">{o.customer}</span>
+                    <span className="text-slate-500 text-[11px]">·</span>
+                    <span className="text-[11px] text-slate-400 font-medium">
+                      {o.qty || 1} {o.qty === 1 ? 'item' : 'items'}
+                    </span>
                   </div>
-                </div>
-
-                {/* Financial Summary */}
-                <div className="flex items-center justify-between text-xs pt-1">
-                  <div>
-                    <div className="text-[10px] text-slate-400 uppercase font-semibold">Total Amount</div>
-                    <div className="font-extrabold text-sm text-slate-100">
+                }
+                row3={
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-xs font-extrabold text-slate-100">
                       ৳{Number(o.amount).toLocaleString()}
-                    </div>
-                  </div>
-
-                  <div className="text-right">
-                    <div
-                      className={`text-[11px] font-semibold ${
+                    </span>
+                    <span
+                      className={`text-[10px] font-semibold px-2 py-0.5 rounded ${
                         o.paymentStatus === 'Paid'
-                          ? 'text-emerald-400'
+                          ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
                           : o.paymentStatus === 'Partial'
-                          ? 'text-sky-400'
-                          : 'text-amber-400'
+                          ? 'bg-sky-500/15 text-sky-300 border border-sky-500/30'
+                          : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
                       }`}
                     >
                       {o.paymentStatus === 'Paid'
                         ? 'Paid (100%)'
                         : o.paymentStatus === 'Partial'
-                        ? `Partial (Adv: ৳${o.advancePayment})`
+                        ? `Adv: ৳${o.advancePayment}`
                         : 'Unpaid (COD)'}
-                    </div>
-                    {o.advancePayment && o.advancePayment > 0 ? (
-                      <div className="text-[10px] text-emerald-400 font-medium">
-                        COD: ৳{(o.codAmount ?? Math.max(0, o.amount - o.advancePayment)).toLocaleString()}
-                      </div>
-                    ) : (
-                      <div className="text-[10px] text-slate-500 font-medium">
-                        {o.paymentMethod || 'Cash on Delivery'}
-                      </div>
+                    </span>
+                    {o.advancePayment && o.advancePayment > 0 && (
+                      <span className="text-[10px] font-mono text-emerald-400 font-medium">
+                        Due: ৳{(o.codAmount ?? Math.max(0, o.amount - o.advancePayment)).toLocaleString()}
+                      </span>
                     )}
                   </div>
-                </div>
+                }
+                expandedContent={
+                  <div className="space-y-2.5">
+                    {/* Customer Details Box with 1-tap Phone Call */}
+                    <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-400 text-[11px]">Customer & Phone:</span>
+                        <a
+                          href={`tel:${o.phone}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-emerald-400 hover:text-emerald-300 font-mono font-bold text-xs inline-flex items-center gap-1"
+                        >
+                          <span>📞 {o.phone}</span>
+                        </a>
+                      </div>
+                      {o.address && (
+                        <div className="text-[11px] text-slate-300 leading-snug">
+                          <span className="text-slate-500">Address: </span>
+                          {o.address}
+                        </div>
+                      )}
+                    </div>
 
-                {/* Action Buttons */}
-                <div
-                  className="pt-2.5 border-t border-slate-800/80 flex items-center gap-2"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <Link
-                    href={`/merchant/orders/${o.id}`}
-                    className="flex-1 py-1.5 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-slate-700/70"
-                  >
-                    <span>View Details</span>
-                  </Link>
+                    {/* Courier & Delivery Grid */}
+                    <div className="grid grid-cols-2 gap-2 text-[11px]">
+                      <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                        <span className="text-slate-500 text-[10px] uppercase font-semibold block">Courier</span>
+                        <span className="font-semibold text-slate-200 block mt-0.5">{o.courier}</span>
+                        <span className="text-slate-400 text-[10px]">Fee: ৳{o.deliveryFee ?? 60}</span>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                        <span className="text-slate-500 text-[10px] uppercase font-semibold block">Invoice Code</span>
+                        <span className="font-mono font-semibold text-indigo-300 block mt-0.5">
+                          {o.memoCode || 'MEMO-DEFAULT'}
+                        </span>
+                        <span className="text-slate-400 text-[10px]">
+                          {o.paymentMethod || 'Cash on Delivery'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                }
+                actions={
+                  <>
+                    <Link
+                      href={`/merchant/orders/${o.id}`}
+                      className="flex-1 min-w-[120px] py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-slate-700/80 cursor-pointer"
+                    >
+                      <span>View Full Details</span>
+                    </Link>
 
-                  <Link
-                    href={`/print/memo/${o.id}?memoCode=${encodeURIComponent(o.memoCode || 'MEMO-DEFAULT')}&customerName=${encodeURIComponent(o.customer)}&customerPhone=${encodeURIComponent(o.phone)}&customerAddress=${encodeURIComponent(o.address)}&codAmount=${o.amount}`}
-                    className="py-1.5 px-3 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shrink-0"
-                    title="Print 2-in-1 4x6 Thermal Memo Slip"
-                  >
-                    <Printer className="h-3.5 w-3.5" />
-                    <span>Print Memo</span>
-                  </Link>
-                </div>
-              </div>
+                    <Link
+                      href={`/print/memo/${o.id}?memoCode=${encodeURIComponent(o.memoCode || 'MEMO-DEFAULT')}&customerName=${encodeURIComponent(o.customer)}&customerPhone=${encodeURIComponent(o.phone)}&customerAddress=${encodeURIComponent(o.address)}&codAmount=${o.amount}`}
+                      className="flex-1 min-w-[120px] py-2 px-3 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                      title="Print 2-in-1 4x6 Thermal Memo Slip"
+                    >
+                      <Printer className="h-3.5 w-3.5" />
+                      <span>Print 4x6" Memo</span>
+                    </Link>
+                  </>
+                }
+              />
             ))
           )}
         </div>

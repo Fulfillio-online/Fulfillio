@@ -16,6 +16,7 @@ import {
   Square,
 } from 'lucide-react';
 import { ProductTableProps } from '../types';
+import { MerchantExpandableCard } from '../../components/common/MerchantExpandableCard';
 
 export function ProductTable({
   products,
@@ -62,7 +63,7 @@ export function ProductTable({
         </div>
 
         {/* Mobile Product Cards List */}
-        <div className="divide-y divide-slate-800/80">
+        <div className="p-2 sm:p-3 space-y-2.5">
           {products.map((p) => {
             const isSelected = selectedIds.includes(p.id);
             const isPublished = p.status === 'PUBLISHED' || (!p.status && p.stock > 0);
@@ -70,169 +71,140 @@ export function ProductTable({
             const isOutOfStock = p.stock === 0;
 
             return (
-              <div
+              <MerchantExpandableCard
                 key={p.id}
-                className={`p-3.5 space-y-3 transition-colors ${
-                  isSelected ? 'bg-emerald-950/15' : 'hover:bg-slate-850/40'
-                }`}
-              >
-                {/* Top Row: Checkbox + Thumbnail + Title & SKU */}
-                <div className="flex items-start gap-3">
-                  {/* Select Checkbox */}
-                  <div className="pt-1 shrink-0">
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => onToggleSelect(p.id)}
-                      aria-label={`Select ${p.title}`}
-                      className="rounded border-slate-700 bg-slate-800 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-0 cursor-pointer h-4 w-4"
-                    />
-                  </div>
-
-                  {/* Thumbnail */}
-                  <Link
-                    href={`/merchant/products/${p.id}`}
-                    className="relative h-14 w-14 rounded-xl bg-slate-950 border border-slate-800 overflow-hidden shrink-0 flex items-center justify-center cursor-pointer hover:border-emerald-500 transition-colors"
-                  >
-                    {p.imageUrl ? (
-                      <Image
-                        src={p.imageUrl}
-                        alt={p.title}
-                        fill
-                        sizes="56px"
-                        className="object-cover"
-                      />
-                    ) : (
-                      <Package className="h-6 w-6 text-slate-500" />
-                    )}
-                  </Link>
-
-                  {/* Title, Category & SKU */}
-                  <div className="min-w-0 flex-1">
-                    <Link
-                      href={`/merchant/products/${p.id}`}
-                      className="font-semibold text-slate-100 hover:text-emerald-400 transition-colors text-xs leading-snug line-clamp-2 block cursor-pointer"
-                    >
-                      {p.title}
-                    </Link>
-
-                    <div className="flex items-center gap-1.5 mt-1 text-[11px] text-slate-400 flex-wrap">
-                      {p.category && (
-                        <span className="text-slate-400 font-medium">{p.category}</span>
-                      )}
-                      <span className="font-mono text-[10px] text-slate-300 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
-                        {p.sku}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Middle Row: Price & Stock Status Badges */}
-                <div className="flex items-center justify-between text-xs bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/80">
-                  <div>
-                    <span className="text-[10px] uppercase text-slate-500 font-semibold block">
-                      Declared Value
-                    </span>
-                    <span className="text-sm font-extrabold text-emerald-400 font-mono">
-                      ৳{p.price.toLocaleString()}
-                    </span>
-                  </div>
-
-                  <div className="text-right">
-                    <span className="text-[10px] uppercase text-slate-500 font-semibold block">
-                      Warehouse Stock
-                    </span>
-                    <div>
-                      {isOutOfStock ? (
-                        <span className="text-[11px] font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20">
-                          Out of stock
-                        </span>
-                      ) : isLowStock ? (
-                        <span className="text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                          {p.stock} pcs left
-                        </span>
-                      ) : (
-                        <span className="text-[11px] text-slate-200 font-bold font-mono">
-                          {p.stock} pcs available
-                        </span>
-                      )}
-                      {p.reserved > 0 && (
-                        <span className="text-[10px] text-slate-500 block">
-                          ({p.reserved} reserved)
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Bottom Row: Quick Action Buttons on Mobile */}
-                <div className="flex items-center justify-between gap-1.5 pt-1">
-                  {/* Status Toggle */}
+                isSelected={isSelected}
+                onToggleSelect={() => onToggleSelect(p.id)}
+                statusBadge={
                   <button
                     type="button"
-                    onClick={() => onToggleStatus(p.id)}
-                    className={`text-[11px] font-semibold px-2.5 py-1.5 rounded-lg border transition-all flex items-center gap-1 cursor-pointer shrink-0 ${
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleStatus(p.id);
+                    }}
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-all cursor-pointer ${
                       isPublished
-                        ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
-                        : 'bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border-emerald-500/40'
+                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                        : 'bg-slate-800 text-slate-400 border-slate-700'
                     }`}
+                    title="Click to toggle status"
                   >
-                    {isPublished ? (
-                      <>
-                        <FileText className="h-3 w-3 text-slate-400" />
-                        <span>Draft</span>
-                      </>
-                    ) : (
-                      <>
-                        <Eye className="h-3 w-3 text-emerald-400" />
-                        <span>Publish</span>
-                      </>
-                    )}
+                    {isPublished ? '● Published' : '○ Draft'}
                   </button>
-
-                  {/* Actions Group */}
-                  <div className="flex items-center gap-1">
+                }
+                row1={
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="relative h-10 w-10 rounded-lg bg-slate-950 border border-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
+                      {p.imageUrl ? (
+                        <Image
+                          src={p.imageUrl}
+                          alt={p.title}
+                          fill
+                          sizes="40px"
+                          className="object-cover"
+                        />
+                      ) : (
+                        <Package className="h-5 w-5 text-slate-500" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="font-mono text-[10px] text-emerald-400 font-bold bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
+                        {p.sku}
+                      </span>
+                      {p.category && (
+                        <span className="text-[11px] text-slate-400 font-medium ml-1.5 truncate">
+                          {p.category}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                }
+                row2={
+                  <Link
+                    href={`/merchant/products/${p.id}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="font-bold text-xs text-slate-100 hover:text-emerald-400 transition-colors line-clamp-1 block cursor-pointer"
+                  >
+                    {p.title}
+                  </Link>
+                }
+                row3={
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-xs font-extrabold text-slate-100">
+                      ৳{p.price.toLocaleString()}
+                    </span>
+                    <span className="text-slate-600 text-[10px]">•</span>
+                    {isOutOfStock ? (
+                      <span className="text-[10px] font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20">
+                        Out of stock
+                      </span>
+                    ) : isLowStock ? (
+                      <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                        {p.stock} left (Low)
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                        {p.stock} in stock
+                      </span>
+                    )}
+                  </div>
+                }
+                expandedContent={
+                  <div className="space-y-2.5">
+                    {/* Barcode & Stock breakdown */}
+                    <div className="grid grid-cols-2 gap-2 text-[11px]">
+                      <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                        <span className="text-slate-500 text-[10px] uppercase font-semibold block">Barcode</span>
+                        <span className="font-mono font-bold text-slate-200 block mt-0.5 truncate">{p.barcode}</span>
+                        <span className="text-slate-500 text-[10px]">Bin: {p.bin || 'Intake bin'}</span>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                        <span className="text-slate-500 text-[10px] uppercase font-semibold block">Warehouse Stock</span>
+                        <span className="font-mono font-bold text-emerald-400 block mt-0.5">{p.stock} units</span>
+                        <span className="text-slate-400 text-[10px]">{p.reserved} reserved</span>
+                      </div>
+                    </div>
+                  </div>
+                }
+                actions={
+                  <>
                     <button
                       type="button"
                       onClick={() => onManageStock(p)}
-                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/80 transition-colors"
-                      title="Manage Stock"
-                      aria-label="Manage Stock"
+                      className="flex-1 min-w-[100px] py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-slate-700/80 cursor-pointer"
                     >
                       <Layers className="h-3.5 w-3.5 text-emerald-400" />
+                      <span>Manage Stock</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => onPrintBarcode(p)}
-                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/80 transition-colors"
-                      title="Print Barcode"
-                      aria-label="Print Barcode"
+                      className="flex-1 min-w-[90px] py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-slate-700/80 cursor-pointer"
                     >
                       <Printer className="h-3.5 w-3.5 text-indigo-400" />
+                      <span>Barcode</span>
                     </button>
 
                     <Link
                       href={`/merchant/products/${p.id}/edit`}
-                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/80 transition-colors"
-                      title="Edit Product"
-                      aria-label="Edit Product"
+                      className="py-2 px-3.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-slate-700/80 cursor-pointer shrink-0"
                     >
                       <Edit2 className="h-3.5 w-3.5 text-slate-300" />
+                      <span>Edit</span>
                     </Link>
 
                     <button
                       type="button"
                       onClick={() => onRequestDelete(p)}
-                      className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition-colors"
+                      className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-semibold flex items-center justify-center transition-colors cursor-pointer shrink-0"
                       title="Delete Product"
-                      aria-label="Delete Product"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
-                  </div>
-                </div>
-              </div>
+                  </>
+                }
+              />
             );
           })}
         </div>

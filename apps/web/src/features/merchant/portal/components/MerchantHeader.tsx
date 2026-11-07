@@ -58,7 +58,7 @@ export function MerchantHeader({
   };
 
   return (
-    <header className="h-16 border-b border-slate-800 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-2 bg-slate-900/60 sticky top-0 z-20 backdrop-blur">
+    <header className="w-full min-w-0 h-16 border-b border-slate-800 px-3.5 sm:px-6 lg:px-8 flex items-center justify-between gap-2 bg-slate-900/60 sticky top-0 z-20 backdrop-blur">
       <div className="flex items-center gap-2 min-w-0">
         <button
           type="button"
