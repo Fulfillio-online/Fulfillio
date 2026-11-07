@@ -1,0 +1,34 @@
+{
+  "courier-dispatch": {
+    "w": 1064,
+    "h": 639
+  },
+  "delivery-van": {
+    "w": 869,
+    "h": 596
+  },
+  "hero-warehouse": {
+    "w": 887,
+    "h": 664
+  },
+  "packing-station": {
+    "w": 1036,
+    "h": 697
+  },
+  "parcel-stack": {
+    "w": 737,
+    "h": 805
+  },
+  "returns-inspection": {
+    "w": 799,
+    "h": 569
+  },
+  "storage-racks": {
+    "w": 956,
+    "h": 811
+  },
+  "worker-inspection": {
+    "w": 780,
+    "h": 717
+  }
+}

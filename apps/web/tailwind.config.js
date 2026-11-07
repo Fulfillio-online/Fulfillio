@@ -10,6 +10,15 @@ module.exports = {
   theme: {
     extend: {
       colors: {
+        navy: {
+          50: '#F3F6FB',
+          100: '#E3EAF5',
+          700: '#1B3A6B',
+          800: '#12284C',
+          900: '#0D1F3C',
+          950: '#091329',
+        },
+        cream: '#FBF3E6',
         brand: {
           50: '#f0fdf4',
           100: '#dcfce7',
