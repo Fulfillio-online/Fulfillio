@@ -25,7 +25,11 @@ interface MerchantOrdersTabProps {
   orders: MerchantOrderItem[];
   products: MerchantProductItem[];
   memoList: ResellerMemo[];
-  onCreateOrder: (order: MerchantOrderItem, productId: string, qty: number) => void;
+  onCreateOrder: (
+    order: MerchantOrderItem,
+    productIdOrItems?: string | { productId: string; qty: number }[],
+    qty?: number
+  ) => void;
   onCancelOrder: (orderId: string) => void;
   onTriggerToast: (msg: string) => void;
 }
@@ -440,24 +444,39 @@ export function MerchantOrdersTab({
                     <td className="py-3.5 px-4 text-slate-300 font-medium">{o.date}</td>
 
                     {/* AMOUNT */}
-                    <td className="py-3.5 px-4 font-bold text-slate-100">৳{Number(o.amount).toLocaleString()}</td>
+                    <td className="py-3.5 px-4">
+                      <div className="font-bold text-slate-100">৳{Number(o.amount).toLocaleString()}</div>
+                      {o.advancePayment && o.advancePayment > 0 ? (
+                        <div className="text-[10px] text-emerald-400 font-medium">
+                          COD: ৳{(o.codAmount ?? Math.max(0, o.amount - o.advancePayment)).toLocaleString()}
+                        </div>
+                      ) : null}
+                    </td>
 
                     {/* PAYMENT */}
                     <td className="py-3.5 px-4">
                       <div className="text-slate-200 font-medium">{o.paymentMethod || 'Cash on Delivery'}</div>
                       <div
                         className={`text-[11px] font-semibold ${
-                          o.paymentStatus === 'Paid' ? 'text-emerald-400' : 'text-amber-400'
+                          o.paymentStatus === 'Paid'
+                            ? 'text-emerald-400'
+                            : o.paymentStatus === 'Partial'
+                            ? 'text-sky-400'
+                            : 'text-amber-400'
                         }`}
                       >
-                        {o.paymentStatus || 'Unpaid'}
+                        {o.paymentStatus === 'Paid'
+                          ? 'Paid (100%)'
+                          : o.paymentStatus === 'Partial'
+                          ? `Partial (Adv: ৳${o.advancePayment})`
+                          : 'Unpaid (COD)'}
                       </div>
                     </td>
 
                     {/* DELIVERY */}
                     <td className="py-3.5 px-4">
                       <div className="text-slate-200 font-semibold">{o.courier}</div>
-                      <div className="text-[11px] text-slate-400">Charge: ৳{o.deliveryFee || 80}</div>
+                      <div className="text-[11px] text-slate-400">Charge: ৳{o.deliveryFee ?? 60}</div>
                     </td>
 
                     {/* STATUS */}

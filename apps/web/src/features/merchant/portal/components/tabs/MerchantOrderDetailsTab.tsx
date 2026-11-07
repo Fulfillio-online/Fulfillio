@@ -343,9 +343,21 @@ export function MerchantOrderDetailsTab({
                 <span>Discount</span>
                 <span className="font-medium text-emerald-400">-৳{Number(discount).toLocaleString()}</span>
               </div>
-              <div className="pt-2.5 border-t border-slate-800 flex justify-between items-center text-sm">
-                <span className="font-bold text-slate-100">Order total</span>
-                <span className="font-extrabold text-base text-white">৳{Number(orderTotal).toLocaleString()}</span>
+              <div className="pt-2.5 border-t border-slate-800 flex justify-between items-center text-xs font-semibold text-slate-300">
+                <span>Total invoice value</span>
+                <span className="font-extrabold text-sm text-white">৳{Number(orderTotal).toLocaleString()}</span>
+              </div>
+              {order.advancePayment && order.advancePayment > 0 ? (
+                <div className="flex justify-between items-center text-xs text-emerald-400 bg-emerald-950/30 p-2 rounded-lg border border-emerald-500/20">
+                  <span>Advance Received ({order.advancePaymentMethod || 'bKash'})</span>
+                  <span className="font-bold font-mono">-৳{Number(order.advancePayment).toLocaleString()}</span>
+                </div>
+              ) : null}
+              <div className="pt-2 border-t border-slate-800 flex justify-between items-center text-sm font-bold">
+                <span className="text-slate-100">Courier COD Collection:</span>
+                <span className="text-base font-extrabold text-emerald-400 font-mono">
+                  ৳{Number(order.codAmount ?? Math.max(0, orderTotal - (order.advancePayment || 0))).toLocaleString()}
+                </span>
               </div>
             </div>
           </div>
@@ -486,21 +498,39 @@ export function MerchantOrderDetailsTab({
                 className={`text-[10px] font-bold px-2 py-0.5 rounded ${
                   order.paymentStatus === 'Paid'
                     ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                    : order.paymentStatus === 'Partial'
+                    ? 'bg-sky-500/10 text-sky-400 border border-sky-500/30'
                     : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
                 }`}
               >
-                {order.paymentStatus || 'Unpaid'}
+                {order.paymentStatus === 'Paid'
+                  ? 'Paid (100%)'
+                  : order.paymentStatus === 'Partial'
+                  ? `Partial (Adv: ৳${order.advancePayment})`
+                  : 'Unpaid (COD)'}
               </span>
             </div>
 
             <div className="space-y-2 text-xs">
               <div className="flex justify-between text-slate-400">
                 <span className="text-[11px] uppercase text-slate-500">Transaction ID</span>
-                <span className="font-mono text-slate-300 font-medium">{order.transactionId || `COD-TRX-${order.id}`}</span>
+                <span className="font-mono text-slate-300 font-medium">
+                  {order.advanceTrxId || order.transactionId || `COD-TRX-${order.id}`}
+                </span>
               </div>
+              {order.advancePayment && order.advancePayment > 0 ? (
+                <div className="flex justify-between text-slate-400">
+                  <span className="text-[11px] uppercase text-slate-500">Advance Received</span>
+                  <span className="font-mono text-emerald-400 font-semibold">
+                    ৳{Number(order.advancePayment).toLocaleString()} ({order.advancePaymentMethod || 'bKash'})
+                  </span>
+                </div>
+              ) : null}
               <div className="flex justify-between items-center pt-2 border-t border-slate-800">
-                <span className="text-slate-300 font-medium">Total paid</span>
-                <span className="text-sm font-extrabold text-white">৳{Number(orderTotal).toLocaleString()}</span>
+                <span className="text-slate-300 font-medium">Due COD to Collect</span>
+                <span className="text-sm font-extrabold text-white">
+                  ৳{Number(order.codAmount ?? Math.max(0, orderTotal - (order.advancePayment || 0))).toLocaleString()}
+                </span>
               </div>
             </div>
           </div>

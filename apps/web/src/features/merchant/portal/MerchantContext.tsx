@@ -48,7 +48,11 @@ interface MerchantContextType {
   requestStockAdd: (productId: string, requestedQty: number, note?: string) => void;
   approveStockRequest: (requestId: string) => void;
   cancelStockRequest: (requestId: string) => void;
-  createOrder: (order: MerchantOrderItem, productId: string, qty: number) => void;
+  createOrder: (
+    order: MerchantOrderItem,
+    productIdOrItems?: string | { productId: string; qty: number }[],
+    qty?: number
+  ) => void;
   cancelOrder: (orderId: string) => void;
   updateOrderStatus: (orderId: string, status: MerchantOrderItem['status']) => void;
   createAsn: (newAsn: MerchantAsnRecord) => void;
@@ -279,13 +283,36 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     showToast('Stock request cancelled.');
   };
 
-  const createOrder = (order: MerchantOrderItem, productId: string, qty: number) => {
+  const createOrder = (
+    order: MerchantOrderItem,
+    productIdOrItems?: string | { productId: string; qty: number }[],
+    qty?: number
+  ) => {
+    const itemsToDeduct: { productId: string; qty: number }[] = [];
+    if (Array.isArray(productIdOrItems)) {
+      itemsToDeduct.push(...productIdOrItems);
+    } else if (typeof productIdOrItems === 'string') {
+      itemsToDeduct.push({ productId: productIdOrItems, qty: qty || order.qty || 1 });
+    } else if (order.lineItems && order.lineItems.length > 0) {
+      order.lineItems.forEach((li) => {
+        itemsToDeduct.push({ productId: li.id, qty: li.quantity });
+      });
+    } else if (order.productId) {
+      itemsToDeduct.push({ productId: order.productId, qty: order.qty || 1 });
+    }
+
     setProducts((prev) => {
-      const next = prev.map((p) =>
-        p.id === productId
-          ? { ...p, stock: Math.max(0, p.stock - qty), reserved: p.reserved + qty }
-          : p
-      );
+      const next = prev.map((p) => {
+        const match = itemsToDeduct.find((it) => it.productId === p.id);
+        if (match) {
+          return {
+            ...p,
+            stock: Math.max(0, p.stock - match.qty),
+            reserved: p.reserved + match.qty,
+          };
+        }
+        return p;
+      });
       if (typeof window !== 'undefined') {
         localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
       }
@@ -305,13 +332,28 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     const target = orders.find((o) => o.id === orderId);
     if (!target) return;
 
-    if (target.productId) {
+    const itemsToRestore: { productId: string; qty: number }[] = [];
+    if (target.lineItems && target.lineItems.length > 0) {
+      target.lineItems.forEach((li) => {
+        itemsToRestore.push({ productId: li.id, qty: li.quantity });
+      });
+    } else if (target.productId) {
+      itemsToRestore.push({ productId: target.productId, qty: target.qty });
+    }
+
+    if (itemsToRestore.length > 0) {
       setProducts((prev) => {
-        const next = prev.map((p) =>
-          p.id === target.productId
-            ? { ...p, stock: p.stock + target.qty, reserved: Math.max(0, p.reserved - target.qty) }
-            : p
-        );
+        const next = prev.map((p) => {
+          const match = itemsToRestore.find((it) => it.productId === p.id);
+          if (match) {
+            return {
+              ...p,
+              stock: p.stock + match.qty,
+              reserved: Math.max(0, p.reserved - match.qty),
+            };
+          }
+          return p;
+        });
         if (typeof window !== 'undefined') {
           localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
         }

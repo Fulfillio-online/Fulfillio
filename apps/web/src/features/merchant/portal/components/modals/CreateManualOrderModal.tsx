@@ -1,15 +1,49 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Sparkles } from 'lucide-react';
-import { MerchantOrderItem, MerchantProductItem, ResellerMemo } from '../../types';
+import Image from 'next/image';
+import {
+  X,
+  Package,
+  Plus,
+  Trash2,
+  Sparkles,
+  Truck,
+  CreditCard,
+  AlertCircle,
+  CheckCircle2,
+  Tag,
+  DollarSign,
+  HelpCircle,
+  Phone,
+  MapPin,
+  User,
+  Layers,
+} from 'lucide-react';
+import { MerchantOrderItem, MerchantProductItem, ResellerMemo, OrderLineItem } from '../../types';
+
+interface OrderLineItemDraft {
+  rowId: string;
+  productId: string;
+  variantLabel: string;
+  sku: string;
+  title: string;
+  unitPrice: number;
+  qty: number;
+  maxStock: number;
+  imageUrl?: string;
+}
 
 interface CreateManualOrderModalProps {
   isOpen: boolean;
   onClose: () => void;
   products: MerchantProductItem[];
   memoList: ResellerMemo[];
-  onCreateOrder: (order: MerchantOrderItem, productId: string, qty: number) => void;
+  onCreateOrder: (
+    order: MerchantOrderItem,
+    productIdOrItems?: string | { productId: string; qty: number }[],
+    qty?: number
+  ) => void;
   onTriggerToast: (msg: string) => void;
 }
 
@@ -21,218 +55,828 @@ export function CreateManualOrderModal({
   onCreateOrder,
   onTriggerToast,
 }: CreateManualOrderModalProps) {
+  // 1. Customer Information
   const [orderCustomer, setOrderCustomer] = useState('');
   const [orderPhone, setOrderPhone] = useState('');
   const [orderAddress, setOrderAddress] = useState('');
-  const [orderSelectedProductId, setOrderSelectedProductId] = useState(
-    products[0]?.id || ''
-  );
-  const [orderQty, setOrderQty] = useState(1);
+  const [orderCity, setOrderCity] = useState('Dhaka');
+  const [orderCourier, setOrderCourier] = useState('Steadfast');
   const [orderMemoCode, setOrderMemoCode] = useState(
     memoList[0]?.code || 'MEMO-DEFAULT'
   );
-  const [orderCourier, setOrderCourier] = useState('Steadfast');
+
+  // 2. Multi-Product Line Items
+  const [items, setItems] = useState<OrderLineItemDraft[]>(() => {
+    const p = products[0];
+    return p
+      ? [
+          {
+            rowId: `row-${Date.now()}-1`,
+            productId: p.id,
+            title: p.title,
+            variantLabel: p.variantLabel || 'Standard',
+            sku: p.sku,
+            unitPrice: p.price || 0,
+            qty: 1,
+            maxStock: p.stock || 0,
+            imageUrl: p.imageUrl,
+          },
+        ]
+      : [];
+  });
+
+  // 3. Pricing Adjustments: Delivery, Discount, Advance
+  const [deliveryArea, setDeliveryArea] = useState<'INSIDE_DHAKA' | 'SUB_DHAKA' | 'OUTSIDE_DHAKA' | 'FREE' | 'CUSTOM'>('INSIDE_DHAKA');
+  const [deliveryFee, setDeliveryFee] = useState<number>(60);
+  const [discount, setDiscount] = useState<number>(0);
+  const [advancePayment, setAdvancePayment] = useState<number>(0);
+  const [advanceMethod, setAdvanceMethod] = useState<string>('bKash');
+  const [advanceTrxId, setAdvanceTrxId] = useState<string>('');
+  const [orderNotes, setOrderNotes] = useState<string>('');
 
   if (!isOpen) return null;
 
+  // Real-time Calculations
+  const subtotal = items.reduce((sum, item) => sum + (item.unitPrice * item.qty), 0);
+  const orderTotal = Math.max(0, subtotal + deliveryFee - discount);
+  const codAmount = Math.max(0, orderTotal - advancePayment);
+  const totalQty = items.reduce((sum, item) => sum + item.qty, 0);
+
+  // Delivery Presets Handler
+  const handleSelectDeliveryPreset = (
+    preset: 'INSIDE_DHAKA' | 'SUB_DHAKA' | 'OUTSIDE_DHAKA' | 'FREE',
+    fee: number
+  ) => {
+    setDeliveryArea(preset);
+    setDeliveryFee(fee);
+  };
+
+  // Advance Payment Presets Handler
+  const handleSetAdvancePreset = (type: 'NONE' | 'DELIVERY' | 'FULL') => {
+    if (type === 'NONE') {
+      setAdvancePayment(0);
+    } else if (type === 'DELIVERY') {
+      setAdvancePayment(deliveryFee);
+    } else if (type === 'FULL') {
+      setAdvancePayment(orderTotal);
+    }
+  };
+
+  // Line Item Handlers
+  const handleAddItem = () => {
+    // Pick first product not already in items, or fallback to first product
+    const available = products.find((p) => !items.some((it) => it.productId === p.id)) || products[0];
+    if (!available) {
+      onTriggerToast('No more products available to add.');
+      return;
+    }
+    const newItem: OrderLineItemDraft = {
+      rowId: `row-${Date.now()}-${items.length + 1}`,
+      productId: available.id,
+      title: available.title,
+      variantLabel: available.variantLabel || 'Standard',
+      sku: available.sku,
+      unitPrice: available.price || 0,
+      qty: 1,
+      maxStock: available.stock || 0,
+      imageUrl: available.imageUrl,
+    };
+    setItems((prev) => [...prev, newItem]);
+  };
+
+  const handleRemoveItem = (rowId: string) => {
+    if (items.length <= 1) {
+      onTriggerToast('An order must contain at least 1 product.');
+      return;
+    }
+    setItems((prev) => prev.filter((it) => it.rowId !== rowId));
+  };
+
+  const handleProductChange = (rowId: string, newProductId: string) => {
+    const p = products.find((prod) => prod.id === newProductId);
+    if (!p) return;
+    setItems((prev) =>
+      prev.map((it) =>
+        it.rowId === rowId
+          ? {
+              ...it,
+              productId: p.id,
+              title: p.title,
+              variantLabel: p.variantLabel || 'Standard',
+              sku: p.sku,
+              unitPrice: p.price || 0,
+              maxStock: p.stock || 0,
+              imageUrl: p.imageUrl,
+            }
+          : it
+      )
+    );
+  };
+
+  const handleUnitPriceChange = (rowId: string, newPrice: number) => {
+    setItems((prev) =>
+      prev.map((it) =>
+        it.rowId === rowId ? { ...it, unitPrice: Math.max(0, newPrice) } : it
+      )
+    );
+  };
+
+  const handleQtyChange = (rowId: string, newQty: number) => {
+    setItems((prev) =>
+      prev.map((it) =>
+        it.rowId === rowId ? { ...it, qty: Math.max(1, newQty) } : it
+      )
+    );
+  };
+
+  // Form Submit Handler
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const product = products.find((p) => p.id === orderSelectedProductId);
-    if (!product) {
-      onTriggerToast('Please select a valid product.');
+
+    if (!orderCustomer.trim()) {
+      onTriggerToast('Please enter customer name.');
+      return;
+    }
+    if (!orderPhone.trim()) {
+      onTriggerToast('Please enter customer phone number.');
+      return;
+    }
+    if (!orderAddress.trim()) {
+      onTriggerToast('Please enter customer delivery address.');
+      return;
+    }
+    if (items.length === 0) {
+      onTriggerToast('Please add at least one product.');
       return;
     }
 
-    if (product.stock < orderQty) {
-      onTriggerToast(`Insufficient stock! Available: ${product.stock}`);
-      return;
+    // Stock validation
+    for (const item of items) {
+      if (item.qty > item.maxStock) {
+        onTriggerToast(
+          `Insufficient stock for "${item.title}". Requested: ${item.qty}, Available: ${item.maxStock}`
+        );
+        return;
+      }
     }
 
     const newOrderId = `ORD-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    const isFullPaid = advancePayment >= orderTotal;
+    const isPartialPaid = advancePayment > 0 && advancePayment < orderTotal;
+    const paymentStatus: 'Paid' | 'Unpaid' | 'Partial' = isFullPaid
+      ? 'Paid'
+      : isPartialPaid
+      ? 'Partial'
+      : 'Unpaid';
+
+    const paymentMethodLabel = isFullPaid
+      ? `${advanceMethod} (100% Advance)`
+      : isPartialPaid
+      ? `Partial (${advanceMethod} Adv + COD)`
+      : 'Cash on Delivery';
+
+    const lineItems: OrderLineItem[] = items.map((it) => ({
+      id: it.productId,
+      title: it.title,
+      variant: it.variantLabel,
+      sku: it.sku,
+      price: it.unitPrice,
+      quantity: it.qty,
+      total: it.unitPrice * it.qty,
+      imageUrl: it.imageUrl,
+    }));
+
     const newOrder: MerchantOrderItem = {
       id: newOrderId,
+      orderNumber: newOrderId,
       date: 'Today, Just now',
-      customer: orderCustomer,
-      phone: orderPhone,
-      address: orderAddress,
-      productId: product.id,
-      items: `${product.title} (${product.variantLabel}) x ${orderQty}`,
-      qty: orderQty,
-      amount: product.price * orderQty,
+      customer: orderCustomer.trim(),
+      phone: orderPhone.trim(),
+      address: orderAddress.trim(),
+      productId: items[0].productId,
+      items: items.map((it) => `${it.title} (${it.variantLabel}) x ${it.qty}`).join(', '),
+      qty: totalQty,
+      amount: orderTotal,
+      subtotal,
+      deliveryFee,
+      discount,
+      advancePayment,
+      codAmount,
       memoCode: orderMemoCode,
       status: 'PENDING',
       courier: orderCourier,
+      paymentMethod: paymentMethodLabel,
+      paymentStatus,
+      advancePaymentMethod: advancePayment > 0 ? advanceMethod : undefined,
+      advanceTrxId: advancePayment > 0 && advanceTrxId ? advanceTrxId.trim() : undefined,
+      lineItems,
+      timeline: [
+        {
+          title: 'Order Created (Manual)',
+          description: `Order created by merchant. ${
+            advancePayment > 0
+              ? `Advance received: ৳${advancePayment.toLocaleString()} (${advanceMethod}). COD: ৳${codAmount.toLocaleString()}`
+              : `Full COD collection: ৳${codAmount.toLocaleString()}`
+          }`,
+          timestamp: 'Just now',
+          isCompleted: true,
+        },
+      ],
     };
 
-    onCreateOrder(newOrder, product.id, orderQty);
+    // Deduct stock for all items
+    const itemsToDeduct = items.map((it) => ({
+      productId: it.productId,
+      qty: it.qty,
+    }));
+
+    onCreateOrder(newOrder, itemsToDeduct);
     onClose();
-    setOrderCustomer('');
-    setOrderPhone('');
-    setOrderAddress('');
-    setOrderQty(1);
-    onTriggerToast(`Manual order ${newOrderId} created with ${orderMemoCode}! Stock reserved.`);
+
+    onTriggerToast(
+      `Order ${newOrderId} created with ${items.length} product(s)! ${
+        codAmount === 0
+          ? 'Full Paid (৳0 COD)'
+          : `COD to Collect: ৳${codAmount.toLocaleString()}`
+      }`
+    );
   };
 
-  const selectedProduct = products.find((p) => p.id === orderSelectedProductId) || products[0];
-
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6 space-y-5 shadow-2xl animate-in zoom-in-95 duration-200">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <div>
-            <h3 className="font-bold text-base text-slate-100">Create Manual Order</h3>
-            <p className="text-xs text-slate-400">
-              Reserves warehouse stock and assigns custom Reseller Memo for packing.
-            </p>
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[92vh] overflow-y-auto p-4 sm:p-7 space-y-6 shadow-2xl animate-in zoom-in-95 duration-200 text-slate-100">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+              <Package className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-base sm:text-lg font-bold text-white">Create Manual Order</h2>
+              <p className="text-xs text-slate-400">
+                একাধিক প্রোডাক্ট যুক্ত করুন, ডেলিভারি চার্জ অ্যাডজাস্ট করুন এবং কাস্টমারের অগ্রিম বা সম্পূর্ণ পেমেন্ট ক্যালকুলেট করুন।
+              </p>
+            </div>
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-300 p-1">
-            <X className="h-4 w-4" />
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+          >
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="text-xs font-semibold text-slate-400 block mb-1">
-              Customer Full Name
-            </label>
-            <input
-              type="text"
-              value={orderCustomer}
-              onChange={(e) => setOrderCustomer(e.target.value)}
-              placeholder="e.g. Mahfuz Rahman"
-              required
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-100 focus:outline-none focus:border-emerald-500"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-semibold text-slate-400 block mb-1">
-                Phone Number
-              </label>
-              <input
-                type="text"
-                value={orderPhone}
-                onChange={(e) => setOrderPhone(e.target.value)}
-                placeholder="017xxxxxxxx"
-                required
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-100 focus:outline-none focus:border-emerald-500"
-              />
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Section 1: Customer Details */}
+          <div className="p-4 sm:p-5 rounded-xl bg-slate-950/70 border border-slate-800 space-y-4">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-200 uppercase tracking-wider">
+              <User className="h-4 w-4 text-emerald-400" />
+              <span>Customer & Delivery Details</span>
             </div>
 
-            <div>
-              <label className="text-xs font-semibold text-slate-400 block mb-1">
-                Courier Partner
-              </label>
-              <select
-                value={orderCourier}
-                onChange={(e) => setOrderCourier(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-100 focus:outline-none focus:border-emerald-500"
-              >
-                <option value="Steadfast">Steadfast Courier</option>
-                <option value="Pathao">Pathao Logistics</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs font-semibold text-slate-400 block mb-1">
-              Delivery Address & City
-            </label>
-            <input
-              type="text"
-              value={orderAddress}
-              onChange={(e) => setOrderAddress(e.target.value)}
-              placeholder="House, Road, Area, Dhaka"
-              required
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-100 focus:outline-none focus:border-emerald-500"
-            />
-          </div>
-
-          {/* Product Selector with Live Stock Display */}
-          <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
-            <span className="text-xs font-bold text-slate-300 block">
-              Product & Warehouse Stock Reservation:
-            </span>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <div className="sm:col-span-2">
-                <label className="text-[11px] font-semibold text-slate-400 block mb-1">
-                  Select SKU
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Customer Full Name <span className="text-rose-400">*</span>
                 </label>
-                <select
-                  value={orderSelectedProductId}
-                  onChange={(e) => setOrderSelectedProductId(e.target.value)}
-                  className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
-                >
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.title} ({p.variantLabel}) — Avail: {p.stock} pcs (৳ {p.price})
-                    </option>
-                  ))}
-                </select>
+                <input
+                  type="text"
+                  required
+                  value={orderCustomer}
+                  onChange={(e) => setOrderCustomer(e.target.value)}
+                  placeholder="e.g. Tanvir Hasan"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                />
               </div>
 
               <div>
-                <label className="text-[11px] font-semibold text-slate-400 block mb-1">
-                  Quantity
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Phone Number <span className="text-rose-400">*</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2 text-xs font-mono text-slate-500">+88</span>
+                  <input
+                    type="text"
+                    required
+                    value={orderPhone}
+                    onChange={(e) => setOrderPhone(e.target.value)}
+                    placeholder="01712345678"
+                    className="w-full pl-10 pr-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs font-mono text-slate-200 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  City / District
                 </label>
                 <input
-                  type="number"
-                  min="1"
-                  max="50"
-                  value={orderQty}
-                  onChange={(e) => setOrderQty(Math.max(1, Number(e.target.value)))}
-                  required
-                  className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                  type="text"
+                  value={orderCity}
+                  onChange={(e) => setOrderCity(e.target.value)}
+                  placeholder="Dhaka, Chittagong, Sylhet..."
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
                 />
               </div>
             </div>
 
-            {selectedProduct && (
-              <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-800/80">
-                <span className="text-slate-400">
-                  SKU: <span className="font-mono text-emerald-400">{selectedProduct.sku}</span>
-                </span>
-                <span className="font-bold text-slate-200">
-                  Total COD: ৳ {(selectedProduct.price * orderQty).toLocaleString()}
-                </span>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Full Delivery Address <span className="text-rose-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={orderAddress}
+                  onChange={(e) => setOrderAddress(e.target.value)}
+                  placeholder="House 12, Road 4, Sector 7, Uttara, Dhaka"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                />
               </div>
-            )}
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Courier Partner
+                </label>
+                <select
+                  value={orderCourier}
+                  onChange={(e) => setOrderCourier(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                >
+                  <option value="Steadfast">Steadfast Courier</option>
+                  <option value="Pathao">Pathao Logistics</option>
+                  <option value="RedX">RedX Delivery</option>
+                  <option value="Paperfly">Paperfly</option>
+                </select>
+              </div>
+            </div>
           </div>
 
-          {/* Reseller Memo Code Selector */}
-          <div>
-            <label className="text-xs font-semibold text-slate-400 block mb-1">
-              Assign Reseller Memo Template (4x6 Thermal Slip)
-            </label>
-            <select
-              value={orderMemoCode}
-              onChange={(e) => setOrderMemoCode(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm font-mono text-indigo-300 focus:outline-none focus:border-indigo-500"
-            >
-              {memoList.map((m) => (
-                <option key={m.id} value={m.code}>
-                  {m.code} — {m.resellerName} ({m.name}) {m.isDefault ? '[DEFAULT]' : ''}
-                </option>
-              ))}
-            </select>
+          {/* Section 2: Multiple Products List */}
+          <div className="p-4 sm:p-5 rounded-xl bg-slate-950/70 border border-slate-800 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-200 uppercase tracking-wider">
+                <Layers className="h-4 w-4 text-emerald-400" />
+                <span>Order Products & Stock Allocation ({items.length} items)</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleAddItem}
+                className="px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>Add Another Product</span>
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {items.map((item, index) => {
+                const isOutOfStock = item.qty > item.maxStock;
+                return (
+                  <div
+                    key={item.rowId}
+                    className={`p-3 sm:p-4 rounded-xl bg-slate-900 border transition-all ${
+                      isOutOfStock ? 'border-rose-500/60 bg-rose-950/10' : 'border-slate-800'
+                    }`}
+                  >
+                    <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+                      {/* Product Selector */}
+                      <div className="flex-1 min-w-0">
+                        <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                          Product #{index + 1}
+                        </label>
+                        <select
+                          value={item.productId}
+                          onChange={(e) => handleProductChange(item.rowId, e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                        >
+                          {products.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.title} ({p.variantLabel || 'Std'}) — SKU: {p.sku} | Stock: {p.stock} pcs (৳{p.price})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Unit Price */}
+                      <div className="w-full lg:w-32">
+                        <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                          Unit Price (৳)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={item.unitPrice}
+                          onChange={(e) =>
+                            handleUnitPriceChange(item.rowId, Number(e.target.value) || 0)
+                          }
+                          className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs font-bold text-slate-200 text-right focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+
+                      {/* Quantity with +/- */}
+                      <div className="w-full lg:w-36">
+                        <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                          Qty (Stock: {item.maxStock})
+                        </label>
+                        <div className="flex items-center">
+                          <button
+                            type="button"
+                            onClick={() => handleQtyChange(item.rowId, item.qty - 1)}
+                            className="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-l-lg text-xs font-bold border border-slate-700"
+                          >
+                            -
+                          </button>
+                          <input
+                            type="number"
+                            min="1"
+                            max={item.maxStock || 999}
+                            value={item.qty}
+                            onChange={(e) =>
+                              handleQtyChange(item.rowId, Number(e.target.value) || 1)
+                            }
+                            className="w-full py-2 bg-slate-950 border-y border-slate-800 text-xs font-bold text-center text-slate-200 focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleQtyChange(item.rowId, item.qty + 1)}
+                            className="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-r-lg text-xs font-bold border border-slate-700"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Line Subtotal */}
+                      <div className="w-full lg:w-32 text-right">
+                        <span className="block text-[11px] font-semibold text-slate-400 mb-1">
+                          Line Total
+                        </span>
+                        <div className="py-2 px-1 text-sm font-bold text-emerald-400 font-mono">
+                          ৳{(item.unitPrice * item.qty).toLocaleString()}
+                        </div>
+                      </div>
+
+                      {/* Delete Item */}
+                      {items.length > 1 && (
+                        <div className="lg:pt-5 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItem(item.rowId)}
+                            className="p-2 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition-colors"
+                            title="Remove this product"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {isOutOfStock && (
+                      <div className="flex items-center gap-1.5 mt-2 text-[11px] text-rose-400 font-medium">
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                        <span>ওয়্যারহাউস স্টকে পর্যাপ্ত প্রোডাক্ট নেই! মোট স্টক: {item.maxStock} টি</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
-          <div className="pt-2 flex justify-end gap-3 border-t border-slate-800">
+          {/* Section 3: Pricing Engine (Delivery, Discount, Advance Payment & COD) */}
+          <div className="p-4 sm:p-5 rounded-xl bg-slate-950/70 border border-slate-800 space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-200 uppercase tracking-wider">
+                <DollarSign className="h-4 w-4 text-emerald-400" />
+                <span>Pricing Calculation & Payment Collection Engine</span>
+              </div>
+              <span className="text-[11px] text-slate-400 hidden sm:inline">
+                প্রোডাক্টের ধরন, ডেলিভারি চার্জ ও অগ্রিম পেমেন্টের হিসাব
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+              {/* Left Column (Inputs for Delivery, Discount, Advance) */}
+              <div className="lg:col-span-7 space-y-4">
+                {/* 1. Delivery Charge with Presets & Custom Input */}
+                <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                      <Truck className="h-3.5 w-3.5 text-blue-400" />
+                      <span>ডেলিভারি চার্জ (Delivery Charge)</span>
+                    </label>
+                    <span className="text-[11px] text-slate-400">ওজন বা লোকেশন অনুযায়ী কম-বেশি হতে পারে</span>
+                  </div>
+
+                  {/* Preset Pills */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleSelectDeliveryPreset('INSIDE_DHAKA', 60)}
+                      className={`px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-all ${
+                        deliveryFee === 60
+                          ? 'bg-blue-600/20 text-blue-300 border-blue-500/50 shadow-sm'
+                          : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
+                      }`}
+                    >
+                      Inside Dhaka ৳60
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectDeliveryPreset('SUB_DHAKA', 100)}
+                      className={`px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-all ${
+                        deliveryFee === 100
+                          ? 'bg-blue-600/20 text-blue-300 border-blue-500/50 shadow-sm'
+                          : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
+                      }`}
+                    >
+                      Sub-Dhaka ৳100
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectDeliveryPreset('OUTSIDE_DHAKA', 120)}
+                      className={`px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-all ${
+                        deliveryFee === 120
+                          ? 'bg-blue-600/20 text-blue-300 border-blue-500/50 shadow-sm'
+                          : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
+                      }`}
+                    >
+                      Outside Dhaka ৳120
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectDeliveryPreset('FREE', 0)}
+                      className={`px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-all ${
+                        deliveryFee === 0
+                          ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/50 shadow-sm'
+                          : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
+                      }`}
+                    >
+                      Free Delivery ৳0
+                    </button>
+                  </div>
+
+                  {/* Custom Delivery Charge Input */}
+                  <div className="flex items-center gap-2 pt-1">
+                    <span className="text-[11px] text-slate-400 shrink-0">Custom Charge:</span>
+                    <div className="relative flex-1">
+                      <span className="absolute left-3 top-1.5 text-xs font-bold text-slate-400">৳</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={deliveryFee}
+                        onChange={(e) => {
+                          setDeliveryArea('CUSTOM');
+                          setDeliveryFee(Number(e.target.value) || 0);
+                        }}
+                        className="w-full pl-7 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs font-bold text-slate-200 focus:outline-none focus:border-blue-500"
+                        placeholder="e.g. 150 for heavy parcel"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Discount */}
+                <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                      <Tag className="h-3.5 w-3.5 text-amber-400" />
+                      <span>স্পেশাল ডিসকাউন্ট (Special Discount)</span>
+                    </label>
+                    <span className="text-[11px] text-slate-400">টোটাল থেকে বাদ যাবে</span>
+                  </div>
+
+                  <div className="relative">
+                    <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">৳</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={discount}
+                      onChange={(e) => setDiscount(Math.max(0, Number(e.target.value) || 0))}
+                      placeholder="0"
+                      className="w-full pl-7 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs font-bold text-slate-200 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                </div>
+
+                {/* 3. Advance Payment (অগ্রিম পেমেন্ট) */}
+                <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                      <CreditCard className="h-3.5 w-3.5 text-emerald-400" />
+                      <span>অগ্রিম পেমেন্ট (Advance Received)</span>
+                    </label>
+                    <span className="text-[11px] text-slate-400">
+                      কাস্টমার অগ্রিম টাকা দিলে এখানে লিখুন
+                    </span>
+                  </div>
+
+                  {/* Quick Preset Buttons */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleSetAdvancePreset('NONE')}
+                      className={`px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-all ${
+                        advancePayment === 0
+                          ? 'bg-amber-600/20 text-amber-300 border-amber-500/50'
+                          : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
+                      }`}
+                    >
+                      No Advance (Full COD)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSetAdvancePreset('DELIVERY')}
+                      className={`px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-all ${
+                        advancePayment === deliveryFee && deliveryFee > 0
+                          ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/50'
+                          : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
+                      }`}
+                    >
+                      Delivery Only (৳{deliveryFee})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSetAdvancePreset('FULL')}
+                      className={`px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-all ${
+                        advancePayment >= orderTotal && orderTotal > 0
+                          ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/50'
+                          : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
+                      }`}
+                    >
+                      Full Paid (৳{orderTotal.toLocaleString()})
+                    </button>
+                  </div>
+
+                  {/* Custom Advance Input */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                    <div className="relative">
+                      <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">৳</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max={orderTotal}
+                        value={advancePayment}
+                        onChange={(e) =>
+                          setAdvancePayment(Math.max(0, Number(e.target.value) || 0))
+                        }
+                        placeholder="Advance Amount"
+                        className="w-full pl-7 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs font-bold text-emerald-400 focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+
+                    <select
+                      value={advanceMethod}
+                      onChange={(e) => setAdvanceMethod(e.target.value)}
+                      disabled={advancePayment <= 0}
+                      className="px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                    >
+                      <option value="bKash">bKash (বিকাশ)</option>
+                      <option value="Nagad">Nagad (নগদ)</option>
+                      <option value="Rocket">Rocket (রকেট)</option>
+                      <option value="Bank Transfer">Bank Transfer</option>
+                      <option value="Cash">Cash Handover</option>
+                    </select>
+                  </div>
+
+                  {advancePayment > 0 && (
+                    <div className="pt-1">
+                      <input
+                        type="text"
+                        value={advanceTrxId}
+                        onChange={(e) => setAdvanceTrxId(e.target.value)}
+                        placeholder="Advance Trx ID / Transaction Note (Optional, e.g. 9J83KA2)"
+                        className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-300 placeholder:text-slate-600 focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Right Column: Live Order Summary Card */}
+              <div className="lg:col-span-5 flex flex-col justify-between p-4 sm:p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-4">
+                <div>
+                  <span className="text-xs font-bold text-slate-200 uppercase tracking-wider block mb-3">
+                    Order Price Summary
+                  </span>
+
+                  <div className="space-y-2.5 text-xs">
+                    <div className="flex justify-between text-slate-400">
+                      <span>Products Subtotal ({totalQty} pcs)</span>
+                      <span className="font-semibold text-slate-200 font-mono">
+                        ৳{subtotal.toLocaleString()}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between text-slate-400">
+                      <span>Delivery Charge</span>
+                      <span className="font-semibold text-blue-400 font-mono">
+                        +৳{deliveryFee.toLocaleString()}
+                      </span>
+                    </div>
+
+                    {discount > 0 && (
+                      <div className="flex justify-between text-amber-400">
+                        <span>Discount Applied</span>
+                        <span className="font-semibold font-mono">
+                          -৳{discount.toLocaleString()}
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="pt-2 border-t border-slate-800 flex justify-between items-center text-xs font-bold text-slate-300">
+                      <span>Total Invoice Value:</span>
+                      <span className="text-sm font-extrabold text-white font-mono">
+                        ৳{orderTotal.toLocaleString()}
+                      </span>
+                    </div>
+
+                    {advancePayment > 0 && (
+                      <div className="flex justify-between items-center text-xs text-emerald-400 bg-emerald-950/30 p-2 rounded-lg border border-emerald-500/20">
+                        <span className="font-semibold">
+                          Advance Received ({advanceMethod}):
+                        </span>
+                        <span className="font-bold font-mono">
+                          -৳{advancePayment.toLocaleString()}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* COD Amount Banner */}
+                <div
+                  className={`p-4 rounded-xl border space-y-1.5 ${
+                    codAmount === 0
+                      ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
+                      : advancePayment > 0
+                      ? 'bg-sky-950/40 border-sky-500/40 text-sky-200'
+                      : 'bg-amber-950/40 border-amber-500/40 text-amber-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs uppercase font-extrabold tracking-wider">
+                      {codAmount === 0
+                        ? 'Full Paid (No COD)'
+                        : advancePayment > 0
+                        ? 'Partial COD Collection'
+                        : 'Cash on Delivery (COD)'}
+                    </span>
+                    <span className="text-lg font-black font-mono">
+                      ৳{codAmount.toLocaleString()}
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] leading-relaxed opacity-90">
+                    {codAmount === 0
+                      ? '✅ কাস্টমার সম্পূর্ণ মূল্য পরিশোধ করেছেন। কুরিয়ার কোনো টাকা কালেক্ট করবে না।'
+                      : advancePayment > 0
+                      ? `⚠️ কাস্টমার ৳${advancePayment.toLocaleString()} অগ্রিম দিয়েছেন। বাকি ৳${codAmount.toLocaleString()} কুরিয়ার ডেলিভারির সময় কালেক্ট করবে।`
+                      : `📦 সম্পূর্ণ ৳${codAmount.toLocaleString()} ডেলিভারির সময় কুরিয়ার কাস্টমার থেকে কালেক্ট করবে।`}
+                  </p>
+                </div>
+
+                {/* Thermal Memo Template Selector */}
+                <div className="pt-2 border-t border-slate-800">
+                  <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                    Assign Reseller Memo (4x6 Thermal Slip)
+                  </label>
+                  <select
+                    value={orderMemoCode}
+                    onChange={(e) => setOrderMemoCode(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-indigo-300 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                  >
+                    {memoList.map((m) => (
+                      <option key={m.id} value={m.code}>
+                        {m.code} — {m.resellerName} {m.isDefault ? '[DEFAULT]' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom Actions */}
+          <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300"
+              className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white shadow-sm flex items-center gap-1.5"
+              className="px-6 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-lg shadow-emerald-950/40 flex items-center gap-2 cursor-pointer"
             >
               <Sparkles className="h-4 w-4" />
-              <span>Save & Reserve Stock</span>
+              <span>Confirm & Reserve Stock ({totalQty} Items)</span>
             </button>
           </div>
         </form>

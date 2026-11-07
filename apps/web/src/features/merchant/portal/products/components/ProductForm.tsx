@@ -41,7 +41,6 @@ export function ProductForm({
   const router = useRouter();
   const isEdit = Boolean(initialProduct);
 
-  const mainFileInputRef = useRef<HTMLInputElement>(null);
   const colorFileInputRef = useRef<HTMLInputElement>(null);
   const [activeColorUploadId, setActiveColorUploadId] = useState<string | null>(null);
 
@@ -84,11 +83,16 @@ export function ProductForm({
           },
         ]
   );
-  const [availableSizes, setAvailableSizes] = useState<string[]>(
-    initialProduct?.sizes && initialProduct.sizes.length > 0
-      ? initialProduct.sizes
-      : ['M', 'L', 'XL', 'XXL']
-  );
+  const [allSizes, setAllSizes] = useState<string[]>(() => {
+    const defaults = ['S', 'M', 'L', 'XL', 'XXL', '3XL'];
+    const existing = initialProduct?.sizes || [];
+    const merged = [...defaults];
+    existing.forEach((sz) => {
+      if (!merged.includes(sz)) merged.push(sz);
+    });
+    return merged;
+  });
+  const [customSizeInputs, setCustomSizeInputs] = useState<Record<string, string>>({});
 
   // B. Electronics: Storages & Gadget Colors
   const [electronicStorages, setElectronicStorages] = useState<string[]>([
@@ -185,7 +189,7 @@ export function ProductForm({
     if (productType === 'FASHION') {
       const list: ProductVariantConfig[] = [];
       colors.forEach((c) => {
-        const colorSizes = c.sizes && c.sizes.length > 0 ? c.sizes : availableSizes;
+        const colorSizes = c.sizes && c.sizes.length > 0 ? c.sizes : allSizes;
         colorSizes.forEach((s) => {
           const id = `${c.name.toLowerCase().replace(/\s+/g, '-')}-${s.toLowerCase()}`;
           if (excludedVariantIds.includes(id)) return;
@@ -270,7 +274,7 @@ export function ProductForm({
     productType,
     masterSku,
     colors,
-    availableSizes,
+    allSizes,
     electronicStorages,
     beautyVolumes,
     groceryPacks,
@@ -291,19 +295,6 @@ export function ProductForm({
       ...prev,
       [variantId]: Math.max(0, val),
     }));
-  };
-
-  // Color Swatch Handlers
-  const handleMainFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64 = event.target?.result as string;
-      setImageUrl(base64);
-    };
-    reader.readAsDataURL(file);
   };
 
   const handleColorFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -330,7 +321,7 @@ export function ProductForm({
         id: newId,
         name: 'New Color',
         hex: '#6B7280',
-        sizes: [...availableSizes],
+        sizes: [...allSizes],
       },
     ]);
   };
@@ -339,12 +330,40 @@ export function ProductForm({
     setColors((prev) =>
       prev.map((c) => {
         if (c.id !== colorId) return c;
-        const currentSizes = c.sizes && c.sizes.length > 0 ? c.sizes : availableSizes;
+        const currentSizes = c.sizes && c.sizes.length > 0 ? c.sizes : allSizes;
         const nextSizes = currentSizes.includes(size)
           ? currentSizes.filter((s) => s !== size)
           : [...currentSizes, size];
         return { ...c, sizes: nextSizes };
       })
+    );
+  };
+
+  const handleAddCustomSizeToColor = (colorId: string) => {
+    const val = (customSizeInputs[colorId] || '').trim();
+    if (!val) return;
+    const formatted = val.toUpperCase();
+    if (!allSizes.includes(formatted)) {
+      setAllSizes((prev) => [...prev, formatted]);
+    }
+    setColors((prev) =>
+      prev.map((c) => {
+        if (c.id !== colorId) return c;
+        const current = c.sizes && c.sizes.length > 0 ? c.sizes : allSizes;
+        if (current.includes(formatted)) return c;
+        return { ...c, sizes: [...current, formatted] };
+      })
+    );
+    setCustomSizeInputs((prev) => ({ ...prev, [colorId]: '' }));
+  };
+
+  const handleRemoveCustomSize = (sizeToRemove: string) => {
+    setAllSizes((prev) => prev.filter((s) => s !== sizeToRemove));
+    setColors((prev) =>
+      prev.map((c) => ({
+        ...c,
+        sizes: (c.sizes || []).filter((s) => s !== sizeToRemove),
+      }))
     );
   };
 
@@ -355,12 +374,6 @@ export function ProductForm({
   const handleRemoveColor = (id: string) => {
     if (colors.length <= 1) return;
     setColors(colors.filter((c) => c.id !== id));
-  };
-
-  const toggleSize = (size: string) => {
-    setAvailableSizes((prev) =>
-      prev.includes(size) ? prev.filter((s) => s !== size) : [...prev, size]
-    );
   };
 
   const handleAddFeature = () => {
@@ -378,6 +391,10 @@ export function ProductForm({
     if (!title.trim() || !masterSku.trim()) return;
 
     const numValue = Number(declaredValue) || 850;
+    const allActiveSizes = Array.from(
+      new Set(colors.flatMap((c) => (c.sizes && c.sizes.length > 0 ? c.sizes : allSizes)))
+    );
+    const finalImageUrl = imageUrl || colors.find((c) => Boolean(c.imageUrl))?.imageUrl || '';
 
     const productPayload: MerchantProductItem = {
       id: initialProduct?.id || `p-${Date.now()}`,
@@ -395,10 +412,10 @@ export function ProductForm({
       stock: computedTotalStock,
       reserved: initialProduct?.reserved || 0,
       status,
-      imageUrl: imageUrl.trim() || undefined,
+      imageUrl: finalImageUrl.trim() || undefined,
       keyFeatures: features,
       colors,
-      sizes: availableSizes,
+      sizes: allActiveSizes.length > 0 ? allActiveSizes : allSizes,
       variantsList: generatedVariants,
       totalOrders: initialProduct?.totalOrders || 0,
     };
@@ -653,11 +670,11 @@ export function ProductForm({
 
                 <div className="space-y-3">
                   {colors.map((c) => {
-                    const activeSizes = c.sizes && c.sizes.length > 0 ? c.sizes : availableSizes;
+                    const activeSizes = c.sizes && c.sizes.length > 0 ? c.sizes : allSizes;
                     return (
                       <div
                         key={c.id}
-                        className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-3"
+                        className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-3"
                       >
                         <div className="flex items-center gap-3">
                           <input
@@ -719,60 +736,76 @@ export function ProductForm({
                           )}
                         </div>
 
-                        {/* Per-color sizes customization */}
-                        <div className="pt-2.5 border-t border-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                          <div className="text-[11px] text-slate-400">
-                            Available Sizes for <strong className="text-slate-200">{c.name || 'this color'}</strong>:
+                        {/* Per-color sizes customization with custom size adder */}
+                        <div className="pt-3 border-t border-slate-900 space-y-2.5">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div className="text-[11px] text-slate-400">
+                              Available Sizes for <strong className="text-slate-200">{c.name || 'this color'}</strong>:
+                            </div>
+
+                            {/* Custom size input */}
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="text"
+                                placeholder="+ Custom Size (e.g. 4XL, Free Size)"
+                                value={customSizeInputs[c.id] || ''}
+                                onChange={(e) =>
+                                  setCustomSizeInputs({ ...customSizeInputs, [c.id]: e.target.value })
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleAddCustomSizeToColor(c.id);
+                                  }
+                                }}
+                                className="px-2.5 py-1 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 w-48"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleAddCustomSizeToColor(c.id)}
+                                className="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors shrink-0"
+                              >
+                                <Plus className="h-3 w-3" />
+                                <span>Add Size</span>
+                              </button>
+                            </div>
                           </div>
+
+                          {/* Size buttons */}
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            {['S', 'M', 'L', 'XL', 'XXL', '3XL'].map((sz) => {
+                            {allSizes.map((sz) => {
                               const isSzActive = activeSizes.includes(sz);
+                              const isDefault = ['S', 'M', 'L', 'XL', 'XXL', '3XL'].includes(sz);
                               return (
-                                <button
-                                  key={sz}
-                                  type="button"
-                                  onClick={() => handleToggleColorSize(c.id, sz)}
-                                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
-                                    isSzActive
-                                      ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/50 shadow-sm'
-                                      : 'bg-slate-900 text-slate-500 border-slate-800 hover:text-slate-300 hover:border-slate-700'
-                                  }`}
-                                >
-                                  <span>{sz}</span>
-                                  {isSzActive && <span className="ml-1 text-emerald-400 font-bold">✓</span>}
-                                </button>
+                                <div key={sz} className="inline-flex items-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleColorSize(c.id, sz)}
+                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                                      isSzActive
+                                        ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/50 shadow-sm'
+                                        : 'bg-slate-900 text-slate-500 border-slate-800 hover:text-slate-300 hover:border-slate-700'
+                                    }`}
+                                  >
+                                    <span>{sz}</span>
+                                    {isSzActive && <span className="ml-1 text-emerald-400 font-bold">✓</span>}
+                                  </button>
+                                  {!isDefault && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveCustomSize(sz)}
+                                      title={`Delete custom size ${sz}`}
+                                      className="ml-1 p-0.5 text-slate-500 hover:text-rose-400 text-xs cursor-pointer"
+                                    >
+                                      ×
+                                    </button>
+                                  )}
+                                </div>
                               );
                             })}
                           </div>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Available Sizes */}
-              <div className="space-y-3">
-                <span className="text-xs font-bold text-slate-200 uppercase tracking-wider block">
-                  Available Sizes
-                </span>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {['S', 'M', 'L', 'XL', 'XXL', '3XL'].map((size) => {
-                    const isSelected = availableSizes.includes(size);
-                    return (
-                      <button
-                        key={size}
-                        type="button"
-                        onClick={() => toggleSize(size)}
-                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
-                          isSelected
-                            ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/50 shadow-sm'
-                            : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-850'
-                        }`}
-                      >
-                        <span>{size}</span>
-                        {isSelected && <span className="ml-1 text-emerald-400">✓</span>}
-                      </button>
                     );
                   })}
                 </div>
@@ -1052,66 +1085,7 @@ export function ProductForm({
           )}
         </div>
 
-        {/* Section 4: Main Product Thumbnail */}
-        <div className="space-y-3 p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-sm">
-          <div>
-            <span className="text-xs font-bold text-slate-200 uppercase tracking-wider block">
-              Main Product Thumbnail
-            </span>
-            <p className="text-[11px] text-slate-500 mt-0.5">
-              Pick the primary thumbnail image from your uploaded color photos above, or upload a custom image.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3 flex-wrap">
-            {colors
-              .filter((c) => Boolean(c.imageUrl))
-              .map((c) => {
-                const isSelected = imageUrl === c.imageUrl;
-                return (
-                  <div
-                    key={c.id}
-                    onClick={() => setImageUrl(c.imageUrl || '')}
-                    className={`relative h-16 w-16 rounded-xl border-2 overflow-hidden cursor-pointer transition-all ${
-                      isSelected
-                        ? 'border-emerald-500 ring-2 ring-emerald-500/30'
-                        : 'border-slate-800 hover:border-slate-700'
-                    }`}
-                  >
-                    <Image
-                      src={c.imageUrl || ''}
-                      alt={c.name}
-                      fill
-                      sizes="64px"
-                      className="object-cover"
-                    />
-                    {isSelected && (
-                      <div className="absolute inset-0 bg-emerald-950/40 flex items-center justify-center">
-                        <Check className="h-5 w-5 text-emerald-400 font-bold" />
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-
-            <div
-              onClick={() => mainFileInputRef.current?.click()}
-              className="h-16 px-4 rounded-xl border-2 border-dashed border-slate-800 hover:border-emerald-500/50 bg-slate-950 flex items-center justify-center gap-2 cursor-pointer transition-colors text-xs text-slate-400 hover:text-slate-200"
-            >
-              <input
-                type="file"
-                ref={mainFileInputRef}
-                onChange={handleMainFileChange}
-                accept="image/*"
-                className="hidden"
-              />
-              <UploadCloud className="h-4 w-4 text-emerald-400" />
-              <span>Upload Custom Picture</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Section 5: Key Features (Bullet points) */}
+        {/* Section 4: Key Features (Bullet points) */}
         <div className="space-y-3 p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-sm">
           <span className="text-xs font-bold text-slate-200 uppercase tracking-wider block">
             Key Features
