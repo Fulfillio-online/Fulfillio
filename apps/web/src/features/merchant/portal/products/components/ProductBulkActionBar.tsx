@@ -21,7 +21,7 @@ export function ProductBulkActionBar({
   if (selectedCount === 0) return null;
 
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900 border border-slate-700/80 shadow-2xl rounded-2xl px-4 py-3 flex items-center gap-3 sm:gap-4 animate-in slide-in-from-bottom-4 backdrop-blur">
+    <div className="fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-40 max-w-[calc(100vw-24px)] overflow-x-auto bg-slate-900 border border-slate-700/80 shadow-2xl rounded-2xl px-3 sm:px-4 py-2.5 sm:py-3 flex items-center gap-2 sm:gap-4 animate-in slide-in-from-bottom-4 backdrop-blur">
       <div className="flex items-center gap-2 pr-3 border-r border-slate-800">
         <CheckSquare className="h-4 w-4 text-emerald-400" />
         <span className="text-xs font-bold text-slate-100 whitespace-nowrap">

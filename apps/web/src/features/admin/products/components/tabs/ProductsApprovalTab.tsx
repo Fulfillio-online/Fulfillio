@@ -379,11 +379,11 @@ export function ProductsApprovalTab({
           No pending products match your search or filter.
         </div>
       ) : (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-visible shadow-xl">
           {/* 1. Mobile Accordion Card View (Visible on < md) */}
           <div className="block md:hidden p-3 space-y-2.5">
             {paginatedProducts.map((item, idx) => {
-              const isNearBottom = idx > 0 && idx >= paginatedProducts.length - 2;
+              const isNearBottom = idx > 0 && idx === paginatedProducts.length - 1;
               const chosenBin =
                 pendingBinSelection[item.id] || item.binCode || bins[0]?.code || 'A-01-02';
               const isSelected = selectedProductIds.has(item.id);
@@ -393,7 +393,9 @@ export function ProductsApprovalTab({
               return (
                 <div
                   key={item.id}
-                  className={`rounded-xl border transition-all shadow-sm overflow-hidden p-3.5 space-y-2.5 ${
+                  className={`relative rounded-xl border transition-colors shadow-sm p-3.5 space-y-2.5 ${
+                    isMenuOpen ? 'z-50' : 'z-0'
+                  } ${
                     isSelected
                       ? 'border-emerald-500/50 bg-emerald-950/20'
                       : 'border-slate-800 bg-slate-950/70'

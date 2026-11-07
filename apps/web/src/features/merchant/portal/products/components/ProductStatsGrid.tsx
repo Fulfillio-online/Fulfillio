@@ -42,25 +42,25 @@ export function ProductStatsGrid({ stats }: ProductStatsGridProps) {
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
       {statItems.map((item) => (
         <div
           key={item.label}
-          className="rounded-xl border border-slate-800 bg-slate-900/90 p-5 shadow-sm transition-all hover:border-slate-700/80"
+          className="rounded-xl border border-slate-800 bg-slate-900/90 p-3 sm:p-5 shadow-sm transition-all hover:border-slate-700/80 flex flex-col justify-between"
         >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold tracking-wide text-slate-400">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[11px] sm:text-xs font-semibold tracking-wide text-slate-400 truncate">
               {item.label}
             </span>
-            <div className={`h-8 w-8 rounded-lg border flex items-center justify-center shrink-0 ${item.accentBg}`}>
+            <div className={`h-7 w-7 sm:h-8 sm:w-8 rounded-lg border flex items-center justify-center shrink-0 ${item.accentBg}`}>
               {item.icon}
             </div>
           </div>
-          <div className="mt-3">
-            <span className={`text-3xl font-extrabold tracking-tight ${item.valueColor || 'text-slate-100'}`}>
+          <div className="mt-2 sm:mt-3">
+            <span className={`text-xl sm:text-3xl font-extrabold tracking-tight ${item.valueColor || 'text-slate-100'}`}>
               {item.value}
             </span>
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 sm:mt-1 line-clamp-1 sm:line-clamp-none">
               {item.subtitle}
             </p>
           </div>

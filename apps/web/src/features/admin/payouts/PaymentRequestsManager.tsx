@@ -226,8 +226,19 @@ export function PaymentRequestsManager() {
       hour12: true,
     });
 
-    // 1. Remove the paid request completely from Payment Requests!
-    updateRequestsAndPersist((prev) => prev.filter((r) => r.id !== requestId));
+    // 1. Mark the request as PAID with trxId and timestamp
+    updateRequestsAndPersist((prev) =>
+      prev.map((r) =>
+        r.id === requestId
+          ? {
+              ...r,
+              status: 'PAID',
+              trxId,
+              paidAt,
+            }
+          : r
+      )
+    );
 
     // 2. Synchronize to Billing & COD Settlement transactions
     try {

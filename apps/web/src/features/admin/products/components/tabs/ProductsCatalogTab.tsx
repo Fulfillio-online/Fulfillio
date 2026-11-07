@@ -314,7 +314,7 @@ export function ProductsCatalogTab({
       )}
 
       {/* Product Catalog Display: Mobile Accordions & Desktop Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl p-3 sm:p-0">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-visible shadow-xl p-3 sm:p-0">
         {/* 1. Mobile Collapsible List (Visible on mobile screens) */}
         <div className="block md:hidden space-y-2.5">
           {paginatedProducts.length === 0 ? (
@@ -329,60 +329,66 @@ export function ProductsCatalogTab({
               const isSelected = selectedProductIds.has(p.id);
               const isLowStock = p.stock < 30;
               const isMenuOpen = activeMenuId === `mobile-${p.id}`;
-              const isNearBottom = idx > 0 && idx >= paginatedProducts.length - 2;
+              const isNearBottom = idx > 0 && idx === paginatedProducts.length - 1;
 
               return (
                 <div
                   key={p.id}
-                  className={`rounded-xl border transition-all shadow-sm overflow-hidden ${
+                  className={`relative rounded-xl border transition-colors shadow-sm ${
+                    isMenuOpen ? 'z-50' : 'z-0'
+                  } ${
                     isSelected
                       ? 'border-emerald-500/50 bg-emerald-950/20'
                       : 'border-slate-800 bg-slate-950/60'
                   }`}
                 >
                   {/* Collapsed Header Summary */}
-                  <div className="p-3.5 flex items-start justify-between gap-3 select-none">
-                    {/* Left: Checkbox + Thumbnail + 3 Distinct Rows */}
-                    <div className="flex items-start gap-3 min-w-0 flex-1">
-                      <div className="pt-1" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleSelect(p.id)}
-                          aria-label={`Select ${p.title}`}
-                          className="w-4 h-4 rounded bg-slate-950 border-slate-700 text-emerald-500 focus:ring-emerald-500 cursor-pointer accent-emerald-500"
-                        />
-                      </div>
-
-                      <img
-                        src={p.imageUrl}
-                        alt={p.title}
-                        className="w-12 h-12 rounded-xl object-cover border border-slate-800 shrink-0 mt-0.5 cursor-pointer"
-                        onClick={() => toggleExpand(p.id)}
+                  <div className="p-3 sm:p-3.5 flex items-start gap-2.5 sm:gap-3 select-none">
+                    <div className="pt-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelect(p.id)}
+                        aria-label={`Select ${p.title}`}
+                        className="w-4 h-4 rounded bg-slate-950 border-slate-700 text-emerald-500 focus:ring-emerald-500 cursor-pointer accent-emerald-500"
                       />
+                    </div>
 
-                      <div
-                        className="min-w-0 flex-1 space-y-1 cursor-pointer"
-                        onClick={() => toggleExpand(p.id)}
-                      >
-                        {/* Row 1: Product Title */}
-                        <div className="font-bold text-white text-[15px] leading-tight truncate">
+                    <img
+                      src={p.imageUrl}
+                      alt={p.title}
+                      className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl object-cover border border-slate-800 shrink-0 mt-0.5 cursor-pointer"
+                      onClick={() => toggleExpand(p.id)}
+                    />
+
+                    <div
+                      className="min-w-0 flex-1 space-y-1 cursor-pointer"
+                      onClick={() => toggleExpand(p.id)}
+                    >
+                      {/* Row 1: Product Title + Status Badge */}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="font-bold text-white text-sm sm:text-[15px] leading-tight truncate min-w-0 flex-1">
                           {p.title}
                         </div>
-
-                        {/* Row 2: SKU and Merchant */}
-                        <div className="flex items-center gap-1.5 text-xs truncate">
-                          <span className="font-mono font-bold text-emerald-400">
-                            {p.fullSku}
-                          </span>
-                          <span className="text-slate-500">·</span>
-                          <span className="text-slate-300 font-medium truncate">
-                            {p.merchantName}
-                          </span>
+                        <div className="shrink-0">
+                          <StatusBadge status="Approved" />
                         </div>
+                      </div>
 
-                        {/* Row 3: Price & Physical Stock Box */}
-                        <div className="flex items-center gap-3 pt-0.5">
+                      {/* Row 2: SKU and Merchant */}
+                      <div className="flex items-center gap-1.5 text-xs truncate">
+                        <span className="font-mono font-bold text-emerald-400 truncate">
+                          {p.fullSku}
+                        </span>
+                        <span className="text-slate-500 shrink-0">·</span>
+                        <span className="text-slate-300 font-medium truncate">
+                          {p.merchantName}
+                        </span>
+                      </div>
+
+                      {/* Row 3: Price & Physical Stock Box + Accordion Toggle Button */}
+                      <div className="flex items-center justify-between gap-2 pt-0.5">
+                        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                           <span className="font-mono text-xs font-bold text-slate-200">
                             ৳{p.price.toLocaleString()}
                           </span>
@@ -427,33 +433,29 @@ export function ProductsCatalogTab({
                             </button>
                           </div>
                         </div>
-                      </div>
-                    </div>
 
-                    {/* Right: Status Tag + Toggle Button */}
-                    <div className="flex flex-col items-end justify-between self-stretch shrink-0">
-                      <div>
-                        <StatusBadge status="Approved" />
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleExpand(p.id);
+                          }}
+                          aria-label="Toggle details"
+                          className="p-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer shrink-0"
+                        >
+                          <ChevronDown
+                            className={`w-4 h-4 transition-transform duration-200 ${
+                              isExpanded ? 'rotate-180 text-emerald-400' : ''
+                            }`}
+                          />
+                        </button>
                       </div>
-
-                      <button
-                        type="button"
-                        onClick={() => toggleExpand(p.id)}
-                        aria-label="Toggle details"
-                        className="p-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
-                      >
-                        <ChevronDown
-                          className={`w-4 h-4 transition-transform duration-200 ${
-                            isExpanded ? 'rotate-180 text-emerald-400' : ''
-                          }`}
-                        />
-                      </button>
                     </div>
                   </div>
 
                   {/* Expanded Row Details */}
                   {isExpanded && (
-                    <div className="px-3.5 pb-3.5 pt-2 border-t border-slate-800/80 bg-slate-900/60 text-xs space-y-2.5 animate-in fade-in-50 duration-150 font-sans">
+                    <div className="relative z-20 px-3.5 pb-3.5 pt-2 border-t border-slate-800/80 bg-slate-900/60 rounded-b-xl text-xs space-y-2.5 font-sans">
                       <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
                         <div>
                           <span className="text-slate-400 block text-[10px] uppercase font-semibold">Category</span>

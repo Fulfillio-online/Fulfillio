@@ -68,7 +68,8 @@ export interface ResellerMemo {
   phone: string;
   address: string;
   note: string;
-  accentColor: string;
+  accentColor?: string;
+  logoUrl?: string;
   paperSize: string;
   isDefault: boolean;
   created: string;
@@ -108,6 +109,8 @@ export interface MerchantOrderItem {
   subtotal?: number;
   deliveryFee?: number;
   discount?: number;
+  advancePayment?: number;
+  codAmount?: number;
   memoCode: string;
   status: 'PENDING' | 'ALLOCATED' | 'PICKED' | 'PACKED' | 'DISPATCHED' | 'DELIVERED' | 'CANCELLED';
   courier: string;
@@ -115,7 +118,9 @@ export interface MerchantOrderItem {
   trackingId?: string;
   consignmentId?: string;
   paymentMethod?: string;
-  paymentStatus?: 'Paid' | 'Unpaid';
+  paymentStatus?: 'Paid' | 'Unpaid' | 'Partial';
+  advancePaymentMethod?: string;
+  advanceTrxId?: string;
   transactionId?: string;
   lineItems?: OrderLineItem[];
   timeline?: OrderTimelineEvent[];

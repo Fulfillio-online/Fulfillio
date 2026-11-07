@@ -12,8 +12,11 @@ import {
   FileText,
   Eye,
   Package,
+  CheckSquare,
+  Square,
 } from 'lucide-react';
 import { ProductTableProps } from '../types';
+import { MerchantExpandableCard } from '../../components/common/MerchantExpandableCard';
 
 export function ProductTable({
   products,
@@ -33,7 +36,184 @@ export function ProductTable({
 
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden shadow-sm">
-      <div className="overflow-x-auto">
+      {/* ============================================================== */}
+      {/* 1. MOBILE RESPONSIVE CARDS VIEW (Visible on screens < 768px)  */}
+      {/* ============================================================== */}
+      <div className="block md:hidden">
+        {/* Mobile "Select All" Bar */}
+        <div className="p-3 bg-slate-950/70 border-b border-slate-800 flex items-center justify-between text-xs">
+          <button
+            type="button"
+            onClick={onToggleSelectAll}
+            className="flex items-center gap-2 text-slate-300 font-semibold hover:text-white transition-colors"
+          >
+            {isAllSelected ? (
+              <CheckSquare className="h-4 w-4 text-emerald-400" />
+            ) : (
+              <Square className="h-4 w-4 text-slate-500" />
+            )}
+            <span>Select All ({products.length} products)</span>
+          </button>
+
+          {selectedIds.length > 0 && (
+            <span className="text-[11px] font-mono text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+              {selectedIds.length} selected
+            </span>
+          )}
+        </div>
+
+        {/* Mobile Product Cards List */}
+        <div className="p-2 sm:p-3 space-y-2.5">
+          {products.map((p) => {
+            const isSelected = selectedIds.includes(p.id);
+            const isPublished = p.status === 'PUBLISHED' || (!p.status && p.stock > 0);
+            const isLowStock = p.stock <= 30 && p.stock > 0;
+            const isOutOfStock = p.stock === 0;
+
+            return (
+              <MerchantExpandableCard
+                key={p.id}
+                isSelected={isSelected}
+                onToggleSelect={() => onToggleSelect(p.id)}
+                statusBadge={
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleStatus(p.id);
+                    }}
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-all cursor-pointer ${
+                      isPublished
+                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                        : 'bg-slate-800 text-slate-400 border-slate-700'
+                    }`}
+                    title="Click to toggle status"
+                  >
+                    {isPublished ? '● Published' : '○ Draft'}
+                  </button>
+                }
+                row1={
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="relative h-10 w-10 rounded-lg bg-slate-950 border border-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
+                      {p.imageUrl ? (
+                        <Image
+                          src={p.imageUrl}
+                          alt={p.title}
+                          fill
+                          sizes="40px"
+                          className="object-cover"
+                        />
+                      ) : (
+                        <Package className="h-5 w-5 text-slate-500" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="font-mono text-[10px] text-emerald-400 font-bold bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
+                        {p.sku}
+                      </span>
+                      {p.category && (
+                        <span className="text-[11px] text-slate-400 font-medium ml-1.5 truncate">
+                          {p.category}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                }
+                row2={
+                  <Link
+                    href={`/merchant/products/${p.id}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="font-bold text-xs text-slate-100 hover:text-emerald-400 transition-colors line-clamp-1 block cursor-pointer"
+                  >
+                    {p.title}
+                  </Link>
+                }
+                row3={
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-xs font-extrabold text-slate-100">
+                      ৳{p.price.toLocaleString()}
+                    </span>
+                    <span className="text-slate-600 text-[10px]">•</span>
+                    {isOutOfStock ? (
+                      <span className="text-[10px] font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20">
+                        Out of stock
+                      </span>
+                    ) : isLowStock ? (
+                      <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                        {p.stock} left (Low)
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                        {p.stock} in stock
+                      </span>
+                    )}
+                  </div>
+                }
+                expandedContent={
+                  <div className="space-y-2.5">
+                    {/* Barcode & Stock breakdown */}
+                    <div className="grid grid-cols-2 gap-2 text-[11px]">
+                      <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                        <span className="text-slate-500 text-[10px] uppercase font-semibold block">Barcode</span>
+                        <span className="font-mono font-bold text-slate-200 block mt-0.5 truncate">{p.barcode}</span>
+                        <span className="text-slate-500 text-[10px]">Bin: {p.bin || 'Intake bin'}</span>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                        <span className="text-slate-500 text-[10px] uppercase font-semibold block">Warehouse Stock</span>
+                        <span className="font-mono font-bold text-emerald-400 block mt-0.5">{p.stock} units</span>
+                        <span className="text-slate-400 text-[10px]">{p.reserved} reserved</span>
+                      </div>
+                    </div>
+                  </div>
+                }
+                actions={
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => onManageStock(p)}
+                      className="flex-1 min-w-[100px] py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-slate-700/80 cursor-pointer"
+                    >
+                      <Layers className="h-3.5 w-3.5 text-emerald-400" />
+                      <span>Manage Stock</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => onPrintBarcode(p)}
+                      className="flex-1 min-w-[90px] py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-slate-700/80 cursor-pointer"
+                    >
+                      <Printer className="h-3.5 w-3.5 text-indigo-400" />
+                      <span>Barcode</span>
+                    </button>
+
+                    <Link
+                      href={`/merchant/products/${p.id}/edit`}
+                      className="py-2 px-3.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-slate-700/80 cursor-pointer shrink-0"
+                    >
+                      <Edit2 className="h-3.5 w-3.5 text-slate-300" />
+                      <span>Edit</span>
+                    </Link>
+
+                    <button
+                      type="button"
+                      onClick={() => onRequestDelete(p)}
+                      className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-semibold flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                      title="Delete Product"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </>
+                }
+              />
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ============================================================== */}
+      {/* 2. DESKTOP / TABLET DATA TABLE VIEW (Visible on screens >= 768px) */}
+      {/* ============================================================== */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full min-w-[760px] text-left text-sm">
           <thead className="bg-slate-950/60 text-slate-400 text-xs uppercase tracking-wider font-semibold border-b border-slate-800">
             <tr>
@@ -130,7 +310,7 @@ export function ProductTable({
                     </div>
                   </td>
 
-                  {/* Stock (Clean display without jumping +/- buttons!) */}
+                  {/* Stock */}
                   <td className="p-4">
                     <div>
                       {isOutOfStock ? (
