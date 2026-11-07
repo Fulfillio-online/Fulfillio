@@ -1,12 +1,15 @@
 'use client';
 
 import React, { useState } from 'react';
-import { User, ShieldCheck } from 'lucide-react';
+import { User } from 'lucide-react';
 import { StoreProfileData, PayoutAccount, KycDocumentData, SocialChannel } from './types';
+import { StoreIdentityHero } from './components/StoreIdentityHero';
 import { StoreIdentityCard } from './components/StoreIdentityCard';
 import { PayoutAccountCard } from './components/PayoutAccountCard';
 import { KycVerificationCard } from './components/KycVerificationCard';
 import { SocialChannelsCard } from './components/SocialChannelsCard';
+import { AccountOverviewCard } from './components/AccountOverviewCard';
+import { FulfillmentHubCard } from './components/FulfillmentHubCard';
 import { EditProfileModal } from './modals/EditProfileModal';
 import { ManagePayoutModal } from './modals/ManagePayoutModal';
 import { KycUploadModal } from './modals/KycUploadModal';
@@ -70,47 +73,69 @@ export function MerchantProfileTab({
   };
 
   return (
-    <div className="space-y-6">
-      {/* Tab Header */}
+    <div className="space-y-6 max-w-7xl mx-auto pb-10">
+      {/* Tab Page Header */}
       <div>
         <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-100 flex items-center gap-2">
           <User className="h-6 w-6 text-emerald-400 shrink-0" />
-          <span>My Store Profile & Compliance</span>
+          <span>My Store Profile &amp; Merchant Identity</span>
         </h1>
-        <p className="text-sm text-slate-400 mt-0.5">
-          Store identity, COD disbursement bank account, regulatory KYC documents, and marketing channels.
+        <p className="text-xs sm:text-sm text-slate-400 mt-1">
+          Manage your verified store branding, COD disbursement account, compliance documents, and connected channels.
         </p>
       </div>
 
-      {/* 4 Modular Profile Cards */}
-      <div className="space-y-6">
-        <StoreIdentityCard
-          profile={profile}
-          onEdit={() => setIsEditProfileOpen(true)}
-        />
+      {/* Prominent Seller Identity Hero Banner */}
+      <StoreIdentityHero
+        profile={profile}
+        onEdit={() => setIsEditProfileOpen(true)}
+      />
 
-        <PayoutAccountCard
-          payoutAccount={profile.payoutAccount}
-          onManagePayout={() => setIsManagePayoutOpen(true)}
-        />
+      {/* 2-Column Responsive Dashboard Grid (7 cols left / 5 cols right on desktop) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* LEFT COLUMN: 60% on desktop (col-span-7) */}
+        <div className="lg:col-span-7 space-y-6">
+          {/* Card 1: Official Business Contact Details */}
+          <StoreIdentityCard
+            profile={profile}
+            onEdit={() => setIsEditProfileOpen(true)}
+          />
 
-        <KycVerificationCard
-          kycData={profile.kycData}
-          onOpenUpload={() => setIsKycUploadOpen(true)}
-        />
+          {/* Card 2: High-End Fintech COD Payout Account */}
+          <PayoutAccountCard
+            payoutAccount={profile.payoutAccount}
+            onManagePayout={() => setIsManagePayoutOpen(true)}
+          />
 
-        <SocialChannelsCard
-          channels={profile.socialChannels || []}
-          onAddChannel={() => {
-            setEditingSocial(null);
-            setIsSocialModalOpen(true);
-          }}
-          onEditChannel={(ch) => {
-            setEditingSocial(ch);
-            setIsSocialModalOpen(true);
-          }}
-          onDeleteChannel={handleDeleteSocial}
-        />
+          {/* Card 3: Business KYC & Regulatory Compliance */}
+          <KycVerificationCard
+            kycData={profile.kycData}
+            onOpenUpload={() => setIsKycUploadOpen(true)}
+          />
+        </div>
+
+        {/* RIGHT COLUMN: 40% on desktop (col-span-5) */}
+        <div className="lg:col-span-5 space-y-6">
+          {/* Card 4: Account Overview & Key Metrics */}
+          <AccountOverviewCard profile={profile} />
+
+          {/* Card 5: Social Media Marketing Channels */}
+          <SocialChannelsCard
+            channels={profile.socialChannels || []}
+            onAddChannel={() => {
+              setEditingSocial(null);
+              setIsSocialModalOpen(true);
+            }}
+            onEditChannel={(ch) => {
+              setEditingSocial(ch);
+              setIsSocialModalOpen(true);
+            }}
+            onDeleteChannel={handleDeleteSocial}
+          />
+
+          {/* Card 6: Fulfillment Hub & Courier Dispatch Readiness */}
+          <FulfillmentHubCard />
+        </div>
       </div>
 
       {/* Scoped Profile Modals */}
