@@ -68,7 +68,8 @@ export interface ResellerMemo {
   phone: string;
   address: string;
   note: string;
-  accentColor: string;
+  accentColor?: string;
+  logoUrl?: string;
   paperSize: string;
   isDefault: boolean;
   created: string;
