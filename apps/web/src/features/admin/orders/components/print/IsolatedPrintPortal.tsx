@@ -56,12 +56,12 @@ export function IsolatedPrintPortal({
 
       {printMode === 'PICK_SHEET' && (
         <div className="bg-white text-black p-6 font-sans text-xs max-w-2xl mx-auto">
-          <h2 className="text-lg font-black uppercase border-b-2 border-black pb-2 mb-3">
+          <h2 className="text-lg font-extrabold uppercase border-b-2 border-black pb-2 mb-3">
             Fulfillio Warehouse — Bin-Guided Pick List Sheet ({orders.length} Orders)
           </h2>
           <table className="w-full border-collapse border border-black text-left">
             <thead>
-              <tr className="bg-neutral-100 border-b border-black">
+              <tr className="bg-slate-100 dark:bg-slate-300 border-b border-black">
                 <th className="p-2 border-r border-black">Bin Location</th>
                 <th className="p-2 border-r border-black">Order ID</th>
                 <th className="p-2 border-r border-black">2-Part SKU</th>
@@ -72,9 +72,9 @@ export function IsolatedPrintPortal({
             <tbody>
               {orders.map((ord) => (
                 <tr key={ord.id} className="border-b border-black">
-                  <td className="p-2 border-r border-black font-mono font-black">{ord.bin}</td>
-                  <td className="p-2 border-r border-black font-mono font-bold">{ord.id}</td>
-                  <td className="p-2 border-r border-black font-mono">{ord.sku}</td>
+                  <td className="p-2 border-r border-black tabular-nums font-extrabold">{ord.bin}</td>
+                  <td className="p-2 border-r border-black tabular-nums font-bold">{ord.id}</td>
+                  <td className="p-2 border-r border-black tabular-nums">{ord.sku}</td>
                   <td className="p-2 border-r border-black">
                     {ord.productTitle} ({ord.color} / {ord.size})
                   </td>
@@ -90,16 +90,16 @@ export function IsolatedPrintPortal({
         <div className="bg-white text-black p-6 font-sans text-xs max-w-2xl mx-auto space-y-4">
           <div className="border-b-2 border-black pb-2 flex justify-between items-end">
             <div>
-              <h2 className="text-lg font-black uppercase">Courier Handover Manifest Sheet</h2>
-              <p className="text-[11px]">
+              <h2 className="text-lg font-extrabold uppercase">Courier Handover Manifest Sheet</h2>
+              <p className="text-xs">
                 Total Parcels: {orders.length} • Date: {new Date().toLocaleDateString('en-GB')}
               </p>
             </div>
-            <span className="font-mono font-bold">FULFILLIO 3PL</span>
+            <span className="tabular-nums font-bold">FULFILLIO 3PL</span>
           </div>
           <table className="w-full border-collapse border border-black text-left">
             <thead>
-              <tr className="bg-neutral-100 border-b border-black">
+              <tr className="bg-slate-100 dark:bg-slate-300 border-b border-black">
                 <th className="p-2 border-r border-black">Order ID</th>
                 <th className="p-2 border-r border-black">Courier &amp; Tracking</th>
                 <th className="p-2 border-r border-black">Customer</th>
@@ -109,14 +109,14 @@ export function IsolatedPrintPortal({
             <tbody>
               {orders.map((ord) => (
                 <tr key={ord.id} className="border-b border-black">
-                  <td className="p-2 border-r border-black font-mono font-bold">{ord.id}</td>
-                  <td className="p-2 border-r border-black font-mono">
+                  <td className="p-2 border-r border-black tabular-nums font-bold">{ord.id}</td>
+                  <td className="p-2 border-r border-black tabular-nums">
                     {ord.courier} — {ord.trackingCode || 'BOOKED'}
                   </td>
                   <td className="p-2 border-r border-black">
                     {ord.customerName} ({ord.customerPhone})
                   </td>
-                  <td className="p-2 text-right font-mono font-bold">
+                  <td className="p-2 text-right tabular-nums font-bold">
                     ৳ {ord.codAmount.toLocaleString()}
                   </td>
                 </tr>

@@ -68,7 +68,7 @@ export function PaymentRequestsTable({
         );
       case 'BANK_TRANSFER':
         return (
-          <div className="flex items-center gap-1.5 text-sky-400 font-semibold text-xs">
+          <div className="flex items-center gap-1.5 text-sky-600 dark:text-sky-400 font-semibold text-xs">
             <Building2 className="w-3.5 h-3.5 shrink-0" />
             <span>Bank Transfer</span>
           </div>
@@ -76,7 +76,7 @@ export function PaymentRequestsTable({
       case 'CASH':
       default:
         return (
-          <div className="flex items-center gap-1.5 text-slate-300 font-semibold text-xs">
+          <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-200 font-semibold text-xs">
             <DollarSign className="w-3.5 h-3.5 shrink-0" />
             <span>Cash</span>
           </div>
@@ -88,28 +88,28 @@ export function PaymentRequestsTable({
     switch (req.status) {
       case 'PENDING':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-300 border border-amber-500/30">
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
             <Clock className="w-3 h-3" />
             Pending
           </span>
         );
       case 'ACCEPTED':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-sky-500/15 text-sky-300 border border-sky-500/30">
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30">
             <Check className="w-3 h-3" />
             Accepted
           </span>
         );
       case 'PAID':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
             <CheckCircle2 className="w-3 h-3" />
             Paid
           </span>
         );
       case 'REJECTED':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-rose-500/15 text-rose-300 border border-rose-500/30">
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
             <XCircle className="w-3 h-3" />
             Rejected
           </span>
@@ -118,11 +118,11 @@ export function PaymentRequestsTable({
   };
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900/90 overflow-hidden shadow-xl">
+    <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-navy-900/90 overflow-hidden shadow-xl">
       {/* 1. Mobile Cards (< md screens) */}
       <div className="block md:hidden p-3 space-y-3">
         {requests.length === 0 ? (
-          <div className="p-8 text-center text-xs text-slate-400">
+          <div className="p-8 text-center text-xs text-slate-600 dark:text-slate-300">
             No payment requests found matching your filters.
           </div>
         ) : (
@@ -133,8 +133,8 @@ export function PaymentRequestsTable({
                 key={req.id}
                 className={`rounded-xl border transition-all p-3.5 space-y-2.5 ${
                   isSelected
-                    ? 'border-emerald-500/50 bg-emerald-950/20'
-                    : 'border-slate-800 bg-slate-950/70'
+                    ? 'border-emerald-500/50 bg-emerald-50 dark:bg-emerald-950/20'
+                    : 'border-slate-200 dark:border-white/10 bg-slate-50/70 dark:bg-navy-950/70'
                 }`}
               >
                 {/* Row 1: Checkbox + ID + Status */}
@@ -145,9 +145,9 @@ export function PaymentRequestsTable({
                       checked={isSelected}
                       onChange={() => onToggleSelectRow(req.id)}
                       aria-label={`Select ${req.id}`}
-                      className="w-4 h-4 rounded bg-slate-950 border-slate-700 text-emerald-500 focus:ring-emerald-500 cursor-pointer accent-emerald-500"
+                      className="w-4 h-4 rounded bg-slate-50 dark:bg-navy-950 border-slate-300 dark:border-white/15 text-orange-600 dark:text-orange-500 focus:ring-orange-500 cursor-pointer accent-orange-500"
                     />
-                    <span className="font-mono text-xs font-extrabold text-white">
+                    <span className="tabular-nums text-xs font-extrabold text-navy-800 dark:text-white">
                       {req.id}
                     </span>
                   </div>
@@ -155,35 +155,35 @@ export function PaymentRequestsTable({
                 </div>
 
                 {/* Row 2: Merchant & Amount */}
-                <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-900">
+                <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100 dark:border-white/5">
                   <div>
-                    <div className="font-bold text-white">{req.merchantName}</div>
-                    <div className="text-[11px] font-mono text-emerald-400">{req.merchantCode}</div>
+                    <div className="font-bold text-navy-800 dark:text-white">{req.merchantName}</div>
+                    <div className="text-xs tabular-nums text-orange-600 dark:text-orange-400">{req.merchantCode}</div>
                   </div>
                   <div className="text-right">
-                    <span className="font-mono text-base font-extrabold text-emerald-400">
+                    <span className="tabular-nums text-base font-extrabold text-orange-600 dark:text-orange-400">
                       ৳{req.amount.toLocaleString()}
                     </span>
                   </div>
                 </div>
 
                 {/* Row 3: Account info & TrxID */}
-                <div className="text-xs space-y-1 pt-1 border-t border-slate-900 text-slate-300">
+                <div className="text-xs space-y-1 pt-1 border-t border-slate-100 dark:border-white/5 text-slate-700 dark:text-slate-200">
                   <div className="flex items-center justify-between">
                     <div>{getMethodBadge(req)}</div>
-                    <span className="font-mono text-slate-300">{req.accountDetails.accountNumber}</span>
+                    <span className="tabular-nums text-slate-700 dark:text-slate-200">{req.accountDetails.accountNumber}</span>
                   </div>
                   {req.trxId && (
-                    <div className="font-mono text-[11px] text-emerald-400 flex items-center justify-between">
-                      <span className="text-slate-500">TrxID:</span>
+                    <div className="tabular-nums text-xs text-orange-600 dark:text-orange-400 flex items-center justify-between">
+                      <span className="text-slate-500 dark:text-slate-400">TrxID:</span>
                       <span className="font-bold">{req.trxId}</span>
                     </div>
                   )}
-                  <div className="text-[10px] text-slate-500">{req.requestedAt}</div>
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400">{req.requestedAt}</div>
                 </div>
 
                 {/* Row 4: Action Buttons */}
-                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-900">
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-white/5">
                   {req.status === 'PENDING' && (
                     <div className="relative inline-block text-left" data-dropdown-container>
                       <button
@@ -191,27 +191,27 @@ export function PaymentRequestsTable({
                         onClick={() =>
                           setActiveMenuId(activeMenuId === `mob-${req.id}` ? null : `mob-${req.id}`)
                         }
-                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+                        className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-bold text-navy-800 dark:text-slate-100 border border-slate-300 dark:border-white/15 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
                       >
                         <span>Actions</span>
                         <ChevronDown
                           className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                            activeMenuId === `mob-${req.id}` ? 'rotate-180 text-emerald-400' : 'text-slate-400'
+                            activeMenuId === `mob-${req.id}` ? 'rotate-180 text-orange-600 dark:text-orange-400' : 'text-slate-600 dark:text-slate-300'
                           }`}
                         />
                       </button>
 
                       {activeMenuId === `mob-${req.id}` && (
-                        <div className="absolute right-0 bottom-full mb-1.5 w-44 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl py-1.5 z-[100] text-left text-xs pointer-events-auto">
+                        <div className="absolute right-0 bottom-full mb-1.5 w-44 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-2xl py-1.5 z-[100] text-left text-xs pointer-events-auto">
                           <button
                             type="button"
                             onClick={() => {
                               setActiveMenuId(null);
                               onAccept(req);
                             }}
-                            className="w-full px-3 py-2 text-left text-emerald-300 hover:bg-emerald-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer"
+                            className="w-full px-3 py-2 text-left text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer"
                           >
-                            <Check className="w-4 h-4 text-emerald-400" />
+                            <Check className="w-4 h-4 text-orange-600 dark:text-orange-400" />
                             <span>Accept Request</span>
                           </button>
                           <button
@@ -220,9 +220,9 @@ export function PaymentRequestsTable({
                               setActiveMenuId(null);
                               onReject(req);
                             }}
-                            className="w-full px-3 py-2 text-left text-rose-300 hover:bg-rose-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer border-t border-slate-800"
+                            className="w-full px-3 py-2 text-left text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer border-t border-slate-200 dark:border-white/10"
                           >
-                            <XCircle className="w-4 h-4 text-rose-400" />
+                            <XCircle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
                             <span>Reject Request</span>
                           </button>
                         </div>
@@ -234,7 +234,7 @@ export function PaymentRequestsTable({
                     <button
                       type="button"
                       onClick={() => onOpenPayModal(req)}
-                      className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-colors cursor-pointer"
+                      className="px-3.5 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-colors cursor-pointer"
                     >
                       <CreditCard className="w-3.5 h-3.5" />
                       <span>Pay Payout</span>
@@ -242,8 +242,8 @@ export function PaymentRequestsTable({
                   )}
 
                   {req.status === 'REJECTED' && (
-                    <span className="text-xs text-rose-400 font-semibold inline-flex items-center gap-1">
-                      <XCircle className="w-3.5 h-3.5 text-rose-400" />
+                    <span className="text-xs text-rose-600 dark:text-rose-400 font-semibold inline-flex items-center gap-1">
+                      <XCircle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
                       <span>Rejected</span>
                     </span>
                   )}
@@ -258,14 +258,14 @@ export function PaymentRequestsTable({
       <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-left text-xs border-collapse">
           <thead>
-            <tr className="border-b border-slate-800 bg-slate-950/70 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+            <tr className="border-b border-slate-200 dark:border-white/10 bg-slate-50/70 dark:bg-navy-950/70 text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
               <th className="py-3.5 pl-4 pr-2 w-10 align-middle">
                 <input
                   type="checkbox"
                   checked={allVisibleSelected}
                   onChange={onToggleSelectAll}
                   aria-label="Select all requests on this page"
-                  className="w-4 h-4 rounded bg-slate-950 border-slate-700 text-emerald-500 focus:ring-emerald-500 cursor-pointer accent-emerald-500"
+                  className="w-4 h-4 rounded bg-slate-50 dark:bg-navy-950 border-slate-300 dark:border-white/15 text-orange-600 dark:text-orange-500 focus:ring-orange-500 cursor-pointer accent-orange-500"
                 />
               </th>
               <th className="py-3.5 px-3 align-middle">Request ID &amp; Date</th>
@@ -276,10 +276,10 @@ export function PaymentRequestsTable({
               <th className="py-3.5 pl-3 pr-5 text-right align-middle">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800/60 font-sans">
+          <tbody className="divide-y divide-slate-200/60 dark:divide-white/10 font-sans">
             {requests.length === 0 ? (
               <tr>
-                <td colSpan={7} className="p-10 text-center text-xs text-slate-400">
+                <td colSpan={7} className="p-10 text-center text-xs text-slate-600 dark:text-slate-300">
                   No payment requests found matching your filters.
                 </td>
               </tr>
@@ -290,8 +290,8 @@ export function PaymentRequestsTable({
                 return (
                   <tr
                     key={req.id}
-                    className={`hover:bg-slate-800/40 transition-colors ${
-                      isSelected ? 'bg-emerald-950/15' : ''
+                    className={`hover:bg-slate-100/40 dark:hover:bg-navy-800/40 transition-colors ${
+                      isSelected ? 'bg-emerald-50 dark:bg-emerald-950/15' : ''
                     }`}
                   >
                     {/* Checkbox */}
@@ -301,35 +301,35 @@ export function PaymentRequestsTable({
                         checked={isSelected}
                         onChange={() => onToggleSelectRow(req.id)}
                         aria-label={`Select ${req.id}`}
-                        className="w-4 h-4 rounded bg-slate-950 border-slate-700 text-emerald-500 focus:ring-emerald-500 cursor-pointer accent-emerald-500"
+                        className="w-4 h-4 rounded bg-slate-50 dark:bg-navy-950 border-slate-300 dark:border-white/15 text-orange-600 dark:text-orange-500 focus:ring-orange-500 cursor-pointer accent-orange-500"
                       />
                     </td>
 
                     {/* Request ID & Date */}
                     <td className="py-3.5 px-3 align-middle">
-                      <span className="font-mono text-xs font-bold text-white block">
+                      <span className="tabular-nums text-xs font-bold text-navy-800 dark:text-white block">
                         {req.id}
                       </span>
-                      <span className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
-                        <Clock className="w-3 h-3 text-slate-500" />
+                      <span className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1 mt-0.5">
+                        <Clock className="w-3 h-3 text-slate-500 dark:text-slate-400" />
                         <span>{req.requestedAt}</span>
                       </span>
                     </td>
 
                     {/* Merchant & Store */}
                     <td className="py-3.5 px-3 align-middle">
-                      <div className="font-semibold text-white flex items-center gap-1.5">
-                        <Store className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                      <div className="font-semibold text-navy-800 dark:text-white flex items-center gap-1.5">
+                        <Store className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 shrink-0" />
                         <span>{req.merchantName}</span>
                       </div>
-                      <div className="font-mono text-[11px] font-bold text-emerald-400 mt-0.5">
-                        {req.merchantCode} · <span className="font-sans text-slate-400 font-normal">{req.ownerName}</span>
+                      <div className="tabular-nums text-xs font-bold text-orange-600 dark:text-orange-400 mt-0.5">
+                        {req.merchantCode} · <span className="font-sans text-slate-600 dark:text-slate-300 font-normal">{req.ownerName}</span>
                       </div>
                     </td>
 
                     {/* Amount */}
                     <td className="py-3.5 px-3 align-middle">
-                      <span className="font-mono text-sm font-extrabold text-emerald-400 block">
+                      <span className="tabular-nums text-sm font-extrabold text-orange-600 dark:text-orange-400 block">
                         ৳{req.amount.toLocaleString()}
                       </span>
                     </td>
@@ -337,10 +337,10 @@ export function PaymentRequestsTable({
                     {/* Method & Account Details */}
                     <td className="py-3.5 px-3 align-middle">
                       <div>{getMethodBadge(req)}</div>
-                      <div className="font-mono text-xs text-slate-300 font-semibold mt-0.5">
+                      <div className="tabular-nums text-xs text-slate-700 dark:text-slate-200 font-semibold mt-0.5">
                         {req.accountDetails.accountNumber}
                       </div>
-                      <div className="text-[10px] text-slate-500 font-medium">
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
                         {req.accountDetails.provider}
                         {req.accountDetails.accountHolder && ` · ${req.accountDetails.accountHolder}`}
                       </div>
@@ -350,7 +350,7 @@ export function PaymentRequestsTable({
                     <td className="py-3.5 px-3 align-middle">
                       <div>{getStatusBadge(req)}</div>
                       {req.trxId && (
-                        <div className="font-mono text-[10px] font-bold text-emerald-400 mt-1">
+                        <div className="tabular-nums text-[11px] font-bold text-orange-600 dark:text-orange-400 mt-1">
                           Trx: {req.trxId}
                         </div>
                       )}
@@ -365,12 +365,12 @@ export function PaymentRequestsTable({
                             onClick={() =>
                               setActiveMenuId(activeMenuId === req.id ? null : req.id)
                             }
-                            className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+                            className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-bold text-navy-800 dark:text-slate-100 border border-slate-300 dark:border-white/15 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
                           >
                             <span>Actions</span>
                             <ChevronDown
                               className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                                activeMenuId === req.id ? 'rotate-180 text-emerald-400' : 'text-slate-400'
+                                activeMenuId === req.id ? 'rotate-180 text-orange-600 dark:text-orange-400' : 'text-slate-600 dark:text-slate-300'
                               }`}
                             />
                           </button>
@@ -379,7 +379,7 @@ export function PaymentRequestsTable({
                             <div
                               className={`absolute right-0 ${
                                 isNearBottom ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
-                              } w-44 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl py-1.5 z-[100] text-left text-xs pointer-events-auto`}
+                              } w-44 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-2xl py-1.5 z-[100] text-left text-xs pointer-events-auto`}
                             >
                               <button
                                 type="button"
@@ -387,9 +387,9 @@ export function PaymentRequestsTable({
                                   setActiveMenuId(null);
                                   onAccept(req);
                                 }}
-                                className="w-full px-3 py-2 text-left text-emerald-300 hover:bg-emerald-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer"
+                                className="w-full px-3 py-2 text-left text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer"
                               >
-                                <Check className="w-4 h-4 text-emerald-400" />
+                                <Check className="w-4 h-4 text-orange-600 dark:text-orange-400" />
                                 <span>Accept Request</span>
                               </button>
                               <button
@@ -398,9 +398,9 @@ export function PaymentRequestsTable({
                                   setActiveMenuId(null);
                                   onReject(req);
                                 }}
-                                className="w-full px-3 py-2 text-left text-rose-300 hover:bg-rose-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer border-t border-slate-800"
+                                className="w-full px-3 py-2 text-left text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer border-t border-slate-200 dark:border-white/10"
                               >
-                                <XCircle className="w-4 h-4 text-rose-400" />
+                                <XCircle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
                                 <span>Reject Request</span>
                               </button>
                             </div>
@@ -412,7 +412,7 @@ export function PaymentRequestsTable({
                         <button
                           type="button"
                           onClick={() => onOpenPayModal(req)}
-                          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-colors cursor-pointer ml-auto"
+                          className="px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-colors cursor-pointer ml-auto"
                         >
                           <CreditCard className="w-3.5 h-3.5" />
                           <span>Pay Payout</span>
@@ -420,8 +420,8 @@ export function PaymentRequestsTable({
                       )}
 
                       {req.status === 'REJECTED' && (
-                        <span className="text-xs text-rose-400 font-semibold inline-flex items-center gap-1">
-                          <XCircle className="w-3.5 h-3.5 text-rose-400" />
+                        <span className="text-xs text-rose-600 dark:text-rose-400 font-semibold inline-flex items-center gap-1">
+                          <XCircle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
                           <span>Rejected</span>
                         </span>
                       )}

@@ -133,7 +133,7 @@ export function MerchantDirectoryManager({
     <div className="space-y-6">
       {/* Toast Feedback */}
       {toastMessage && (
-        <div className="fixed top-6 right-6 z-50 bg-emerald-600 text-white px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-2 text-xs font-bold animate-in fade-in slide-in-from-top-2">
+        <div className="fixed top-6 right-6 z-50 bg-orange-600 text-white px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-2 text-xs font-bold animate-in fade-in slide-in-from-top-2">
           <CheckCircle2 className="w-4 h-4" />
           <span>{toastMessage}</span>
         </div>
@@ -142,13 +142,20 @@ export function MerchantDirectoryManager({
       {/* VIEW 1: MERCHANT DIRECTORY LIST */}
       {!selectedMerchant ? (
         <div className="space-y-6">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-white">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-navy-900 dark:text-white">
               Merchant Profiles &amp; Verification
             </h1>
-            <p className="text-sm text-slate-400">
+            <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
               Inspect verified merchant stores, KYC payout accounts, active catalog items, and fulfillment history.
             </p>
+          </div>
+            <div className="flex items-center gap-2">
+            <span className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/20 shadow-2xs">
+              {merchants.length} Verified Stores
+            </span>
+          </div>
           </div>
 
           {/* 4 Summary Metric Cards */}

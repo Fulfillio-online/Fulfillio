@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Printer } from 'lucide-react';
-import { Modal } from '@/components/ui';
+import { Modal } from '@/components/admin/AdminModal';
 import { UnifiedThermalSticker } from '@/features/shared/thermal-print/UnifiedThermalSticker';
 import { WarehousePipelineOrder } from '../../types';
 
@@ -30,16 +30,16 @@ export function MemoPreviewModal({
       size="lg"
     >
       <div className="space-y-4">
-        <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-xl p-3">
-          <div className="text-xs text-slate-300">
-            <span className="font-bold text-white">{order.resellerName}</span> •{' '}
-            <span className="font-mono text-emerald-400">{order.memoCode}</span> •{' '}
-            <span className="font-mono text-amber-300">Bin: {order.bin}</span>
+        <div className="flex items-center justify-between bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl p-3">
+          <div className="text-xs text-slate-700 dark:text-slate-200">
+            <span className="font-bold text-navy-800 dark:text-white">{order.resellerName}</span> •{' '}
+            <span className="tabular-nums text-orange-600 dark:text-orange-400">{order.memoCode}</span> •{' '}
+            <span className="tabular-nums text-amber-700 dark:text-amber-300">Bin: {order.bin}</span>
           </div>
           <button
             type="button"
             onClick={onPrint}
-            className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer shadow-md"
+            className="px-4 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer shadow-md"
           >
             <Printer className="w-3.5 h-3.5" />
             <span>Print 4x6&quot; Invoice</span>

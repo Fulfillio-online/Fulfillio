@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
     "@fulfillio/contracts": "workspace:*",
     "@fulfillio/shared": "workspace:*",
     "@tanstack/react-query": "^5.105.3",

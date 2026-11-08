@@ -17,13 +17,17 @@ function OrdersPipelineContent() {
       ? tabParam
       : 'all';
 
+  const searchQuery = searchParams.get('search') || searchParams.get('q') || searchParams.get('sku') || '';
+
   const handleTabChange = (newTab: PipelineMainTab) => {
-    router.replace(`/admin/orders?tab=${newTab}`, { scroll: false });
+    const searchPart = searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : '';
+    router.replace(`/admin/orders?tab=${newTab}${searchPart}`, { scroll: false });
   };
 
   return (
     <OrdersPipelineManager
       activeTab={activeTab}
+      initialSearch={searchQuery}
       onTabChange={handleTabChange}
       onOpenDeliveryTracker={() => router.push('/admin/delivery')}
     />
@@ -34,7 +38,7 @@ export default function AdminOrdersPage() {
   return (
     <Suspense
       fallback={
-        <div className="p-8 text-center text-slate-400 font-mono text-sm animate-pulse">
+        <div className="p-8 text-center text-slate-600 dark:text-slate-300 tabular-nums text-sm animate-pulse">
           Loading Orders Pipeline...
         </div>
       }

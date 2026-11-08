@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Layers, X } from 'lucide-react';
-import { Modal } from '@/components/ui';
+import { Modal } from '@/components/admin/AdminModal';
 import { WarehouseBin } from '../../types';
 
 interface CreateBinModalProps {
@@ -56,7 +56,7 @@ export function CreateBinModal({
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">
+          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-200 mb-1.5">
             Bin Code (Format: Zone-Rack-Shelf) *
           </label>
           <input
@@ -65,13 +65,13 @@ export function CreateBinModal({
             value={newBinCode}
             onChange={(e) => setNewBinCode(e.target.value)}
             placeholder="e.g. E-01-01 or A-03-02"
-            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm font-mono text-white focus:outline-none focus:border-emerald-500"
+            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-sm tabular-nums text-navy-800 dark:text-white focus:outline-none focus:border-orange-500"
           />
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-200 mb-1.5">
               Warehouse Zone
             </label>
             <input
@@ -79,24 +79,24 @@ export function CreateBinModal({
               value={newBinZone}
               onChange={(e) => setNewBinZone(e.target.value)}
               placeholder="Zone E"
-              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:border-emerald-500"
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-sm text-navy-800 dark:text-white focus:outline-none focus:border-orange-500"
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-200 mb-1.5">
               Unit Capacity
             </label>
             <input
               type="number"
               value={newBinCapacity}
               onChange={(e) => setNewBinCapacity(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm font-mono text-white focus:outline-none focus:border-emerald-500"
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-sm tabular-nums text-navy-800 dark:text-white focus:outline-none focus:border-orange-500"
             />
           </div>
         </div>
 
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">
+          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-200 mb-1.5">
             Zone / Shelf Description
           </label>
           <input
@@ -104,21 +104,21 @@ export function CreateBinModal({
             value={newBinDesc}
             onChange={(e) => setNewBinDesc(e.target.value)}
             placeholder="Zone E · Rack 01 · Shelf 01 (Seasonal Fast-Movers)"
-            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:border-emerald-500"
+            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-sm text-navy-800 dark:text-white focus:outline-none focus:border-orange-500"
           />
         </div>
 
-        <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800/80">
+        <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200/80 dark:border-white/10">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300"
+            className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-semibold text-slate-700 dark:text-slate-200"
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-lg shadow-emerald-600/25 cursor-pointer"
+            className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-xs font-bold text-white shadow-lg shadow-orange-500/25 cursor-pointer"
           >
             Create &amp; Save Bin
           </button>

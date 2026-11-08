@@ -17,59 +17,59 @@ export function MerchantStatsOverview({
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       {/* 1. Total Registered */}
-      <div className="p-4 sm:p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg">
+      <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-lg">
         <div className="flex items-center justify-between">
-          <span className="text-xs uppercase font-bold text-slate-400">Total Registered</span>
-          <div className="p-2 rounded-xl bg-slate-800 text-slate-300">
+          <span className="text-xs uppercase font-bold text-slate-600 dark:text-slate-300">Total Registered</span>
+          <div className="p-2 rounded-xl bg-slate-100 dark:bg-navy-800 text-slate-700 dark:text-slate-200">
             <Store className="w-4 h-4" />
           </div>
         </div>
-        <div className="text-2xl sm:text-3xl font-black text-white mt-2 font-mono">
+        <div className="text-2xl sm:text-3xl font-extrabold text-navy-800 dark:text-white mt-2 tabular-nums">
           {merchants.length}
         </div>
-        <span className="text-xs text-slate-400 mt-1 block">Verified merchant accounts</span>
+        <span className="text-xs text-slate-600 dark:text-slate-300 mt-1 block">Verified merchant accounts</span>
       </div>
 
       {/* 2. Active Stores */}
-      <div className="p-4 sm:p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg">
+      <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-lg">
         <div className="flex items-center justify-between">
-          <span className="text-xs uppercase font-bold text-slate-400">Active Stores</span>
-          <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+          <span className="text-xs uppercase font-bold text-slate-600 dark:text-slate-300">Active Stores</span>
+          <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
             <UserCheck className="w-4 h-4" />
           </div>
         </div>
-        <div className="text-2xl sm:text-3xl font-black text-emerald-400 mt-2 font-mono">
+        <div className="text-2xl sm:text-3xl font-extrabold text-orange-600 dark:text-orange-400 mt-2 tabular-nums">
           {activeCount}
         </div>
-        <span className="text-xs text-emerald-400/80 mt-1 block font-medium">Ready for fulfillment</span>
+        <span className="text-xs text-orange-600 dark:text-orange-400 mt-1 block font-medium">Ready for fulfillment</span>
       </div>
 
       {/* 3. Pending Review */}
-      <div className="p-4 sm:p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg">
+      <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-lg">
         <div className="flex items-center justify-between">
-          <span className="text-xs uppercase font-bold text-slate-400">Pending Review</span>
-          <div className="p-2 rounded-xl bg-amber-500/15 text-amber-300 border border-amber-500/30">
+          <span className="text-xs uppercase font-bold text-slate-600 dark:text-slate-300">Pending Review</span>
+          <div className="p-2 rounded-xl bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
             <Clock className="w-4 h-4" />
           </div>
         </div>
-        <div className="text-2xl sm:text-3xl font-black text-amber-300 mt-2 font-mono">
+        <div className="text-2xl sm:text-3xl font-extrabold text-amber-700 dark:text-amber-300 mt-2 tabular-nums">
           {pendingCount}
         </div>
-        <span className="text-xs text-amber-400/80 mt-1 block font-medium">Awaiting admin KYC check</span>
+        <span className="text-xs text-amber-600 dark:text-amber-400 mt-1 block font-medium">Awaiting admin KYC check</span>
       </div>
 
       {/* 4. Total Active SKUs */}
-      <div className="p-4 sm:p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg">
+      <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-lg">
         <div className="flex items-center justify-between">
-          <span className="text-xs uppercase font-bold text-slate-400">Warehouse SKUs</span>
-          <div className="p-2 rounded-xl bg-indigo-500/15 text-indigo-400 border border-indigo-500/30">
+          <span className="text-xs uppercase font-bold text-slate-600 dark:text-slate-300">Warehouse SKUs</span>
+          <div className="p-2 rounded-xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30">
             <Boxes className="w-4 h-4" />
           </div>
         </div>
-        <div className="text-2xl sm:text-3xl font-black text-indigo-400 mt-2 font-mono">
+        <div className="text-2xl sm:text-3xl font-extrabold text-indigo-600 dark:text-indigo-400 mt-2 tabular-nums">
           {productsCount}
         </div>
-        <span className="text-xs text-slate-400 mt-1 block">Live catalog items in storage</span>
+        <span className="text-xs text-slate-600 dark:text-slate-300 mt-1 block">Live catalog items in storage</span>
       </div>
     </div>
   );

@@ -61,19 +61,19 @@ export function LogNewReturnModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+    <div className="fixed inset-0 z-50 bg-navy-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
+        <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-3">
           <div>
-            <h3 className="text-base font-bold text-white">Log Inbound Return Parcel (RTO)</h3>
-            <p className="text-xs text-slate-400">
+            <h3 className="text-base font-bold text-navy-800 dark:text-white">Log Inbound Return Parcel (RTO)</h3>
+            <p className="text-xs text-slate-600 dark:text-slate-300">
               Receive a returned parcel at the warehouse dock for inspection
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1 text-slate-400 hover:text-white"
+            className="p-1 text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-white"
           >
             <X className="w-4 h-4" />
           </button>
@@ -82,34 +82,34 @@ export function LogNewReturnModal({
         <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block font-bold text-slate-300 mb-1">Order ID *</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1">Order ID *</label>
               <input
                 type="text"
                 required
                 value={orderId}
                 onChange={(e) => setOrderId(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono uppercase"
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-navy-800 dark:text-white tabular-nums uppercase"
               />
             </div>
             <div>
-              <label className="block font-bold text-slate-300 mb-1">Tracking Code *</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1">Tracking Code *</label>
               <input
                 type="text"
                 required
                 value={trackingCode}
                 onChange={(e) => setTrackingCode(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-emerald-300 font-mono uppercase"
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-orange-700 dark:text-orange-300 tabular-nums uppercase"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block font-bold text-slate-300 mb-1">Courier Partner *</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1">Courier Partner *</label>
               <select
                 value={courier}
                 onChange={(e) => setCourier(e.target.value as any)}
-                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white"
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-navy-800 dark:text-white"
               >
                 <option value="Steadfast">Steadfast</option>
                 <option value="Pathao">Pathao</option>
@@ -117,24 +117,24 @@ export function LogNewReturnModal({
               </select>
             </div>
             <div>
-              <label className="block font-bold text-slate-300 mb-1">Quantity Returned *</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1">Quantity Returned *</label>
               <input
                 type="number"
                 min={1}
                 required
                 value={qty}
                 onChange={(e) => setQty(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono"
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-navy-800 dark:text-white tabular-nums"
               />
             </div>
           </div>
 
           <div>
-            <label className="block font-bold text-slate-300 mb-1">Product SKU *</label>
+            <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1">Product SKU *</label>
             <select
               value={selectedSku}
               onChange={(e) => setSelectedSku(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono text-xs"
+              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-navy-800 dark:text-white tabular-nums text-xs"
             >
               {liveProducts.map((p) => (
                 <option key={p.id} value={p.fullSku}>
@@ -145,27 +145,27 @@ export function LogNewReturnModal({
           </div>
 
           <div>
-            <label className="block font-bold text-slate-300 mb-1">Return Reason *</label>
+            <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1">Return Reason *</label>
             <input
               type="text"
               required
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white"
+              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-navy-800 dark:text-white"
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+          <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-white/10">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-semibold cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 text-slate-700 dark:text-slate-200 font-semibold cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold cursor-pointer"
             >
               Log Return Parcel
             </button>

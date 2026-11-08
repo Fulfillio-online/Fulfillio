@@ -281,6 +281,94 @@ export function ProductsManager({
     }
   };
 
+  const handleMoveToDraft = (productId: string) => {
+    const prod = products.find((p) => p.id === productId);
+    setProducts((prev) => {
+      const next = prev.map((p) =>
+        p.id === productId ? { ...p, status: 'DRAFT' as const, isDraft: true } : p
+      );
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+    if (prod) {
+      triggerToast(`Product "${prod.title}" moved to Draft. You can restore it anytime.`);
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
+      );
+    }
+  };
+
+  const handleRestoreProduct = (productId: string) => {
+    const prod = products.find((p) => p.id === productId);
+    setProducts((prev) => {
+      const next = prev.map((p) =>
+        p.id === productId ? { ...p, status: 'APPROVED' as const, isDraft: false } : p
+      );
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+    if (prod) {
+      triggerToast(`Product "${prod.title}" restored to active catalog.`);
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
+      );
+    }
+  };
+
+  const handleBulkMoveToDraft = (productIds: string[]) => {
+    const idSet = new Set(productIds);
+    setProducts((prev) => {
+      const next = prev.map((p) =>
+        idSet.has(p.id) ? { ...p, status: 'DRAFT' as const, isDraft: true } : p
+      );
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+    triggerToast(`Moved ${productIds.length} products to Draft.`);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
+      );
+    }
+  };
+
+  const handleBulkRestore = (productIds: string[]) => {
+    const idSet = new Set(productIds);
+    setProducts((prev) => {
+      const next = prev.map((p) =>
+        idSet.has(p.id) ? { ...p, status: 'APPROVED' as const, isDraft: false } : p
+      );
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+    triggerToast(`Restored ${productIds.length} products to active catalog.`);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
+      );
+    }
+  };
+
   const handleDeleteProduct = (productId: string) => {
     const prod = products.find((p) => p.id === productId);
     setProducts((prev) => {
@@ -336,18 +424,18 @@ export function ProductsManager({
   };
 
   return (
-    <div className="space-y-6 text-slate-100">
+    <div className="space-y-6 text-navy-800 dark:text-navy-800 dark:text-white">
       {/* Top Header & Sub-Tab Navigation */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 bg-white/90 dark:bg-navy-900/90 border border-slate-200 dark:border-white/10 rounded-2xl p-5 shadow-xl">
         <div className="flex items-center gap-2.5">
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
             <Package className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-navy-900 dark:text-white tracking-tight">
               Warehouse Master Product &amp; Bin Registry
-            </h2>
-            <p className="text-xs sm:text-sm text-slate-400">
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300">
               Multi-merchant 2-part SKU catalog, inbound product approvals, and physical bin slotting
             </p>
           </div>
@@ -358,7 +446,7 @@ export function ProductsManager({
           <button
             type="button"
             onClick={() => setAddProductModalOpen(true)}
-            className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-semibold flex items-center gap-2 shadow-lg shadow-emerald-600/20 transition-all cursor-pointer"
+            className="px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs sm:text-sm font-semibold flex items-center gap-2 shadow-lg shadow-orange-500/25 transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Add Product (Under Merchant)</span>
@@ -368,15 +456,15 @@ export function ProductsManager({
 
       {/* Feedback Toast Banner */}
       {bannerMessage && (
-        <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-sm">
+        <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-700 dark:text-emerald-300 text-sm">
           <div className="flex items-center gap-2.5">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <CheckCircle2 className="w-4 h-4 text-orange-600 dark:text-orange-400 shrink-0" />
             <span>{bannerMessage}</span>
           </div>
           <button
             type="button"
             onClick={() => setBannerMessage(null)}
-            className="text-xs text-emerald-400 hover:text-emerald-200 cursor-pointer"
+            className="text-xs text-orange-600 dark:text-orange-400 hover:text-orange-800 dark:hover:text-orange-200 cursor-pointer"
           >
             Dismiss
           </button>
@@ -398,6 +486,12 @@ export function ProductsManager({
           onOpenStockAdjustModal={(prod) => setStockAdjustProduct(prod)}
           onChangeProductBin={handleChangeProductBin}
           onOpenAddProduct={() => setAddProductModalOpen(true)}
+          onMoveToDraft={handleMoveToDraft}
+          onRestoreProduct={handleRestoreProduct}
+          onPermanentDelete={handleDeleteProduct}
+          onBulkMoveToDraft={handleBulkMoveToDraft}
+          onBulkRestore={handleBulkRestore}
+          onBulkPermanentDelete={handleDeleteProducts}
           onDeleteProduct={handleDeleteProduct}
           onDeleteProducts={handleDeleteProducts}
         />

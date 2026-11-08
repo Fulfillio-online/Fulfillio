@@ -115,18 +115,18 @@ export function CourierIntegrationManager() {
   };
 
   return (
-    <div className="space-y-6 text-slate-100">
+    <div className="space-y-6 text-navy-800 dark:text-navy-800 dark:text-white">
       {/* Header Banner */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl p-5 shadow-xl">
         <div className="flex items-start sm:items-center gap-3.5">
-          <div className="w-11 h-11 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+          <div className="w-11 h-11 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
             <Truck className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-navy-800 dark:text-white">
               Courier API Integrations &amp; Sandbox Simulator
             </h1>
-            <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-0.5">
               Configure Steadfast, Pathao, RedX credentials or run local simulation with realistic consignment dispatch &amp; tracking.
             </p>
           </div>
@@ -137,7 +137,7 @@ export function CourierIntegrationManager() {
             <button
               type="button"
               onClick={() => setIsAddModalOpen(true)}
-              className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white flex items-center gap-1.5 shadow-lg shadow-emerald-950/50 transition-colors cursor-pointer"
+              className="px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-xs font-bold text-white flex items-center gap-1.5 shadow-lg shadow-orange-500/25 transition-colors cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>+ Add Courier Partner</span>
@@ -147,14 +147,14 @@ export function CourierIntegrationManager() {
       </div>
 
       {/* Mode Navigation Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-white/10 pb-3">
         <button
           type="button"
           onClick={() => setActiveTab('INTEGRATIONS')}
           className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
             activeTab === 'INTEGRATIONS'
-              ? 'bg-emerald-600 text-white shadow'
-              : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
+              ? 'bg-orange-600 text-white shadow'
+              : 'bg-white dark:bg-navy-900 text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-slate-100 border border-slate-200 dark:border-white/10'
           }`}
         >
           <Sliders className="w-3.5 h-3.5" />
@@ -167,7 +167,7 @@ export function CourierIntegrationManager() {
           className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
             activeTab === 'SIMULATOR'
               ? 'bg-indigo-600 text-white shadow'
-              : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
+              : 'bg-white dark:bg-navy-900 text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-slate-100 border border-slate-200 dark:border-white/10'
           }`}
         >
           <Activity className="w-3.5 h-3.5" />
@@ -177,15 +177,15 @@ export function CourierIntegrationManager() {
 
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="p-4 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-200 text-xs sm:text-sm flex items-center justify-between gap-3 shadow-sm animate-in fade-in">
+        <div className="p-4 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-800 dark:text-emerald-200 text-xs sm:text-sm flex items-center justify-between gap-3 shadow-sm animate-in fade-in">
           <div className="flex items-center gap-2.5">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <CheckCircle2 className="w-4 h-4 text-orange-600 dark:text-orange-400 shrink-0" />
             <span className="font-medium">{toastMessage}</span>
           </div>
           <button
             type="button"
             onClick={() => setToastMessage(null)}
-            className="text-xs text-emerald-300 hover:text-white"
+            className="text-xs text-orange-700 dark:text-orange-300 hover:text-navy-800 dark:hover:text-white"
           >
             Dismiss
           </button>

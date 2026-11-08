@@ -321,7 +321,7 @@ export function PaymentRequestsManager() {
     <div className="space-y-6">
       {/* Toast Notification */}
       {toast && (
-        <div className="fixed top-6 right-6 z-50 bg-emerald-600 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 text-xs font-bold animate-in fade-in">
+        <div className="fixed top-6 right-6 z-50 bg-orange-600 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 text-xs font-bold animate-in fade-in">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span>{toast}</span>
         </div>
@@ -331,23 +331,23 @@ export function PaymentRequestsManager() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
-            <h1 className="text-2xl font-bold tracking-tight text-white">
+            <h1 className="text-2xl font-bold tracking-tight text-navy-800 dark:text-white">
               Merchant Payment Requests
             </h1>
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+            <span className="px-2.5 py-0.5 rounded-full text-xs tabular-nums font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
               Payouts &amp; Settlements
             </span>
           </div>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
             Review and process merchant COD payout requests. Accepted requests can be settled with bank/mobile banking TrxID.
           </p>
         </div>
 
         <Link
           href="/admin/billing"
-          className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-bold text-slate-200 flex items-center gap-2 shadow-sm transition-colors cursor-pointer w-fit"
+          className="px-3.5 py-2 rounded-xl bg-white dark:bg-navy-900 hover:bg-slate-100 dark:hover:bg-navy-800 border border-slate-300 dark:border-white/15 text-xs font-bold text-navy-800 dark:text-slate-100 flex items-center gap-2 shadow-sm transition-colors cursor-pointer w-fit"
         >
-          <CreditCard className="w-4 h-4 text-emerald-400" />
+          <CreditCard className="w-4 h-4 text-orange-600 dark:text-orange-400" />
           <span>View Billing &amp; COD Statement</span>
         </Link>
       </div>
@@ -355,59 +355,59 @@ export function PaymentRequestsManager() {
       {/* 4 KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
         {/* Total Requests */}
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-4 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-navy-900/90 p-4 shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-400 font-medium">Active Requests</span>
-            <div className="w-8 h-8 rounded-xl bg-slate-800 flex items-center justify-center text-slate-300">
+            <span className="text-xs text-slate-600 dark:text-slate-300 font-medium">Active Requests</span>
+            <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-navy-800 flex items-center justify-center text-slate-700 dark:text-slate-200">
               <HandCoins className="w-4 h-4" />
             </div>
           </div>
-          <div className="font-mono text-xl font-extrabold text-white mt-2">
+          <div className="tabular-nums text-xl font-extrabold text-navy-800 dark:text-white mt-2">
             {stats.totalRequests}
           </div>
-          <span className="text-[10px] text-slate-500 mt-0.5 block">Pending &amp; accepted payouts</span>
+          <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 block">Pending &amp; accepted payouts</span>
         </div>
 
         {/* Pending Requests */}
-        <div className="rounded-2xl border border-amber-500/30 bg-amber-950/10 p-4 shadow-sm">
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-50 dark:bg-amber-950/10 p-4 shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-amber-300 font-medium">Pending Approval</span>
-            <div className="w-8 h-8 rounded-xl bg-amber-500/15 flex items-center justify-center text-amber-300 border border-amber-500/30">
+            <span className="text-xs text-amber-700 dark:text-amber-300 font-medium">Pending Approval</span>
+            <div className="w-8 h-8 rounded-xl bg-amber-500/15 flex items-center justify-center text-amber-700 dark:text-amber-300 border border-amber-500/30">
               <Clock className="w-4 h-4" />
             </div>
           </div>
-          <div className="font-mono text-xl font-extrabold text-amber-300 mt-2">
+          <div className="tabular-nums text-xl font-extrabold text-amber-700 dark:text-amber-300 mt-2">
             {stats.pendingRequests}
           </div>
-          <span className="text-[10px] text-amber-400/80 mt-0.5 block">Awaiting review</span>
+          <span className="text-[11px] text-amber-600 dark:text-amber-400 mt-0.5 block">Awaiting review</span>
         </div>
 
         {/* Accepted (Ready to Pay) */}
-        <div className="rounded-2xl border border-sky-500/30 bg-sky-950/10 p-4 shadow-sm">
+        <div className="rounded-2xl border border-sky-500/30 bg-sky-50 dark:bg-sky-950/10 p-4 shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-sky-300 font-medium">Accepted (Ready to Pay)</span>
-            <div className="w-8 h-8 rounded-xl bg-sky-500/15 flex items-center justify-center text-sky-300 border border-sky-500/30">
+            <span className="text-xs text-sky-700 dark:text-sky-300 font-medium">Accepted (Ready to Pay)</span>
+            <div className="w-8 h-8 rounded-xl bg-sky-500/15 flex items-center justify-center text-sky-700 dark:text-sky-300 border border-sky-500/30">
               <Check className="w-4 h-4" />
             </div>
           </div>
-          <div className="font-mono text-xl font-extrabold text-sky-300 mt-2">
+          <div className="tabular-nums text-xl font-extrabold text-sky-700 dark:text-sky-300 mt-2">
             {stats.acceptedRequests}
           </div>
-          <span className="text-[10px] text-sky-400/80 mt-0.5 block">Approved for disbursement</span>
+          <span className="text-[11px] text-sky-600 dark:text-sky-400 mt-0.5 block">Approved for disbursement</span>
         </div>
 
         {/* Rejected Requests */}
-        <div className="rounded-2xl border border-rose-500/30 bg-rose-950/10 p-4 shadow-sm">
+        <div className="rounded-2xl border border-rose-500/30 bg-rose-50 dark:bg-rose-950/10 p-4 shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-rose-300 font-medium">Rejected Requests</span>
-            <div className="w-8 h-8 rounded-xl bg-rose-500/15 flex items-center justify-center text-rose-300 border border-rose-500/30">
+            <span className="text-xs text-rose-700 dark:text-rose-300 font-medium">Rejected Requests</span>
+            <div className="w-8 h-8 rounded-xl bg-rose-500/15 flex items-center justify-center text-rose-700 dark:text-rose-300 border border-rose-500/30">
               <XCircle className="w-4 h-4" />
             </div>
           </div>
-          <div className="font-mono text-xl font-extrabold text-rose-300 mt-2">
+          <div className="tabular-nums text-xl font-extrabold text-rose-700 dark:text-rose-300 mt-2">
             {stats.rejectedRequests}
           </div>
-          <span className="text-[10px] text-rose-400/80 mt-0.5 block">Declined payouts</span>
+          <span className="text-[11px] text-rose-600 dark:text-rose-400 mt-0.5 block">Declined payouts</span>
         </div>
       </div>
 

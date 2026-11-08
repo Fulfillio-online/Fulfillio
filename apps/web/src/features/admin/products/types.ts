@@ -27,7 +27,8 @@ export interface WarehouseProductItem {
   binCode: string;
   stock: number;
   price: number;
-  status: 'APPROVED' | 'PENDING_APPROVAL' | 'REJECTED';
+  status: 'APPROVED' | 'PENDING_APPROVAL' | 'REJECTED' | 'DRAFT';
+  isDraft?: boolean;
   submittedAt: string;
   imageUrl: string;
 }

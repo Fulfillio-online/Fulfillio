@@ -131,12 +131,12 @@ export function MerchantOrdersTab({
   return (
     <div className="space-y-4">
       {/* Filters Bar */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-4 space-y-3 shadow-lg">
+      <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-navy-900/90 p-4 space-y-3 shadow-lg">
         {/* Top: 7-Range Period Pills */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-slate-300">Period:</span>
-            <div className="inline-flex flex-wrap items-center gap-1 rounded-xl bg-slate-950 p-1 border border-slate-800">
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Period:</span>
+            <div className="inline-flex flex-wrap items-center gap-1 rounded-xl bg-slate-50 dark:bg-navy-950 p-1 border border-slate-200 dark:border-white/10">
               {PERIOD_FILTER_OPTIONS.map((item) => {
                 const active = orderPeriodFilter === item.id;
                 return (
@@ -150,8 +150,8 @@ export function MerchantOrdersTab({
                     }}
                     className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                       active
-                        ? 'bg-emerald-600 text-white shadow-sm'
-                        : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                        ? 'bg-orange-600 text-white shadow-sm'
+                        : 'text-slate-600 dark:text-slate-300 hover:text-white hover:bg-slate-100/60 dark:hover:bg-navy-800/60'
                     }`}
                   >
                     {item.label}
@@ -161,25 +161,25 @@ export function MerchantOrdersTab({
             </div>
           </div>
 
-          <div className="text-xs font-mono text-slate-300">
+          <div className="text-xs tabular-nums text-slate-700 dark:text-slate-200">
             Total COD:{' '}
-            <strong className="text-emerald-400">
+            <strong className="text-orange-600 dark:text-orange-400">
               ৳ {filteredOrders.reduce((sum, o) => sum + o.amount, 0).toLocaleString()}
             </strong>
           </div>
         </div>
 
         {/* Bottom Filter Controls: Search + Status + Jump to Date + Range Picker + Reset */}
-        <div className="flex flex-wrap items-center gap-2.5 pt-3 border-t border-slate-800/80">
+        <div className="flex flex-wrap items-center gap-2.5 pt-3 border-t border-slate-200/80 dark:border-white/10">
           {/* Search */}
           <div className="relative flex-1 min-w-[180px]">
-            <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-2.5" />
+            <Search className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
               value={orderSearch}
               onChange={(e) => setOrderSearch(e.target.value)}
               placeholder="Search Order ID, Customer, Phone, SKU..."
-              className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-mono"
+              className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs text-navy-800 dark:text-white placeholder-slate-500 dark:placeholder-slate-400 focus:outline-none focus:border-orange-500 tabular-nums"
             />
           </div>
 
@@ -187,7 +187,7 @@ export function MerchantOrdersTab({
           <select
             value={orderStatusFilter}
             onChange={(e) => setOrderStatusFilter(e.target.value)}
-            className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+            className="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs text-navy-800 dark:text-slate-100 focus:outline-none focus:border-orange-500"
           >
             <option value="ALL">All Status</option>
             <option value="PENDING_FULFILLMENT">Pending Fulfillment</option>
@@ -212,7 +212,7 @@ export function MerchantOrdersTab({
                 setOrderEndDate(val);
               }
             }}
-            className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-emerald-400 font-semibold focus:outline-none focus:border-emerald-500"
+            className="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs text-orange-600 dark:text-orange-400 font-semibold focus:outline-none focus:border-orange-500"
           >
             <option value="">Jump to Date...</option>
             {availableOrderDates.map((d) => (
@@ -223,24 +223,24 @@ export function MerchantOrdersTab({
           </select>
 
           {/* Date Range Picker */}
-          <div className="flex items-center gap-1.5 rounded-xl bg-slate-950 border border-slate-800 px-2.5 py-1">
-            <Calendar className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span className="text-[11px] text-slate-400 font-medium">From:</span>
+          <div className="flex items-center gap-1.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 px-2.5 py-1">
+            <Calendar className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400 shrink-0" />
+            <span className="text-xs text-slate-600 dark:text-slate-300 font-medium">From:</span>
             <input
               type="date"
               style={{ colorScheme: 'dark' }}
               value={orderStartDate}
               onChange={(e) => setOrderStartDate(e.target.value)}
-              className="bg-transparent text-xs text-slate-200 focus:outline-none font-mono"
+              className="bg-transparent text-xs text-navy-800 dark:text-slate-100 focus:outline-none tabular-nums"
             />
-            <span className="text-slate-600">→</span>
-            <span className="text-[11px] text-slate-400 font-medium">To:</span>
+            <span className="text-slate-400 dark:text-slate-500">→</span>
+            <span className="text-xs text-slate-600 dark:text-slate-300 font-medium">To:</span>
             <input
               type="date"
               style={{ colorScheme: 'dark' }}
               value={orderEndDate}
               onChange={(e) => setOrderEndDate(e.target.value)}
-              className="bg-transparent text-xs text-slate-200 focus:outline-none font-mono"
+              className="bg-transparent text-xs text-navy-800 dark:text-slate-100 focus:outline-none tabular-nums"
             />
           </div>
 
@@ -249,26 +249,26 @@ export function MerchantOrdersTab({
             <button
               type="button"
               onClick={handleResetFilters}
-              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-200 flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 border border-slate-300 dark:border-white/15 text-xs font-semibold text-navy-800 dark:text-slate-100 flex items-center gap-1.5 transition-colors cursor-pointer"
             >
-              <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
+              <RotateCcw className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
               <span>Reset</span>
             </button>
           )}
         </div>
 
         {/* Filter Summary Badge */}
-        <div className="text-xs text-slate-400 pt-1">
-          Showing <strong className="text-white">{filteredOrders.length}</strong> orders for{' '}
-          <strong className="text-emerald-400">{merchant.storeName}</strong>
+        <div className="text-xs text-slate-600 dark:text-slate-300 pt-1">
+          Showing <strong className="text-navy-800 dark:text-white">{filteredOrders.length}</strong> orders for{' '}
+          <strong className="text-orange-600 dark:text-orange-400">{merchant.storeName}</strong>
         </div>
       </div>
 
       {/* Orders Table */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-xl overflow-hidden">
+      <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-navy-900 shadow-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-950/80 text-slate-400 uppercase tracking-wider font-bold border-b border-slate-800 text-[11px]">
+            <thead className="bg-slate-50/80 dark:bg-navy-950/80 text-slate-600 dark:text-slate-300 uppercase tracking-wider font-bold border-b border-slate-200 dark:border-white/10 text-xs">
               <tr>
                 <th className="p-4">Order ID &amp; Date</th>
                 <th className="p-4">Customer</th>
@@ -279,42 +279,42 @@ export function MerchantOrdersTab({
                 <th className="p-4 text-right">COD Amount</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/80">
+            <tbody className="divide-y divide-slate-200/80 dark:divide-white/10">
               {filteredOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-400">
+                  <td colSpan={7} className="p-8 text-center text-slate-600 dark:text-slate-300">
                     No orders match your filter criteria.
                   </td>
                 </tr>
               ) : (
                 filteredOrders.map((ord) => (
-                  <tr key={ord.id} className="hover:bg-slate-800/40 transition-colors">
+                  <tr key={ord.id} className="hover:bg-slate-100/40 dark:hover:bg-navy-800/40 transition-colors">
                     <td className="p-4">
-                      <span className="font-mono text-xs font-bold text-white block">
+                      <span className="tabular-nums text-xs font-bold text-navy-800 dark:text-white block">
                         {ord.id}
                       </span>
-                      <span className="text-[11px] text-slate-400">{ord.date}</span>
+                      <span className="text-xs text-slate-600 dark:text-slate-300">{ord.date}</span>
                     </td>
                     <td className="p-4 space-y-0.5">
-                      <div className="font-bold text-slate-200">{ord.customer}</div>
-                      <div className="text-[11px] text-slate-400 font-mono">{ord.phone}</div>
+                      <div className="font-bold text-navy-800 dark:text-slate-100">{ord.customer}</div>
+                      <div className="text-xs text-slate-600 dark:text-slate-300 tabular-nums">{ord.phone}</div>
                     </td>
                     <td className="p-4">
-                      <div className="font-medium text-white">{ord.items}</div>
-                      <div className="text-[11px] font-mono text-emerald-400">
+                      <div className="font-medium text-navy-800 dark:text-white">{ord.items}</div>
+                      <div className="text-xs tabular-nums text-orange-600 dark:text-orange-400">
                         {ord.sku} (Qty: {ord.qty})
                       </div>
                     </td>
                     <td className="p-4">
-                      <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-slate-950 text-emerald-300 border border-slate-800">
+                      <span className="tabular-nums text-xs px-2 py-0.5 rounded bg-slate-50 dark:bg-navy-950 text-orange-700 dark:text-orange-300 border border-slate-200 dark:border-white/10">
                         {ord.memoCode}
                       </span>
                     </td>
-                    <td className="p-4 font-bold text-slate-300">{ord.courier}</td>
+                    <td className="p-4 font-bold text-slate-700 dark:text-slate-200">{ord.courier}</td>
                     <td className="p-4">
                       <StatusBadge status={ord.status} />
                     </td>
-                    <td className="p-4 text-right font-mono font-bold text-white">
+                    <td className="p-4 text-right tabular-nums font-bold text-navy-800 dark:text-white">
                       ৳{ord.amount.toLocaleString()}
                     </td>
                   </tr>

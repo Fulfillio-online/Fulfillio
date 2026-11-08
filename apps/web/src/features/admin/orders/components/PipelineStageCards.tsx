@@ -69,20 +69,20 @@ export function PipelineStageCards({
             onClick={() => onSelectTab(tab.id)}
             className={`text-left rounded-2xl border p-4 transition-all flex items-center justify-between cursor-pointer ${
               isActive
-                ? 'border-emerald-500 bg-emerald-950/25 shadow-lg'
-                : 'border-slate-800 bg-slate-900/90 hover:border-slate-700'
+                ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/25 shadow-lg'
+                : 'border-slate-200 dark:border-white/10 bg-white/90 dark:bg-navy-900/90 hover:border-slate-300 dark:hover:border-white/15'
             }`}
           >
             <div>
-              <span className="text-xs font-semibold text-slate-400 block">{tab.label}</span>
-              <div className="text-2xl font-extrabold text-white mt-1 font-mono">{tab.count}</div>
-              <span className="text-[11px] text-emerald-400 mt-0.5 block">{tab.subtitle}</span>
+              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 block">{tab.label}</span>
+              <div className="text-2xl font-extrabold text-navy-800 dark:text-white mt-1 tabular-nums">{tab.count}</div>
+              <span className="text-xs text-orange-600 dark:text-orange-400 mt-0.5 block">{tab.subtitle}</span>
             </div>
             <div
               className={`h-11 w-11 rounded-xl flex items-center justify-center border shrink-0 ${
                 isActive
-                  ? 'bg-emerald-600 text-white border-emerald-500'
-                  : 'bg-slate-950 text-emerald-400 border-slate-800'
+                  ? 'bg-orange-600 text-white border-orange-500'
+                  : 'bg-slate-50 dark:bg-navy-950 text-orange-600 dark:text-orange-400 border-slate-200 dark:border-white/10'
               }`}
             >
               <Icon className="w-5 h-5" />

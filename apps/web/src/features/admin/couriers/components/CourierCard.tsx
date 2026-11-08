@@ -35,34 +35,34 @@ export function CourierCard({
   };
 
   return (
-    <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 hover:border-slate-700 flex flex-col justify-between gap-5 shadow-xl transition-all">
+    <div className="p-6 rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/15 flex flex-col justify-between gap-5 shadow-xl transition-all">
       <div className="space-y-4">
         {/* Top Card Header */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3.5">
-            <div className="h-12 w-12 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-center font-mono font-extrabold text-emerald-400 text-sm shrink-0">
+            <div className="h-12 w-12 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 flex items-center justify-center tabular-nums font-extrabold text-orange-600 dark:text-orange-400 text-sm shrink-0">
               {courier.code.slice(0, 3)}
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-bold text-base text-white">{courier.name}</h3>
-                <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 font-mono text-[10px] text-slate-400">
+                <h3 className="font-bold text-base text-navy-800 dark:text-white">{courier.name}</h3>
+                <span className="px-2 py-0.5 rounded bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 tabular-nums text-[11px] text-slate-600 dark:text-slate-300">
                   {courier.environment}
                 </span>
               </div>
-              <p className="text-xs text-slate-400 font-mono mt-0.5 truncate max-w-[280px] sm:max-w-xs">
+              <p className="text-xs text-slate-600 dark:text-slate-300 tabular-nums mt-0.5 truncate max-w-[280px] sm:max-w-xs">
                 {courier.baseUrl}
               </p>
             </div>
           </div>
 
           <span
-            className={`px-2.5 py-1 rounded-full text-[11px] font-bold border shrink-0 ${
+            className={`px-2.5 py-1 rounded-full text-xs font-bold border shrink-0 ${
               courier.status === 'CONNECTED'
-                ? 'bg-emerald-950/90 text-emerald-400 border-emerald-800'
+                ? 'bg-emerald-50 dark:bg-emerald-950/90 text-emerald-600 dark:text-emerald-400 border-emerald-800'
                 : courier.status === 'SANDBOX'
-                ? 'bg-amber-950/90 text-amber-400 border-amber-800'
-                : 'bg-slate-800 text-slate-400 border-slate-700'
+                ? 'bg-amber-50 dark:bg-amber-950/90 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800'
+                : 'bg-slate-100 dark:bg-navy-800 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-white/15'
             }`}
           >
             {courier.status}
@@ -70,26 +70,26 @@ export function CourierCard({
         </div>
 
         {/* Store ID, Rates & Ping Info Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-xl bg-slate-950/90 border border-slate-800/80 text-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-xl bg-slate-50/90 dark:bg-navy-950/90 border border-slate-200/80 dark:border-white/10 text-xs">
           <div>
-            <span className="text-[10px] text-slate-500 uppercase block">Pickup Store ID</span>
-            <span className="font-mono font-bold text-indigo-300">{courier.storeId}</span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase block">Pickup Store ID</span>
+            <span className="tabular-nums font-bold text-indigo-700 dark:text-indigo-300">{courier.storeId}</span>
           </div>
           <div>
-            <span className="text-[10px] text-slate-500 uppercase block">Inside / Outside</span>
-            <span className="font-mono font-bold text-white">
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase block">Inside / Outside</span>
+            <span className="tabular-nums font-bold text-navy-800 dark:text-white">
               ৳{courier.insideDhakaRate} / ৳{courier.outsideDhakaRate}
             </span>
           </div>
           <div>
-            <span className="text-[10px] text-slate-500 uppercase block">COD Fee</span>
-            <span className="font-mono font-bold text-emerald-400">
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase block">COD Fee</span>
+            <span className="tabular-nums font-bold text-orange-600 dark:text-orange-400">
               {courier.codChargePercent}%
             </span>
           </div>
           <div>
-            <span className="text-[10px] text-slate-500 uppercase block">API Health</span>
-            <span className="font-mono text-[11px] text-slate-300">{courier.lastPing}</span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase block">API Health</span>
+            <span className="tabular-nums text-xs text-slate-700 dark:text-slate-200">{courier.lastPing}</span>
           </div>
         </div>
 
@@ -97,12 +97,12 @@ export function CourierCard({
         <div className="space-y-3 text-xs">
           <div>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-slate-400 font-medium">API Key / Client Token:</span>
+              <span className="text-slate-600 dark:text-slate-300 font-medium">API Key / Client Token:</span>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setIsRevealed(!isRevealed)}
-                  className="text-slate-400 hover:text-white flex items-center gap-1 cursor-pointer"
+                  className="text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-white flex items-center gap-1 cursor-pointer"
                 >
                   {isRevealed ? (
                     <>
@@ -120,7 +120,7 @@ export function CourierCard({
                   <button
                     type="button"
                     onClick={() => handleCopy(`key-${courier.id}`, courier.apiKey)}
-                    className="text-emerald-400 hover:text-emerald-300 flex items-center gap-1 cursor-pointer"
+                    className="text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 flex items-center gap-1 cursor-pointer"
                   >
                     {copiedField === `key-${courier.id}` ? (
                       <>
@@ -141,17 +141,17 @@ export function CourierCard({
               type={isRevealed ? 'text' : 'password'}
               value={courier.apiKey || 'Not configured — click Configure below'}
               readOnly
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 font-mono text-xs focus:outline-none"
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-navy-800 dark:text-slate-100 tabular-nums text-xs focus:outline-none"
             />
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-slate-400 font-medium">Webhook Callback URL:</span>
+              <span className="text-slate-600 dark:text-slate-300 font-medium">Webhook Callback URL:</span>
               <button
                 type="button"
                 onClick={() => handleCopy(`wh-${courier.id}`, courier.webhookUrl)}
-                className="text-emerald-400 hover:text-emerald-300 flex items-center gap-1 cursor-pointer"
+                className="text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 flex items-center gap-1 cursor-pointer"
               >
                 {copiedField === `wh-${courier.id}` ? (
                   <>
@@ -170,19 +170,19 @@ export function CourierCard({
               type="text"
               value={courier.webhookUrl}
               readOnly
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-400 font-mono text-xs focus:outline-none"
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-slate-600 dark:text-slate-300 tabular-nums text-xs focus:outline-none"
             />
           </div>
         </div>
       </div>
 
       {/* Card Footer */}
-      <div className="pt-3 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-xs text-slate-400">
+      <div className="pt-3 border-t border-slate-200 dark:border-white/10 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
           <span>Pipeline Override:</span>
           <span
             className={`font-bold ${
-              courier.allowPipelineOverride ? 'text-emerald-400' : 'text-slate-500'
+              courier.allowPipelineOverride ? 'text-orange-600 dark:text-orange-400' : 'text-slate-500 dark:text-slate-400'
             }`}
           >
             {courier.allowPipelineOverride ? 'Allowed' : 'Disabled'}
@@ -193,16 +193,16 @@ export function CourierCard({
           <button
             type="button"
             onClick={() => onTestConnection(courier)}
-            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-semibold text-navy-800 dark:text-slate-100 border border-slate-300 dark:border-white/15 flex items-center gap-1.5 transition-colors cursor-pointer"
           >
-            <Activity className="w-3.5 h-3.5 text-emerald-400" />
+            <Activity className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
             <span>Test Connection</span>
           </button>
 
           <button
             type="button"
             onClick={() => onConfigure(courier)}
-            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white flex items-center gap-1.5 shadow-md transition-colors cursor-pointer"
+            className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-xs font-bold text-white flex items-center gap-1.5 shadow-md transition-colors cursor-pointer"
           >
             <Settings className="w-3.5 h-3.5" />
             <span>Configure</span>

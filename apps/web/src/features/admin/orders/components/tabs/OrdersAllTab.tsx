@@ -39,11 +39,11 @@ export function OrdersAllTab({
   onCancelOrder,
 }: OrdersAllTabProps) {
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900 overflow-hidden shadow-lg p-3 sm:p-0">
+    <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-navy-900 overflow-hidden shadow-lg p-3 sm:p-0">
       {/* 1. Mobile Collapsible List (Visible on mobile screens) */}
       <div className="block md:hidden space-y-2.5">
         {orders.length === 0 ? (
-          <div className="p-8 text-center text-xs text-slate-400">
+          <div className="p-8 text-center text-xs text-slate-600 dark:text-slate-300">
             No active warehouse orders found in this stage matching your filter.
           </div>
         ) : (
@@ -70,7 +70,7 @@ export function OrdersAllTab({
       {/* 2. Desktop Full Table (Visible on md screens and larger) */}
       <div className="hidden md:block overflow-x-auto">
         <table className="w-full min-w-[960px] text-left text-sm">
-          <thead className="bg-slate-950/80 text-slate-400 text-xs uppercase border-b border-slate-800">
+          <thead className="bg-slate-50/80 dark:bg-navy-950/80 text-slate-600 dark:text-slate-300 text-xs uppercase border-b border-slate-200 dark:border-white/10">
             <tr>
               <th className="p-4 w-10">
                 <input
@@ -78,7 +78,7 @@ export function OrdersAllTab({
                   checked={allVisibleSelected}
                   onChange={onToggleSelectAll}
                   aria-label="Select All Orders"
-                  className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-emerald-500 cursor-pointer"
+                  className="h-4 w-4 rounded border-slate-300 dark:border-white/15 bg-white dark:bg-navy-900 text-orange-600 dark:text-orange-500 cursor-pointer"
                 />
               </th>
               <th className="p-4">Order ID &amp; Merchant</th>
@@ -90,10 +90,10 @@ export function OrdersAllTab({
               <th className="p-4 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800">
+          <tbody className="divide-y divide-slate-200 dark:divide-white/10">
             {orders.length === 0 ? (
               <tr>
-                <td colSpan={8} className="p-10 text-center text-xs text-slate-400">
+                <td colSpan={8} className="p-10 text-center text-xs text-slate-600 dark:text-slate-300">
                   No active warehouse orders found in this stage matching your filter.
                 </td>
               </tr>

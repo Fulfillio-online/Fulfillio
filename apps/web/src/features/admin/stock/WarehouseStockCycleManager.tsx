@@ -92,13 +92,13 @@ export function WarehouseStockCycleManager({
   };
 
   return (
-    <div className="space-y-6 text-slate-100">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
+    <div className="space-y-6 text-navy-800 dark:text-navy-800 dark:text-white">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl p-5 shadow-xl">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-navy-800 dark:text-white">
             Stock Adjustments &amp; Cycle Counts
           </h1>
-          <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-0.5">
             Live audit ledger of all Return (RTO) restocks, shelf cycle counts, and supervisor inventory adjustments.
           </p>
         </div>
@@ -108,7 +108,7 @@ export function WarehouseStockCycleManager({
             <button
               type="button"
               onClick={onOpenReturns}
-              className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 cursor-pointer"
+              className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-semibold text-navy-800 dark:text-slate-100 border border-slate-300 dark:border-white/15 cursor-pointer"
             >
               Open Returns &amp; RTO
             </button>
@@ -116,7 +116,7 @@ export function WarehouseStockCycleManager({
           <button
             type="button"
             onClick={() => setIsModalOpen(true)}
-            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white flex items-center gap-1.5 shadow-lg shadow-emerald-950/50 cursor-pointer"
+            className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-xs font-bold text-white flex items-center gap-1.5 shadow-lg shadow-orange-500/25 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>+ New Cycle Count / Adjustment</span>
@@ -125,8 +125,8 @@ export function WarehouseStockCycleManager({
       </div>
 
       {toast && (
-        <div className="p-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center gap-2 animate-in fade-in">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+        <div className="p-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-700 dark:text-emerald-300 text-xs font-semibold flex items-center gap-2 animate-in fade-in">
+          <CheckCircle2 className="w-4 h-4 text-orange-600 dark:text-orange-400" />
           <span>{toast}</span>
         </div>
       )}

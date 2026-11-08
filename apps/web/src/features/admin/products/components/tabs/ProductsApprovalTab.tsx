@@ -17,7 +17,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { WarehouseBin, WarehouseProductItem } from '../../types';
-import { Modal } from '@/components/ui/Modal';
+import { Modal } from '@/components/admin/AdminModal';
 
 interface ProductsApprovalTabProps {
   products: WarehouseProductItem[];
@@ -195,27 +195,27 @@ export function ProductsApprovalTab({
   return (
     <div className="space-y-4">
       {/* Top Banner */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-md">
+      <div className="bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-md">
         <div>
-          <h3 className="text-base font-bold text-white flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-amber-400" />
+          <h3 className="text-base font-bold text-navy-800 dark:text-white flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-amber-600 dark:text-amber-400" />
             <span>Inbound Merchant Product Submissions Awaiting Bin Assignment</span>
           </h3>
-          <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-0.5">
             Review inbound product submissions, assign warehouse storage bins, and approve into active catalog.
           </p>
         </div>
-        <div className="text-xs text-slate-400 flex items-center gap-1.5 self-start sm:self-auto bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
-          <Layers className="w-3.5 h-3.5 text-emerald-400" />
+        <div className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1.5 self-start sm:self-auto bg-slate-50 dark:bg-navy-950 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-white/10">
+          <Layers className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
           <span>Bins can be configured from <strong>Warehouse Bins</strong> tab</span>
         </div>
       </div>
 
       {/* Filter & Controls Bar */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-md">
+      <div className="bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-md">
         {/* Search Input */}
         <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400 pointer-events-none" />
+          <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-600 dark:text-slate-300 pointer-events-none" />
           <input
             type="text"
             value={searchQuery}
@@ -224,7 +224,7 @@ export function ProductsApprovalTab({
               setCurrentPage(1);
             }}
             placeholder="Search by title, SKU, or merchant..."
-            className="w-full pl-10 pr-4 py-2 bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl text-xs sm:text-sm text-slate-200 placeholder-slate-500 focus:outline-none transition-colors"
+            className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 focus:border-orange-500 rounded-xl text-xs sm:text-sm text-navy-800 dark:text-slate-100 placeholder-slate-500 dark:placeholder-slate-400 focus:outline-none transition-colors"
           />
         </div>
 
@@ -237,7 +237,7 @@ export function ProductsApprovalTab({
               setCurrentPage(1);
             }}
             aria-label="Filter by Merchant"
-            className="px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs font-medium text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+            className="px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-medium text-navy-800 dark:text-slate-100 focus:outline-none focus:border-orange-500 cursor-pointer"
           >
             <option value="ALL">All Merchants</option>
             {merchantsList.map((m) => (
@@ -248,38 +248,38 @@ export function ProductsApprovalTab({
           </select>
 
           {/* Rows Limit Selector */}
-          <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5">
-            <span className="text-[11px] font-semibold text-slate-400 whitespace-nowrap">Show:</span>
+          <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl px-2.5 py-1.5">
+            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">Show:</span>
             <select
               value={pageSize}
               onChange={(e) => handlePageSizeChange(Number(e.target.value))}
               aria-label="Items per page"
-              className="bg-transparent text-xs font-bold text-emerald-400 focus:outline-none cursor-pointer"
+              className="bg-transparent text-xs font-bold text-orange-600 dark:text-orange-400 focus:outline-none cursor-pointer"
             >
-              <option value={10} className="bg-slate-950 text-slate-200">10</option>
-              <option value={25} className="bg-slate-950 text-slate-200">25</option>
-              <option value={50} className="bg-slate-950 text-slate-200">50</option>
+              <option value={10} className="bg-slate-50 dark:bg-navy-950 text-navy-800 dark:text-slate-100">10</option>
+              <option value={25} className="bg-slate-50 dark:bg-navy-950 text-navy-800 dark:text-slate-100">25</option>
+              <option value={50} className="bg-slate-50 dark:bg-navy-950 text-navy-800 dark:text-slate-100">50</option>
             </select>
-            <span className="text-[11px] text-slate-500">rows</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">rows</span>
           </div>
         </div>
       </div>
 
       {/* Bulk Action Bar (Visible when 1+ pending products selected) */}
       {selectedProductIds.size > 0 && (
-        <div className="bg-slate-900 border border-emerald-500/50 rounded-2xl p-3 sm:p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xl animate-in fade-in-50 duration-200">
+        <div className="bg-white dark:bg-navy-900 border border-orange-500/50 rounded-2xl p-3 sm:p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xl animate-in fade-in-50 duration-200">
           <div className="flex items-center gap-3">
-            <span className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 font-mono font-bold flex items-center justify-center text-xs">
+            <span className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 tabular-nums font-bold flex items-center justify-center text-xs">
               {selectedProductIds.size}
             </span>
             <div className="text-xs sm:text-sm">
-              <span className="text-white font-bold">{selectedProductIds.size}</span>
-              <span className="text-slate-400"> pending submissions selected</span>
+              <span className="text-navy-800 dark:text-white font-bold">{selectedProductIds.size}</span>
+              <span className="text-slate-600 dark:text-slate-300"> pending submissions selected</span>
             </div>
             <button
               type="button"
               onClick={() => setSelectedProductIds(new Set())}
-              className="text-xs text-slate-400 hover:text-white underline underline-offset-2 ml-2 cursor-pointer"
+              className="text-xs text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-white underline underline-offset-2 ml-2 cursor-pointer"
             >
               Deselect All
             </button>
@@ -293,27 +293,27 @@ export function ProductsApprovalTab({
                 onClick={() =>
                   setActiveMenuId(activeMenuId === 'bulk-actions-approval' ? null : 'bulk-actions-approval')
                 }
-                className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+                className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-bold text-navy-800 dark:text-slate-100 border border-slate-300 dark:border-white/15 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
               >
                 <span>Bulk Actions</span>
                 <ChevronDown
                   className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                    activeMenuId === 'bulk-actions-approval' ? 'rotate-180 text-emerald-400' : 'text-slate-400'
+                    activeMenuId === 'bulk-actions-approval' ? 'rotate-180 text-orange-600 dark:text-orange-400' : 'text-slate-600 dark:text-slate-300'
                   }`}
                 />
               </button>
 
               {activeMenuId === 'bulk-actions-approval' && (
-                <div className="absolute right-0 top-full mt-1.5 w-60 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl py-1.5 z-[100] text-left font-sans text-xs">
+                <div className="absolute right-0 top-full mt-1.5 w-60 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-2xl py-1.5 z-[100] text-left font-sans text-xs">
                   <button
                     type="button"
                     onClick={() => {
                       setActiveMenuId(null);
                       setBulkApproveModalOpen(true);
                     }}
-                    className="w-full px-3.5 py-2 text-left text-emerald-300 hover:bg-emerald-950/40 flex items-center gap-2.5 transition-colors cursor-pointer"
+                    className="w-full px-3.5 py-2 text-left text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 flex items-center gap-2.5 transition-colors cursor-pointer"
                   >
-                    <Check className="w-4 h-4 text-emerald-400 pointer-events-none" />
+                    <Check className="w-4 h-4 text-orange-600 dark:text-orange-400 pointer-events-none" />
                     <span>Approve Selected ({selectedProductIds.size})</span>
                   </button>
 
@@ -323,9 +323,9 @@ export function ProductsApprovalTab({
                       setActiveMenuId(null);
                       setBulkRejectModalOpen(true);
                     }}
-                    className="w-full px-3.5 py-2 text-left text-rose-300 hover:bg-rose-950/40 flex items-center gap-2.5 transition-colors cursor-pointer border-t border-slate-800/80"
+                    className="w-full px-3.5 py-2 text-left text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center gap-2.5 transition-colors cursor-pointer border-t border-slate-200/80 dark:border-white/10"
                   >
-                    <XCircle className="w-4 h-4 text-rose-400 pointer-events-none" />
+                    <XCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 pointer-events-none" />
                     <span>Reject Selected ({selectedProductIds.size})</span>
                   </button>
                 </div>
@@ -336,7 +336,7 @@ export function ProductsApprovalTab({
             <button
               type="button"
               onClick={() => setBulkApproveModalOpen(true)}
-              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-emerald-600/20 transition-all cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-orange-500/25 transition-all cursor-pointer"
             >
               <Check className="w-4 h-4 pointer-events-none" />
               <span>Approve Selected ({selectedProductIds.size})</span>
@@ -346,7 +346,7 @@ export function ProductsApprovalTab({
             <button
               type="button"
               onClick={() => setBulkRejectModalOpen(true)}
-              className="px-3.5 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/40 text-rose-300 hover:text-white active:scale-95 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+              className="px-3.5 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/40 text-rose-700 dark:text-rose-300 hover:text-navy-800 dark:hover:text-white active:scale-95 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
             >
               <XCircle className="w-4 h-4 pointer-events-none" />
               <span>Reject ({selectedProductIds.size})</span>
@@ -356,30 +356,30 @@ export function ProductsApprovalTab({
       )}
 
       {pendingProducts.length === 0 ? (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center space-y-3">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto">
+        <div className="bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl p-12 text-center space-y-3">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
             <CheckCircle2 className="w-6 h-6" />
           </div>
-          <h4 className="text-base font-bold text-white">
+          <h4 className="text-base font-bold text-navy-800 dark:text-white">
             All Merchant Product Submissions Approved!
           </h4>
-          <p className="text-xs sm:text-sm text-slate-400 max-w-md mx-auto">
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 max-w-md mx-auto">
             Every pending product has been assigned a warehouse storage bin and moved into the active catalog.
           </p>
           <button
             type="button"
             onClick={onSwitchToAllTab}
-            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold cursor-pointer"
+            className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold cursor-pointer"
           >
             View All Approved Products
           </button>
         </div>
       ) : filteredProducts.length === 0 ? (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-400 text-sm">
+        <div className="bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl p-8 text-center text-slate-600 dark:text-slate-300 text-sm">
           No pending products match your search or filter.
         </div>
       ) : (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-visible shadow-xl">
+        <div className="bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl overflow-visible shadow-xl">
           {/* 1. Mobile Accordion Card View (Visible on < md) */}
           <div className="block md:hidden p-3 space-y-2.5">
             {paginatedProducts.map((item, idx) => {
@@ -397,8 +397,8 @@ export function ProductsApprovalTab({
                     isMenuOpen ? 'z-50' : 'z-0'
                   } ${
                     isSelected
-                      ? 'border-emerald-500/50 bg-emerald-950/20'
-                      : 'border-slate-800 bg-slate-950/70'
+                      ? 'border-emerald-500/50 bg-emerald-50 dark:bg-emerald-950/20'
+                      : 'border-slate-200 dark:border-white/10 bg-slate-50/70 dark:bg-navy-950/70'
                   }`}
                 >
                   {/* Row 1: Checkbox + Product Thumbnail + Title + Status + Accordion Toggle */}
@@ -409,7 +409,7 @@ export function ProductsApprovalTab({
                         checked={isSelected}
                         onChange={() => toggleSelect(item.id)}
                         aria-label={`Select ${item.title}`}
-                        className="w-4 h-4 rounded bg-slate-950 border-slate-700 text-emerald-500 focus:ring-emerald-500 cursor-pointer accent-emerald-500"
+                        className="w-4 h-4 rounded bg-slate-50 dark:bg-navy-950 border-slate-300 dark:border-white/15 text-orange-600 dark:text-orange-500 focus:ring-orange-500 cursor-pointer accent-orange-500"
                       />
                     </div>
 
@@ -420,31 +420,31 @@ export function ProductsApprovalTab({
                       <img
                         src={item.imageUrl}
                         alt={item.title}
-                        className="w-10 h-10 rounded-lg object-cover border border-slate-800 shrink-0 bg-slate-900"
+                        className="w-10 h-10 rounded-lg object-cover border border-slate-200 dark:border-white/10 shrink-0 bg-white dark:bg-navy-900"
                       />
                       <div className="min-w-0 flex-1">
-                        <div className="text-sm font-bold text-white truncate">{item.title}</div>
-                        <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                        <div className="text-sm font-bold text-navy-800 dark:text-white truncate">{item.title}</div>
+                        <div className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
                           <span>{item.category}</span>
                           <span>·</span>
-                          <span className="text-emerald-400 font-mono font-semibold">{item.fullSku}</span>
+                          <span className="text-orange-600 dark:text-orange-400 tabular-nums font-semibold">{item.fullSku}</span>
                         </div>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-1.5 shrink-0">
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
                         Pending
                       </span>
                       <button
                         type="button"
                         onClick={() => toggleExpand(item.id)}
-                        className="p-1 rounded-lg text-slate-400 hover:text-white cursor-pointer"
+                        className="p-1 rounded-lg text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-white cursor-pointer"
                         aria-label="Toggle details"
                       >
                         <ChevronDown
                           className={`w-4 h-4 transition-transform duration-200 ${
-                            isExpanded ? 'rotate-180 text-emerald-400' : ''
+                            isExpanded ? 'rotate-180 text-orange-600 dark:text-orange-400' : ''
                           }`}
                         />
                       </button>
@@ -452,21 +452,21 @@ export function ProductsApprovalTab({
                   </div>
 
                   {/* Row 2: Merchant Info & Stock */}
-                  <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-900">
-                    <div className="flex items-center gap-1 text-slate-300">
-                      <Store className="w-3.5 h-3.5 text-slate-500" />
+                  <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100 dark:border-white/5">
+                    <div className="flex items-center gap-1 text-slate-700 dark:text-slate-200">
+                      <Store className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                       <span>{item.merchantName}</span>
-                      <span className="text-emerald-400 font-mono font-bold">({item.merchantCode})</span>
+                      <span className="text-orange-600 dark:text-orange-400 tabular-nums font-bold">({item.merchantCode})</span>
                     </div>
-                    <div className="text-cyan-300 font-mono font-bold">
-                      {item.stock} <span className="text-[10px] font-normal text-slate-400">units</span>
+                    <div className="text-cyan-700 dark:text-cyan-300 tabular-nums font-bold">
+                      {item.stock} <span className="text-[11px] font-normal text-slate-600 dark:text-slate-300">units</span>
                     </div>
                   </div>
 
                   {/* Row 3: Target Bin & Actions Dropdown */}
-                  <div className="flex items-center justify-between pt-1 border-t border-slate-900 gap-2">
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-white/5 gap-2">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-[11px] text-slate-400 font-medium">Bin:</span>
+                      <span className="text-xs text-slate-600 dark:text-slate-300 font-medium">Bin:</span>
                       <select
                         value={chosenBin}
                         onChange={(e) =>
@@ -475,7 +475,7 @@ export function ProductsApprovalTab({
                             [item.id]: e.target.value,
                           }))
                         }
-                        className="px-2 py-1 rounded-lg bg-slate-900 border border-slate-700 text-xs font-mono font-bold text-emerald-300 focus:outline-none"
+                        className="px-2 py-1 rounded-lg bg-white dark:bg-navy-900 border border-slate-300 dark:border-white/15 text-xs tabular-nums font-bold text-orange-700 dark:text-orange-300 focus:outline-none"
                       >
                         {bins.map((b) => (
                           <option key={b.code} value={b.code}>
@@ -492,12 +492,12 @@ export function ProductsApprovalTab({
                         onClick={() =>
                           setActiveMenuId(isMenuOpen ? null : `mobile-${item.id}`)
                         }
-                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer"
+                        className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-bold text-navy-800 dark:text-slate-100 border border-slate-300 dark:border-white/15 flex items-center gap-1.5 transition-colors cursor-pointer"
                       >
                         <span>Actions</span>
                         <ChevronDown
                           className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                            isMenuOpen ? 'rotate-180 text-emerald-400' : 'text-slate-400'
+                            isMenuOpen ? 'rotate-180 text-orange-600 dark:text-orange-400' : 'text-slate-600 dark:text-slate-300'
                           }`}
                         />
                       </button>
@@ -506,7 +506,7 @@ export function ProductsApprovalTab({
                         <div
                           className={`absolute right-0 ${
                             isNearBottom ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
-                          } w-52 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl py-1.5 z-[100] text-left text-xs pointer-events-auto`}
+                          } w-52 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-2xl py-1.5 z-[100] text-left text-xs pointer-events-auto`}
                         >
                           <button
                             type="button"
@@ -514,9 +514,9 @@ export function ProductsApprovalTab({
                               setActiveMenuId(null);
                               setViewingProduct(item);
                             }}
-                            className="w-full px-3.5 py-2 text-left text-slate-200 hover:bg-slate-800 flex items-center gap-2 transition-colors cursor-pointer"
+                            className="w-full px-3.5 py-2 text-left text-navy-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 transition-colors cursor-pointer"
                           >
-                            <Eye className="w-4 h-4 text-emerald-400 pointer-events-none" />
+                            <Eye className="w-4 h-4 text-orange-600 dark:text-orange-400 pointer-events-none" />
                             <span>View Details</span>
                           </button>
                           <button
@@ -525,9 +525,9 @@ export function ProductsApprovalTab({
                               setActiveMenuId(null);
                               onOpenApprovalModal('APPROVE', item, chosenBin);
                             }}
-                            className="w-full px-3.5 py-2 text-left text-emerald-300 hover:bg-emerald-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer"
+                            className="w-full px-3.5 py-2 text-left text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer"
                           >
-                            <Check className="w-4 h-4 text-emerald-400 pointer-events-none" />
+                            <Check className="w-4 h-4 text-orange-600 dark:text-orange-400 pointer-events-none" />
                             <span>Approve &amp; Assign Bin</span>
                           </button>
                           <button
@@ -536,9 +536,9 @@ export function ProductsApprovalTab({
                               setActiveMenuId(null);
                               onOpenApprovalModal('REJECT', item, chosenBin);
                             }}
-                            className="w-full px-3.5 py-2 text-left text-rose-300 hover:bg-rose-950/40 flex items-center gap-2 transition-colors cursor-pointer border-t border-slate-800/80"
+                            className="w-full px-3.5 py-2 text-left text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center gap-2 transition-colors cursor-pointer border-t border-slate-200/80 dark:border-white/10"
                           >
-                            <XCircle className="w-4 h-4 text-rose-400 pointer-events-none" />
+                            <XCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 pointer-events-none" />
                             <span>Reject / QC Fail</span>
                           </button>
                         </div>
@@ -548,19 +548,19 @@ export function ProductsApprovalTab({
 
                   {/* Expanded Accordion Details */}
                   {isExpanded && (
-                    <div className="pt-2 border-t border-slate-800/80 space-y-2 text-xs text-slate-300">
-                      <div className="grid grid-cols-2 gap-2 bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/60">
+                    <div className="pt-2 border-t border-slate-200/80 dark:border-white/10 space-y-2 text-xs text-slate-700 dark:text-slate-200">
+                      <div className="grid grid-cols-2 gap-2 bg-white/60 dark:bg-navy-900/60 p-2.5 rounded-lg border border-slate-200/60 dark:border-white/10">
                         <div>
-                          <div className="text-[10px] text-slate-500 font-semibold uppercase">Variant</div>
-                          <div className="font-medium text-slate-200">{item.color} · {item.size}</div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold uppercase">Variant</div>
+                          <div className="font-medium text-navy-800 dark:text-slate-100">{item.color} · {item.size}</div>
                         </div>
                         <div>
-                          <div className="text-[10px] text-slate-500 font-semibold uppercase">Price</div>
-                          <div className="font-mono font-bold text-white">৳{item.price.toLocaleString()}</div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold uppercase">Price</div>
+                          <div className="tabular-nums font-bold text-navy-800 dark:text-white">৳{item.price.toLocaleString()}</div>
                         </div>
                         <div className="col-span-2">
-                          <div className="text-[10px] text-slate-500 font-semibold uppercase">Submitted</div>
-                          <div className="text-slate-400">{item.submittedAt}</div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold uppercase">Submitted</div>
+                          <div className="text-slate-600 dark:text-slate-300">{item.submittedAt}</div>
                         </div>
                       </div>
                     </div>
@@ -574,14 +574,14 @@ export function ProductsApprovalTab({
           <div className="hidden md:block overflow-x-auto overflow-y-visible">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-slate-800 bg-slate-950/70 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                <tr className="border-b border-slate-200 dark:border-white/10 bg-slate-50/70 dark:bg-navy-950/70 text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
                   <th className="py-3.5 pl-4 pr-2 w-10 align-middle">
                     <input
                       type="checkbox"
                       checked={isAllPageSelected}
                       onChange={toggleSelectAllPage}
                       aria-label="Select all pending products on this page"
-                      className="w-4 h-4 rounded bg-slate-950 border-slate-700 text-emerald-500 focus:ring-emerald-500 cursor-pointer accent-emerald-500"
+                      className="w-4 h-4 rounded bg-slate-50 dark:bg-navy-950 border-slate-300 dark:border-white/15 text-orange-600 dark:text-orange-500 focus:ring-orange-500 cursor-pointer accent-orange-500"
                     />
                   </th>
                   <th className="py-3.5 px-3 align-middle">Product</th>
@@ -593,7 +593,7 @@ export function ProductsApprovalTab({
                   <th className="py-3.5 pl-3 pr-5 text-right align-middle">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60 text-xs">
+              <tbody className="divide-y divide-slate-200/60 dark:divide-white/10 text-xs">
                 {paginatedProducts.map((item, idx) => {
                   const isNearBottom = idx > 0 && idx >= paginatedProducts.length - 2;
                   const chosenBin =
@@ -604,8 +604,8 @@ export function ProductsApprovalTab({
                   return (
                     <tr
                       key={item.id}
-                      className={`hover:bg-slate-800/40 transition-colors group ${
-                        isSelected ? 'bg-emerald-950/15' : ''
+                      className={`hover:bg-slate-100/40 dark:hover:bg-navy-800/40 transition-colors group ${
+                        isSelected ? 'bg-emerald-50 dark:bg-emerald-950/15' : ''
                       }`}
                     >
                       {/* Checkbox */}
@@ -615,7 +615,7 @@ export function ProductsApprovalTab({
                           checked={isSelected}
                           onChange={() => toggleSelect(item.id)}
                           aria-label={`Select ${item.title}`}
-                          className="w-4 h-4 rounded bg-slate-950 border-slate-700 text-emerald-500 focus:ring-emerald-500 cursor-pointer accent-emerald-500"
+                          className="w-4 h-4 rounded bg-slate-50 dark:bg-navy-950 border-slate-300 dark:border-white/15 text-orange-600 dark:text-orange-500 focus:ring-orange-500 cursor-pointer accent-orange-500"
                         />
                       </td>
 
@@ -625,18 +625,18 @@ export function ProductsApprovalTab({
                           <img
                             src={item.imageUrl}
                             alt={item.title}
-                            className="w-11 h-11 rounded-xl object-cover border border-slate-800 bg-slate-950 shrink-0"
+                            className="w-11 h-11 rounded-xl object-cover border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-navy-950 shrink-0"
                           />
                           <div className="min-w-0 max-w-[220px]">
                             <div
-                              className="text-sm font-bold text-white truncate cursor-pointer hover:text-emerald-400 transition-colors"
+                              className="text-sm font-bold text-navy-800 dark:text-white truncate cursor-pointer hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
                               title={item.title}
                               onClick={() => setViewingProduct(item)}
                             >
                               {item.title}
                             </div>
-                            <div className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5">
-                              <span className="px-1.5 py-0.2 rounded bg-slate-950 border border-slate-800 text-[10px] font-medium text-slate-300">
+                            <div className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1.5 mt-0.5">
+                              <span className="px-1.5 py-0.2 rounded bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-[11px] font-medium text-slate-700 dark:text-slate-200">
                                 {item.category}
                               </span>
                             </div>
@@ -646,28 +646,28 @@ export function ProductsApprovalTab({
 
                       {/* Merchant */}
                       <td className="py-3 px-3 align-middle">
-                        <div className="font-semibold text-slate-200">{item.merchantName}</div>
-                        <div className="font-mono text-[11px] font-bold text-emerald-400">
+                        <div className="font-semibold text-navy-800 dark:text-slate-100">{item.merchantName}</div>
+                        <div className="tabular-nums text-xs font-bold text-orange-600 dark:text-orange-400">
                           {item.merchantCode}
                         </div>
                       </td>
 
                       {/* SKU & Variant */}
                       <td className="py-3 px-3 align-middle">
-                        <div className="font-mono font-bold text-emerald-400 text-xs" title={item.fullSku}>
+                        <div className="tabular-nums font-bold text-orange-600 dark:text-orange-400 text-xs" title={item.fullSku}>
                           {item.fullSku}
                         </div>
-                        <div className="text-[11px] text-slate-400 mt-0.5">
+                        <div className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
                           {item.color} · {item.size}
                         </div>
                       </td>
 
                       {/* Received Qty & Price */}
                       <td className="py-3 px-3 align-middle">
-                        <div className="font-mono font-bold text-cyan-300 text-xs">
-                          {item.stock} <span className="text-[10px] font-normal text-slate-400">units</span>
+                        <div className="tabular-nums font-bold text-cyan-700 dark:text-cyan-300 text-xs">
+                          {item.stock} <span className="text-[11px] font-normal text-slate-600 dark:text-slate-300">units</span>
                         </div>
-                        <div className="font-mono text-[11px] text-slate-300 mt-0.5">
+                        <div className="tabular-nums text-xs text-slate-700 dark:text-slate-200 mt-0.5">
                           ৳{item.price.toLocaleString()}
                         </div>
                       </td>
@@ -683,7 +683,7 @@ export function ProductsApprovalTab({
                             }))
                           }
                           aria-label={`Select Bin for ${item.title}`}
-                          className="px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 hover:border-slate-700 text-xs font-mono font-bold text-emerald-300 focus:outline-none focus:border-emerald-500 cursor-pointer shadow-inner"
+                          className="px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/15 text-xs tabular-nums font-bold text-orange-700 dark:text-orange-300 focus:outline-none focus:border-orange-500 cursor-pointer shadow-inner"
                         >
                           {bins.map((b) => (
                             <option key={b.code} value={b.code}>
@@ -694,9 +694,9 @@ export function ProductsApprovalTab({
                       </td>
 
                       {/* Submitted At */}
-                      <td className="py-3 px-3 whitespace-nowrap text-slate-400 text-xs align-middle">
+                      <td className="py-3 px-3 whitespace-nowrap text-slate-600 dark:text-slate-300 text-xs align-middle">
                         <div className="flex items-center gap-1.5">
-                          <Clock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                          <Clock className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 shrink-0" />
                           <span>{item.submittedAt}</span>
                         </div>
                       </td>
@@ -709,12 +709,12 @@ export function ProductsApprovalTab({
                             onClick={() =>
                               setActiveMenuId(isMenuOpen ? null : `desktop-${item.id}`)
                             }
-                            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+                            className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-bold text-navy-800 dark:text-slate-100 border border-slate-300 dark:border-white/15 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
                           >
                             <span>Actions</span>
                             <ChevronDown
                               className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                                isMenuOpen ? 'rotate-180 text-emerald-400' : 'text-slate-400'
+                                isMenuOpen ? 'rotate-180 text-orange-600 dark:text-orange-400' : 'text-slate-600 dark:text-slate-300'
                               }`}
                             />
                           </button>
@@ -723,7 +723,7 @@ export function ProductsApprovalTab({
                             <div
                               className={`absolute right-0 ${
                                 isNearBottom ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
-                              } w-52 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl py-1.5 z-[100] text-left font-sans text-xs pointer-events-auto`}
+                              } w-52 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-2xl py-1.5 z-[100] text-left font-sans text-xs pointer-events-auto`}
                             >
                               {/* 1. View Details */}
                               <button
@@ -732,9 +732,9 @@ export function ProductsApprovalTab({
                                   setActiveMenuId(null);
                                   setViewingProduct(item);
                                 }}
-                                className="w-full px-3.5 py-2 text-left text-slate-200 hover:bg-slate-800 flex items-center gap-2.5 transition-colors cursor-pointer"
+                                className="w-full px-3.5 py-2 text-left text-navy-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2.5 transition-colors cursor-pointer"
                               >
-                                <Eye className="w-4 h-4 text-emerald-400 pointer-events-none" />
+                                <Eye className="w-4 h-4 text-orange-600 dark:text-orange-400 pointer-events-none" />
                                 <span>View Details</span>
                               </button>
 
@@ -745,9 +745,9 @@ export function ProductsApprovalTab({
                                   setActiveMenuId(null);
                                   onOpenApprovalModal('APPROVE', item, chosenBin);
                                 }}
-                                className="w-full px-3.5 py-2 text-left text-emerald-300 hover:bg-emerald-950/40 font-semibold flex items-center gap-2.5 transition-colors cursor-pointer"
+                                className="w-full px-3.5 py-2 text-left text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 font-semibold flex items-center gap-2.5 transition-colors cursor-pointer"
                               >
-                                <Check className="w-4 h-4 text-emerald-400 pointer-events-none" />
+                                <Check className="w-4 h-4 text-orange-600 dark:text-orange-400 pointer-events-none" />
                                 <span>Approve &amp; Assign Bin</span>
                               </button>
 
@@ -758,9 +758,9 @@ export function ProductsApprovalTab({
                                   setActiveMenuId(null);
                                   onOpenApprovalModal('REJECT', item, chosenBin);
                                 }}
-                                className="w-full px-3.5 py-2 text-left text-rose-300 hover:bg-rose-950/40 flex items-center gap-2.5 transition-colors cursor-pointer border-t border-slate-800/80"
+                                className="w-full px-3.5 py-2 text-left text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center gap-2.5 transition-colors cursor-pointer border-t border-slate-200/80 dark:border-white/10"
                               >
-                                <XCircle className="w-4 h-4 text-rose-400 pointer-events-none" />
+                                <XCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 pointer-events-none" />
                                 <span>Reject / QC Fail</span>
                               </button>
                             </div>
@@ -775,13 +775,13 @@ export function ProductsApprovalTab({
           </div>
 
           {/* 3. Pagination Footer */}
-          <div className="p-4 border-t border-slate-800 bg-slate-950/60 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400">
+          <div className="p-4 border-t border-slate-200 dark:border-white/10 bg-slate-50/60 dark:bg-navy-950/60 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600 dark:text-slate-300">
             <div>
-              Showing <strong className="text-white">{totalItems === 0 ? 0 : startIndex + 1}</strong> to{' '}
-              <strong className="text-white">
+              Showing <strong className="text-navy-800 dark:text-white">{totalItems === 0 ? 0 : startIndex + 1}</strong> to{' '}
+              <strong className="text-navy-800 dark:text-white">
                 {Math.min(startIndex + pageSize, totalItems)}
               </strong>{' '}
-              of <strong className="text-white">{totalItems}</strong> pending submissions
+              of <strong className="text-navy-800 dark:text-white">{totalItems}</strong> pending submissions
             </div>
 
             <div className="flex items-center gap-1.5">
@@ -789,7 +789,7 @@ export function ProductsApprovalTab({
                 type="button"
                 onClick={() => handlePageChange(safePage - 1)}
                 disabled={safePage <= 1}
-                className="p-1.5 rounded-lg border border-slate-800 bg-slate-900 text-slate-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                className="p-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-navy-900 text-slate-700 dark:text-slate-200 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
                 aria-label="Previous Page"
               >
                 <ChevronLeft className="w-4 h-4" />
@@ -802,8 +802,8 @@ export function ProductsApprovalTab({
                   onClick={() => handlePageChange(pageNum)}
                   className={`w-7 h-7 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
                     pageNum === safePage
-                      ? 'bg-emerald-600 text-white shadow-sm'
-                      : 'bg-slate-900 border border-slate-800 text-slate-300 hover:text-white'
+                      ? 'bg-orange-600 text-white shadow-sm'
+                      : 'bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 hover:text-white'
                   }`}
                 >
                   {pageNum}
@@ -814,7 +814,7 @@ export function ProductsApprovalTab({
                 type="button"
                 onClick={() => handlePageChange(safePage + 1)}
                 disabled={safePage >= totalPages}
-                className="p-1.5 rounded-lg border border-slate-800 bg-slate-900 text-slate-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                className="p-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-navy-900 text-slate-700 dark:text-slate-200 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
                 aria-label="Next Page"
               >
                 <ChevronRight className="w-4 h-4" />
@@ -835,71 +835,71 @@ export function ProductsApprovalTab({
         >
           <div className="space-y-4">
             {/* Product Overview Header */}
-            <div className="flex flex-col sm:flex-row items-start gap-4 p-4 rounded-2xl bg-slate-950 border border-slate-800">
+            <div className="flex flex-col sm:flex-row items-start gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10">
               <img
                 src={viewingProduct.imageUrl}
                 alt={viewingProduct.title}
-                className="w-full sm:w-36 h-36 rounded-xl object-cover border border-slate-800 shrink-0 bg-slate-900"
+                className="w-full sm:w-36 h-36 rounded-xl object-cover border border-slate-200 dark:border-white/10 shrink-0 bg-white dark:bg-navy-900"
               />
               <div className="space-y-2 flex-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
                     Pending Approval
                   </span>
-                  <span className="px-2 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider bg-slate-900 text-slate-300 border border-slate-800">
+                  <span className="px-2 py-0.5 rounded-md text-xs font-bold uppercase tracking-wider bg-white dark:bg-navy-900 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-white/10">
                     {viewingProduct.category}
                   </span>
-                  <span className="text-xs text-slate-400 flex items-center gap-1 sm:ml-auto">
-                    <Clock className="w-3.5 h-3.5 text-slate-500" />
+                  <span className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1 sm:ml-auto">
+                    <Clock className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                     Submitted {viewingProduct.submittedAt}
                   </span>
                 </div>
-                <h3 className="text-base font-bold text-white leading-snug">
+                <h3 className="text-base font-bold text-navy-800 dark:text-white leading-snug">
                   {viewingProduct.title}
                 </h3>
-                <div className="flex items-center gap-2 text-xs text-slate-300">
-                  <Store className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Merchant: <strong className="text-white">{viewingProduct.merchantName}</strong> ({viewingProduct.merchantCode})</span>
+                <div className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-200">
+                  <Store className="w-3.5 h-3.5 text-slate-600 dark:text-slate-300" />
+                  <span>Merchant: <strong className="text-navy-800 dark:text-white">{viewingProduct.merchantName}</strong> ({viewingProduct.merchantCode})</span>
                 </div>
               </div>
             </div>
 
             {/* Specifications Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Full SKU</div>
-                <div className="text-xs font-mono font-bold text-emerald-400 truncate mt-1">
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Full SKU</div>
+                <div className="text-xs tabular-nums font-bold text-orange-600 dark:text-orange-400 truncate mt-1">
                   {viewingProduct.fullSku}
                 </div>
               </div>
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Variant</div>
-                <div className="text-xs font-medium text-slate-200 truncate mt-1">
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Variant</div>
+                <div className="text-xs font-medium text-navy-800 dark:text-slate-100 truncate mt-1">
                   {viewingProduct.color} · {viewingProduct.size}
                 </div>
               </div>
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Unit Price</div>
-                <div className="text-xs font-mono font-bold text-white mt-1">
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Unit Price</div>
+                <div className="text-xs tabular-nums font-bold text-navy-800 dark:text-white mt-1">
                   ৳{viewingProduct.price.toLocaleString()}
                 </div>
               </div>
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Received Stock</div>
-                <div className="text-xs font-mono font-bold text-cyan-300 mt-1">
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Received Stock</div>
+                <div className="text-xs tabular-nums font-bold text-cyan-700 dark:text-cyan-300 mt-1">
                   {viewingProduct.stock} pcs
                 </div>
               </div>
             </div>
 
             {/* Assign Target Bin */}
-            <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-                  <Layers className="w-4 h-4 text-emerald-400" />
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                  <Layers className="w-4 h-4 text-orange-600 dark:text-orange-400" />
                   <span>Assign Target Storage Bin</span>
                 </label>
-                <p className="text-xs text-slate-400 mt-0.5">Physical location where this inventory will be shelved</p>
+                <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">Physical location where this inventory will be shelved</p>
               </div>
               <select
                 value={pendingBinSelection[viewingProduct.id] || viewingProduct.binCode || bins[0]?.code}
@@ -909,7 +909,7 @@ export function ProductsApprovalTab({
                     [viewingProduct.id]: e.target.value,
                   }))
                 }
-                className="bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-xs font-mono font-bold text-emerald-300 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                className="bg-white dark:bg-navy-900 border border-slate-300 dark:border-white/15 rounded-xl px-3.5 py-2 text-xs tabular-nums font-bold text-orange-700 dark:text-orange-300 focus:outline-none focus:border-orange-500 cursor-pointer"
               >
                 {bins.map((b) => (
                   <option key={b.code} value={b.code}>
@@ -920,11 +920,11 @@ export function ProductsApprovalTab({
             </div>
 
             {/* Modal Actions */}
-            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-800">
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-200 dark:border-white/10">
               <button
                 type="button"
                 onClick={() => setViewingProduct(null)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer transition-colors"
+                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-200 text-xs font-semibold cursor-pointer transition-colors"
               >
                 Close
               </button>
@@ -940,9 +940,9 @@ export function ProductsApprovalTab({
                   setViewingProduct(null);
                   onOpenApprovalModal('REJECT', prod, bin);
                 }}
-                className="px-4 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
+                className="px-4 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
               >
-                <XCircle className="w-4 h-4 text-rose-400 pointer-events-none" />
+                <XCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 pointer-events-none" />
                 <span>Reject / QC Fail</span>
               </button>
               <button
@@ -957,7 +957,7 @@ export function ProductsApprovalTab({
                   setViewingProduct(null);
                   onOpenApprovalModal('APPROVE', prod, bin);
                 }}
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-emerald-600/20 cursor-pointer transition-colors"
+                className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-orange-500/25 cursor-pointer transition-colors"
               >
                 <Check className="w-4 h-4 pointer-events-none" />
                 <span>Approve &amp; Assign Bin</span>
@@ -976,31 +976,31 @@ export function ProductsApprovalTab({
       >
         <div className="space-y-4">
           <div className="flex items-start gap-3.5">
-            <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border bg-emerald-500/15 border-emerald-500/30 text-emerald-400">
+            <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border bg-emerald-500/15 border-emerald-500/30 text-emerald-600 dark:text-emerald-400">
               <CheckCircle2 className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-sm text-slate-200 font-semibold">
+              <p className="text-sm text-navy-800 dark:text-slate-100 font-semibold">
                 Confirm approving {selectedProductIds.size} selected products?
               </p>
-              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+              <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
                 All {selectedProductIds.size} products will be assigned their target warehouse bins and activated into the live inventory catalog.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-800">
+          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-200 dark:border-white/10">
             <button
               type="button"
               onClick={() => setBulkApproveModalOpen(false)}
-              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer transition-colors"
+              className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-200 text-xs font-semibold cursor-pointer transition-colors"
             >
               Cancel
             </button>
             <button
               type="button"
               onClick={handleConfirmBulkApprove}
-              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-emerald-600/20 cursor-pointer transition-colors"
+              className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-orange-500/25 cursor-pointer transition-colors"
             >
               <Check className="w-4 h-4 pointer-events-none" />
               <span>Approve {selectedProductIds.size} Products</span>
@@ -1018,24 +1018,24 @@ export function ProductsApprovalTab({
       >
         <div className="space-y-4">
           <div className="flex items-start gap-3.5">
-            <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border bg-rose-500/15 border-rose-500/30 text-rose-400">
+            <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border bg-rose-500/15 border-rose-500/30 text-rose-600 dark:text-rose-400">
               <AlertTriangle className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-sm text-slate-200 font-semibold">
+              <p className="text-sm text-navy-800 dark:text-slate-100 font-semibold">
                 Are you sure you want to reject {selectedProductIds.size} product submissions?
               </p>
-              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+              <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
                 These submissions will be marked as rejected/QC failed and will not be added to active inventory.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-800">
+          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-200 dark:border-white/10">
             <button
               type="button"
               onClick={() => setBulkRejectModalOpen(false)}
-              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer transition-colors"
+              className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-200 text-xs font-semibold cursor-pointer transition-colors"
             >
               Cancel
             </button>

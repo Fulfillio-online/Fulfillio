@@ -31,7 +31,7 @@ export default function AdminProductsPage() {
   return (
     <Suspense
       fallback={
-        <div className="p-8 text-center text-slate-400 font-mono text-sm animate-pulse">
+        <div className="p-8 text-center text-slate-600 dark:text-slate-300 tabular-nums text-sm animate-pulse">
           Loading Warehouse Products Catalog...
         </div>
       }

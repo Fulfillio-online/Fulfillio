@@ -210,18 +210,18 @@ export function WarehouseReturnsManager({
   });
 
   return (
-    <div className="space-y-6 text-slate-100">
+    <div className="space-y-6 text-navy-800 dark:text-navy-800 dark:text-white">
       {/* Header Banner */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 shadow-xl">
+      <div className="bg-white/90 dark:bg-navy-900/90 border border-slate-200 dark:border-white/10 rounded-2xl p-5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 shadow-xl">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 shrink-0">
+          <div className="w-11 h-11 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-600 dark:text-rose-400 shrink-0">
             <RotateCcw className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">
+            <h2 className="text-lg sm:text-xl font-bold text-navy-800 dark:text-white tracking-tight">
               Warehouse Returns &amp; Reverse Logistics Intake
             </h2>
-            <p className="text-xs sm:text-sm text-slate-400">
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300">
               Inspect returned parcels from Steadfast, Pathao &amp; RedX, verify tags, restock undamaged units to storage bins, and quarantine damages
             </p>
           </div>
@@ -232,9 +232,9 @@ export function WarehouseReturnsManager({
             <button
               type="button"
               onClick={onOpenProducts}
-              className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-navy-800 dark:text-slate-100 border border-slate-300 dark:border-white/15 flex items-center gap-1.5 transition-colors cursor-pointer"
             >
-              <Package className="w-3.5 h-3.5 text-emerald-400" />
+              <Package className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
               <span>Products Catalog</span>
             </button>
           )}
@@ -242,7 +242,7 @@ export function WarehouseReturnsManager({
           <button
             type="button"
             onClick={() => setIsNewReturnModalOpen(true)}
-            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-1.5 shadow-lg shadow-emerald-950/50 transition-colors cursor-pointer"
+            className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold flex items-center gap-1.5 shadow-lg shadow-orange-500/25 transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>+ Log Inbound Return</span>
@@ -252,15 +252,15 @@ export function WarehouseReturnsManager({
 
       {/* Toast Feedback */}
       {toastMessage && (
-        <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-sm shadow-md animate-in fade-in">
+        <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-700 dark:text-emerald-300 text-sm shadow-md animate-in fade-in">
           <div className="flex items-center gap-2.5">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <CheckCircle2 className="w-4 h-4 text-orange-600 dark:text-orange-400 shrink-0" />
             <span>{toastMessage}</span>
           </div>
           <button
             type="button"
             onClick={() => setToastMessage(null)}
-            className="text-xs text-emerald-400 hover:text-emerald-200"
+            className="text-xs text-orange-600 dark:text-orange-400 hover:text-orange-800 dark:hover:text-orange-200"
           >
             Dismiss
           </button>

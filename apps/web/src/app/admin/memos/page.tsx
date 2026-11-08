@@ -101,17 +101,17 @@ export default function AdminMemosPage() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Memo / Invoice Templates</h1>
-          <p className="text-sm text-slate-400">
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-navy-900 dark:text-white">Memo &amp; Invoice Templates</h1>
+          <p className="text-sm text-slate-600 dark:text-slate-300">
             All custom branded 4x6&quot; invoice &amp; memo slips designed by merchants. Click Print Test to print only the selected 4x6&quot; invoice.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-400">Filter Merchant:</span>
+          <span className="text-xs text-slate-600 dark:text-slate-300">Filter Merchant:</span>
           <select
             value={memoFilter}
             onChange={(e) => setMemoFilter(e.target.value)}
-            className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            className="px-3 py-1.5 rounded-lg bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 text-xs text-navy-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-orange-500"
           >
             <option value="ALL">All Merchants ({memos.length})</option>
             <option value="MC-101">Urban Threads BD (MC-101)</option>
@@ -126,82 +126,82 @@ export default function AdminMemosPage() {
         {filteredMemos.map((memo) => (
           <div
             key={memo.id}
-            className="rounded-2xl border border-slate-800 bg-slate-900/90 overflow-hidden flex flex-col justify-between hover:border-slate-700 transition-all shadow-lg"
+            className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-navy-900/90 overflow-hidden flex flex-col justify-between hover:border-slate-300 dark:hover:border-white/15 transition-all shadow-lg"
           >
             {/* Card Header */}
-            <div className="p-4 border-b border-slate-800/80 bg-slate-900 flex items-center justify-between">
+            <div className="p-4 border-b border-slate-200/80 dark:border-white/10 bg-white dark:bg-navy-900 flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 font-mono text-[11px] font-bold border border-indigo-800">
+                  <span className="px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 tabular-nums text-xs font-bold border border-indigo-200 dark:border-indigo-800">
                     {memo.code}
                   </span>
                   {memo.isDefault && (
-                    <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 text-[10px] font-semibold border border-emerald-800">
+                    <span className="px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 text-[11px] font-semibold border border-emerald-800">
                       Default
                     </span>
                   )}
                 </div>
-                <span className="text-xs text-slate-400 block mt-1">
-                  Owner: <span className="text-slate-200 font-semibold">{memo.merchantName}</span> ({memo.merchantCode})
+                <span className="text-xs text-slate-600 dark:text-slate-300 block mt-1">
+                  Owner: <span className="text-navy-800 dark:text-slate-100 font-semibold">{memo.merchantName}</span> ({memo.merchantCode})
                 </span>
               </div>
-              <span className="px-2.5 py-1 rounded-full bg-slate-800 text-[11px] font-medium text-slate-300 border border-slate-700">
+              <span className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-navy-800 text-xs font-medium text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-white/15">
                 {memo.paperSize}
               </span>
             </div>
 
             {/* Card Body — Visual 4x6 Thermal Sticker Preview */}
             <div className="p-4 flex-1">
-              <div className="rounded-xl border-2 border-dashed border-slate-700 bg-white text-slate-950 p-4 shadow-inner space-y-3 font-sans text-xs">
+              <div className="rounded-xl border-2 border-dashed border-slate-300 dark:border-white/15 bg-white text-slate-950 p-4 shadow-inner space-y-3 font-sans text-xs">
                 {/* Reseller Branding Header */}
-                <div className="text-center pb-2 border-b border-slate-200">
+                <div className="text-center pb-2 border-b border-slate-200 dark:border-white/15">
                   <div
-                    className="font-black text-sm uppercase tracking-wide"
+                    className="font-extrabold text-sm uppercase tracking-wide"
                     style={{ color: memo.color }}
                   >
                     {memo.resellerName}
                   </div>
-                  <div className="text-[11px] text-slate-600 mt-0.5">{memo.phone}</div>
-                  <div className="text-[10px] text-slate-500">{memo.address}</div>
+                  <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{memo.phone}</div>
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400">{memo.address}</div>
                 </div>
 
                 {/* Sample Order Data */}
                 <div className="space-y-1.5 py-1">
-                  <div className="flex justify-between text-[11px] font-semibold text-slate-700">
+                  <div className="flex justify-between text-xs font-semibold text-slate-300 dark:text-slate-600">
                     <span>Customer: Tariqul Islam</span>
-                    <span className="font-mono">#ORD-9824</span>
+                    <span className="tabular-nums">#ORD-9824</span>
                   </div>
-                  <div className="text-[10px] text-slate-600">Banani Block-D, Dhaka</div>
+                  <div className="text-[11px] text-slate-400 dark:text-slate-500">Banani Block-D, Dhaka</div>
                 </div>
 
                 {/* Line Items Table Mockup */}
-                <div className="border-t border-b border-slate-200 py-1.5 space-y-1">
+                <div className="border-t border-b border-slate-200 dark:border-white/15 py-1.5 space-y-1">
                   {memo.sampleItems.map((item, idx) => (
-                    <div key={idx} className="flex justify-between text-[11px]">
+                    <div key={idx} className="flex justify-between text-xs">
                       <span>
                         {item.name} x {item.qty}
                       </span>
-                      <span className="font-mono font-bold">{item.price}</span>
+                      <span className="tabular-nums font-bold">{item.price}</span>
                     </div>
                   ))}
                 </div>
 
                 {/* COD Amount Banner */}
-                <div className="bg-slate-100 rounded p-1.5 flex justify-between items-center font-bold text-[11px]">
+                <div className="bg-slate-100 dark:bg-slate-300 rounded p-1.5 flex justify-between items-center font-bold text-xs">
                   <span>Cash on Delivery (COD):</span>
-                  <span className="font-mono text-sm text-slate-900">৳ 3,450</span>
+                  <span className="tabular-nums text-sm text-slate-100 dark:text-slate-800">৳ 3,450</span>
                 </div>
 
                 {/* Reseller Policy Footer */}
-                <div className="text-[9px] text-center text-slate-500 italic pt-1">
+                <div className="text-[11px] text-center text-slate-500 dark:text-slate-400 italic pt-1">
                   &quot;{memo.note}&quot;
                 </div>
               </div>
             </div>
 
             {/* Card Footer Actions */}
-            <div className="p-3 border-t border-slate-800 bg-slate-900/60 flex items-center justify-between">
-              <span className="text-[11px] text-slate-500 font-mono">Created: {memo.created}</span>
+            <div className="p-3 border-t border-slate-200 dark:border-white/10 bg-white/60 dark:bg-navy-900/60 flex items-center justify-between">
+              <span className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">Created: {memo.created}</span>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -209,7 +209,7 @@ export default function AdminMemosPage() {
                     navigator.clipboard.writeText(memo.code);
                     alert(`Copied Memo Code: ${memo.code}`);
                   }}
-                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 border border-slate-700 flex items-center gap-1 transition-colors cursor-pointer"
+                  className="px-2.5 py-1 rounded bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-white/15 flex items-center gap-1 transition-colors cursor-pointer"
                 >
                   <Copy className="h-3 w-3" />
                   Copy Code
@@ -217,7 +217,7 @@ export default function AdminMemosPage() {
                 <button
                   type="button"
                   onClick={() => handlePrintSingleMemo(memo)}
-                  className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white flex items-center gap-1 transition-colors shadow-sm cursor-pointer"
+                  className="px-2.5 py-1 rounded bg-orange-600 hover:bg-orange-700 text-xs font-semibold text-white flex items-center gap-1 transition-colors shadow-sm cursor-pointer"
                 >
                   <Printer className="h-3 w-3" />
                   Print Test

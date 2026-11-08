@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { CreditCard, CheckCircle2, X } from 'lucide-react';
-import { Modal } from '@/components/ui/Modal';
+import { Modal } from '@/components/admin/AdminModal';
 import { PaymentRequest } from '../types';
 
 interface PayTransactionModalProps {
@@ -45,26 +45,26 @@ export function PayTransactionModal({
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Complete Merchant Payout">
       <form onSubmit={handleSubmit} className="space-y-4 pt-1">
-        <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-1">
+        <div className="bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl p-3.5 space-y-1">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-400">Request ID:</span>
-            <span className="font-mono font-bold text-white">{request.id}</span>
+            <span className="text-slate-600 dark:text-slate-300">Request ID:</span>
+            <span className="tabular-nums font-bold text-navy-800 dark:text-white">{request.id}</span>
           </div>
           <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-400">Merchant:</span>
-            <span className="font-semibold text-white">
+            <span className="text-slate-600 dark:text-slate-300">Merchant:</span>
+            <span className="font-semibold text-navy-800 dark:text-white">
               {request.merchantName} ({request.merchantCode})
             </span>
           </div>
-          <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-900">
-            <span className="text-slate-400">Payout Amount:</span>
-            <span className="font-mono text-sm font-extrabold text-emerald-400">
+          <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100 dark:border-white/5">
+            <span className="text-slate-600 dark:text-slate-300">Payout Amount:</span>
+            <span className="tabular-nums text-sm font-extrabold text-orange-600 dark:text-orange-400">
               ৳{request.amount.toLocaleString()}
             </span>
           </div>
           <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-400">Destination:</span>
-            <span className="text-slate-300 font-mono">
+            <span className="text-slate-600 dark:text-slate-300">Destination:</span>
+            <span className="text-slate-700 dark:text-slate-200 tabular-nums">
               {request.accountDetails.provider} · {request.accountDetails.accountNumber}
             </span>
           </div>
@@ -72,8 +72,8 @@ export function PayTransactionModal({
 
         {/* Transaction ID Input */}
         <div className="space-y-1.5">
-          <label className="block text-xs font-bold text-slate-200">
-            Transaction ID (TrxID) <span className="text-rose-400">*</span>
+          <label className="block text-xs font-bold text-navy-800 dark:text-slate-100">
+            Transaction ID (TrxID) <span className="text-rose-600 dark:text-rose-400">*</span>
           </label>
           <input
             type="text"
@@ -84,31 +84,31 @@ export function PayTransactionModal({
             }}
             placeholder="e.g. BK-98765432 or TXN-20261105-01"
             autoFocus
-            className={`w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border text-xs font-mono font-bold text-emerald-300 focus:outline-none transition-colors ${
-              error ? 'border-rose-500' : 'border-slate-800 focus:border-emerald-500'
+            className={`w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-navy-950 border text-xs tabular-nums font-bold text-orange-700 dark:text-orange-300 focus:outline-none transition-colors ${
+              error ? 'border-rose-500' : 'border-slate-200 dark:border-white/10 focus:border-orange-500'
             }`}
           />
           {error ? (
-            <p className="text-[11px] text-rose-400 font-medium">{error}</p>
+            <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">{error}</p>
           ) : (
-            <p className="text-[10px] text-slate-500">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
               Enter the bank or mobile banking transaction reference ID for record keeping.
             </p>
           )}
         </div>
 
         {/* Modal Actions */}
-        <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-800">
+        <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-200 dark:border-white/10">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition-colors cursor-pointer"
+            className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white flex items-center gap-1.5 shadow-lg transition-colors cursor-pointer"
+            className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-xs font-bold text-white flex items-center gap-1.5 shadow-lg transition-colors cursor-pointer"
           >
             <CheckCircle2 className="w-4 h-4" />
             <span>Confirm Payout &amp; Settle</span>

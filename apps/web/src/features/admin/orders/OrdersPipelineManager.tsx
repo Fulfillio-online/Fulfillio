@@ -24,6 +24,7 @@ import { IsolatedPrintPortal } from './components/print/IsolatedPrintPortal';
 export interface OrdersPipelineManagerProps {
   initialTab?: PipelineMainTab;
   activeTab?: PipelineMainTab;
+  initialSearch?: string;
   onTabChange?: (tab: PipelineMainTab) => void;
   onOpenDeliveryTracker?: () => void;
 }
@@ -31,6 +32,7 @@ export interface OrdersPipelineManagerProps {
 export function OrdersPipelineManager({
   initialTab = 'all',
   activeTab: controlledTab,
+  initialSearch = '',
   onTabChange,
   onOpenDeliveryTracker,
 }: OrdersPipelineManagerProps) {
@@ -42,7 +44,13 @@ export function OrdersPipelineManager({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   // Filters
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(initialSearch);
+
+  useEffect(() => {
+    if (initialSearch !== undefined) {
+      setSearchQuery(initialSearch);
+    }
+  }, [initialSearch]);
   const [merchantFilter, setMerchantFilter] = useState<string>('ALL');
   const [stageFilter, setStageFilter] = useState<'ALL' | OrderStage>('ALL');
   const [courierFilter, setCourierFilter] = useState<string>('ALL');
@@ -178,6 +186,7 @@ export function OrdersPipelineManager({
         o.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         o.customerPhone.includes(searchQuery) ||
         o.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (o.productTitle && o.productTitle.toLowerCase().includes(searchQuery.toLowerCase())) ||
         o.bin.toLowerCase().includes(searchQuery.toLowerCase()) ||
         o.memoCode.toLowerCase().includes(searchQuery.toLowerCase());
 
@@ -356,7 +365,7 @@ export function OrdersPipelineManager({
   return (
     <div className="space-y-6">
       {toast && (
-        <div className="fixed top-6 right-6 z-50 bg-emerald-600 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 text-xs font-bold animate-in fade-in">
+        <div className="fixed top-6 right-6 z-50 bg-orange-600 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 text-xs font-bold animate-in fade-in">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span>{toast}</span>
         </div>
@@ -366,14 +375,14 @@ export function OrdersPipelineManager({
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5 flex-wrap">
-            <h1 className="text-2xl font-bold tracking-tight text-white">
+            <h1 className="text-2xl font-bold tracking-tight text-navy-800 dark:text-white">
               Warehouse Orders Pipeline
             </h1>
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+            <span className="px-2.5 py-0.5 rounded-full text-xs tabular-nums font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
               In-Warehouse Fulfillment Only
             </span>
           </div>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
             Active warehouse operations: All Orders → 1. Pick List (Bin Verified) → 2. Pack &amp;
             4x6&quot; Print → 3. Courier Dispatch. Handed-over parcels move to Delivery Tracker.
           </p>
@@ -391,20 +400,20 @@ export function OrdersPipelineManager({
                 );
               }
             }}
-            className="px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-sky-500/40 text-xs font-bold text-sky-300 flex items-center gap-2 shadow-sm transition-colors cursor-pointer"
+            className="px-3.5 py-2.5 rounded-xl bg-white dark:bg-navy-900 hover:bg-slate-100 dark:hover:bg-navy-800 border border-sky-500/40 text-xs font-bold text-sky-700 dark:text-sky-300 flex items-center gap-2 shadow-sm transition-colors cursor-pointer"
           >
-            <Truck className="w-4 h-4 text-sky-400" />
+            <Truck className="w-4 h-4 text-sky-600 dark:text-sky-400" />
             <span>View Dispatched &amp; Delivery Tracker</span>
-            <span className="px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-200 font-mono text-[11px] border border-sky-500/30">
+            <span className="px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-800 dark:text-sky-200 tabular-nums text-xs border border-sky-500/30">
               {counts.handedOver} Sent
             </span>
-            <ExternalLink className="w-3.5 h-3.5 text-sky-400" />
+            <ExternalLink className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
           </button>
 
           <button
             type="button"
             onClick={() => setIsCreateModalOpen(true)}
-            className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white flex items-center gap-1.5 shadow-lg transition-colors cursor-pointer"
+            className="px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-xs font-bold text-white flex items-center gap-1.5 shadow-lg transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Create Manual Order</span>
@@ -418,6 +427,28 @@ export function OrdersPipelineManager({
         onSelectTab={handleSelectTab}
         counts={counts}
       />
+
+      {/* Active Filter Indicator */}
+      {searchQuery && (
+        <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-orange-500/10 border border-orange-500/25 text-xs text-navy-900 dark:text-slate-100 shadow-2xs animate-in fade-in-50">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-bold text-orange-600 dark:text-orange-400">Filtering orders for product / query:</span>
+            <span className="font-mono font-bold px-2.5 py-0.5 rounded-md bg-white dark:bg-navy-800 text-orange-600 dark:text-orange-400 border border-orange-500/30">
+              {searchQuery}
+            </span>
+            <span className="text-slate-500 dark:text-slate-400">
+              ({filteredOrders.length} matching order{filteredOrders.length !== 1 ? 's' : ''} found in pipeline)
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSearchQuery('')}
+            className="px-2.5 py-1 rounded-lg bg-white dark:bg-navy-800 hover:bg-slate-100 dark:hover:bg-navy-700 border border-slate-200 dark:border-white/10 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors cursor-pointer shrink-0"
+          >
+            Clear Filter
+          </button>
+        </div>
+      )}
 
       {/* Filters & Bulk Action Bar */}
       <PipelineFiltersBar
@@ -550,17 +581,17 @@ export function OrdersPipelineManager({
 
       {/* Pagination & Limit Selector */}
       {filteredOrders.length > 0 && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 bg-slate-900 border border-slate-800 rounded-2xl shadow-sm text-xs text-slate-400">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl shadow-sm text-xs text-slate-600 dark:text-slate-300">
           <div className="flex items-center gap-3">
             <span>
-              Showing <span className="font-bold text-white">{startIndex + 1}</span> to{' '}
-              <span className="font-bold text-white">
+              Showing <span className="font-bold text-navy-800 dark:text-white">{startIndex + 1}</span> to{' '}
+              <span className="font-bold text-navy-800 dark:text-white">
                 {Math.min(startIndex + pageSize, totalItems)}
               </span>{' '}
-              of <span className="font-bold text-white">{totalItems}</span> orders
+              of <span className="font-bold text-navy-800 dark:text-white">{totalItems}</span> orders
             </span>
 
-            <div className="flex items-center gap-1.5 border-l border-slate-800 pl-3">
+            <div className="flex items-center gap-1.5 border-l border-slate-200 dark:border-white/10 pl-3">
               <span>Show</span>
               <select
                 value={pageSize}
@@ -569,7 +600,7 @@ export function OrdersPipelineManager({
                   setCurrentPage(1);
                 }}
                 aria-label="Rows per page"
-                className="px-2 py-1 rounded-lg bg-slate-950 border border-slate-800 text-xs font-semibold text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                className="px-2 py-1 rounded-lg bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs font-semibold text-navy-800 dark:text-slate-100 focus:outline-none focus:border-orange-500 cursor-pointer"
               >
                 <option value={10}>10</option>
                 <option value={25}>25</option>
@@ -581,9 +612,9 @@ export function OrdersPipelineManager({
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">
-              Page <span className="text-white font-bold">{safePage}</span> of{' '}
-              <span className="text-white font-bold">{totalPages}</span>
+            <span className="text-slate-600 dark:text-slate-300 font-medium">
+              Page <span className="text-navy-800 dark:text-white font-bold">{safePage}</span> of{' '}
+              <span className="text-navy-800 dark:text-white font-bold">{totalPages}</span>
             </span>
 
             <div className="flex items-center gap-1">
@@ -592,7 +623,7 @@ export function OrdersPipelineManager({
                 disabled={safePage <= 1}
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 aria-label="Previous page"
-                className="p-1.5 rounded-lg border border-slate-800 bg-slate-950 text-slate-300 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                className="p-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-navy-950 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
@@ -601,7 +632,7 @@ export function OrdersPipelineManager({
                 disabled={safePage >= totalPages}
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 aria-label="Next page"
-                className="p-1.5 rounded-lg border border-slate-800 bg-slate-950 text-slate-300 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                className="p-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-navy-950 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>

@@ -12,11 +12,11 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-slate-950 text-slate-100">
+    <div className="flex h-screen w-full overflow-hidden bg-slate-50 dark:bg-navy-950 text-navy-900 dark:text-white">
       {/* Mobile / Tablet Backdrop Overlay */}
       {isMobileSidebarOpen && (
         <div
-          className="fixed inset-0 z-40 bg-slate-950/80 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-40 bg-navy-950/80 backdrop-blur-sm lg:hidden"
           onClick={() => setIsMobileSidebarOpen(false)}
         />
       )}
