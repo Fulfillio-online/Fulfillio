@@ -26,6 +26,7 @@ import {
   ProductType,
   ProductVariantConfig,
 } from '../types';
+import { compressImage } from '../utils/imageCompressor';
 
 interface ProductFormProps {
   initialProduct?: MerchantProductItem | null;
@@ -41,6 +42,7 @@ export function ProductForm({
   const router = useRouter();
   const isEdit = Boolean(initialProduct);
 
+  const mainImageInputRef = useRef<HTMLInputElement>(null);
   const colorFileInputRef = useRef<HTMLInputElement>(null);
   const [activeColorUploadId, setActiveColorUploadId] = useState<string | null>(null);
 
@@ -137,10 +139,7 @@ export function ProductForm({
   );
 
   // 5. Main Image
-  const [imageUrl, setImageUrl] = useState(
-    initialProduct?.imageUrl ||
-      'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=400&q=80'
-  );
+  const [imageUrl, setImageUrl] = useState(initialProduct?.imageUrl || '');
 
   // 6. Key Features
   const [features, setFeatures] = useState<string[]>(
@@ -297,20 +296,42 @@ export function ProductForm({
     }));
   };
 
-  const handleColorFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleMainImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const compressed = await compressImage(file, 800, 800, 0.8);
+      setImageUrl(compressed);
+    } catch (err) {
+      console.error('Failed to compress image:', err);
+    } finally {
+      if (mainImageInputRef.current) {
+        mainImageInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleColorFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !activeColorUploadId) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64 = event.target?.result as string;
+    try {
+      const compressed = await compressImage(file, 800, 800, 0.8);
       setColors((prev) =>
-        prev.map((c) => (c.id === activeColorUploadId ? { ...c, imageUrl: base64 } : c))
+        prev.map((c) => (c.id === activeColorUploadId ? { ...c, imageUrl: compressed } : c))
       );
-      if (!imageUrl) setImageUrl(base64);
+      if (!imageUrl) {
+        setImageUrl(compressed);
+      }
+    } catch (err) {
+      console.error('Image compression error:', err);
+    } finally {
       setActiveColorUploadId(null);
-    };
-    reader.readAsDataURL(file);
+      if (colorFileInputRef.current) {
+        colorFileInputRef.current.value = '';
+      }
+    }
   };
 
   const handleAddColor = () => {
@@ -540,6 +561,73 @@ export function ProductForm({
           </div>
         </div>
 
+        {/* Product Photo Upload Section */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-sm space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-200 uppercase tracking-wider">
+              <UploadCloud className="h-4 w-4 text-emerald-400" />
+              <span>Product Display Photo</span>
+            </div>
+            <span className="text-[11px] text-slate-400">
+              Primary image shown across tables, orders & catalog
+            </span>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 pt-1">
+            {imageUrl ? (
+              <div className="relative group h-24 w-24 rounded-xl bg-slate-950 border border-slate-700 overflow-hidden shrink-0 flex items-center justify-center shadow-md">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={imageUrl}
+                  alt="Product Image"
+                  className="h-full w-full object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={() => setImageUrl('')}
+                  className="absolute top-1 right-1 p-1 rounded-full bg-rose-600/90 text-white hover:bg-rose-500 shadow transition-colors cursor-pointer"
+                  title="Remove image"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : (
+              <div
+                onClick={() => mainImageInputRef.current?.click()}
+                className="h-24 w-24 rounded-xl bg-slate-950 border-2 border-dashed border-slate-800 hover:border-emerald-500/50 flex flex-col items-center justify-center text-slate-500 hover:text-emerald-400 cursor-pointer transition-colors shrink-0"
+              >
+                <Package className="h-6 w-6 mb-1 opacity-60" />
+                <span className="text-[10px] font-semibold">Upload Photo</span>
+              </div>
+            )}
+
+            <div className="space-y-1.5 flex-1">
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => mainImageInputRef.current?.click()}
+                  className="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition-colors cursor-pointer"
+                >
+                  <UploadCloud className="h-3.5 w-3.5 text-emerald-400" />
+                  <span>{imageUrl ? 'Change Photo' : 'Upload Product Photo'}</span>
+                </button>
+                {imageUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setImageUrl('')}
+                    className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold border border-rose-500/20 transition-colors cursor-pointer"
+                  >
+                    Remove Photo
+                  </button>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Supports PNG, JPG, or WebP. Auto-compressed for fast loading and zero broken images.
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Section 2: Declared Product Value */}
         <div className="p-4 sm:p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-sm space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
@@ -715,13 +803,23 @@ export function ProductForm({
                           <div className="flex items-center gap-2 w-full sm:w-auto">
                             <div className="relative h-9 w-9 rounded-lg bg-slate-900 border border-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
                               {c.imageUrl ? (
-                                <Image
-                                  src={c.imageUrl}
-                                  alt={c.name}
-                                  fill
-                                  sizes="36px"
-                                  className="object-cover"
-                                />
+                                c.imageUrl.startsWith('data:') ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    src={c.imageUrl}
+                                    alt={c.name}
+                                    className="h-full w-full object-cover"
+                                  />
+                                ) : (
+                                  <Image
+                                    src={c.imageUrl}
+                                    alt={c.name}
+                                    fill
+                                    unoptimized={true}
+                                    sizes="36px"
+                                    className="object-cover"
+                                  />
+                                )
                               ) : (
                                 <Package className="h-4 w-4 text-slate-600" />
                               )}
@@ -1244,6 +1342,15 @@ export function ProductForm({
           </button>
         </div>
       </form>
+
+      {/* Hidden file input for main product photo */}
+      <input
+        type="file"
+        ref={mainImageInputRef}
+        onChange={handleMainImageChange}
+        accept="image/*"
+        className="hidden"
+      />
 
       {/* Hidden file input for color swatches */}
       <input

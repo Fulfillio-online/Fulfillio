@@ -64,13 +64,23 @@ export function ProductGrid({
                 className="w-full h-full relative cursor-pointer block"
               >
                 {p.imageUrl ? (
-                  <Image
-                    src={p.imageUrl}
-                    alt={p.title}
-                    fill
-                    sizes="(max-width: 768px) 100vw, 300px"
-                    className="object-cover"
-                  />
+                  p.imageUrl.startsWith('data:') ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={p.imageUrl}
+                      alt={p.title}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <Image
+                      src={p.imageUrl}
+                      alt={p.title}
+                      fill
+                      unoptimized={true}
+                      sizes="(max-width: 768px) 100vw, 300px"
+                      className="object-cover"
+                    />
+                  )
                 ) : (
                   <div className="h-full w-full flex items-center justify-center">
                     <Package className="h-10 w-10 text-slate-700" />

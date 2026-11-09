@@ -21,6 +21,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { MerchantOrderItem, MerchantProductItem, ResellerMemo, OrderLineItem } from '../../types';
+import { ProductThumbnail } from '../../products/components/ProductThumbnail';
 
 interface OrderLineItemDraft {
   rowId: string;
@@ -449,17 +450,20 @@ export function CreateManualOrderModal({
                         <label className="block text-[11px] font-semibold text-slate-400 mb-1">
                           Product #{index + 1}
                         </label>
-                        <select
-                          value={item.productId}
-                          onChange={(e) => handleProductChange(item.rowId, e.target.value)}
-                          className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
-                        >
-                          {products.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.title} ({p.variantLabel || 'Std'}) — SKU: {p.sku} | Stock: {p.stock} pcs (৳{p.price})
-                            </option>
-                          ))}
-                        </select>
+                        <div className="flex items-center gap-2">
+                          <ProductThumbnail src={item.imageUrl} alt={item.title} size="sm" />
+                          <select
+                            value={item.productId}
+                            onChange={(e) => handleProductChange(item.rowId, e.target.value)}
+                            className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                          >
+                            {products.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.title} ({p.variantLabel || 'Std'}) — SKU: {p.sku} | Stock: {p.stock} pcs (৳{p.price})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
 
                       {/* Unit Price */}

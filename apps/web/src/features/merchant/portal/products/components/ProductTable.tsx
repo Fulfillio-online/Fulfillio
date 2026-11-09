@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { ProductTableProps } from '../types';
 import { MerchantExpandableCard } from '../../components/common/MerchantExpandableCard';
+import { ProductThumbnail } from './ProductThumbnail';
 
 export function ProductTable({
   products,
@@ -94,19 +95,7 @@ export function ProductTable({
                 }
                 row1={
                   <div className="flex items-center gap-2 min-w-0">
-                    <div className="relative h-10 w-10 rounded-lg bg-slate-950 border border-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
-                      {p.imageUrl ? (
-                        <Image
-                          src={p.imageUrl}
-                          alt={p.title}
-                          fill
-                          sizes="40px"
-                          className="object-cover"
-                        />
-                      ) : (
-                        <Package className="h-5 w-5 text-slate-500" />
-                      )}
-                    </div>
+                    <ProductThumbnail src={p.imageUrl} alt={p.title} size="md" />
                     <div className="min-w-0 flex-1">
                       <span className="font-mono text-[10px] text-emerald-400 font-bold bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
                         {p.sku}
@@ -263,19 +252,9 @@ export function ProductTable({
                       {/* Product Thumbnail */}
                       <Link
                         href={`/merchant/products/${p.id}`}
-                        className="relative h-12 w-12 rounded-lg bg-slate-800 border border-slate-700 overflow-hidden shrink-0 flex items-center justify-center cursor-pointer hover:border-emerald-500 transition-colors"
+                        className="cursor-pointer hover:opacity-90 transition-opacity"
                       >
-                        {p.imageUrl ? (
-                          <Image
-                            src={p.imageUrl}
-                            alt={p.title}
-                            fill
-                            sizes="48px"
-                            className="object-cover"
-                          />
-                        ) : (
-                          <Package className="h-6 w-6 text-slate-500" />
-                        )}
+                        <ProductThumbnail src={p.imageUrl} alt={p.title} size="lg" />
                       </Link>
 
                       {/* Title & SKU info */}

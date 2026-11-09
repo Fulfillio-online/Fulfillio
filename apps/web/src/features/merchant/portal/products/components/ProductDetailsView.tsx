@@ -84,13 +84,23 @@ export function ProductDetailsView({
         <div className="flex items-center gap-4">
           <div className="relative h-20 w-20 rounded-xl bg-slate-950 border border-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
             {product.imageUrl ? (
-              <Image
-                src={product.imageUrl}
-                alt={product.title}
-                fill
-                sizes="80px"
-                className="object-cover"
-              />
+              product.imageUrl.startsWith('data:') ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={product.imageUrl}
+                  alt={product.title}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <Image
+                  src={product.imageUrl}
+                  alt={product.title}
+                  fill
+                  unoptimized={true}
+                  sizes="80px"
+                  className="object-cover"
+                />
+              )
             ) : (
               <Package className="h-8 w-8 text-slate-600" />
             )}
