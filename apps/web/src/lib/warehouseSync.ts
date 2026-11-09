@@ -1238,6 +1238,7 @@ export function convertMerchantOrderToWarehouse(
     resellerName: matchedMemo?.resellerName || merchantName,
     resellerPhone: matchedMemo?.phone || profile.phone || '01712-345678',
     resellerAddress: matchedMemo?.address || profile.location || 'Dhaka, Bangladesh',
+    resellerLogo: matchedMemo?.logoUrl || profile.logoUrl,
     codAmount: order.codAmount ?? order.amount,
     courier: validCourier,
     trackingCode: order.trackingId,
@@ -1595,6 +1596,7 @@ export interface SyncedAdminMemoItem {
   note: string;
   sampleItems: { name: string; qty: number; price: string }[];
   created: string;
+  logoUrl?: string;
 }
 
 export function getStoredMerchantMemos(): ResellerMemo[] {
@@ -1646,6 +1648,7 @@ export function syncMerchantMemoToAdmin(
         ? memo.sampleItems
         : [{ name: 'Heavyweight Hoodie (XL)', qty: 1, price: '৳ 3,450' }],
       created: memo.created || new Date().toISOString().slice(0, 10),
+      logoUrl: memo.logoUrl || undefined,
     };
 
     // Upsert into admin memos storage
@@ -1728,6 +1731,7 @@ export function getSyncedAdminMemos(baseMemos: SyncedAdminMemoItem[]): SyncedAdm
         note: mm.note || 'Thank you for shopping! Return within 7 days with invoice.',
         sampleItems: mm.sampleItems || [{ name: 'Standard Item Sample', qty: 1, price: '৳ 1,500' }],
         created: mm.created || new Date().toISOString().slice(0, 10),
+        logoUrl: mm.logoUrl || undefined,
       };
     });
 
@@ -1782,6 +1786,7 @@ export function getSyncedMerchantMemos(baseMemos: MerchantMemoItem[]): MerchantM
         address: am.address,
         terms: am.note,
         isDefault: am.isDefault,
+        logoUrl: am.logoUrl,
       });
     });
 

@@ -53,6 +53,7 @@ export function MemoPreviewModal({
             resellerName={order.resellerName}
             resellerPhone={order.resellerPhone}
             resellerAddress={order.resellerAddress}
+            logoUrl={order.resellerLogo}
             customerName={order.customerName}
             customerPhone={order.customerPhone}
             customerAddress={order.customerAddress}

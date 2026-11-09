@@ -67,11 +67,19 @@ export function MerchantResellerMemosTab({
                 />
               </div>
 
-              <div>
-                <h4 className="text-base font-bold text-navy-800 dark:text-white">{memo.resellerName}</h4>
-                <div className="text-xs text-slate-600 dark:text-slate-300 mt-1 space-y-0.5">
-                  <div>Phone: {memo.phone}</div>
-                  <div>Address: {memo.address}</div>
+              <div className="flex items-start gap-3">
+                {memo.logoUrl ? (
+                  <div className="w-12 h-10 flex items-center justify-center p-1 rounded-lg bg-slate-100 dark:bg-navy-950 border border-slate-200 dark:border-white/10 shrink-0 overflow-hidden">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={memo.logoUrl} alt={memo.resellerName} className="max-h-full max-w-full object-contain" />
+                  </div>
+                ) : null}
+                <div>
+                  <h4 className="text-base font-bold text-navy-800 dark:text-white">{memo.resellerName}</h4>
+                  <div className="text-xs text-slate-600 dark:text-slate-300 mt-1 space-y-0.5">
+                    <div>Phone: {memo.phone}</div>
+                    <div>Address: {memo.address}</div>
+                  </div>
                 </div>
               </div>
 
@@ -135,6 +143,7 @@ export function MerchantResellerMemosTab({
                 resellerPhone={previewMemo.phone}
                 resellerAddress={previewMemo.address}
                 brandColor={previewMemo.brandColor}
+                logoUrl={previewMemo.logoUrl}
                 footerTerms={previewMemo.terms}
                 customerName="Sample Customer"
                 customerPhone="01700-000000"
@@ -173,6 +182,7 @@ export function MerchantResellerMemosTab({
               resellerPhone={previewMemo.phone}
               resellerAddress={previewMemo.address}
               brandColor={previewMemo.brandColor}
+              logoUrl={previewMemo.logoUrl}
               footerTerms={previewMemo.terms}
               customerName="Sample Customer"
               customerPhone="01700-000000"

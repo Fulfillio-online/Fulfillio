@@ -21,6 +21,7 @@ export default function DedicatedThermalMemoPrintPage() {
   const codAmount = Number(searchParams.get('codAmount') || 1650);
   const sku = searchParams.get('sku') || 'MC-101-HOODIE-BLK-XL';
   const title = searchParams.get('title') || 'Heavyweight Winter Fleece Hoodie';
+  const logoUrl = searchParams.get('logoUrl') || undefined;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 py-8 px-4 print:bg-white print:p-0 print:m-0">
@@ -63,6 +64,7 @@ export default function DedicatedThermalMemoPrintPage() {
         resellerName={resellerName}
         resellerPhone="+880 1819-554433"
         resellerAddress="Plot 22, Gulshan-1, Dhaka (White-Label Dispatch)"
+        logoUrl={logoUrl}
         customerName={customerName}
         customerPhone={customerPhone}
         customerAddress={customerAddress}

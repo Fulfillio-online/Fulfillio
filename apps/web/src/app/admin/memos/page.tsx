@@ -218,6 +218,16 @@ export default function AdminMemosPage() {
               <div className="rounded-xl border-2 border-dashed border-slate-300 dark:border-white/15 bg-white text-slate-950 p-4 shadow-inner space-y-3 font-sans text-xs">
                 {/* Reseller Branding Header */}
                 <div className="text-center pb-2 border-b border-slate-200 dark:border-white/15">
+                  {memo.logoUrl ? (
+                    <div className="flex justify-center mb-1.5">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={memo.logoUrl}
+                        alt={memo.resellerName}
+                        className="max-h-9 max-w-[140px] object-contain"
+                      />
+                    </div>
+                  ) : null}
                   <div
                     className="font-extrabold text-sm uppercase tracking-wide"
                     style={{ color: memo.color }}
@@ -303,6 +313,7 @@ export default function AdminMemosPage() {
               resellerPhone={printingMemo.phone}
               resellerAddress={printingMemo.address}
               brandColor={printingMemo.color}
+              logoUrl={printingMemo.logoUrl}
               footerTerms={printingMemo.note}
               customerName="Tariqul Islam"
               customerPhone="01711-234567"

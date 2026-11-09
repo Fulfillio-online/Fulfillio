@@ -70,6 +70,7 @@ export interface MerchantMemoItem {
   address: string;
   terms: string;
   isDefault: boolean;
+  logoUrl?: string;
 }
 
 export interface MerchantRecord {
