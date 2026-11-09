@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Store, Plus, ChevronRight, PackageOpen } from 'lucide-react';
@@ -22,6 +22,14 @@ import { StockRequestsTable } from './components/StockRequestsTable';
 import { ManageStockModal } from './modals/ManageStockModal';
 import { DeleteConfirmModal } from './modals/DeleteConfirmModal';
 import { PrintBarcodeModal } from '../components/modals/PrintBarcodeModal';
+
+const isPendingApprovalProduct = (p: MerchantProductItem): boolean => {
+  const isPublished = p.status === 'PUBLISHED' || (!p.status && p.stock > 0);
+  return (
+    !isPublished &&
+    (!p.bin || p.bin === 'Pending Approval' || p.bin === 'Assigned on intake')
+  );
+};
 
 export interface MerchantProductsTabProps {
   products: MerchantProductItem[];
@@ -68,6 +76,16 @@ export function MerchantProductsTab({
   const [viewMode, setViewMode] = useState<ProductViewMode>('LIST');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const requestedTab = sessionStorage.getItem('fulfillio_products_initial_tab');
+      if (requestedTab === 'PENDING_APPROVAL') {
+        sessionStorage.removeItem('fulfillio_products_initial_tab');
+        setActiveTab('PENDING_APPROVAL');
+      }
+    }
+  }, []);
+
   // Modals state for stock adjustment, delete confirmation & thermal barcode
   const [stockModalProduct, setStockModalProduct] = useState<MerchantProductItem | null>(null);
   const [isStockModalOpen, setIsStockModalOpen] = useState(false);
@@ -89,17 +107,18 @@ export function MerchantProductsTab({
 
   // Dynamic Statistics
   const stats: ProductStats = useMemo(() => {
-    const published = products.filter(
+    const approvedProducts = products.filter((p) => !isPendingApprovalProduct(p));
+    const published = approvedProducts.filter(
       (p) => p.status === 'PUBLISHED' || (!p.status && p.stock > 0)
     ).length;
-    const lowStock = products.filter((p) => p.stock > 0 && p.stock <= 30).length;
+    const lowStock = approvedProducts.filter((p) => p.stock > 0 && p.stock <= 30).length;
     const totalOrders =
       orders.length > 0
         ? orders.length
         : products.reduce((sum, p) => sum + (p.totalOrders || 0), 0);
 
     return {
-      storeProducts: products.length,
+      storeProducts: approvedProducts.length,
       published,
       totalOrders,
       lowStock,
@@ -107,15 +126,19 @@ export function MerchantProductsTab({
     };
   }, [products, orders, stockRequests]);
 
-  // Tab counts
+  // Tab counts (Pending Approval products are strictly isolated into the Pending Approval tab)
   const counts = useMemo(() => {
+    const approvedProducts = products.filter((p) => !isPendingApprovalProduct(p));
+    const pendingApprovalProducts = products.filter((p) => isPendingApprovalProduct(p));
+
     return {
-      all: products.length,
-      published: products.filter(
+      all: approvedProducts.length,
+      published: approvedProducts.filter(
         (p) => p.status === 'PUBLISHED' || (!p.status && p.stock > 0)
       ).length,
-      draft: products.filter((p) => p.status === 'DRAFT').length,
-      outOfStock: products.filter((p) => p.stock === 0).length,
+      pendingApproval: pendingApprovalProducts.length,
+      draft: approvedProducts.filter((p) => p.status === 'DRAFT').length,
+      outOfStock: approvedProducts.filter((p) => p.stock === 0).length,
       stockRequests: stockRequests.filter((r) => r.status === 'PENDING_APPROVAL').length,
     };
   }, [products, stockRequests]);
@@ -124,14 +147,22 @@ export function MerchantProductsTab({
   const filteredProducts = useMemo(() => {
     return products
       .filter((p) => {
-        // Tab Filter
-        if (activeTab === 'PUBLISHED') {
-          const isPublished = p.status === 'PUBLISHED' || (!p.status && p.stock > 0);
-          if (!isPublished) return false;
-        } else if (activeTab === 'DRAFT') {
-          if (p.status !== 'DRAFT') return false;
-        } else if (activeTab === 'OUT_OF_STOCK') {
-          if (p.stock !== 0) return false;
+        const isPendingApproval = isPendingApprovalProduct(p);
+
+        // Strict isolation: unapproved products ONLY appear in the PENDING_APPROVAL tab
+        if (activeTab === 'PENDING_APPROVAL') {
+          if (!isPendingApproval) return false;
+        } else {
+          if (isPendingApproval) return false;
+
+          if (activeTab === 'PUBLISHED') {
+            const isPublished = p.status === 'PUBLISHED' || (!p.status && p.stock > 0);
+            if (!isPublished) return false;
+          } else if (activeTab === 'DRAFT') {
+            if (p.status !== 'DRAFT') return false;
+          } else if (activeTab === 'OUT_OF_STOCK') {
+            if (p.stock !== 0) return false;
+          }
         }
 
         // Category Filter

@@ -448,6 +448,9 @@ export function ProductForm({
     };
 
     onSave(productPayload);
+    if (!isApprovedByAdmin && typeof window !== 'undefined') {
+      sessionStorage.setItem('fulfillio_products_initial_tab', 'PENDING_APPROVAL');
+    }
     router.push('/merchant/products');
   };
 

@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Layers } from 'lucide-react';
+import { Layers, Clock } from 'lucide-react';
 import { ProductFilterTab } from '../types';
 
 interface ProductStatusTabsProps {
@@ -10,6 +10,7 @@ interface ProductStatusTabsProps {
   counts: {
     all: number;
     published: number;
+    pendingApproval: number;
     draft: number;
     outOfStock: number;
     stockRequests: number;
@@ -21,12 +22,31 @@ export function ProductStatusTabs({
   onTabChange,
   counts,
 }: ProductStatusTabsProps) {
-  const tabs: { id: ProductFilterTab; label: string; count: number; isSpecial?: boolean }[] = [
+  const tabs: {
+    id: ProductFilterTab;
+    label: string;
+    count: number;
+    isSpecial?: boolean;
+    icon?: 'clock' | 'layers';
+  }[] = [
     { id: 'ALL', label: 'All Items', count: counts.all },
     { id: 'PUBLISHED', label: 'Published', count: counts.published },
-    { id: 'DRAFT', label: 'Pending / Drafts', count: counts.draft },
+    {
+      id: 'PENDING_APPROVAL',
+      label: 'Pending Approval',
+      count: counts.pendingApproval,
+      isSpecial: true,
+      icon: 'clock',
+    },
+    { id: 'DRAFT', label: 'Drafts', count: counts.draft },
     { id: 'OUT_OF_STOCK', label: 'Out of Stock', count: counts.outOfStock },
-    { id: 'STOCK_REQUESTS', label: 'Stock Requests', count: counts.stockRequests, isSpecial: true },
+    {
+      id: 'STOCK_REQUESTS',
+      label: 'Stock Requests',
+      count: counts.stockRequests,
+      isSpecial: true,
+      icon: 'layers',
+    },
   ];
 
   return (
@@ -44,7 +64,8 @@ export function ProductStatusTabs({
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            {tab.isSpecial && <Layers className="h-3.5 w-3.5 text-amber-400" />}
+            {tab.icon === 'clock' && <Clock className="h-3.5 w-3.5 text-amber-400" />}
+            {tab.icon === 'layers' && <Layers className="h-3.5 w-3.5 text-amber-400" />}
             <span>{tab.label}</span>
             <span
               className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full transition-colors ${
