@@ -150,6 +150,67 @@ export function ProductsManager({
     });
   };
 
+  const handleSaveVariantStocks = (
+    productId: string,
+    updatedVariants: {
+      id: string;
+      variantSku: string;
+      color?: string;
+      size?: string;
+      attributeName?: string;
+      attributeValue?: string;
+      stock: number;
+    }[],
+    totalStock: number,
+    reason?: string
+  ) => {
+    setProducts((prev) => {
+      const next = prev.map((p) =>
+        p.id === productId
+          ? {
+              ...p,
+              stock: totalStock,
+              variantsList: updatedVariants,
+            }
+          : p
+      );
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        localStorage.setItem(
+          `fulfillio_variants_${productId}`,
+          JSON.stringify(
+            updatedVariants.map((v) => ({
+              id: v.id,
+              sku: v.variantSku,
+              colorName: v.color || 'Standard',
+              colorHex: '#ea580c',
+              size: v.size || v.attributeValue || 'Standard',
+              binCode: 'A-01-01',
+              stock: v.stock,
+              reserved: 0,
+              available: v.stock,
+            }))
+          )
+        );
+        syncAdminProductsToMerchant(next);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
+          );
+        }
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+
+    const target = products.find((p) => p.id === productId);
+    triggerToast(
+      `Stock updated for "${target?.title || productId}" to ${totalStock} pcs across ${updatedVariants.length} variants.`
+    );
+    setStockAdjustProduct(null);
+  };
+
   const handleChangeProductBin = (productId: string, nextBinCode: string) => {
     setProducts((prev) => {
       const next = prev.map((p) => (p.id === productId ? { ...p, binCode: nextBinCode } : p));
@@ -548,6 +609,7 @@ export function ProductsManager({
         onClose={() => setStockAdjustProduct(null)}
         product={stockAdjustProduct}
         onAdjustStock={(id, delta) => handleAdjustStock(id, delta)}
+        onSaveVariantStocks={handleSaveVariantStocks}
       />
 
       <ApprovalActionModal

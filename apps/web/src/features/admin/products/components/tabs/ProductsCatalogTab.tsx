@@ -646,35 +646,17 @@ export function ProductsCatalogTab({
                             ৳{p.price.toLocaleString()}
                           </span>
 
-                          <div
-                            onClick={(e) => e.stopPropagation()}
-                            className={`flex items-center rounded-lg p-0.5 border transition-colors ${
+                          <span
+                            className={`px-2 py-0.5 rounded text-xs font-bold tabular-nums border ${
                               isOutOfStock
                                 ? 'bg-rose-500/15 border-rose-500/35 text-rose-600 dark:text-rose-400'
                                 : isLowStock
                                 ? 'bg-amber-500/15 border-amber-500/35 text-amber-600 dark:text-amber-400'
-                                : 'bg-slate-50 dark:bg-navy-950 border-slate-200 dark:border-white/10'
+                                : 'bg-slate-100 dark:bg-navy-950 border-slate-200 dark:border-white/10 text-navy-900 dark:text-white'
                             }`}
                           >
-                            <button
-                              type="button"
-                              onClick={() => onAdjustStock(p.id, -1)}
-                              disabled={p.stock <= 0}
-                              className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold transition-colors text-slate-600 dark:text-slate-300 hover:text-white hover:bg-orange-600 disabled:opacity-30 cursor-pointer"
-                            >
-                              -
-                            </button>
-                            <span className="w-7 text-center tabular-nums text-xs font-bold text-navy-900 dark:text-white">
-                              {p.stock}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => onAdjustStock(p.id, 1)}
-                              className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold transition-colors text-slate-600 dark:text-slate-300 hover:text-white hover:bg-orange-600 cursor-pointer"
-                            >
-                              +
-                            </button>
-                          </div>
+                            Stock: {p.stock} pcs
+                          </span>
                         </div>
 
                         <button
@@ -761,10 +743,10 @@ export function ProductsCatalogTab({
                                   setActiveMenuId(null);
                                   onOpenStockAdjustModal(p);
                                 }}
-                                className="w-full px-3.5 py-2 text-left text-navy-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2.5 transition-colors cursor-pointer"
+                                className="w-full px-3.5 py-2 text-left text-navy-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2.5 transition-colors cursor-pointer font-semibold"
                               >
                                 <SlidersHorizontal className="w-4 h-4 text-orange-600 dark:text-orange-400 pointer-events-none" />
-                                <span>Adjust Physical Stock</span>
+                                <span>Manage Stock (Color & Size)</span>
                               </button>
 
                               {isDraft ? (
@@ -946,49 +928,19 @@ export function ProductsCatalogTab({
                         </div>
                       </td>
 
-                      {/* Stock Units (with inline quick adjust) */}
+                      {/* Stock Units (Display only — edit via Action button) */}
                       <td className="py-3.5 px-3 align-middle">
-                        <div className="flex items-center gap-2">
-                          <div
-                            className={`inline-flex items-center rounded-lg p-0.5 border ${
-                              isOutOfStock
-                                ? 'bg-rose-500/10 border-rose-500/30'
-                                : isLowStock
-                                ? 'bg-amber-500/10 border-amber-500/30'
-                                : 'bg-slate-50 dark:bg-navy-950 border-slate-200 dark:border-white/10'
-                            }`}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => onAdjustStock(p.id, -1)}
-                              disabled={p.stock <= 0}
-                              className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-white hover:bg-orange-600 disabled:opacity-30 transition-colors cursor-pointer"
-                              title="Decrease stock by 1"
-                            >
-                              -
-                            </button>
-                            <span
-                              className={`w-10 text-center font-bold tabular-nums text-xs ${
-                                isOutOfStock
-                                  ? 'text-rose-600 dark:text-rose-400'
-                                  : isLowStock
-                                  ? 'text-amber-600 dark:text-amber-400'
-                                  : 'text-navy-900 dark:text-white'
-                              }`}
-                            >
-                              {p.stock}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => onAdjustStock(p.id, 1)}
-                              className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-white hover:bg-orange-600 transition-colors cursor-pointer"
-                              title="Increase stock by 1"
-                            >
-                              +
-                            </button>
-                          </div>
-                          <span className="text-[11px] text-slate-500 font-medium">pcs</span>
-                        </div>
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold tabular-nums border ${
+                            isOutOfStock
+                              ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30'
+                              : isLowStock
+                              ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                              : 'bg-slate-100 dark:bg-navy-950 text-navy-900 dark:text-white border-slate-200 dark:border-white/10'
+                          }`}
+                        >
+                          {p.stock} <span className="text-[11px] font-normal text-slate-500">pcs</span>
+                        </span>
                       </td>
 
                       {/* Unit Price */}
@@ -1051,10 +1003,10 @@ export function ProductsCatalogTab({
                                   setActiveMenuId(null);
                                   onOpenStockAdjustModal(p);
                                 }}
-                                className="w-full px-3.5 py-2 text-left text-navy-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2.5 transition-colors cursor-pointer"
+                                className="w-full px-3.5 py-2 text-left text-navy-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2.5 transition-colors cursor-pointer font-semibold"
                               >
                                 <SlidersHorizontal className="w-4 h-4 text-orange-600 dark:text-orange-400 pointer-events-none" />
-                                <span>Adjust Physical Stock</span>
+                                <span>Manage Stock (Color & Size)</span>
                               </button>
 
                               {isDraft ? (
