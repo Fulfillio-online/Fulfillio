@@ -1578,6 +1578,7 @@ export function getSyncedMerchantDirectoryLists(
     return { products: syncedProds, orders: syncedOrders };
   } catch {
     return { products: baseProducts, orders: baseOrders };
+  }
 }
 
 export interface SyncedAdminMemoItem {
