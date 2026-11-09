@@ -32,6 +32,7 @@ export class AuthRepository {
 
   async registerMerchantWithUser(data: {
     businessName: string;
+    ownerName?: string;
     email: string;
     phone?: string;
     passwordHash: string;
@@ -53,7 +54,7 @@ export class AuthRepository {
       const user = await tx.user.create({
         data: {
           merchantId: merchant.id,
-          name: data.businessName,
+          name: data.ownerName || data.businessName,
           email: data.email,
           passwordHash: data.passwordHash,
           role: UserRole.MERCHANT,
@@ -63,6 +64,10 @@ export class AuthRepository {
       return {
         merchantId: merchant.id,
         merchantCode: merchant.merchantCode,
+        businessName: merchant.businessName,
+        ownerName: user.name,
+        email: merchant.email,
+        phone: merchant.phone,
         userId: user.id,
         status: merchant.status,
       };

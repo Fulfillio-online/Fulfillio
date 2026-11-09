@@ -153,6 +153,11 @@ export function MerchantHeader({
               <div className="border-t border-slate-800 py-1">
                 <Link
                   href="/login"
+                  onClick={() => {
+                    try {
+                      localStorage.removeItem('fulfillio_active_merchant_session_v1');
+                    } catch {}
+                  }}
                   className="w-full px-4 py-2 text-left text-xs text-rose-400 hover:bg-rose-500/10 flex items-center gap-2 font-medium"
                 >
                   <Lock className="h-3.5 w-3.5" />

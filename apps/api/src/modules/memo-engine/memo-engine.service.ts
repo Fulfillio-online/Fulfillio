@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { MemoEngineRepository } from './memo-engine.repository';
-import { MemoTemplateLayout, MemoPaperSize } from '@fulfillio/shared';
+import { MemoTemplateLayout, MemoPaperSize } from '@fulfillio/contracts';
 
 @Injectable()
 export class MemoEngineService {

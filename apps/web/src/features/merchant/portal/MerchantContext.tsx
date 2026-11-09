@@ -10,21 +10,23 @@ import {
 } from './types';
 import { StockRequestItem } from './products/types';
 import {
-  INITIAL_MERCHANT_ASNS,
-  INITIAL_MERCHANT_MEMOS,
-  INITIAL_MERCHANT_ORDERS,
-  INITIAL_MERCHANT_PRODUCTS,
   INITIAL_MERCHANT_PROFILE,
-  INITIAL_STOCK_REQUESTS,
-  STORAGE_KEY_MERCHANT_ASNS,
-  STORAGE_KEY_MERCHANT_MEMOS,
-  STORAGE_KEY_MERCHANT_ORDERS,
-  STORAGE_KEY_MERCHANT_PRODUCTS,
-  STORAGE_KEY_MERCHANT_PROFILE,
-  STORAGE_KEY_STOCK_REQUESTS,
 } from './mockData';
 import { merchantApi } from './api';
 import {
+  getActiveMerchantSession,
+  getMerchantAsnsKey,
+  getMerchantMemosKey,
+  getMerchantOrdersKey,
+  getMerchantProductsKey,
+  getMerchantProfileKey,
+  getMerchantStockRequestsKey,
+  getStoredMerchantAsnsForCode,
+  getStoredMerchantMemosForCode,
+  getStoredMerchantOrdersForCode,
+  getStoredMerchantProductsForCode,
+  getStoredMerchantProfileForCode,
+  getStoredMerchantStockRequestsForCode,
   syncMerchantOrderCancelledToAdmin,
   syncMerchantOrderCreatedToAdmin,
   syncMerchantProductsAddedToAdmin,
@@ -72,77 +74,40 @@ const MerchantContext = createContext<MerchantContextType | undefined>(undefined
 
 export function MerchantProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<MerchantProfileData>(INITIAL_MERCHANT_PROFILE);
-  const [products, setProducts] = useState<MerchantProductItem[]>(INITIAL_MERCHANT_PRODUCTS);
-  const [orders, setOrders] = useState<MerchantOrderItem[]>(INITIAL_MERCHANT_ORDERS);
-  const [memoList, setMemoList] = useState<ResellerMemo[]>(INITIAL_MERCHANT_MEMOS);
-  const [asns, setAsns] = useState<MerchantAsnRecord[]>(INITIAL_MERCHANT_ASNS);
-  const [stockRequests, setStockRequests] = useState<StockRequestItem[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem(STORAGE_KEY_STOCK_REQUESTS);
-      if (saved) {
-        try {
-          return JSON.parse(saved);
-        } catch {}
-      }
-    }
-    return INITIAL_STOCK_REQUESTS;
-  });
+  const [products, setProducts] = useState<MerchantProductItem[]>([]);
+  const [orders, setOrders] = useState<MerchantOrderItem[]>([]);
+  const [memoList, setMemoList] = useState<ResellerMemo[]>([]);
+  const [asns, setAsns] = useState<MerchantAsnRecord[]>([]);
+  const [stockRequests, setStockRequests] = useState<StockRequestItem[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
-  // Load from API with localStorage / seed fallback
+  // Load active merchant session & scoped data
   useEffect(() => {
-    let isMounted = true;
-    async function loadData() {
-      try {
-        const [profData, prodsData, ordsData, memosData, asnsData] = await Promise.all([
-          merchantApi.getProfile(),
-          merchantApi.getProducts(),
-          merchantApi.getOrders(),
-          merchantApi.getMemos(),
-          merchantApi.getInboundAsns(),
-        ]);
-        if (isMounted) {
-          if (profData) setProfile(profData);
-          if (prodsData && prodsData.length > 0) setProducts(prodsData);
-          if (ordsData && ordsData.length > 0) setOrders(ordsData);
-          if (memosData && memosData.length > 0) setMemoList(memosData);
-          if (asnsData && asnsData.length > 0) setAsns(asnsData);
-        }
-      } catch {
-        // Fallback already handled
-      }
-    }
-    loadData();
+    const loadActiveMerchantWorkspace = () => {
+      const session = getActiveMerchantSession();
+      const code = session.merchantCode || 'MC-101';
+      const prof = getStoredMerchantProfileForCode(code);
+      setProfile(prof);
+      setProducts(getStoredMerchantProductsForCode(code));
+      setOrders(getStoredMerchantOrdersForCode(code));
+      setMemoList(getStoredMerchantMemosForCode(code, prof));
+      setAsns(getStoredMerchantAsnsForCode(code));
+      setStockRequests(getStoredMerchantStockRequestsForCode(code));
+    };
+
+    loadActiveMerchantWorkspace();
 
     const handleExternalSync = (e: Event) => {
       const ce = e as CustomEvent;
       if (ce.detail?.source === 'MerchantContext') return;
-      try {
-        const savedProds = localStorage.getItem(STORAGE_KEY_MERCHANT_PRODUCTS);
-        if (savedProds) {
-          const parsedProds = JSON.parse(savedProds);
-          if (Array.isArray(parsedProds) && parsedProds.length > 0) {
-            setProducts(parsedProds);
-          }
-        }
-        const savedOrds = localStorage.getItem(STORAGE_KEY_MERCHANT_ORDERS);
-        if (savedOrds) {
-          const parsedOrds = JSON.parse(savedOrds);
-          if (Array.isArray(parsedOrds) && parsedOrds.length > 0) {
-            setOrders(parsedOrds);
-          }
-        }
-      } catch {
-        // ignore
-      }
+      loadActiveMerchantWorkspace();
     };
 
     window.addEventListener('fulfillio-warehouse-sync', handleExternalSync);
     window.addEventListener('storage', handleExternalSync);
 
     return () => {
-      isMounted = false;
       window.removeEventListener('fulfillio-warehouse-sync', handleExternalSync);
       window.removeEventListener('storage', handleExternalSync);
     };
@@ -161,7 +126,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     setProfile((prev) => {
       const next = { ...prev, ...updated };
       if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY_MERCHANT_PROFILE, JSON.stringify(next));
+        localStorage.setItem(getMerchantProfileKey(next.merchantCode), JSON.stringify(next));
       }
       return next;
     });
@@ -177,7 +142,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
         return updatedTarget;
       });
       if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
+        localStorage.setItem(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
         if (updatedTarget) {
           syncMerchantProductUpdatedToAdmin(updatedTarget, profile);
         }
@@ -192,7 +157,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       const deleted = prev.filter((p) => p.id === id);
       const next = prev.filter((p) => p.id !== id);
       if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
+        localStorage.setItem(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
         syncMerchantProductsDeletedToAdmin(deleted);
       }
       return next;
@@ -204,7 +169,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     setProducts((prev) => {
       const next = [...newItems, ...prev];
       if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
+        localStorage.setItem(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
         syncMerchantProductsAddedToAdmin(newItems, profile);
       }
       return next;
@@ -221,7 +186,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
         return updatedTarget;
       });
       if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
+        localStorage.setItem(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
         if (updatedTarget) {
           syncMerchantProductUpdatedToAdmin(updatedTarget, profile);
         }
@@ -239,7 +204,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
         return { ...p, status: newStatus };
       });
       if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
+        localStorage.setItem(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
       }
       return next;
     });
@@ -250,7 +215,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     setProducts((prev) => {
       const next = prev.map((p) => (ids.includes(p.id) ? { ...p, status } : p));
       if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
+        localStorage.setItem(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
       }
       return next;
     });
@@ -262,7 +227,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       const deleted = prev.filter((p) => ids.includes(p.id));
       const next = prev.filter((p) => !ids.includes(p.id));
       if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
+        localStorage.setItem(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
         syncMerchantProductsDeletedToAdmin(deleted);
       }
       return next;
@@ -290,7 +255,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     setStockRequests((prev) => {
       const next = [newReq, ...prev];
       if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY_STOCK_REQUESTS, JSON.stringify(next));
+        localStorage.setItem(getMerchantStockRequestsKey(profile.merchantCode), JSON.stringify(next));
       }
       return next;
     });
@@ -311,7 +276,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
         return updatedTarget;
       });
       if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
+        localStorage.setItem(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
         if (updatedTarget) {
           syncMerchantProductUpdatedToAdmin(updatedTarget, profile);
         }
@@ -325,7 +290,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
         r.id === requestId ? { ...r, status: 'APPROVED' as const } : r
       );
       if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY_STOCK_REQUESTS, JSON.stringify(next));
+        localStorage.setItem(getMerchantStockRequestsKey(profile.merchantCode), JSON.stringify(next));
       }
       return next;
     });
@@ -337,7 +302,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     setStockRequests((prev) => {
       const next = prev.filter((r) => r.id !== requestId);
       if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY_STOCK_REQUESTS, JSON.stringify(next));
+        localStorage.setItem(getMerchantStockRequestsKey(profile.merchantCode), JSON.stringify(next));
       }
       return next;
     });
@@ -377,7 +342,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       });
       latestProducts = next;
       if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
+        localStorage.setItem(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
       }
       return next;
     });
@@ -385,7 +350,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     setOrders((prev) => {
       const next = [order, ...prev];
       if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY_MERCHANT_ORDERS, JSON.stringify(next));
+        localStorage.setItem(getMerchantOrdersKey(profile.merchantCode), JSON.stringify(next));
       }
       return next;
     });
@@ -422,7 +387,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
         });
         latestProducts = next;
         if (typeof window !== 'undefined') {
-          localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
+          localStorage.setItem(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
         }
         return next;
       });
@@ -435,7 +400,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
           : o
       );
       if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY_MERCHANT_ORDERS, JSON.stringify(next));
+        localStorage.setItem(getMerchantOrdersKey(profile.merchantCode), JSON.stringify(next));
       }
       return next;
     });
@@ -448,7 +413,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     setOrders((prev) => {
       const next = prev.map((o) => (o.id === orderId ? { ...o, status } : o));
       if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY_MERCHANT_ORDERS, JSON.stringify(next));
+        localStorage.setItem(getMerchantOrdersKey(profile.merchantCode), JSON.stringify(next));
       }
       return next;
     });
@@ -460,7 +425,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     setAsns((prev) => {
       const next = [newAsn, ...prev];
       if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY_MERCHANT_ASNS, JSON.stringify(next));
+        localStorage.setItem(getMerchantAsnsKey(profile.merchantCode), JSON.stringify(next));
       }
       return next;
     });
@@ -472,7 +437,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       const filtered = prev.filter((m) => m.id !== newMemo.id && m.code !== newMemo.code);
       const next = [newMemo, ...filtered];
       if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY_MERCHANT_MEMOS, JSON.stringify(next));
+        localStorage.setItem(getMerchantMemosKey(profile.merchantCode), JSON.stringify(next));
       }
       return next;
     });
@@ -483,7 +448,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     setMemoList((prev) => {
       const next = prev.map((m) => ({ ...m, isDefault: m.id === id }));
       if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY_MERCHANT_MEMOS, JSON.stringify(next));
+        localStorage.setItem(getMerchantMemosKey(profile.merchantCode), JSON.stringify(next));
       }
       return next;
     });
@@ -494,7 +459,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     setMemoList((prev) => {
       const next = prev.filter((m) => m.id !== id);
       if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY_MERCHANT_MEMOS, JSON.stringify(next));
+        localStorage.setItem(getMerchantMemosKey(profile.merchantCode), JSON.stringify(next));
       }
       return next;
     });

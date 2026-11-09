@@ -1,7 +1,7 @@
 import { Controller, Post, Get, Param, Body, UseGuards, Request } from '@nestjs/common';
 import { MemoEngineService } from './memo-engine.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { MemoTemplateLayout } from '@fulfillio/shared';
+import { MemoTemplateLayout } from '@fulfillio/contracts';
 
 @Controller('memos')
 export class MemoEngineController {

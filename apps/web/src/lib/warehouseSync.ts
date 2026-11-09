@@ -1,15 +1,24 @@
 import {
+  MerchantAsnRecord,
   MerchantOrderItem,
   MerchantProductItem,
   MerchantProfileData,
   ResellerMemo,
 } from '@/features/merchant/portal/types';
+import { StockRequestItem } from '@/features/merchant/portal/products/types';
 import {
+  INITIAL_MERCHANT_ASNS,
+  INITIAL_MERCHANT_MEMOS,
   INITIAL_MERCHANT_ORDERS,
   INITIAL_MERCHANT_PRODUCTS,
   INITIAL_MERCHANT_PROFILE,
+  INITIAL_STOCK_REQUESTS,
+  STORAGE_KEY_MERCHANT_ASNS,
+  STORAGE_KEY_MERCHANT_MEMOS,
   STORAGE_KEY_MERCHANT_ORDERS,
   STORAGE_KEY_MERCHANT_PRODUCTS,
+  STORAGE_KEY_MERCHANT_PROFILE,
+  STORAGE_KEY_STOCK_REQUESTS,
 } from '@/features/merchant/portal/mockData';
 import { WarehouseProductItem } from '@/features/admin/products/types';
 import {
@@ -19,11 +28,700 @@ import {
 } from '@/features/admin/products/mockData';
 import { CourierPartner, OrderStage, WarehousePipelineOrder } from '@/features/admin/orders/types';
 import { INITIAL_PIPELINE_ORDERS, STORAGE_KEY_ORDERS } from '@/features/admin/orders/mockData';
+import { MerchantRecord } from '@/features/admin/merchants/types';
+import { MERCHANTS_DATA, STORAGE_KEY as STORAGE_KEY_MERCHANT_DIRECTORY } from '@/features/admin/merchants/mockData';
+
+export const STORAGE_KEY_MERCHANT_CREDENTIALS = 'fulfillio_merchant_credentials_v1';
+export const STORAGE_KEY_ACTIVE_MERCHANT_SESSION = 'fulfillio_active_merchant_session_v1';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+
+export interface MerchantCredentialRecord {
+  email: string;
+  password: string;
+  merchantCode: string;
+  storeName: string;
+  ownerName: string;
+  phone: string;
+  category?: string;
+  orderVolume?: string;
+  storeUrl?: string;
+}
+
+export interface ActiveMerchantSession {
+  merchantCode: string;
+  email: string;
+  storeName: string;
+  ownerName: string;
+}
+
+export interface RegisterMerchantInput {
+  fullName: string;
+  storeName: string;
+  phone: string;
+  email: string;
+  category: string;
+  orderVolume: string;
+  storeUrl?: string;
+  password: string;
+}
+
+const AVATAR_GRADIENTS = [
+  'from-orange-500 to-amber-600',
+  'from-emerald-600 to-teal-700',
+  'from-indigo-600 to-violet-700',
+  'from-sky-600 to-blue-700',
+  'from-rose-600 to-pink-700',
+];
 
 const DEFAULT_SEED_MERCHANT_PRODUCT_IDS = new Set(INITIAL_MERCHANT_PRODUCTS.map((p) => p.id));
 const DEFAULT_SEED_MERCHANT_ORDER_IDS = new Set(
   INITIAL_MERCHANT_ORDERS.map((o) => o.orderNumber || o.id)
 );
+
+/**
+ * Scoped localStorage keys per merchantCode.
+ * MC-101 uses the base keys for backward compatibility with existing demo data;
+ * every other merchant (e.g. MC-106) gets its own isolated keys.
+ */
+export function getMerchantProfileKey(merchantCode = 'MC-101'): string {
+  const code = (merchantCode || 'MC-101').trim().toUpperCase();
+  return code === 'MC-101'
+    ? STORAGE_KEY_MERCHANT_PROFILE
+    : `${STORAGE_KEY_MERCHANT_PROFILE}_${code}`;
+}
+
+export function getMerchantProductsKey(merchantCode = 'MC-101'): string {
+  const code = (merchantCode || 'MC-101').trim().toUpperCase();
+  return code === 'MC-101'
+    ? STORAGE_KEY_MERCHANT_PRODUCTS
+    : `${STORAGE_KEY_MERCHANT_PRODUCTS}_${code}`;
+}
+
+export function getMerchantOrdersKey(merchantCode = 'MC-101'): string {
+  const code = (merchantCode || 'MC-101').trim().toUpperCase();
+  return code === 'MC-101'
+    ? STORAGE_KEY_MERCHANT_ORDERS
+    : `${STORAGE_KEY_MERCHANT_ORDERS}_${code}`;
+}
+
+export function getMerchantMemosKey(merchantCode = 'MC-101'): string {
+  const code = (merchantCode || 'MC-101').trim().toUpperCase();
+  return code === 'MC-101'
+    ? STORAGE_KEY_MERCHANT_MEMOS
+    : `${STORAGE_KEY_MERCHANT_MEMOS}_${code}`;
+}
+
+export function getMerchantAsnsKey(merchantCode = 'MC-101'): string {
+  const code = (merchantCode || 'MC-101').trim().toUpperCase();
+  return code === 'MC-101'
+    ? STORAGE_KEY_MERCHANT_ASNS
+    : `${STORAGE_KEY_MERCHANT_ASNS}_${code}`;
+}
+
+export function getMerchantStockRequestsKey(merchantCode = 'MC-101'): string {
+  const code = (merchantCode || 'MC-101').trim().toUpperCase();
+  return code === 'MC-101'
+    ? STORAGE_KEY_STOCK_REQUESTS
+    : `${STORAGE_KEY_STOCK_REQUESTS}_${code}`;
+}
+
+export function getStoredMerchantDirectory(): MerchantRecord[] {
+  if (typeof window === 'undefined') return MERCHANTS_DATA;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_MERCHANT_DIRECTORY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {
+    // ignore
+  }
+  return MERCHANTS_DATA;
+}
+
+function getStoredMerchantCredentials(): MerchantCredentialRecord[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_MERCHANT_CREDENTIALS);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {
+    // ignore
+  }
+  return [];
+}
+
+export function getActiveMerchantSession(): ActiveMerchantSession {
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_ACTIVE_MERCHANT_SESSION);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.merchantCode) {
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return {
+    merchantCode: INITIAL_MERCHANT_PROFILE.merchantCode,
+    email: INITIAL_MERCHANT_PROFILE.email,
+    storeName: INITIAL_MERCHANT_PROFILE.storeName,
+    ownerName: INITIAL_MERCHANT_PROFILE.ownerName,
+  };
+}
+
+export function setActiveMerchantSession(session: ActiveMerchantSession): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY_ACTIVE_MERCHANT_SESSION, JSON.stringify(session));
+    window.dispatchEvent(
+      new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'AuthSession' } })
+    );
+  } catch {
+    // ignore
+  }
+}
+
+export function clearActiveMerchantSession(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(STORAGE_KEY_ACTIVE_MERCHANT_SESSION);
+    localStorage.removeItem('fulfillio_token');
+    localStorage.removeItem('token');
+  } catch {
+    // ignore
+  }
+}
+
+export function buildProfileFromMerchantRecord(record: MerchantRecord): MerchantProfileData {
+  return {
+    merchantCode: record.merchantCode,
+    ownerName: record.ownerName,
+    storeName: record.storeName,
+    email: record.email,
+    phone: record.phone,
+    location: record.location || 'Dhaka, Bangladesh',
+    status: record.status,
+    verified: record.verified,
+    logoUrl: record.avatarUrl,
+    payoutMethod: 'Bank Transfer / bKash',
+    payoutSchedule: record.payoutAccount.frequency || 'Weekly (Every Friday)',
+    payoutAccount: {
+      provider: record.payoutAccount.provider,
+      accountHolder: record.payoutAccount.accountHolder,
+      accountNumber: record.payoutAccount.accountNumber,
+      branchName: record.payoutAccount.branchName,
+      routingNumber: record.payoutAccount.routingNumber,
+      bkashMerchantNumber: record.payoutAccount.bkashNumber,
+      chequeLeafUrl: '',
+      frequency: 'Weekly',
+      status: record.payoutAccount.status === 'VERIFIED' ? 'VERIFIED' : 'PENDING_REVIEW',
+    },
+    kycData: {
+      tradeLicenseNo: '',
+      nidNumber: '',
+      verificationStatus: record.verified ? 'VERIFIED' : 'PENDING_REVIEW',
+    },
+    socialChannels: [],
+  };
+}
+
+export function getStoredMerchantProfileForCode(merchantCode: string): MerchantProfileData {
+  const code = (merchantCode || 'MC-101').trim().toUpperCase();
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem(getMerchantProfileKey(code));
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.merchantCode) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+  }
+  const dirMatch = getStoredMerchantDirectory().find(
+    (m) => m.merchantCode.toUpperCase() === code
+  );
+  if (dirMatch && code !== 'MC-101') {
+    return buildProfileFromMerchantRecord(dirMatch);
+  }
+  return INITIAL_MERCHANT_PROFILE;
+}
+
+export function getStoredMerchantProductsForCode(merchantCode = 'MC-101'): MerchantProductItem[] {
+  const code = (merchantCode || 'MC-101').trim().toUpperCase();
+  if (typeof window === 'undefined') {
+    return code === 'MC-101' ? INITIAL_MERCHANT_PRODUCTS : [];
+  }
+  try {
+    const raw = localStorage.getItem(getMerchantProductsKey(code));
+    if (raw !== null) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {
+    // ignore
+  }
+  return code === 'MC-101' ? INITIAL_MERCHANT_PRODUCTS : [];
+}
+
+export function getStoredMerchantOrdersForCode(merchantCode = 'MC-101'): MerchantOrderItem[] {
+  const code = (merchantCode || 'MC-101').trim().toUpperCase();
+  if (typeof window === 'undefined') {
+    return code === 'MC-101' ? INITIAL_MERCHANT_ORDERS : [];
+  }
+  try {
+    const raw = localStorage.getItem(getMerchantOrdersKey(code));
+    if (raw !== null) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {
+    // ignore
+  }
+  return code === 'MC-101' ? INITIAL_MERCHANT_ORDERS : [];
+}
+
+export function getStoredMerchantMemosForCode(
+  merchantCode = 'MC-101',
+  profile?: MerchantProfileData
+): ResellerMemo[] {
+  const code = (merchantCode || 'MC-101').trim().toUpperCase();
+  if (typeof window === 'undefined') {
+    return code === 'MC-101' ? INITIAL_MERCHANT_MEMOS : [];
+  }
+  try {
+    const raw = localStorage.getItem(getMerchantMemosKey(code));
+    if (raw !== null) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {
+    // ignore
+  }
+  if (code === 'MC-101') return INITIAL_MERCHANT_MEMOS;
+  const prof = profile || getStoredMerchantProfileForCode(code);
+  return [
+    {
+      id: `m-${code.toLowerCase()}-1`,
+      code: 'MEMO-DEFAULT',
+      name: `${prof.storeName} Official Slip`,
+      resellerName: prof.storeName,
+      phone: prof.phone || '01700-000000',
+      address: prof.location || 'Dhaka, Bangladesh',
+      note: 'Thank you for shopping with us!',
+      accentColor: '#10b981',
+      paperSize: 'THERMAL_4X6',
+      isDefault: true,
+      created: 'Today',
+    },
+  ];
+}
+
+export function getStoredMerchantAsnsForCode(merchantCode = 'MC-101'): MerchantAsnRecord[] {
+  const code = (merchantCode || 'MC-101').trim().toUpperCase();
+  if (typeof window === 'undefined') {
+    return code === 'MC-101' ? INITIAL_MERCHANT_ASNS : [];
+  }
+  try {
+    const raw = localStorage.getItem(getMerchantAsnsKey(code));
+    if (raw !== null) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {
+    // ignore
+  }
+  return code === 'MC-101' ? INITIAL_MERCHANT_ASNS : [];
+}
+
+export function getStoredMerchantStockRequestsForCode(
+  merchantCode = 'MC-101'
+): StockRequestItem[] {
+  const code = (merchantCode || 'MC-101').trim().toUpperCase();
+  if (typeof window === 'undefined') {
+    return code === 'MC-101' ? INITIAL_STOCK_REQUESTS : [];
+  }
+  try {
+    const raw = localStorage.getItem(getMerchantStockRequestsKey(code));
+    if (raw !== null) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {
+    // ignore
+  }
+  return code === 'MC-101' ? INITIAL_STOCK_REQUESTS : [];
+}
+
+/**
+ * Register a new Merchant Account:
+ * 1. Calls Backend API `/auth/register` if running on localhost
+ * 2. Adds Merchant to Admin Merchant Directory (`Pending` approval status)
+ * 3. Creates isolated empty workspace (`0` products, `0` orders) for the new merchant
+ */
+export async function registerNewMerchantAccount(
+  input: RegisterMerchantInput
+): Promise<{ ok: boolean; error?: string; merchant?: MerchantRecord }> {
+  const cleanEmail = input.email.trim().toLowerCase();
+  const cleanStoreName = input.storeName.trim();
+  const cleanOwnerName = input.fullName.trim();
+  const cleanPhone = input.phone.trim();
+
+  if (!cleanEmail || !cleanStoreName || !cleanOwnerName || !input.password) {
+    return { ok: false, error: 'অনুগ্রহ করে সকল আবশ্যক তথ্য পূরণ করুন।' };
+  }
+
+  const directory = getStoredMerchantDirectory();
+  const credentials = getStoredMerchantCredentials();
+
+  // Check duplicate email
+  if (
+    directory.some((m) => m.email.trim().toLowerCase() === cleanEmail) ||
+    credentials.some((c) => c.email.trim().toLowerCase() === cleanEmail)
+  ) {
+    return {
+      ok: false,
+      error: 'এই ইমেইল দিয়ে ইতিমধ্যে একটি মার্চেন্ট একাউন্ট খোলা হয়েছে। অনুগ্রহ করে লগইন করুন।',
+    };
+  }
+
+  // Try calling backend API if available (localhost)
+  let backendMerchantCode: string | null = null;
+  try {
+    const res = await fetch(`${API_BASE}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        businessName: cleanStoreName,
+        ownerName: cleanOwnerName,
+        email: cleanEmail,
+        phone: cleanPhone,
+        password: input.password,
+      }),
+    });
+    if (res.status === 409) {
+      return {
+        ok: false,
+        error: 'এই ইমেইল দিয়ে ইতিমধ্যে একটি মার্চেন্ট একাউন্ট খোলা হয়েছে।',
+      };
+    }
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.merchantCode) {
+        backendMerchantCode = data.merchantCode;
+      }
+    }
+  } catch {
+    // Backend offline or on Vercel static deployment; continue with local storage engine
+  }
+
+  // Determine next sequential Merchant Code (MC-106, MC-107, ...)
+  const maxNum = directory.reduce((max, m) => {
+    const num = parseInt(m.merchantCode.replace(/[^0-9]/g, ''), 10);
+    return Number.isFinite(num) && num > max ? num : max;
+  }, 105);
+  const nextNum = maxNum + 1;
+  const merchantCode = backendMerchantCode || `MC-${nextNum}`;
+
+  const initials =
+    cleanStoreName
+      .split(/\s+/)
+      .map((w) => w[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase() || 'MC';
+
+  const avatarBg = AVATAR_GRADIENTS[nextNum % AVATAR_GRADIENTS.length];
+  const joinedDate = new Date().toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+
+  const newMerchantRecord: MerchantRecord = {
+    id: `m-${nextNum}`,
+    merchantCode,
+    storeName: cleanStoreName,
+    ownerName: cleanOwnerName,
+    email: input.email.trim(),
+    phone: cleanPhone,
+    location: 'Dhaka, Bangladesh',
+    deliveryArea: 'Nationwide Bangladesh',
+    status: 'Pending',
+    verified: false,
+    joinedDate,
+    avatarInitials: initials,
+    avatarBg,
+    payoutAccount: {
+      provider: 'Pending Bank Setup',
+      accountHolder: cleanOwnerName,
+      accountNumber: '0000000000000',
+      branchName: 'Dhaka Main Branch',
+      routingNumber: '000000000',
+      bkashNumber: cleanPhone,
+      frequency: 'Weekly (Every Friday)',
+      status: 'PENDING_REVIEW',
+      availableBalance: 0,
+      lastPayoutAmount: 0,
+    },
+  };
+
+  if (typeof window !== 'undefined') {
+    try {
+      // 1. Prepend to Admin Merchant Directory
+      const updatedDirectory = [newMerchantRecord, ...directory];
+      localStorage.setItem(STORAGE_KEY_MERCHANT_DIRECTORY, JSON.stringify(updatedDirectory));
+
+      // 2. Save Credentials
+      const newCred: MerchantCredentialRecord = {
+        email: cleanEmail,
+        password: input.password,
+        merchantCode,
+        storeName: cleanStoreName,
+        ownerName: cleanOwnerName,
+        phone: cleanPhone,
+        category: input.category,
+        orderVolume: input.orderVolume,
+        storeUrl: input.storeUrl?.trim(),
+      };
+      localStorage.setItem(
+        STORAGE_KEY_MERCHANT_CREDENTIALS,
+        JSON.stringify([newCred, ...credentials])
+      );
+
+      // 3. Initialize isolated Merchant Portal profile & empty workspaces (0 products, 0 orders)
+      const initialProfile: MerchantProfileData = {
+        ...buildProfileFromMerchantRecord(newMerchantRecord),
+        socialChannels: input.storeUrl?.trim()
+          ? [{ id: '1', platform: 'Facebook', url: input.storeUrl.trim() }]
+          : [],
+      };
+      localStorage.setItem(getMerchantProfileKey(merchantCode), JSON.stringify(initialProfile));
+      localStorage.setItem(getMerchantProductsKey(merchantCode), JSON.stringify([]));
+      localStorage.setItem(getMerchantOrdersKey(merchantCode), JSON.stringify([]));
+      localStorage.setItem(
+        getMerchantMemosKey(merchantCode),
+        JSON.stringify(getStoredMerchantMemosForCode(merchantCode, initialProfile))
+      );
+      localStorage.setItem(getMerchantAsnsKey(merchantCode), JSON.stringify([]));
+      localStorage.setItem(getMerchantStockRequestsKey(merchantCode), JSON.stringify([]));
+
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'MerchantRegister' } })
+      );
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  return { ok: true, merchant: newMerchantRecord };
+}
+
+/**
+ * Authenticate a Merchant Login:
+ * - Verifies email & password
+ * - Checks if the merchant is approved (`Active`) in Admin Merchant Directory
+ * - Blocks `Pending` or `Suspended` merchants with clear guidance
+ * - Sets the active merchant session so `/merchant` loads that merchant's isolated portal
+ */
+export async function authenticateMerchantLogin(
+  emailInput: string,
+  passwordInput: string
+): Promise<{
+  ok: boolean;
+  error?: string;
+  merchantCode?: string;
+  merchant?: MerchantRecord;
+}> {
+  const cleanEmail = emailInput.trim().toLowerCase();
+  const directory = getStoredMerchantDirectory();
+  const credentials = getStoredMerchantCredentials();
+
+  // Check if user is logging in with the default demo preset (`merchant@urbanthreads.com` or `sabbir@example.com`)
+  const isDefaultDemoPreset =
+    cleanEmail === 'merchant@urbanthreads.com' || cleanEmail === 'sabbir@example.com';
+
+  let matchedMerchant = directory.find(
+    (m) =>
+      m.email.trim().toLowerCase() === cleanEmail ||
+      m.merchantCode.trim().toLowerCase() === cleanEmail
+  );
+
+  if (!matchedMerchant && isDefaultDemoPreset) {
+    matchedMerchant = directory.find((m) => m.merchantCode === 'MC-101') || MERCHANTS_DATA[0];
+  }
+
+  // Also check credentials if not found in directory yet
+  const matchedCred = credentials.find(
+    (c) =>
+      c.email.trim().toLowerCase() === cleanEmail ||
+      (matchedMerchant && c.merchantCode === matchedMerchant.merchantCode)
+  );
+
+  if (!matchedMerchant && !matchedCred) {
+    // Try backend login if running on localhost
+    try {
+      const res = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail, password: passwordInput }),
+      });
+      if (res.status === 403) {
+        return {
+          ok: false,
+          error:
+            'আপনার একাউন্টটি এখনো এডমিন অনুমোদনের অপেক্ষায় আছে (Pending Approval)। এডমিন প্যানেল থেকে Approve করার পর লগইন করতে পারবেন।',
+        };
+      }
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.accessToken) {
+          localStorage.setItem('fulfillio_token', data.accessToken);
+        }
+        const mCode = data?.user?.merchantCode || 'MC-101';
+        const session: ActiveMerchantSession = {
+          merchantCode: mCode,
+          email: data?.user?.email || cleanEmail,
+          storeName: data?.user?.businessName || data?.user?.name || 'Merchant Store',
+          ownerName: data?.user?.name || 'Merchant Owner',
+        };
+        setActiveMerchantSession(session);
+        return { ok: true, merchantCode: mCode };
+      }
+    } catch {
+      // Backend offline
+    }
+
+    return {
+      ok: false,
+      error:
+        'এই ইমেইলে কোনো মার্চেন্ট একাউন্ট পাওয়া যায়নি। নতুন মার্চেন্ট একাউন্ট খুলতে নিচের "এখানে একাউন্ট খুলুন" অপশনে যান।',
+    };
+  }
+
+  // Verify password if credential exists for this merchant
+  if (matchedCred && matchedCred.password !== passwordInput) {
+    return {
+      ok: false,
+      error: 'পাসওয়ার্ড সঠিক নয়। অনুগ্রহ করে সঠিক পাসওয়ার্ড দিয়ে চেষ্টা করুন।',
+    };
+  }
+
+  // Check Admin Approval / Account Status
+  const currentStatus = matchedMerchant?.status || 'Pending';
+  const storeLabel = matchedMerchant?.storeName || matchedCred?.storeName || 'আপনার স্টোর';
+  const codeLabel = matchedMerchant?.merchantCode || matchedCred?.merchantCode || '';
+
+  if (currentStatus === 'Pending') {
+    return {
+      ok: false,
+      error: `"${storeLabel}" (${codeLabel}) একাউন্টটি এখনো এডমিন অনুমোদনের অপেক্ষায় আছে (Pending Approval)। Admin Panel -> Merchants থেকে Approve করার পর লগইন করতে পারবেন।`,
+    };
+  }
+
+  if (currentStatus === 'Suspended') {
+    return {
+      ok: false,
+      error: `"${storeLabel}" (${codeLabel}) একাউন্টটি বর্তমানে স্থগিত (Suspended) রয়েছে। Admin Panel থেকে Active করার পর লগইন করতে পারবেন।`,
+    };
+  }
+
+  // Optional: also authenticate against localhost backend to obtain JWT if running locally
+  try {
+    const res = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: cleanEmail, password: passwordInput }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.accessToken) {
+        localStorage.setItem('fulfillio_token', data.accessToken);
+      }
+    }
+  } catch {
+    // ignore when backend is not running
+  }
+
+  const finalMerchantCode = matchedMerchant?.merchantCode || matchedCred?.merchantCode || 'MC-101';
+  const finalEmail = matchedMerchant?.email || matchedCred?.email || cleanEmail;
+  const finalStoreName =
+    matchedMerchant?.storeName || matchedCred?.storeName || INITIAL_MERCHANT_PROFILE.storeName;
+  const finalOwnerName =
+    matchedMerchant?.ownerName || matchedCred?.ownerName || INITIAL_MERCHANT_PROFILE.ownerName;
+
+  // Ensure profile in storage reflects Active & Verified state
+  if (matchedMerchant && finalMerchantCode !== 'MC-101') {
+    const existingProf = getStoredMerchantProfileForCode(finalMerchantCode);
+    const updatedProf: MerchantProfileData = {
+      ...existingProf,
+      merchantCode: finalMerchantCode,
+      storeName: finalStoreName,
+      ownerName: finalOwnerName,
+      email: finalEmail,
+      phone: matchedMerchant.phone || existingProf.phone,
+      status: 'Active',
+      verified: true,
+    };
+    try {
+      localStorage.setItem(getMerchantProfileKey(finalMerchantCode), JSON.stringify(updatedProf));
+    } catch {
+      // ignore
+    }
+  }
+
+  setActiveMerchantSession({
+    merchantCode: finalMerchantCode,
+    email: finalEmail,
+    storeName: finalStoreName,
+    ownerName: finalOwnerName,
+  });
+
+  return { ok: true, merchantCode: finalMerchantCode, merchant: matchedMerchant };
+}
+
+/**
+ * Sync Admin Merchant Directory updates (Approve / Suspend / Profile Edit) to per-merchant profiles.
+ */
+export function syncMerchantDirectoryToProfiles(merchants: MerchantRecord[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY_MERCHANT_DIRECTORY, JSON.stringify(merchants));
+    for (const m of merchants) {
+      const key = getMerchantProfileKey(m.merchantCode);
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const parsed: MerchantProfileData = JSON.parse(raw);
+        const updated: MerchantProfileData = {
+          ...parsed,
+          storeName: m.storeName,
+          ownerName: m.ownerName,
+          email: m.email,
+          phone: m.phone,
+          location: m.location || parsed.location,
+          status: m.status,
+          verified: m.verified,
+          logoUrl: m.avatarUrl || parsed.logoUrl,
+        };
+        localStorage.setItem(key, JSON.stringify(updated));
+      } else if (m.merchantCode !== 'MC-101') {
+        localStorage.setItem(key, JSON.stringify(buildProfileFromMerchantRecord(m)));
+      }
+    }
+    window.dispatchEvent(
+      new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'AdminMerchantDirectory' } })
+    );
+  } catch {
+    // ignore
+  }
+}
 
 function mapCategoryToAdmin(
   category?: string,
@@ -113,20 +811,6 @@ function getStoredAdminProducts(): WarehouseProductItem[] {
   return INITIAL_PRODUCTS;
 }
 
-function getStoredMerchantProducts(): MerchantProductItem[] {
-  if (typeof window === 'undefined') return INITIAL_MERCHANT_PRODUCTS;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_MERCHANT_PRODUCTS);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    }
-  } catch {
-    // ignore
-  }
-  return INITIAL_MERCHANT_PRODUCTS;
-}
-
 function getStoredAdminOrders(): WarehousePipelineOrder[] {
   if (typeof window === 'undefined') return INITIAL_PIPELINE_ORDERS;
   try {
@@ -139,20 +823,6 @@ function getStoredAdminOrders(): WarehousePipelineOrder[] {
     // ignore
   }
   return INITIAL_PIPELINE_ORDERS;
-}
-
-function getStoredMerchantOrders(): MerchantOrderItem[] {
-  if (typeof window === 'undefined') return INITIAL_MERCHANT_ORDERS;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_MERCHANT_ORDERS);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    }
-  } catch {
-    // ignore
-  }
-  return INITIAL_MERCHANT_ORDERS;
 }
 
 function isMatchingProduct(
@@ -255,7 +925,7 @@ export function syncMerchantProductsDeletedToAdmin(deletedProducts: MerchantProd
 }
 
 /**
- * Admin -> Merchant: When Admin approves, updates bin/stock, adds, or deletes products, sync back to Merchant.
+ * Admin -> Merchant: When Admin approves, updates bin/stock, adds, or deletes products, sync back to all Merchants.
  */
 export function syncAdminProductsToMerchant(
   adminProducts: WarehouseProductItem[],
@@ -263,86 +933,127 @@ export function syncAdminProductsToMerchant(
 ): void {
   if (typeof window === 'undefined') return;
   try {
-    let merchantProducts = getStoredMerchantProducts();
+    const directory = getStoredMerchantDirectory();
+    const merchantCodes = new Set<string>([
+      'MC-101',
+      ...directory.map((m) => m.merchantCode.toUpperCase()),
+      ...adminProducts.map((ap) => ap.merchantCode.toUpperCase()),
+      ...deletedAdminProducts.map((ap) => ap.merchantCode.toUpperCase()),
+    ]);
 
-    // 1. Remove any products deleted/rejected by Admin
-    if (deletedAdminProducts.length > 0) {
-      merchantProducts = merchantProducts.filter(
-        (mp) => !deletedAdminProducts.some((delAp) => isMatchingProduct(mp, delAp))
+    for (const code of merchantCodes) {
+      const storageKey = getMerchantProductsKey(code);
+      const rawExisting = localStorage.getItem(storageKey);
+      // Only initialize/touch non-MC-101 merchants if they have stored products or matching admin products
+      if (
+        code !== 'MC-101' &&
+        rawExisting === null &&
+        !adminProducts.some((ap) => ap.merchantCode.toUpperCase() === code)
+      ) {
+        continue;
+      }
+
+      let merchantProducts = getStoredMerchantProductsForCode(code);
+
+      // 1. Remove any products deleted/rejected by Admin
+      if (deletedAdminProducts.length > 0) {
+        merchantProducts = merchantProducts.filter(
+          (mp) => !deletedAdminProducts.some((delAp) => isMatchingProduct(mp, delAp))
+        );
+      }
+
+      // 2. Update existing Merchant products from Admin products
+      merchantProducts = merchantProducts.map((mp) => {
+        const matchedAdmin = adminProducts.find((ap) => isMatchingProduct(mp, ap));
+        if (!matchedAdmin) return mp;
+        return {
+          ...mp,
+          title: matchedAdmin.title,
+          stock: matchedAdmin.stock,
+          price: matchedAdmin.price,
+          bin: matchedAdmin.binCode,
+          status:
+            matchedAdmin.status === 'APPROVED'
+              ? ('PUBLISHED' as const)
+              : ('DRAFT' as const),
+        };
+      });
+
+      // 3. Add any new approved products created directly by Admin for this merchantCode
+      const newFromAdmin = adminProducts.filter(
+        (ap) =>
+          ap.merchantCode.toUpperCase() === code &&
+          ap.status === 'APPROVED' &&
+          !INITIAL_PRODUCTS.some((seed) => seed.id === ap.id) &&
+          !merchantProducts.some((mp) => isMatchingProduct(mp, ap))
       );
+
+      if (newFromAdmin.length > 0) {
+        const converted: MerchantProductItem[] = newFromAdmin.map((ap) => ({
+          id: ap.id,
+          title: ap.title,
+          variantLabel: `${ap.color} / ${ap.size}`,
+          category: ap.category,
+          sku: ap.fullSku,
+          barcode: `890${Math.floor(1000000000 + Math.random() * 9000000000)}`,
+          stock: ap.stock,
+          reserved: 0,
+          price: ap.price,
+          bin: ap.binCode,
+          status: 'PUBLISHED',
+          totalOrders: 0,
+          imageUrl: ap.imageUrl,
+        }));
+        merchantProducts = [...converted, ...merchantProducts];
+      }
+
+      localStorage.setItem(storageKey, JSON.stringify(merchantProducts));
     }
-
-    // 2. Update existing Merchant products from Admin products
-    merchantProducts = merchantProducts.map((mp) => {
-      const matchedAdmin = adminProducts.find((ap) => isMatchingProduct(mp, ap));
-      if (!matchedAdmin) return mp;
-      return {
-        ...mp,
-        title: matchedAdmin.title,
-        stock: matchedAdmin.stock,
-        price: matchedAdmin.price,
-        bin: matchedAdmin.binCode,
-        status:
-          matchedAdmin.status === 'APPROVED'
-            ? ('PUBLISHED' as const)
-            : ('DRAFT' as const),
-      };
-    });
-
-    // 3. Add any new MC-101 approved products created directly by Admin that aren't in Merchant catalog
-    const newFromAdmin = adminProducts.filter(
-      (ap) =>
-        ap.merchantCode === 'MC-101' &&
-        ap.status === 'APPROVED' &&
-        !INITIAL_PRODUCTS.some((seed) => seed.id === ap.id) &&
-        !merchantProducts.some((mp) => isMatchingProduct(mp, ap))
-    );
-
-    if (newFromAdmin.length > 0) {
-      const converted: MerchantProductItem[] = newFromAdmin.map((ap) => ({
-        id: ap.id,
-        title: ap.title,
-        variantLabel: `${ap.color} / ${ap.size}`,
-        category: ap.category,
-        sku: ap.fullSku,
-        barcode: `890${Math.floor(1000000000 + Math.random() * 9000000000)}`,
-        stock: ap.stock,
-        reserved: 0,
-        price: ap.price,
-        bin: ap.binCode,
-        status: 'PUBLISHED',
-        totalOrders: 0,
-        imageUrl: ap.imageUrl,
-      }));
-      merchantProducts = [...converted, ...merchantProducts];
-    }
-
-    localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(merchantProducts));
   } catch {
     // ignore
   }
 }
 
 /**
- * Reconcile any previously uploaded Merchant products into Admin's product list on load.
+ * Reconcile any previously uploaded Merchant products (across all merchants) into Admin's product list on load.
  */
 export function reconcileAdminProductsWithMerchant(
   adminProducts: WarehouseProductItem[]
 ): WarehouseProductItem[] {
   if (typeof window === 'undefined') return adminProducts;
   try {
-    const merchantProducts = getStoredMerchantProducts();
-    const customMerchantItems = merchantProducts.filter(
-      (mp) =>
-        !DEFAULT_SEED_MERCHANT_PRODUCT_IDS.has(mp.id) &&
-        !adminProducts.some((ap) => isMatchingProduct(mp, ap))
-    );
-    if (customMerchantItems.length === 0) return adminProducts;
+    const directory = getStoredMerchantDirectory();
+    const merchantCodes = new Set<string>([
+      'MC-101',
+      ...directory.map((m) => m.merchantCode.toUpperCase()),
+    ]);
 
-    const converted = customMerchantItems.map((mp) =>
-      convertMerchantProductToWarehouse(mp, INITIAL_MERCHANT_PROFILE, 'PENDING_APPROVAL')
-    );
-    const merged = [...converted, ...adminProducts];
+    const newlyConverted: WarehouseProductItem[] = [];
+
+    for (const code of merchantCodes) {
+      const raw = localStorage.getItem(getMerchantProductsKey(code));
+      if (code !== 'MC-101' && raw === null) continue;
+
+      const merchantProducts = getStoredMerchantProductsForCode(code);
+      const profile = getStoredMerchantProfileForCode(code);
+
+      const customMerchantItems = merchantProducts.filter(
+        (mp) =>
+          (code !== 'MC-101' || !DEFAULT_SEED_MERCHANT_PRODUCT_IDS.has(mp.id)) &&
+          !adminProducts.some((ap) => isMatchingProduct(mp, ap)) &&
+          !newlyConverted.some((ap) => isMatchingProduct(mp, ap))
+      );
+
+      for (const mp of customMerchantItems) {
+        newlyConverted.push(
+          convertMerchantProductToWarehouse(mp, profile, 'PENDING_APPROVAL')
+        );
+      }
+    }
+
+    if (newlyConverted.length === 0) return adminProducts;
+
+    const merged = [...newlyConverted, ...adminProducts];
     localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(merged));
     return merged;
   } catch {
@@ -535,12 +1246,17 @@ export function syncMerchantOrderCancelledToAdmin(
 }
 
 /**
- * Admin -> Merchant: Sync Admin pipeline order stage/courier/tracking changes back to Merchant orders.
+ * Admin -> Merchant: Sync Admin pipeline order stage/courier/tracking changes back to all Merchants' orders.
  */
 export function syncAdminOrdersToMerchant(adminOrders: WarehousePipelineOrder[]): void {
   if (typeof window === 'undefined') return;
   try {
-    let merchantOrders = getStoredMerchantOrders();
+    const directory = getStoredMerchantDirectory();
+    const merchantCodes = new Set<string>([
+      'MC-101',
+      ...directory.map((m) => m.merchantCode.toUpperCase()),
+      ...adminOrders.map((ao) => ao.merchantCode.toUpperCase()),
+    ]);
 
     const stageToStatus: Record<OrderStage, MerchantOrderItem['status']> = {
       PICK: 'PENDING',
@@ -551,79 +1267,113 @@ export function syncAdminOrdersToMerchant(adminOrders: WarehousePipelineOrder[])
       CANCELLED: 'CANCELLED',
     };
 
-    merchantOrders = merchantOrders.map((mo) => {
-      const moId = mo.orderNumber || mo.id;
-      const matchedAdmin = adminOrders.find((ao) => ao.id === moId || ao.id === mo.id);
-      if (!matchedAdmin) return mo;
-      return {
-        ...mo,
-        status: stageToStatus[matchedAdmin.stage] || mo.status,
-        courier: matchedAdmin.courier,
-        trackingId: matchedAdmin.trackingCode || mo.trackingId,
-      };
-    });
+    for (const code of merchantCodes) {
+      const storageKey = getMerchantOrdersKey(code);
+      const rawExisting = localStorage.getItem(storageKey);
+      if (
+        code !== 'MC-101' &&
+        rawExisting === null &&
+        !adminOrders.some((ao) => ao.merchantCode.toUpperCase() === code)
+      ) {
+        continue;
+      }
 
-    // Also add any new MC-101 orders created from Admin Panel that aren't in Merchant's order list yet
-    const newAdminMc101Orders = adminOrders.filter(
-      (ao) =>
-        ao.merchantCode === 'MC-101' &&
-        !INITIAL_PIPELINE_ORDERS.some((seed) => seed.id === ao.id) &&
-        !merchantOrders.some((mo) => (mo.orderNumber || mo.id) === ao.id || mo.id === ao.id)
-    );
+      let merchantOrders = getStoredMerchantOrdersForCode(code);
 
-    if (newAdminMc101Orders.length > 0) {
-      const converted: MerchantOrderItem[] = newAdminMc101Orders.map((ao) => ({
-        id: ao.id,
-        orderNumber: ao.id,
-        date: ao.createdAt || 'Today, Just now',
-        customer: ao.customerName,
-        phone: ao.customerPhone,
-        address: ao.customerAddress,
-        productId: 'p-1',
-        items: `${ao.productTitle} (${ao.color} / ${ao.size}) x ${ao.qty}`,
-        qty: ao.qty,
-        amount: ao.codAmount,
-        codAmount: ao.codAmount,
-        memoCode: ao.memoCode,
-        status: stageToStatus[ao.stage] || 'PENDING',
-        courier: ao.courier,
-        trackingId: ao.trackingCode,
-        paymentMethod: 'Cash on Delivery',
-        paymentStatus: 'Unpaid',
-      }));
-      merchantOrders = [...converted, ...merchantOrders];
+      merchantOrders = merchantOrders.map((mo) => {
+        const moId = mo.orderNumber || mo.id;
+        const matchedAdmin = adminOrders.find((ao) => ao.id === moId || ao.id === mo.id);
+        if (!matchedAdmin) return mo;
+        return {
+          ...mo,
+          status: stageToStatus[matchedAdmin.stage] || mo.status,
+          courier: matchedAdmin.courier,
+          trackingId: matchedAdmin.trackingCode || mo.trackingId,
+        };
+      });
+
+      // Add any new orders created from Admin Panel for this merchantCode
+      const newAdminOrders = adminOrders.filter(
+        (ao) =>
+          ao.merchantCode.toUpperCase() === code &&
+          !INITIAL_PIPELINE_ORDERS.some((seed) => seed.id === ao.id) &&
+          !merchantOrders.some((mo) => (mo.orderNumber || mo.id) === ao.id || mo.id === ao.id)
+      );
+
+      if (newAdminOrders.length > 0) {
+        const converted: MerchantOrderItem[] = newAdminOrders.map((ao) => ({
+          id: ao.id,
+          orderNumber: ao.id,
+          date: ao.createdAt || 'Today, Just now',
+          customer: ao.customerName,
+          phone: ao.customerPhone,
+          address: ao.customerAddress,
+          productId: 'p-1',
+          items: `${ao.productTitle} (${ao.color} / ${ao.size}) x ${ao.qty}`,
+          qty: ao.qty,
+          amount: ao.codAmount,
+          codAmount: ao.codAmount,
+          memoCode: ao.memoCode,
+          status: stageToStatus[ao.stage] || 'PENDING',
+          courier: ao.courier,
+          trackingId: ao.trackingCode,
+          paymentMethod: 'Cash on Delivery',
+          paymentStatus: 'Unpaid',
+        }));
+        merchantOrders = [...converted, ...merchantOrders];
+      }
+
+      localStorage.setItem(storageKey, JSON.stringify(merchantOrders));
     }
-
-    localStorage.setItem(STORAGE_KEY_MERCHANT_ORDERS, JSON.stringify(merchantOrders));
   } catch {
     // ignore
   }
 }
 
 /**
- * Reconcile any previously created Merchant orders into Admin's pipeline order list on load.
+ * Reconcile any previously created Merchant orders (across all merchants) into Admin's pipeline order list on load.
  */
 export function reconcileAdminOrdersWithMerchant(
   adminOrders: WarehousePipelineOrder[]
 ): WarehousePipelineOrder[] {
   if (typeof window === 'undefined') return adminOrders;
   try {
-    const merchantOrders = getStoredMerchantOrders();
-    const merchantProducts = getStoredMerchantProducts();
-    const customMerchantOrders = merchantOrders.filter((mo) => {
-      const moId = mo.orderNumber || mo.id;
-      return (
-        !DEFAULT_SEED_MERCHANT_ORDER_IDS.has(moId) &&
-        !adminOrders.some((ao) => ao.id === moId || ao.id === mo.id)
-      );
-    });
+    const directory = getStoredMerchantDirectory();
+    const merchantCodes = new Set<string>([
+      'MC-101',
+      ...directory.map((m) => m.merchantCode.toUpperCase()),
+    ]);
 
-    if (customMerchantOrders.length === 0) return adminOrders;
+    const newlyConverted: WarehousePipelineOrder[] = [];
 
-    const converted = customMerchantOrders.map((mo) =>
-      convertMerchantOrderToWarehouse(mo, merchantProducts, [], INITIAL_MERCHANT_PROFILE)
-    );
-    const merged = [...converted, ...adminOrders];
+    for (const code of merchantCodes) {
+      const raw = localStorage.getItem(getMerchantOrdersKey(code));
+      if (code !== 'MC-101' && raw === null) continue;
+
+      const merchantOrders = getStoredMerchantOrdersForCode(code);
+      const merchantProducts = getStoredMerchantProductsForCode(code);
+      const profile = getStoredMerchantProfileForCode(code);
+      const memos = getStoredMerchantMemosForCode(code, profile);
+
+      const customMerchantOrders = merchantOrders.filter((mo) => {
+        const moId = mo.orderNumber || mo.id;
+        return (
+          (code !== 'MC-101' || !DEFAULT_SEED_MERCHANT_ORDER_IDS.has(moId)) &&
+          !adminOrders.some((ao) => ao.id === moId || ao.id === mo.id) &&
+          !newlyConverted.some((ao) => ao.id === moId || ao.id === mo.id)
+        );
+      });
+
+      for (const mo of customMerchantOrders) {
+        newlyConverted.push(
+          convertMerchantOrderToWarehouse(mo, merchantProducts, memos, profile)
+        );
+      }
+    }
+
+    if (newlyConverted.length === 0) return adminOrders;
+
+    const merged = [...newlyConverted, ...adminOrders];
     localStorage.setItem(STORAGE_KEY_ORDERS, JSON.stringify(merged));
     return merged;
   } catch {
@@ -729,4 +1479,3 @@ export function getSyncedMerchantDirectoryLists(
     return { products: baseProducts, orders: baseOrders };
   }
 }
-

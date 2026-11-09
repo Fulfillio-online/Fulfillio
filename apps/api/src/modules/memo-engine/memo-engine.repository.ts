@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { MemoTemplateLayout } from '@fulfillio/shared';
+import { MemoTemplateLayout } from '@fulfillio/contracts';
 
 @Injectable()
 export class MemoEngineRepository {

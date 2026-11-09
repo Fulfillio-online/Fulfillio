@@ -18,7 +18,10 @@ import {
 import { MerchantStatsOverview } from './components/MerchantStatsOverview';
 import { MerchantTable } from './components/MerchantTable';
 import { MerchantProfileDrawer } from './components/MerchantProfileDrawer';
-import { getSyncedMerchantDirectoryLists } from '@/lib/warehouseSync';
+import {
+  getSyncedMerchantDirectoryLists,
+  syncMerchantDirectoryToProfiles,
+} from '@/lib/warehouseSync';
 
 export interface MerchantDirectoryManagerProps {
   onNavigateTab?: (tabName: any) => void;
@@ -43,7 +46,9 @@ export function MerchantDirectoryManager({
 
   // Load persisted merchants & synced products/orders from localStorage
   useEffect(() => {
-    const syncData = () => {
+    const syncData = (e?: Event) => {
+      const ce = e as CustomEvent | undefined;
+      if (ce?.detail?.source === 'AdminMerchantDirectory') return;
       try {
         const saved = localStorage.getItem(STORAGE_KEY);
         if (saved) {
@@ -85,11 +90,7 @@ export function MerchantDirectoryManager({
       m.id === merchantId ? { ...m, status: nextStatus, verified: nextStatus === 'Active' } : m,
     );
     setMerchants(updated);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    } catch (err) {
-      console.warn('Could not save to localStorage', err);
-    }
+    syncMerchantDirectoryToProfiles(updated);
     triggerToast(`Status changed to ${nextStatus}`);
   };
 
@@ -101,11 +102,7 @@ export function MerchantDirectoryManager({
         : m,
     );
     setMerchants(updated);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    } catch (err) {
-      console.warn('Could not save to localStorage', err);
-    }
+    syncMerchantDirectoryToProfiles(updated);
     triggerToast(
       `${nextStatus === 'Active' ? 'Approved' : 'Suspended'} ${merchantIds.length} merchant${
         merchantIds.length > 1 ? 's' : ''
@@ -119,11 +116,7 @@ export function MerchantDirectoryManager({
       m.id === updatedMerchant.id ? updatedMerchant : m,
     );
     setMerchants(updated);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    } catch (err) {
-      console.warn('Could not save to localStorage', err);
-    }
+    syncMerchantDirectoryToProfiles(updated);
     triggerToast(`Saved settings for ${updatedMerchant.storeName}!`);
   };
 

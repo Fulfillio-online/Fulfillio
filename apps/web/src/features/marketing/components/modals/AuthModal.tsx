@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -13,7 +13,9 @@ import {
   Eye,
   EyeOff,
   Sparkles,
+  AlertCircle,
 } from 'lucide-react';
+import { authenticateMerchantLogin } from '@/lib/warehouseSync';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -30,13 +32,15 @@ export function AuthModal({
 }: AuthModalProps) {
   const router = useRouter();
   const [selectedRole, setSelectedRole] = useState<'MERCHANT' | 'SUPER_ADMIN' | 'WAREHOUSE_OPERATOR'>(initialRole);
-  const [email, setEmail] = useState('merchant@urbanthreads.com');
+  const [email, setEmail] = useState('sabbir@example.com');
   const [password, setPassword] = useState('password123');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setSelectedRole(initialRole);
+    setErrorMessage(null);
     applyPresetCredentials(initialRole);
   }, [initialRole, isOpen]);
 
@@ -51,11 +55,12 @@ export function AuthModal({
 
   const applyPresetCredentials = (role: 'MERCHANT' | 'SUPER_ADMIN' | 'WAREHOUSE_OPERATOR') => {
     setSelectedRole(role);
+    setErrorMessage(null);
     if (role === 'SUPER_ADMIN') {
       setEmail('admin@fulfillio.online');
       setPassword('admin123');
     } else if (role === 'MERCHANT') {
-      setEmail('merchant@urbanthreads.com');
+      setEmail('sabbir@example.com');
       setPassword('password123');
     } else {
       setEmail('worker@fulfillio.online');
@@ -63,21 +68,32 @@ export function AuthModal({
     }
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setErrorMessage(null);
+
+    if (selectedRole === 'MERCHANT') {
+      const res = await authenticateMerchantLogin(email, password);
+      setLoading(false);
+      if (!res.ok) {
+        setErrorMessage(res.error || 'লগইন করা সম্ভব হয়নি।');
+        return;
+      }
+      onClose();
+      router.push('/merchant');
+      return;
+    }
 
     setTimeout(() => {
       setLoading(false);
       onClose();
       if (selectedRole === 'SUPER_ADMIN') {
         router.push('/admin');
-      } else if (selectedRole === 'MERCHANT') {
-        router.push('/merchant');
       } else {
         router.push('/wms/pick');
       }
-    }, 450);
+    }, 350);
   };
 
   if (!isOpen) return null;
@@ -156,6 +172,13 @@ export function AuthModal({
               <span>কর্মী</span>
             </button>
           </div>
+
+          {errorMessage && (
+            <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-start gap-2.5 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
 
           {/* Form */}
           <form onSubmit={handleLogin} className="space-y-4">

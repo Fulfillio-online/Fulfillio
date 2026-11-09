@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect } from 'react';
 import {
@@ -14,7 +14,9 @@ import {
   Sparkles,
   ArrowRight,
   ShieldCheck,
+  AlertCircle,
 } from 'lucide-react';
+import { registerNewMerchantAccount } from '@/lib/warehouseSync';
 
 interface MerchantRegisterModalProps {
   isOpen: boolean;
@@ -39,10 +41,13 @@ export function MerchantRegisterModal({
 
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [createdCode, setCreatedCode] = useState<string>('MC-106');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
       setSubmitted(false);
+      setErrorMessage(null);
     }
   }, [isOpen]);
 
@@ -55,15 +60,34 @@ export function MerchantRegisterModal({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!agreeTerms) return;
 
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      setSubmitted(true);
-    }, 600);
+    setErrorMessage(null);
+
+    const res = await registerNewMerchantAccount({
+      fullName,
+      storeName,
+      phone,
+      email,
+      category,
+      orderVolume,
+      storeUrl,
+      password,
+    });
+
+    setLoading(false);
+    if (!res.ok) {
+      setErrorMessage(res.error || 'সাইন-আপ সম্পন্ন করা যায়নি।');
+      return;
+    }
+
+    if (res.merchant?.merchantCode) {
+      setCreatedCode(res.merchant.merchantCode);
+    }
+    setSubmitted(true);
   };
 
   if (!isOpen) return null;
@@ -100,6 +124,13 @@ export function MerchantRegisterModal({
                 ঢাকার সেন্ট্রাল ওয়্যারহাউসে ইনভেন্টরি সংরক্ষণ, বারকোড প্যাকিং এবং দ্রুত COD সেটেলমেন্ট পান।
               </p>
             </div>
+
+            {errorMessage && (
+              <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{errorMessage}</span>
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-4 text-xs font-sans">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -283,23 +314,37 @@ export function MerchantRegisterModal({
 
             <div>
               <span className="text-[11px] uppercase tracking-wider font-bold text-orange-600 dark:text-orange-400 block mb-1">
-                আবেদন সফল হয়েছে
+                আবেদন সফল হয়েছে · স্ট্যাটাস: Pending Approval
               </span>
               <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-                স্বাগতম, {storeName || 'মার্চেন্ট'}!
+                স্বাগতম, {storeName || 'মার্চেন্ট'} ({createdCode})!
               </h3>
               <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-2 max-w-md mx-auto leading-relaxed">
-                আপনার অনবোর্ডিং রিকোয়েস্ট রিসিভ করা হয়েছে। আমাদের ওয়্যারহাউস টিম শীঘ্রই আপনার দেওয়া হোয়াটসঅ্যাপ নাম্বারে (<span className="text-orange-600 dark:text-orange-400 font-mono font-semibold">{phone || 'প্রদত্ত নাম্বার'}</span>) যোগাযোগ করে প্রথম প্রোডাক্ট ইনবাউন্ড শিডিউল বুঝিয়ে দেবে।
+                আপনার মার্চেন্ট প্রোফাইল <span className="text-orange-600 dark:text-orange-400 font-mono font-bold">{createdCode}</span> তৈরি হয়ে <strong>Admin Panel &rarr; Merchants</strong> লিস্টে <strong>Pending</strong> হিসেবে যুক্ত হয়েছে। এডমিন প্যানেল থেকে একাউন্টটি <strong>Approve</strong> করার পরই আপনি আপনার ইমেইল (<span className="font-mono font-semibold">{email}</span>) ও পাসওয়ার্ড দিয়ে মার্চেন্ট পোর্টালে লগইন করতে পারবেন।
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-6 py-2.5 rounded-xl font-bold text-xs bg-orange-600 hover:bg-orange-500 text-white transition-all shadow-md cursor-pointer"
-            >
-              সম্পন্ন &amp; হোমপেজে ফিরুন
-            </button>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              {onOpenLogin && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenLogin();
+                  }}
+                  className="px-5 py-2.5 rounded-xl font-bold text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 transition-all cursor-pointer"
+                >
+                  লগইন পেজে যান
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-6 py-2.5 rounded-xl font-bold text-xs bg-orange-600 hover:bg-orange-500 text-white transition-all shadow-md cursor-pointer"
+              >
+                সম্পন্ন &amp; হোমপেজে ফিরুন
+              </button>
+            </div>
           </div>
         )}
       </div>
