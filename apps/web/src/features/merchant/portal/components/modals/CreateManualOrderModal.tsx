@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import {
   X,
@@ -139,10 +139,11 @@ export function resolveVariantConfig(
   const availableSizes = getAvailableSizesForColor(p, resolvedColor);
   let resolvedSize: string | undefined = undefined;
   if (availableSizes.length > 0) {
-    if (sizeOrAttr && availableSizes.includes(sizeOrAttr)) {
+    if (sizeOrAttr && availableSizes.includes(sizeOrAttr) && getOptionStock(p, resolvedColor, sizeOrAttr) > 0) {
       resolvedSize = sizeOrAttr;
     } else {
-      resolvedSize = availableSizes[0];
+      const inStockSize = availableSizes.find((sz) => getOptionStock(p, resolvedColor, sz) > 0);
+      resolvedSize = inStockSize || (sizeOrAttr && availableSizes.includes(sizeOrAttr) ? sizeOrAttr : availableSizes[0]);
     }
   }
 
@@ -223,7 +224,7 @@ export function CreateManualOrderModal({
         variantLabel: cfg.variantLabel,
         sku: cfg.sku,
         unitPrice: p.price || 0,
-        qty: 1,
+        qty: cfg.maxStock > 0 ? 1 : 0,
         maxStock: cfg.maxStock,
         imageUrl: cfg.imageUrl,
         selectedColor: cfg.selectedColor,
@@ -232,6 +233,53 @@ export function CreateManualOrderModal({
       },
     ];
   });
+
+  // Re-sync line items when modal opens or products data is updated
+  useEffect(() => {
+    if (isOpen) {
+      setItems((prev) => {
+        if (prev.length === 0) {
+          const p = products[0];
+          if (!p) return [];
+          const cfg = resolveVariantConfig(p);
+          return [
+            {
+              rowId: `row-${Date.now()}-1`,
+              productId: p.id,
+              title: p.title,
+              variantLabel: cfg.variantLabel,
+              sku: cfg.sku,
+              unitPrice: p.price || 0,
+              qty: cfg.maxStock > 0 ? 1 : 0,
+              maxStock: cfg.maxStock,
+              imageUrl: cfg.imageUrl,
+              selectedColor: cfg.selectedColor,
+              selectedSize: cfg.selectedSize,
+              selectedVariantId: cfg.selectedVariantId,
+            },
+          ];
+        }
+        return prev.map((item) => {
+          const p = products.find((prod) => prod.id === item.productId);
+          if (!p) return item;
+          const cfg = resolveVariantConfig(p, item.selectedColor, item.selectedSize);
+          const nextMaxStock = cfg.maxStock;
+          const nextQty = nextMaxStock <= 0 ? 0 : Math.min(item.qty > 0 ? item.qty : 1, nextMaxStock);
+          return {
+            ...item,
+            variantLabel: cfg.variantLabel,
+            sku: cfg.sku,
+            maxStock: nextMaxStock,
+            qty: nextQty,
+            imageUrl: cfg.imageUrl || item.imageUrl,
+            selectedColor: cfg.selectedColor,
+            selectedSize: cfg.selectedSize,
+            selectedVariantId: cfg.selectedVariantId,
+          };
+        });
+      });
+    }
+  }, [isOpen, products]);
 
   // 3. Pricing Adjustments: Delivery, Discount, Advance
   const [deliveryArea, setDeliveryArea] = useState<'INSIDE_DHAKA' | 'SUB_DHAKA' | 'OUTSIDE_DHAKA' | 'FREE' | 'CUSTOM'>('INSIDE_DHAKA');
@@ -286,7 +334,7 @@ export function CreateManualOrderModal({
       variantLabel: cfg.variantLabel,
       sku: cfg.sku,
       unitPrice: available.price || 0,
-      qty: 1,
+      qty: cfg.maxStock > 0 ? 1 : 0,
       maxStock: cfg.maxStock,
       imageUrl: cfg.imageUrl,
       selectedColor: cfg.selectedColor,
@@ -308,6 +356,7 @@ export function CreateManualOrderModal({
     const p = products.find((prod) => prod.id === newProductId);
     if (!p) return;
     const cfg = resolveVariantConfig(p);
+    const nextQty = cfg.maxStock > 0 ? 1 : 0;
     setItems((prev) =>
       prev.map((it) =>
         it.rowId === rowId
@@ -318,7 +367,7 @@ export function CreateManualOrderModal({
               variantLabel: cfg.variantLabel,
               sku: cfg.sku,
               unitPrice: p.price || 0,
-              qty: 1,
+              qty: nextQty,
               maxStock: cfg.maxStock,
               imageUrl: cfg.imageUrl,
               selectedColor: cfg.selectedColor,
@@ -337,11 +386,13 @@ export function CreateManualOrderModal({
         const p = products.find((prod) => prod.id === it.productId);
         if (!p) return it;
         const cfg = resolveVariantConfig(p, newColorName, it.selectedSize);
+        const nextQty = cfg.maxStock <= 0 ? 0 : Math.min(cfg.maxStock, Math.max(1, it.qty));
         return {
           ...it,
           variantLabel: cfg.variantLabel,
           sku: cfg.sku,
           maxStock: cfg.maxStock,
+          qty: nextQty,
           imageUrl: cfg.imageUrl,
           selectedColor: cfg.selectedColor,
           selectedSize: cfg.selectedSize,
@@ -358,11 +409,13 @@ export function CreateManualOrderModal({
         const p = products.find((prod) => prod.id === it.productId);
         if (!p) return it;
         const cfg = resolveVariantConfig(p, it.selectedColor, newSize);
+        const nextQty = cfg.maxStock <= 0 ? 0 : Math.min(cfg.maxStock, Math.max(1, it.qty));
         return {
           ...it,
           variantLabel: cfg.variantLabel,
           sku: cfg.sku,
           maxStock: cfg.maxStock,
+          qty: nextQty,
           imageUrl: cfg.imageUrl,
           selectedSize: cfg.selectedSize,
           selectedVariantId: cfg.selectedVariantId,
@@ -381,9 +434,14 @@ export function CreateManualOrderModal({
 
   const handleQtyChange = (rowId: string, newQty: number) => {
     setItems((prev) =>
-      prev.map((it) =>
-        it.rowId === rowId ? { ...it, qty: Math.max(1, newQty) } : it
-      )
+      prev.map((it) => {
+        if (it.rowId !== rowId) return it;
+        if (it.maxStock <= 0) {
+          return { ...it, qty: 0 };
+        }
+        const clamped = Math.min(it.maxStock, Math.max(1, newQty));
+        return { ...it, qty: clamped };
+      })
     );
   };
 
@@ -410,7 +468,7 @@ export function CreateManualOrderModal({
 
     // Stock validation
     for (const item of items) {
-      if (item.maxStock === 0) {
+      if (item.maxStock <= 0 || item.qty <= 0) {
         onTriggerToast(
           `"${item.title} (${item.variantLabel})" এর কোনো স্টক নেই! অনুগ্রহ করে অন্য কালার/সাইজ নির্বাচন করুন।`
         );
@@ -746,9 +804,10 @@ export function CreateManualOrderModal({
                           >
                             {availableSizes.map((sizeName) => {
                               const stockForOption = getOptionStock(p, item.selectedColor, sizeName);
+                              const isZeroStock = stockForOption <= 0;
                               return (
-                                <option key={sizeName} value={sizeName}>
-                                  {sizeName} {stockForOption === 0 ? '(Stock Out - 0)' : `(${stockForOption} in stock)`}
+                                <option key={sizeName} value={sizeName} disabled={isZeroStock}>
+                                  {sizeName} {isZeroStock ? '(Out of Stock — 0 pcs)' : `(${stockForOption} in stock)`}
                                 </option>
                               );
                             })}
@@ -780,25 +839,28 @@ export function CreateManualOrderModal({
                         <div className="flex items-center">
                           <button
                             type="button"
+                            disabled={item.qty <= 1 || item.maxStock <= 0}
                             onClick={() => handleQtyChange(item.rowId, item.qty - 1)}
-                            className="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-l-lg text-xs font-bold border border-slate-700 cursor-pointer"
+                            className="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-300 rounded-l-lg text-xs font-bold border border-slate-700 cursor-pointer"
                           >
                             -
                           </button>
                           <input
                             type="number"
-                            min="1"
-                            max={item.maxStock || 999}
+                            min={item.maxStock > 0 ? 1 : 0}
+                            max={item.maxStock}
+                            disabled={item.maxStock <= 0}
                             value={item.qty}
                             onChange={(e) =>
-                              handleQtyChange(item.rowId, Number(e.target.value) || 1)
+                              handleQtyChange(item.rowId, Number(e.target.value) || 0)
                             }
-                            className="w-full py-2 bg-slate-950 border-y border-slate-800 text-xs font-bold text-center text-slate-200 focus:outline-none"
+                            className="w-full py-2 bg-slate-950 border-y border-slate-800 text-xs font-bold text-center text-slate-200 focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
                           />
                           <button
                             type="button"
+                            disabled={item.qty >= item.maxStock || item.maxStock <= 0}
                             onClick={() => handleQtyChange(item.rowId, item.qty + 1)}
-                            className="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-r-lg text-xs font-bold border border-slate-700 cursor-pointer"
+                            className="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-300 rounded-r-lg text-xs font-bold border border-slate-700 cursor-pointer"
                           >
                             +
                           </button>

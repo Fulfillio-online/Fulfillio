@@ -247,9 +247,11 @@ function MerchantPortalInner() {
           let updatedVariants = p.variantsList;
           if (p.variantsList && p.variantsList.length > 0) {
             updatedVariants = p.variantsList.map((v) => {
-              const vMatch = matches.find((it) => it.variantSku && it.variantSku === v.variantSku);
-              if (vMatch) {
-                return { ...v, stock: Math.max(0, v.stock - vMatch.qty) };
+              const vQty = matches
+                .filter((it) => it.variantSku && it.variantSku === v.variantSku)
+                .reduce((s, it) => s + it.qty, 0);
+              if (vQty > 0) {
+                return { ...v, stock: Math.max(0, v.stock - vQty) };
               }
               return v;
             });
@@ -282,10 +284,10 @@ function MerchantPortalInner() {
     const target = orders.find((o) => o.id === orderId);
     if (!target) return;
 
-    const itemsToRestore: { productId: string; qty: number }[] = [];
+    const itemsToRestore: { productId: string; qty: number; variantSku?: string }[] = [];
     if (target.lineItems && target.lineItems.length > 0) {
       target.lineItems.forEach((li) => {
-        itemsToRestore.push({ productId: li.id, qty: li.quantity });
+        itemsToRestore.push({ productId: li.id, qty: li.quantity, variantSku: li.sku });
       });
     } else if (target.productId) {
       itemsToRestore.push({ productId: target.productId, qty: target.qty });
@@ -294,12 +296,26 @@ function MerchantPortalInner() {
     if (itemsToRestore.length > 0) {
       setProducts((prev) => {
         const next = prev.map((p) => {
-          const match = itemsToRestore.find((it) => it.productId === p.id);
-          if (match) {
+          const matches = itemsToRestore.filter((it) => it.productId === p.id);
+          if (matches.length > 0) {
+            const totalQty = matches.reduce((sum, it) => sum + it.qty, 0);
+            let updatedVariants = p.variantsList;
+            if (p.variantsList && p.variantsList.length > 0) {
+              updatedVariants = p.variantsList.map((v) => {
+                const vQty = matches
+                  .filter((it) => it.variantSku && it.variantSku === v.variantSku)
+                  .reduce((s, it) => s + it.qty, 0);
+                if (vQty > 0) {
+                  return { ...v, stock: v.stock + vQty };
+                }
+                return v;
+              });
+            }
             return {
               ...p,
-              stock: p.stock + match.qty,
-              reserved: Math.max(0, p.reserved - match.qty),
+              stock: p.stock + totalQty,
+              reserved: Math.max(0, (p.reserved || 0) - totalQty),
+              variantsList: updatedVariants,
             };
           }
           return p;

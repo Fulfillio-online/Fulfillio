@@ -845,9 +845,7 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
                     <th className="py-3 px-3">Size</th>
                     <th className="py-3 px-3">Variant SKU</th>
                     <th className="py-3 px-3">Bin</th>
-                    <th className="py-3 px-3 text-center">Physical Stock</th>
-                    <th className="py-3 px-3 text-center">Reserved</th>
-                    <th className="py-3 px-4 text-center">Available</th>
+                    <th className="py-3 px-4 text-center">Available Stock</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200/70 dark:divide-white/10 font-medium">
@@ -891,19 +889,7 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
                           </span>
                         </td>
 
-                        {/* Physical Stock */}
-                        <td className="py-3 px-3 text-center align-middle">
-                          <span className="font-extrabold tabular-nums text-navy-900 dark:text-white">
-                            {v.stock} <span className="text-[11px] font-normal text-slate-500">pcs</span>
-                          </span>
-                        </td>
-
-                        {/* Reserved */}
-                        <td className="py-3 px-3 text-center tabular-nums text-slate-500 font-semibold align-middle">
-                          {v.reserved} pcs
-                        </td>
-
-                        {/* Available: Green if >20, Red if <10, Amber if 10-20 */}
+                        {/* Available Stock */}
                         <td className="py-3 px-4 text-center align-middle">
                           <span
                             className={`tabular-nums font-bold ${
@@ -914,7 +900,7 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
                                 : 'text-amber-600 dark:text-amber-400'
                             }`}
                           >
-                            {v.available} pcs
+                            {v.available} <span className="text-[11px] font-normal text-slate-500">pcs</span>
                           </span>
                         </td>
                       </tr>
@@ -925,15 +911,9 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
                 <tfoot className="bg-slate-50 dark:bg-navy-950 font-bold text-xs text-navy-900 dark:text-white border-t border-slate-200 dark:border-white/10">
                   <tr>
                     <td colSpan={4} className="py-3 px-4">
-                      Total Across All Variants:
+                      Total Available Stock:
                     </td>
-                    <td className="py-3 px-3 text-center tabular-nums text-orange-600 dark:text-orange-400 font-extrabold">
-                      {totalVariantStock} pcs
-                    </td>
-                    <td className="py-3 px-3 text-center tabular-nums text-slate-500">
-                      {totalVariantReserved} pcs
-                    </td>
-                    <td className="py-3 px-4 text-center tabular-nums text-emerald-600 dark:text-emerald-400 font-extrabold">
+                    <td className="py-3 px-4 text-center tabular-nums text-emerald-600 dark:text-emerald-400 font-extrabold text-sm">
                       {totalVariantStock - totalVariantReserved} pcs
                     </td>
                   </tr>
