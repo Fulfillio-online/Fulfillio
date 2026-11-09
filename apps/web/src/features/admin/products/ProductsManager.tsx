@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { Package, CheckCircle2, Plus } from 'lucide-react';
 import {
   WarehouseBin,
@@ -467,14 +468,13 @@ export function ProductsManager({
 
         {/* Action Button */}
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setAddProductModalOpen(true)}
+          <Link
+            href="/admin/products/new"
             className="px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs sm:text-sm font-semibold flex items-center gap-2 shadow-lg shadow-orange-500/25 transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Add Product (Under Merchant)</span>
-          </button>
+          </Link>
         </div>
       </div>
 

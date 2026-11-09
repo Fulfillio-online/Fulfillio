@@ -1071,7 +1071,11 @@ export function syncAdminProductsToMerchant(
           title: matchedAdmin.title,
           stock: matchedAdmin.stock,
           price: matchedAdmin.price,
+          imageUrl: matchedAdmin.imageUrl || mp.imageUrl,
+          colors: matchedAdmin.colors ?? mp.colors,
+          sizes: matchedAdmin.sizes ?? mp.sizes,
           variantsList: matchedAdmin.variantsList ?? mp.variantsList,
+          description: matchedAdmin.description ?? mp.description,
           bin: matchedAdmin.status === 'APPROVED' ? matchedAdmin.binCode : 'Pending Approval',
           status:
             matchedAdmin.status === 'APPROVED'
@@ -1096,7 +1100,7 @@ export function syncAdminProductsToMerchant(
           variantLabel: `${ap.color} / ${ap.size}`,
           category: ap.category,
           sku: ap.fullSku,
-          barcode: `890${Math.floor(1000000000 + Math.random() * 9000000000)}`,
+          barcode: ap.barcode || `890${Math.floor(1000000000 + Math.random() * 9000000000)}`,
           stock: ap.stock,
           reserved: 0,
           price: ap.price,
@@ -1104,6 +1108,10 @@ export function syncAdminProductsToMerchant(
           status: 'PUBLISHED',
           totalOrders: 0,
           imageUrl: ap.imageUrl,
+          colors: ap.colors,
+          sizes: ap.sizes,
+          variantsList: ap.variantsList,
+          description: ap.description,
         }));
         merchantProducts = [...converted, ...merchantProducts];
       }
