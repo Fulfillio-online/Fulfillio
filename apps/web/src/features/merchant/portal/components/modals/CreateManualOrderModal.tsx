@@ -19,6 +19,8 @@ import {
   MapPin,
   User,
   Layers,
+  Palette,
+  Check,
 } from 'lucide-react';
 import { MerchantOrderItem, MerchantProductItem, ResellerMemo, OrderLineItem } from '../../types';
 import { ProductThumbnail } from '../../products/components/ProductThumbnail';
@@ -33,6 +35,9 @@ interface OrderLineItemDraft {
   qty: number;
   maxStock: number;
   imageUrl?: string;
+  selectedColor?: string;
+  selectedSize?: string;
+  selectedVariantId?: string;
 }
 
 interface CreateManualOrderModalProps {
@@ -42,10 +47,149 @@ interface CreateManualOrderModalProps {
   memoList: ResellerMemo[];
   onCreateOrder: (
     order: MerchantOrderItem,
-    productIdOrItems?: string | { productId: string; qty: number }[],
+    productIdOrItems?: string | { productId: string; qty: number; variantSku?: string }[],
     qty?: number
   ) => void;
   onTriggerToast: (msg: string) => void;
+}
+
+export function getAttributeLabel(productType?: string): string {
+  if (productType === 'FASHION') return 'Size';
+  if (productType === 'ELECTRONICS') return 'Storage / Spec';
+  if (productType === 'BEAUTY') return 'Volume / Shade';
+  if (productType === 'GROCERY') return 'Pack Size';
+  return 'Variant / Size';
+}
+
+export function getAvailableSizesForColor(
+  p: MerchantProductItem,
+  selectedColorName?: string
+): string[] {
+  // 1. If color has explicit sizes
+  if (selectedColorName && p.colors && p.colors.length > 0) {
+    const colorObj = p.colors.find((c) => c.name === selectedColorName);
+    if (colorObj?.sizes && colorObj.sizes.length > 0) {
+      return colorObj.sizes;
+    }
+  }
+
+  // 2. If variantsList has matching entries for this color
+  if (p.variantsList && p.variantsList.length > 0) {
+    const matching = selectedColorName
+      ? p.variantsList.filter((v) => !v.color || v.color === selectedColorName)
+      : p.variantsList;
+    const sizes = matching
+      .map((v) => v.size || v.attributeValue)
+      .filter((s): s is string => Boolean(s));
+    if (sizes.length > 0) {
+      return Array.from(new Set(sizes));
+    }
+  }
+
+  // 3. Fallback to product sizes
+  if (p.sizes && p.sizes.length > 0) {
+    return p.sizes;
+  }
+
+  return [];
+}
+
+export function getOptionStock(
+  p: MerchantProductItem,
+  colorName?: string,
+  sizeOrAttr?: string
+): number {
+  if (!p.variantsList || p.variantsList.length === 0) {
+    return p.stock || 0;
+  }
+  const match = p.variantsList.find((v) => {
+    const colorMatches = !colorName || !v.color || v.color === colorName;
+    const sizeMatches =
+      !sizeOrAttr ||
+      v.size === sizeOrAttr ||
+      v.attributeValue === sizeOrAttr;
+    return colorMatches && sizeMatches;
+  });
+  return match ? match.stock : p.stock || 0;
+}
+
+export function resolveVariantConfig(
+  p: MerchantProductItem,
+  colorName?: string,
+  sizeOrAttr?: string
+): {
+  sku: string;
+  variantLabel: string;
+  maxStock: number;
+  imageUrl?: string;
+  selectedColor?: string;
+  selectedSize?: string;
+  selectedVariantId?: string;
+} {
+  const hasColors = Boolean(p.colors && p.colors.length > 0);
+  const resolvedColor = hasColors
+    ? colorName || p.colors![0]?.name
+    : undefined;
+
+  const colorObj = hasColors && resolvedColor
+    ? p.colors!.find((c) => c.name === resolvedColor)
+    : undefined;
+  const resolvedImage = colorObj?.imageUrl || p.imageUrl;
+
+  const availableSizes = getAvailableSizesForColor(p, resolvedColor);
+  let resolvedSize: string | undefined = undefined;
+  if (availableSizes.length > 0) {
+    if (sizeOrAttr && availableSizes.includes(sizeOrAttr)) {
+      resolvedSize = sizeOrAttr;
+    } else {
+      resolvedSize = availableSizes[0];
+    }
+  }
+
+  // Find in variantsList
+  let matchedVariant = p.variantsList?.find((v) => {
+    const colorMatches = !resolvedColor || !v.color || v.color === resolvedColor;
+    const sizeMatches =
+      !resolvedSize ||
+      v.size === resolvedSize ||
+      v.attributeValue === resolvedSize;
+    return colorMatches && sizeMatches;
+  });
+
+  if (!matchedVariant && resolvedColor && p.variantsList) {
+    matchedVariant = p.variantsList.find((v) => v.color === resolvedColor);
+  }
+
+  if (matchedVariant) {
+    const labelParts = [
+      matchedVariant.color,
+      matchedVariant.size || matchedVariant.attributeValue,
+    ].filter(Boolean);
+    const label =
+      labelParts.length > 0 ? labelParts.join(' / ') : p.variantLabel || 'Standard';
+    return {
+      sku: matchedVariant.variantSku,
+      variantLabel: label,
+      maxStock: matchedVariant.stock,
+      imageUrl: resolvedImage,
+      selectedColor: resolvedColor,
+      selectedSize: resolvedSize,
+      selectedVariantId: matchedVariant.id,
+    };
+  }
+
+  // Fallback if no specific variantsList item
+  const labelParts = [resolvedColor, resolvedSize].filter(Boolean);
+  const label =
+    labelParts.length > 0 ? labelParts.join(' / ') : p.variantLabel || 'Standard';
+  return {
+    sku: p.sku,
+    variantLabel: label,
+    maxStock: p.stock || 0,
+    imageUrl: resolvedImage,
+    selectedColor: resolvedColor,
+    selectedSize: resolvedSize,
+  };
 }
 
 export function CreateManualOrderModal({
@@ -69,21 +213,24 @@ export function CreateManualOrderModal({
   // 2. Multi-Product Line Items
   const [items, setItems] = useState<OrderLineItemDraft[]>(() => {
     const p = products[0];
-    return p
-      ? [
-          {
-            rowId: `row-${Date.now()}-1`,
-            productId: p.id,
-            title: p.title,
-            variantLabel: p.variantLabel || 'Standard',
-            sku: p.sku,
-            unitPrice: p.price || 0,
-            qty: 1,
-            maxStock: p.stock || 0,
-            imageUrl: p.imageUrl,
-          },
-        ]
-      : [];
+    if (!p) return [];
+    const cfg = resolveVariantConfig(p);
+    return [
+      {
+        rowId: `row-${Date.now()}-1`,
+        productId: p.id,
+        title: p.title,
+        variantLabel: cfg.variantLabel,
+        sku: cfg.sku,
+        unitPrice: p.price || 0,
+        qty: 1,
+        maxStock: cfg.maxStock,
+        imageUrl: cfg.imageUrl,
+        selectedColor: cfg.selectedColor,
+        selectedSize: cfg.selectedSize,
+        selectedVariantId: cfg.selectedVariantId,
+      },
+    ];
   });
 
   // 3. Pricing Adjustments: Delivery, Discount, Advance
@@ -131,16 +278,20 @@ export function CreateManualOrderModal({
       onTriggerToast('No more products available to add.');
       return;
     }
+    const cfg = resolveVariantConfig(available);
     const newItem: OrderLineItemDraft = {
       rowId: `row-${Date.now()}-${items.length + 1}`,
       productId: available.id,
       title: available.title,
-      variantLabel: available.variantLabel || 'Standard',
-      sku: available.sku,
+      variantLabel: cfg.variantLabel,
+      sku: cfg.sku,
       unitPrice: available.price || 0,
       qty: 1,
-      maxStock: available.stock || 0,
-      imageUrl: available.imageUrl,
+      maxStock: cfg.maxStock,
+      imageUrl: cfg.imageUrl,
+      selectedColor: cfg.selectedColor,
+      selectedSize: cfg.selectedSize,
+      selectedVariantId: cfg.selectedVariantId,
     };
     setItems((prev) => [...prev, newItem]);
   };
@@ -156,6 +307,7 @@ export function CreateManualOrderModal({
   const handleProductChange = (rowId: string, newProductId: string) => {
     const p = products.find((prod) => prod.id === newProductId);
     if (!p) return;
+    const cfg = resolveVariantConfig(p);
     setItems((prev) =>
       prev.map((it) =>
         it.rowId === rowId
@@ -163,14 +315,59 @@ export function CreateManualOrderModal({
               ...it,
               productId: p.id,
               title: p.title,
-              variantLabel: p.variantLabel || 'Standard',
-              sku: p.sku,
+              variantLabel: cfg.variantLabel,
+              sku: cfg.sku,
               unitPrice: p.price || 0,
-              maxStock: p.stock || 0,
-              imageUrl: p.imageUrl,
+              qty: 1,
+              maxStock: cfg.maxStock,
+              imageUrl: cfg.imageUrl,
+              selectedColor: cfg.selectedColor,
+              selectedSize: cfg.selectedSize,
+              selectedVariantId: cfg.selectedVariantId,
             }
           : it
       )
+    );
+  };
+
+  const handleColorChange = (rowId: string, newColorName: string) => {
+    setItems((prev) =>
+      prev.map((it) => {
+        if (it.rowId !== rowId) return it;
+        const p = products.find((prod) => prod.id === it.productId);
+        if (!p) return it;
+        const cfg = resolveVariantConfig(p, newColorName, it.selectedSize);
+        return {
+          ...it,
+          variantLabel: cfg.variantLabel,
+          sku: cfg.sku,
+          maxStock: cfg.maxStock,
+          imageUrl: cfg.imageUrl,
+          selectedColor: cfg.selectedColor,
+          selectedSize: cfg.selectedSize,
+          selectedVariantId: cfg.selectedVariantId,
+        };
+      })
+    );
+  };
+
+  const handleSizeChange = (rowId: string, newSize: string) => {
+    setItems((prev) =>
+      prev.map((it) => {
+        if (it.rowId !== rowId) return it;
+        const p = products.find((prod) => prod.id === it.productId);
+        if (!p) return it;
+        const cfg = resolveVariantConfig(p, it.selectedColor, newSize);
+        return {
+          ...it,
+          variantLabel: cfg.variantLabel,
+          sku: cfg.sku,
+          maxStock: cfg.maxStock,
+          imageUrl: cfg.imageUrl,
+          selectedSize: cfg.selectedSize,
+          selectedVariantId: cfg.selectedVariantId,
+        };
+      })
     );
   };
 
@@ -213,9 +410,15 @@ export function CreateManualOrderModal({
 
     // Stock validation
     for (const item of items) {
+      if (item.maxStock === 0) {
+        onTriggerToast(
+          `"${item.title} (${item.variantLabel})" এর কোনো স্টক নেই! অনুগ্রহ করে অন্য কালার/সাইজ নির্বাচন করুন।`
+        );
+        return;
+      }
       if (item.qty > item.maxStock) {
         onTriggerToast(
-          `Insufficient stock for "${item.title}". Requested: ${item.qty}, Available: ${item.maxStock}`
+          `"${item.title} (${item.variantLabel})" এর পর্যাপ্ত স্টক নেই! আপনি চেয়েছেন: ${item.qty} টি, কিন্তু ওয়্যারহাউসে আছে: ${item.maxStock} টি।`
         );
         return;
       }
@@ -286,10 +489,11 @@ export function CreateManualOrderModal({
       ],
     };
 
-    // Deduct stock for all items
+    // Deduct stock for all items (including variant-level stock)
     const itemsToDeduct = items.map((it) => ({
       productId: it.productId,
       qty: it.qty,
+      variantSku: it.sku,
     }));
 
     onCreateOrder(newOrder, itemsToDeduct);
@@ -436,7 +640,13 @@ export function CreateManualOrderModal({
 
             <div className="space-y-3">
               {items.map((item, index) => {
-                const isOutOfStock = item.qty > item.maxStock;
+                const p = products.find((prod) => prod.id === item.productId);
+                const hasColors = Boolean(p && p.colors && p.colors.length > 0);
+                const availableSizes = p ? getAvailableSizesForColor(p, item.selectedColor) : [];
+                const hasSizes = availableSizes.length > 0;
+                const hasVariants = Boolean(p && p.variantsList && p.variantsList.length > 0);
+                const isOutOfStock = item.maxStock === 0 || item.qty > item.maxStock;
+
                 return (
                   <div
                     key={item.rowId}
@@ -457,9 +667,9 @@ export function CreateManualOrderModal({
                             onChange={(e) => handleProductChange(item.rowId, e.target.value)}
                             className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
                           >
-                            {products.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.title} ({p.variantLabel || 'Std'}) — SKU: {p.sku} | Stock: {p.stock} pcs (৳{p.price})
+                            {products.map((prod) => (
+                              <option key={prod.id} value={prod.id}>
+                                {prod.title} — Stock: {prod.stock} pcs (৳{prod.price})
                               </option>
                             ))}
                           </select>
@@ -531,7 +741,7 @@ export function CreateManualOrderModal({
                           <button
                             type="button"
                             onClick={() => handleRemoveItem(item.rowId)}
-                            className="p-2 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition-colors"
+                            className="p-2 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition-colors cursor-pointer"
                             title="Remove this product"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -540,10 +750,118 @@ export function CreateManualOrderModal({
                       )}
                     </div>
 
+                    {/* Dynamic Color & Variant / Size Bar */}
+                    {(hasColors || hasSizes || hasVariants) && (
+                      <div className="mt-3 pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3 bg-slate-950/50 p-2.5 rounded-lg">
+                        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+                          {/* Color Selector */}
+                          {hasColors && p && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
+                                <Palette className="h-3.5 w-3.5 text-emerald-400" />
+                                Color:
+                              </span>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {p.colors!.map((c) => {
+                                  const isSelected = item.selectedColor === c.name;
+                                  return (
+                                    <button
+                                      key={c.id || c.name}
+                                      type="button"
+                                      onClick={() => handleColorChange(item.rowId, c.name)}
+                                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-all cursor-pointer ${
+                                        isSelected
+                                          ? 'border-emerald-500 bg-emerald-500/15 text-white ring-1 ring-emerald-500/30 font-semibold'
+                                          : 'border-slate-800 bg-slate-900 text-slate-300 hover:border-slate-700 hover:text-white'
+                                      }`}
+                                    >
+                                      <span
+                                        className="w-3 h-3 rounded-full border border-white/30 shrink-0"
+                                        style={{ backgroundColor: c.hex }}
+                                      />
+                                      <span>{c.name}</span>
+                                      {isSelected && <Check className="h-3 w-3 text-emerald-400 ml-0.5" />}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Size / Attribute Selector */}
+                          {hasSizes && p && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] font-semibold text-slate-400">
+                                {getAttributeLabel(p.productType)}:
+                              </span>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {availableSizes.map((sizeName) => {
+                                  const isSelected = item.selectedSize === sizeName;
+                                  const stockForOption = getOptionStock(p, item.selectedColor, sizeName);
+                                  const isZeroStock = stockForOption === 0;
+
+                                  return (
+                                    <button
+                                      key={sizeName}
+                                      type="button"
+                                      onClick={() => handleSizeChange(item.rowId, sizeName)}
+                                      className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium border transition-all cursor-pointer ${
+                                        isSelected
+                                          ? 'border-emerald-500 bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30 font-semibold'
+                                          : isZeroStock
+                                          ? 'border-slate-800/60 bg-slate-900/40 text-slate-500 hover:border-slate-700'
+                                          : 'border-slate-800 bg-slate-900 text-slate-300 hover:border-slate-700 hover:text-white'
+                                      }`}
+                                      title={`${sizeName} (${stockForOption} in stock)`}
+                                    >
+                                      <span className={isZeroStock ? 'line-through opacity-75' : ''}>{sizeName}</span>
+                                      <span
+                                        className={`text-[10px] ml-0.5 font-mono px-1 rounded ${
+                                          isZeroStock
+                                            ? 'text-rose-400 bg-rose-500/10'
+                                            : isSelected
+                                            ? 'text-emerald-400 bg-emerald-500/20'
+                                            : 'text-slate-400 bg-slate-800'
+                                        }`}
+                                      >
+                                        {stockForOption}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* SKU & Stock Indicator */}
+                        <div className="flex items-center gap-2 text-[11px] ml-auto">
+                          <span className="px-2 py-0.5 rounded bg-slate-900 text-slate-400 font-mono border border-slate-800">
+                            SKU: <strong className="text-slate-200">{item.sku}</strong>
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded font-mono border font-semibold ${
+                              item.maxStock === 0
+                                ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                                : item.maxStock < 5
+                                ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                                : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                            }`}
+                          >
+                            {item.maxStock === 0 ? 'Out of Stock' : `${item.maxStock} in stock`}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
                     {isOutOfStock && (
-                      <div className="flex items-center gap-1.5 mt-2 text-[11px] text-rose-400 font-medium">
-                        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                        <span>ওয়্যারহাউস স্টকে পর্যাপ্ত প্রোডাক্ট নেই! মোট স্টক: {item.maxStock} টি</span>
+                      <div className="flex items-center gap-1.5 mt-2.5 p-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400 font-medium">
+                        <AlertCircle className="h-4 w-4 shrink-0" />
+                        <span>
+                          {item.maxStock === 0
+                            ? `এই ভ্যারিয়েন্টের কোনো স্টক নেই! ("${item.title} - ${item.variantLabel}")`
+                            : `ওয়্যারহাউস স্টকে পর্যাপ্ত প্রোডাক্ট নেই! মোট উপলব্ধ স্টক: ${item.maxStock} টি (আপনি চেয়েছেন: ${item.qty} টি)`}
+                        </span>
                       </div>
                     )}
                   </div>

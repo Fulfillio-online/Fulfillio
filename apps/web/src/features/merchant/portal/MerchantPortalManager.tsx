@@ -222,17 +222,17 @@ function MerchantPortalInner() {
 
   const handleCreateOrder = (
     order: MerchantOrderItem,
-    productIdOrItems?: string | { productId: string; qty: number }[],
+    productIdOrItems?: string | { productId: string; qty: number; variantSku?: string }[],
     qty?: number
   ) => {
-    const itemsToDeduct: { productId: string; qty: number }[] = [];
+    const itemsToDeduct: { productId: string; qty: number; variantSku?: string }[] = [];
     if (Array.isArray(productIdOrItems)) {
       itemsToDeduct.push(...productIdOrItems);
     } else if (typeof productIdOrItems === 'string') {
       itemsToDeduct.push({ productId: productIdOrItems, qty: qty || order.qty || 1 });
     } else if (order.lineItems && order.lineItems.length > 0) {
       order.lineItems.forEach((li) => {
-        itemsToDeduct.push({ productId: li.id, qty: li.quantity });
+        itemsToDeduct.push({ productId: li.id, qty: li.quantity, variantSku: li.sku });
       });
     } else if (order.productId) {
       itemsToDeduct.push({ productId: order.productId, qty: order.qty || 1 });
@@ -240,12 +240,24 @@ function MerchantPortalInner() {
 
     setProducts((prev) => {
       const next = prev.map((p) => {
-        const match = itemsToDeduct.find((it) => it.productId === p.id);
-        if (match) {
+        const matches = itemsToDeduct.filter((it) => it.productId === p.id);
+        if (matches.length > 0) {
+          const totalQty = matches.reduce((sum, it) => sum + it.qty, 0);
+          let updatedVariants = p.variantsList;
+          if (p.variantsList && p.variantsList.length > 0) {
+            updatedVariants = p.variantsList.map((v) => {
+              const vMatch = matches.find((it) => it.variantSku && it.variantSku === v.variantSku);
+              if (vMatch) {
+                return { ...v, stock: Math.max(0, v.stock - vMatch.qty) };
+              }
+              return v;
+            });
+          }
           return {
             ...p,
-            stock: Math.max(0, p.stock - match.qty),
-            reserved: p.reserved + match.qty,
+            stock: Math.max(0, p.stock - totalQty),
+            reserved: (p.reserved || 0) + totalQty,
+            variantsList: updatedVariants,
           };
         }
         return p;
