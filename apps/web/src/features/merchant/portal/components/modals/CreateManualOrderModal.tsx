@@ -650,34 +650,114 @@ export function CreateManualOrderModal({
                 return (
                   <div
                     key={item.rowId}
-                    className={`p-3 sm:p-4 rounded-xl bg-slate-900 border transition-all ${
+                    className={`p-3 sm:p-4 rounded-xl bg-slate-900 border transition-all space-y-3 ${
                       isOutOfStock ? 'border-rose-500/60 bg-rose-950/10' : 'border-slate-800'
                     }`}
                   >
-                    <div className="flex flex-col lg:flex-row lg:items-center gap-3">
-                      {/* Product Selector */}
-                      <div className="flex-1 min-w-0">
-                        <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                          Product #{index + 1}
-                        </label>
-                        <div className="flex items-center gap-2">
-                          <ProductThumbnail src={item.imageUrl} alt={item.title} size="sm" />
+                    {/* Top Row: Full-width Product Selector & Delete button */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                        <ProductThumbnail src={item.imageUrl} alt={item.title} size="sm" />
+                        <div className="flex-1 min-w-0">
+                          <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                            Product #{index + 1}
+                          </label>
                           <select
                             value={item.productId}
                             onChange={(e) => handleProductChange(item.rowId, e.target.value)}
-                            className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
                           >
                             {products.map((prod) => (
                               <option key={prod.id} value={prod.id}>
-                                {prod.title} — Stock: {prod.stock} pcs (৳{prod.price})
+                                {prod.title} — Base Stock: {prod.stock} pcs (৳{prod.price})
                               </option>
                             ))}
                           </select>
                         </div>
                       </div>
 
-                      {/* Unit Price */}
-                      <div className="w-full lg:w-32">
+                      {items.length > 1 && (
+                        <div className="pt-5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItem(item.rowId)}
+                            className="p-2 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition-colors cursor-pointer"
+                            title="Remove this product"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Middle Row: Responsive Grid for Color Dropdown, Size/Spec Dropdown, Unit Price, and Quantity */}
+                    <div
+                      className={`grid gap-3 pt-3 border-t border-slate-800/80 items-end ${
+                        hasColors && hasSizes
+                          ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4'
+                          : hasColors || hasSizes
+                          ? 'grid-cols-1 sm:grid-cols-3'
+                          : 'grid-cols-1 sm:grid-cols-2'
+                      }`}
+                    >
+                      {/* Color Dropdown */}
+                      {hasColors && p && (
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-400 mb-1 flex items-center justify-between">
+                            <span className="flex items-center gap-1.5">
+                              <Palette className="h-3.5 w-3.5 text-emerald-400" />
+                              Color
+                            </span>
+                            {(() => {
+                              const activeColor = p.colors?.find((c) => c.name === item.selectedColor);
+                              return activeColor ? (
+                                <span
+                                  className="inline-block w-2.5 h-2.5 rounded-full border border-white/30"
+                                  style={{ backgroundColor: activeColor.hex }}
+                                  title={activeColor.name}
+                                />
+                              ) : null;
+                            })()}
+                          </label>
+                          <select
+                            value={item.selectedColor || ''}
+                            onChange={(e) => handleColorChange(item.rowId, e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                          >
+                            {p.colors!.map((c) => (
+                              <option key={c.id || c.name} value={c.name}>
+                                {c.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Size / Specification Dropdown */}
+                      {hasSizes && p && (
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                            {getAttributeLabel(p.productType)}
+                          </label>
+                          <select
+                            value={item.selectedSize || ''}
+                            onChange={(e) => handleSizeChange(item.rowId, e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                          >
+                            {availableSizes.map((sizeName) => {
+                              const stockForOption = getOptionStock(p, item.selectedColor, sizeName);
+                              return (
+                                <option key={sizeName} value={sizeName}>
+                                  {sizeName} {stockForOption === 0 ? '(Stock Out - 0)' : `(${stockForOption} in stock)`}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Unit Price (৳) */}
+                      <div>
                         <label className="block text-[11px] font-semibold text-slate-400 mb-1">
                           Unit Price (৳)
                         </label>
@@ -693,7 +773,7 @@ export function CreateManualOrderModal({
                       </div>
 
                       {/* Quantity with +/- */}
-                      <div className="w-full lg:w-36">
+                      <div>
                         <label className="block text-[11px] font-semibold text-slate-400 mb-1">
                           Qty (Stock: {item.maxStock})
                         </label>
@@ -701,7 +781,7 @@ export function CreateManualOrderModal({
                           <button
                             type="button"
                             onClick={() => handleQtyChange(item.rowId, item.qty - 1)}
-                            className="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-l-lg text-xs font-bold border border-slate-700"
+                            className="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-l-lg text-xs font-bold border border-slate-700 cursor-pointer"
                           >
                             -
                           </button>
@@ -718,142 +798,45 @@ export function CreateManualOrderModal({
                           <button
                             type="button"
                             onClick={() => handleQtyChange(item.rowId, item.qty + 1)}
-                            className="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-r-lg text-xs font-bold border border-slate-700"
+                            className="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-r-lg text-xs font-bold border border-slate-700 cursor-pointer"
                           >
                             +
                           </button>
                         </div>
                       </div>
-
-                      {/* Line Subtotal */}
-                      <div className="w-full lg:w-32 text-right">
-                        <span className="block text-[11px] font-semibold text-slate-400 mb-1">
-                          Line Total
-                        </span>
-                        <div className="py-2 px-1 text-sm font-bold text-emerald-400 font-mono">
-                          ৳{(item.unitPrice * item.qty).toLocaleString()}
-                        </div>
-                      </div>
-
-                      {/* Delete Item */}
-                      {items.length > 1 && (
-                        <div className="lg:pt-5 flex justify-end">
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveItem(item.rowId)}
-                            className="p-2 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition-colors cursor-pointer"
-                            title="Remove this product"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      )}
                     </div>
 
-                    {/* Dynamic Color & Variant / Size Bar */}
-                    {(hasColors || hasSizes || hasVariants) && (
-                      <div className="mt-3 pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3 bg-slate-950/50 p-2.5 rounded-lg">
-                        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
-                          {/* Color Selector */}
-                          {hasColors && p && (
-                            <div className="flex items-center gap-2">
-                              <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
-                                <Palette className="h-3.5 w-3.5 text-emerald-400" />
-                                Color:
-                              </span>
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                {p.colors!.map((c) => {
-                                  const isSelected = item.selectedColor === c.name;
-                                  return (
-                                    <button
-                                      key={c.id || c.name}
-                                      type="button"
-                                      onClick={() => handleColorChange(item.rowId, c.name)}
-                                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-all cursor-pointer ${
-                                        isSelected
-                                          ? 'border-emerald-500 bg-emerald-500/15 text-white ring-1 ring-emerald-500/30 font-semibold'
-                                          : 'border-slate-800 bg-slate-900 text-slate-300 hover:border-slate-700 hover:text-white'
-                                      }`}
-                                    >
-                                      <span
-                                        className="w-3 h-3 rounded-full border border-white/30 shrink-0"
-                                        style={{ backgroundColor: c.hex }}
-                                      />
-                                      <span>{c.name}</span>
-                                      {isSelected && <Check className="h-3 w-3 text-emerald-400 ml-0.5" />}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Size / Attribute Selector */}
-                          {hasSizes && p && (
-                            <div className="flex items-center gap-2">
-                              <span className="text-[11px] font-semibold text-slate-400">
-                                {getAttributeLabel(p.productType)}:
-                              </span>
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                {availableSizes.map((sizeName) => {
-                                  const isSelected = item.selectedSize === sizeName;
-                                  const stockForOption = getOptionStock(p, item.selectedColor, sizeName);
-                                  const isZeroStock = stockForOption === 0;
-
-                                  return (
-                                    <button
-                                      key={sizeName}
-                                      type="button"
-                                      onClick={() => handleSizeChange(item.rowId, sizeName)}
-                                      className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium border transition-all cursor-pointer ${
-                                        isSelected
-                                          ? 'border-emerald-500 bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30 font-semibold'
-                                          : isZeroStock
-                                          ? 'border-slate-800/60 bg-slate-900/40 text-slate-500 hover:border-slate-700'
-                                          : 'border-slate-800 bg-slate-900 text-slate-300 hover:border-slate-700 hover:text-white'
-                                      }`}
-                                      title={`${sizeName} (${stockForOption} in stock)`}
-                                    >
-                                      <span className={isZeroStock ? 'line-through opacity-75' : ''}>{sizeName}</span>
-                                      <span
-                                        className={`text-[10px] ml-0.5 font-mono px-1 rounded ${
-                                          isZeroStock
-                                            ? 'text-rose-400 bg-rose-500/10'
-                                            : isSelected
-                                            ? 'text-emerald-400 bg-emerald-500/20'
-                                            : 'text-slate-400 bg-slate-800'
-                                        }`}
-                                      >
-                                        {stockForOption}
-                                      </span>
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* SKU & Stock Indicator */}
-                        <div className="flex items-center gap-2 text-[11px] ml-auto">
-                          <span className="px-2 py-0.5 rounded bg-slate-900 text-slate-400 font-mono border border-slate-800">
-                            SKU: <strong className="text-slate-200">{item.sku}</strong>
-                          </span>
-                          <span
-                            className={`px-2 py-0.5 rounded font-mono border font-semibold ${
-                              item.maxStock === 0
-                                ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                                : item.maxStock < 5
-                                ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                                : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                            }`}
-                          >
-                            {item.maxStock === 0 ? 'Out of Stock' : `${item.maxStock} in stock`}
-                          </span>
-                        </div>
+                    {/* Bottom Row: Variant Pill, SKU, Stock Status & Line Total */}
+                    <div className="pt-2.5 border-t border-slate-800/60 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+                      <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                        <span className="px-2 py-0.5 rounded bg-slate-950 text-slate-300 font-mono border border-slate-800">
+                          SKU: <strong className="text-white">{item.sku}</strong>
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800">
+                          Variant: <strong className="text-slate-200">{item.variantLabel}</strong>
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded font-mono border font-semibold ${
+                            item.maxStock === 0
+                              ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                              : item.maxStock < 5
+                              ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                              : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                          }`}
+                        >
+                          {item.maxStock === 0 ? 'Out of Stock' : `${item.maxStock} in stock`}
+                        </span>
                       </div>
-                    )}
 
+                      <div className="flex items-center gap-1.5 ml-auto">
+                        <span className="text-[11px] text-slate-400">Total:</span>
+                        <span className="font-bold text-emerald-400 font-mono text-sm">
+                          ৳{(item.unitPrice * item.qty).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Out of Stock Alert */}
                     {isOutOfStock && (
                       <div className="flex items-center gap-1.5 mt-2.5 p-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400 font-medium">
                         <AlertCircle className="h-4 w-4 shrink-0" />
