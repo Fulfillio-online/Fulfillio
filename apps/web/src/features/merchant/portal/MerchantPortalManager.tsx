@@ -23,6 +23,7 @@ import {
   STORAGE_KEY_MERCHANT_PROFILE,
 } from './mockData';
 import { merchantApi } from './api';
+import { syncMerchantMemoToAdmin, syncMerchantMemoDeletedToAdmin } from '@/lib/warehouseSync';
 import { MerchantSidebar } from './components/MerchantSidebar';
 import { MerchantHeader } from './components/MerchantHeader';
 import { MerchantOverviewTab } from './components/tabs/MerchantOverviewTab';
@@ -334,11 +335,17 @@ function MerchantPortalInner() {
   };
 
   const handleSaveMemo = (newMemo: ResellerMemo) => {
+    const memoWithMerchant: ResellerMemo = {
+      ...newMemo,
+      merchantCode: newMemo.merchantCode || profile.merchantCode || 'MC-101',
+      merchantName: newMemo.merchantName || profile.storeName || "Sabbir's Store",
+    };
     setMemoList((prev) => {
-      const filtered = prev.filter((m) => m.id !== newMemo.id && m.code !== newMemo.code);
-      const next = [newMemo, ...filtered];
+      const filtered = prev.filter((m) => m.id !== memoWithMerchant.id && m.code !== memoWithMerchant.code);
+      const next = [memoWithMerchant, ...filtered];
       if (typeof window !== 'undefined') {
         localStorage.setItem(STORAGE_KEY_MERCHANT_MEMOS, JSON.stringify(next));
+        syncMerchantMemoToAdmin(memoWithMerchant, profile);
       }
       return next;
     });
@@ -350,6 +357,10 @@ function MerchantPortalInner() {
       const next = prev.map((m) => ({ ...m, isDefault: m.id === id }));
       if (typeof window !== 'undefined') {
         localStorage.setItem(STORAGE_KEY_MERCHANT_MEMOS, JSON.stringify(next));
+        const target = next.find((m) => m.id === id);
+        if (target) {
+          syncMerchantMemoToAdmin(target, profile);
+        }
       }
       return next;
     });
@@ -358,9 +369,13 @@ function MerchantPortalInner() {
 
   const handleDeleteMemo = (id: string) => {
     setMemoList((prev) => {
+      const target = prev.find((m) => m.id === id);
       const next = prev.filter((m) => m.id !== id);
       if (typeof window !== 'undefined') {
         localStorage.setItem(STORAGE_KEY_MERCHANT_MEMOS, JSON.stringify(next));
+        if (target) {
+          syncMerchantMemoDeletedToAdmin(target.id, target.code);
+        }
       }
       return next;
     });

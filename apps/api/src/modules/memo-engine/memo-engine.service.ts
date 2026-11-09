@@ -12,16 +12,17 @@ export class MemoEngineService {
   async createTemplate(
     merchantId: string,
     data: {
-      memoCode: string;
+      memoCode?: string;
       name: string;
       isDefault?: boolean;
       layout: MemoTemplateLayout;
     },
   ) {
-    const existing = await this.memoRepo.findByCode(merchantId, data.memoCode);
+    const memoCode = data.memoCode?.trim() || `MEMO-${Math.floor(100000 + Math.random() * 900000)}`;
+    const existing = await this.memoRepo.findByCode(merchantId, memoCode);
 
     if (existing) {
-      throw new ConflictException(`Memo Code '${data.memoCode}' already exists for this merchant.`);
+      throw new ConflictException(`Memo Code '${memoCode}' already exists for this merchant.`);
     }
 
     if (data.isDefault) {
@@ -30,7 +31,7 @@ export class MemoEngineService {
 
     return this.memoRepo.create({
       merchantId,
-      memoCode: data.memoCode,
+      memoCode,
       name: data.name,
       isDefault: data.isDefault ?? false,
       layout: data.layout,

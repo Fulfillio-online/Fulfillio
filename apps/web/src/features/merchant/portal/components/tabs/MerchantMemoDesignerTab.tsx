@@ -30,7 +30,6 @@ export function MerchantMemoDesignerTab({
   onDeleteMemo,
   onTriggerToast,
 }: MerchantMemoDesignerTabProps) {
-  const [designerCode, setDesignerCode] = useState('MEMO-FESTIVE-01');
   const [designerName, setDesignerName] = useState('Festive Season Branded Slip');
   const [resellerStoreName, setResellerStoreName] = useState('URBAN THREADS OFFICIAL');
   const [resellerPhone, setResellerPhone] = useState('+880 1711-234567');
@@ -71,13 +70,15 @@ export function MerchantMemoDesignerTab({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!designerCode) return;
+
+    // Auto-generate unique memo code by system/backend
+    const autoCode = `MEMO-${Math.floor(100000 + Math.random() * 900000)}`;
 
     const newMemo: ResellerMemo = {
       id: `memo-${Date.now()}`,
-      code: designerCode.toUpperCase(),
-      name: designerName,
-      resellerName: resellerStoreName,
+      code: autoCode,
+      name: designerName.trim() || 'Branded Slip',
+      resellerName: resellerStoreName.trim() || 'Brand Store',
       phone: resellerPhone,
       address: resellerAddress,
       note: resellerNote,
@@ -91,7 +92,7 @@ export function MerchantMemoDesignerTab({
     setMemoSavedAlert(true);
     setTimeout(() => setMemoSavedAlert(false), 4000);
     onTriggerToast(
-      `Reseller Memo ${designerCode.toUpperCase()} created & compiled for 4x6 thermal printers!`
+      `Reseller Memo created with Code: ${autoCode}! You can copy it from the list below.`
     );
   };
 
@@ -125,18 +126,15 @@ export function MerchantMemoDesignerTab({
               <span>Reseller Slip Configuration</span>
             </h3>
 
-            <div>
-              <label className="text-xs font-semibold text-slate-400 block mb-1">
-                Unique Memo Code (System Attribution)
-              </label>
-              <input
-                type="text"
-                value={designerCode}
-                onChange={(e) => setDesignerCode(e.target.value.toUpperCase())}
-                placeholder="e.g. MEMO-FESTIVE-01"
-                required
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm font-mono text-indigo-300 focus:outline-none focus:border-indigo-500"
-              />
+            <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2 text-slate-300">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="font-medium">Memo Code:</span>
+                <span className="text-slate-400 text-[11px]">(Assigned automatically upon creation)</span>
+              </div>
+              <span className="font-mono text-xs font-bold text-indigo-300 bg-indigo-950/60 px-2.5 py-1 rounded border border-indigo-800/50">
+                AUTO-ASSIGNED
+              </span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -320,7 +318,7 @@ export function MerchantMemoDesignerTab({
               <button
                 type="button"
                 onClick={() => {
-                  onTriggerToast(`Triggered 4x6 thermal test print for ${designerCode}!`);
+                  onTriggerToast('Triggered 4x6 thermal test print preview!');
                 }}
                 className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shadow-sm shrink-0"
               >
@@ -388,35 +386,18 @@ export function MerchantMemoDesignerTab({
             {/* Bottom Controls matching Screenshot_35.png */}
             <div className="flex items-center justify-between pt-3 border-t border-slate-800 text-xs text-slate-400">
               <span className="text-[11px]">
-                Created: <span className="text-slate-300 font-mono">2026-10-15</span>
+                Memo Code: <span className="text-indigo-400 font-mono font-semibold">Auto-assigned upon save</span>
               </span>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => handleCopyCode(designerCode)}
-                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-700"
-                >
-                  {copiedCode === designerCode ? (
-                    <>
-                      <Check className="h-3.5 w-3.5 text-emerald-400" />
-                      <span className="text-emerald-400">Copied</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-3.5 w-3.5 text-slate-400" />
-                      <span>Copy Code</span>
-                    </>
-                  )}
-                </button>
-                <button
-                  type="button"
                   onClick={() => {
-                    onTriggerToast(`Triggered 4x6 thermal test print for ${designerCode}!`);
+                    onTriggerToast('Triggered 4x6 thermal test print preview!');
                   }}
                   className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
                 >
                   <Printer className="h-3.5 w-3.5" />
-                  <span>Print Test</span>
+                  <span>Print Preview Test</span>
                 </button>
               </div>
             </div>

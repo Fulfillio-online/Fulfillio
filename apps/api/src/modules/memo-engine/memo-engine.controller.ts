@@ -16,7 +16,7 @@ export class MemoEngineController {
     @Request() req: any,
     @Body()
     body: {
-      memoCode: string;
+      memoCode?: string;
       name: string;
       isDefault?: boolean;
       layout: MemoTemplateLayout;

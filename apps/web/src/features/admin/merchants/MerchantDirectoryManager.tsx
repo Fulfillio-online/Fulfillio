@@ -21,6 +21,7 @@ import { MerchantProfileDrawer } from './components/MerchantProfileDrawer';
 import {
   getSyncedMerchantDirectoryLists,
   syncMerchantDirectoryToProfiles,
+  getSyncedMerchantMemos,
 } from '@/lib/warehouseSync';
 
 export interface MerchantDirectoryManagerProps {
@@ -35,7 +36,7 @@ export function MerchantDirectoryManager({
   const [merchants, setMerchants] = useState<MerchantRecord[]>(MERCHANTS_DATA);
   const [productsList, setProductsList] = useState<MerchantProductItem[]>(ALL_PRODUCTS);
   const [ordersList, setOrdersList] = useState<MerchantOrderItem[]>(ALL_ORDERS);
-  const [memosList] = useState<MerchantMemoItem[]>(ALL_MEMOS);
+  const [memosList, setMemosList] = useState<MerchantMemoItem[]>(ALL_MEMOS);
   const [selectedMerchantId, setSelectedMerchantId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -60,6 +61,8 @@ export function MerchantDirectoryManager({
         const { products, orders } = getSyncedMerchantDirectoryLists(ALL_PRODUCTS, ALL_ORDERS);
         setProductsList(products);
         setOrdersList(orders);
+        const syncedMemos = getSyncedMerchantMemos(ALL_MEMOS);
+        setMemosList(syncedMemos);
       } catch (err) {
         console.warn('Could not read from localStorage', err);
       }

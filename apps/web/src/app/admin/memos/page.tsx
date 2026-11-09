@@ -1,11 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Copy, Printer } from 'lucide-react';
 import { UnifiedThermalSticker } from '@/features/shared/thermal-print/UnifiedThermalSticker';
+import { getSyncedAdminMemos, SyncedAdminMemoItem } from '@/lib/warehouseSync';
+import { STORAGE_KEY as STORAGE_KEY_MERCHANTS_DIRECTORY, MERCHANTS_DATA } from '@/features/admin/merchants/mockData';
 
-const INITIAL_MEMOS = [
+const INITIAL_MEMOS: SyncedAdminMemoItem[] = [
   {
     id: 'memo-1',
     code: 'MEMO-FESTIVE-01',
@@ -77,9 +79,38 @@ const INITIAL_MEMOS = [
 ];
 
 export default function AdminMemosPage() {
-  const [memos] = useState(INITIAL_MEMOS);
+  const [memos, setMemos] = useState<SyncedAdminMemoItem[]>(INITIAL_MEMOS);
+  const [merchantsList, setMerchantsList] = useState<any[]>(MERCHANTS_DATA);
   const [memoFilter, setMemoFilter] = useState<string>('ALL');
   const [printingMemo, setPrintingMemo] = useState<any | null>(null);
+
+  // Sync memos and merchants list from warehouse storage & cross-tab events
+  useEffect(() => {
+    const syncMemos = () => {
+      try {
+        const synced = getSyncedAdminMemos(INITIAL_MEMOS);
+        setMemos(synced);
+
+        const savedMerchants = localStorage.getItem(STORAGE_KEY_MERCHANTS_DIRECTORY);
+        if (savedMerchants) {
+          const parsed = JSON.parse(savedMerchants);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setMerchantsList(parsed);
+          }
+        }
+      } catch (err) {
+        console.warn('Error syncing admin memos:', err);
+      }
+    };
+
+    syncMemos();
+    window.addEventListener('fulfillio-warehouse-sync', syncMemos);
+    window.addEventListener('storage', syncMemos);
+    return () => {
+      window.removeEventListener('fulfillio-warehouse-sync', syncMemos);
+      window.removeEventListener('storage', syncMemos);
+    };
+  }, []);
 
   const handlePrintSingleMemo = (memo: any) => {
     setPrintingMemo(memo);
@@ -91,6 +122,22 @@ export default function AdminMemosPage() {
       }, 80);
     }
   };
+
+  // Dynamically extract all available merchants from merchant directory and current memos
+  const merchantOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    merchantsList.forEach((m) => {
+      if (m.merchantCode) {
+        map.set(m.merchantCode, m.storeName || m.businessName || m.merchantCode);
+      }
+    });
+    memos.forEach((m) => {
+      if (m.merchantCode && !map.has(m.merchantCode)) {
+        map.set(m.merchantCode, m.merchantName || m.merchantCode);
+      }
+    });
+    return Array.from(map.entries()).map(([code, name]) => ({ code, name }));
+  }, [merchantsList, memos]);
 
   const filteredMemos =
     memoFilter === 'ALL'
@@ -111,23 +158,39 @@ export default function AdminMemosPage() {
           <select
             value={memoFilter}
             onChange={(e) => setMemoFilter(e.target.value)}
-            className="px-3 py-1.5 rounded-lg bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 text-xs text-navy-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-orange-500"
+            className="px-3 py-1.5 rounded-lg bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 text-xs text-navy-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-orange-500 cursor-pointer"
           >
             <option value="ALL">All Merchants ({memos.length})</option>
-            <option value="MC-101">Urban Threads BD (MC-101)</option>
-            <option value="MC-102">Apex Footwear Store (MC-102)</option>
-            <option value="MC-103">Gadget Freak Online (MC-103)</option>
+            {merchantOptions.map((opt) => {
+              const count = memos.filter((m) => m.merchantCode === opt.code).length;
+              return (
+                <option key={opt.code} value={opt.code}>
+                  {opt.name} ({opt.code}){count > 0 ? ` [${count}]` : ''}
+                </option>
+              );
+            })}
           </select>
         </div>
       </div>
 
       {/* Memo Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredMemos.map((memo) => (
-          <div
-            key={memo.id}
-            className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-navy-900/90 overflow-hidden flex flex-col justify-between hover:border-slate-300 dark:hover:border-white/15 transition-all shadow-lg"
-          >
+        {filteredMemos.length === 0 ? (
+          <div className="col-span-full rounded-2xl border-2 border-dashed border-slate-200 dark:border-white/10 p-12 text-center bg-white/50 dark:bg-navy-900/50">
+            <div className="w-12 h-12 mx-auto rounded-full bg-slate-100 dark:bg-navy-800 flex items-center justify-center text-slate-400 mb-3">
+              <Printer className="w-6 h-6" />
+            </div>
+            <h3 className="text-sm font-bold text-navy-900 dark:text-white">No Memos Found</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
+              No invoice or memo templates found for {memoFilter === 'ALL' ? 'any merchant' : `merchant ${memoFilter}`}. New memos designed in the Merchant Portal will appear here automatically.
+            </p>
+          </div>
+        ) : (
+          filteredMemos.map((memo) => (
+            <div
+              key={memo.id}
+              className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-navy-900/90 overflow-hidden flex flex-col justify-between hover:border-slate-300 dark:hover:border-white/15 transition-all shadow-lg"
+            >
             {/* Card Header */}
             <div className="p-4 border-b border-slate-200/80 dark:border-white/10 bg-white dark:bg-navy-900 flex items-center justify-between">
               <div>
@@ -225,7 +288,7 @@ export default function AdminMemosPage() {
               </div>
             </div>
           </div>
-        ))}
+        )))}
       </div>
 
       {/* Isolated 4x6" Print Portal for Memo Section */}

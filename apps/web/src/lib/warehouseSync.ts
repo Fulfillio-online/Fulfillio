@@ -20,6 +20,10 @@ import {
   STORAGE_KEY_MERCHANT_PROFILE,
   STORAGE_KEY_STOCK_REQUESTS,
 } from '@/features/merchant/portal/mockData';
+import { MerchantMemoItem } from '@/features/admin/merchants/types';
+import { ALL_MEMOS, STORAGE_KEY as STORAGE_KEY_MERCHANTS_DIRECTORY } from '@/features/admin/merchants/mockData';
+
+export const STORAGE_KEY_ADMIN_MEMOS = 'fulfillio_admin_memos_v1';
 import { WarehouseProductItem } from '@/features/admin/products/types';
 import {
   INITIAL_PRODUCTS,
@@ -1574,5 +1578,214 @@ export function getSyncedMerchantDirectoryLists(
     return { products: syncedProds, orders: syncedOrders };
   } catch {
     return { products: baseProducts, orders: baseOrders };
+}
+
+export interface SyncedAdminMemoItem {
+  id: string;
+  code: string;
+  resellerName: string;
+  merchantName: string;
+  merchantCode: string;
+  phone: string;
+  address: string;
+  paperSize: string;
+  isDefault: boolean;
+  color: string;
+  note: string;
+  sampleItems: { name: string; qty: number; price: string }[];
+  created: string;
+}
+
+export function getStoredMerchantMemos(): ResellerMemo[] {
+  if (typeof window === 'undefined') return INITIAL_MERCHANT_MEMOS;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_MERCHANT_MEMOS);
+    if (!raw) return INITIAL_MERCHANT_MEMOS;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_MERCHANT_MEMOS;
+  } catch {
+    return INITIAL_MERCHANT_MEMOS;
+  }
+}
+
+export function getStoredAdminMemos(): SyncedAdminMemoItem[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_ADMIN_MEMOS);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function syncMerchantMemoToAdmin(
+  memo: ResellerMemo,
+  profile: MerchantProfileData = INITIAL_MERCHANT_PROFILE
+) {
+  if (typeof window === 'undefined') return;
+  try {
+    const merchantCode = (memo.merchantCode || profile.merchantCode || 'MC-101').trim();
+    const merchantName = (memo.merchantName || profile.storeName || "Sabbir's Store").trim();
+
+    const adminItem: SyncedAdminMemoItem = {
+      id: memo.id,
+      code: (memo.code || 'MEMO-DEFAULT').trim().toUpperCase(),
+      resellerName: memo.resellerName || merchantName,
+      merchantName,
+      merchantCode,
+      phone: memo.phone || profile.phone || '+880 1711-000000',
+      address: memo.address || profile.location || 'Dhaka, Bangladesh',
+      paperSize: memo.paperSize === 'POS_80MM' ? '80mm POS Slip' : '4x6 Thermal Sticker',
+      isDefault: Boolean(memo.isDefault),
+      color: memo.color || memo.accentColor || '#4f46e5',
+      note: memo.note || 'Thank you for shopping! Return within 7 days with invoice.',
+      sampleItems: memo.sampleItems && memo.sampleItems.length > 0
+        ? memo.sampleItems
+        : [{ name: 'Heavyweight Hoodie (XL)', qty: 1, price: '৳ 3,450' }],
+      created: memo.created || new Date().toISOString().slice(0, 10),
+    };
+
+    // Upsert into admin memos storage
+    const storedAdmin = getStoredAdminMemos();
+    const filteredAdmin = storedAdmin.filter(
+      (m) => m.id !== adminItem.id && !(m.code === adminItem.code && m.merchantCode === adminItem.merchantCode)
+    );
+    const updatedAdmin = [adminItem, ...filteredAdmin];
+    localStorage.setItem(STORAGE_KEY_ADMIN_MEMOS, JSON.stringify(updatedAdmin));
+
+    // Also update merchant memos to ensure merchantCode and merchantName are retained
+    const storedMerchant = getStoredMerchantMemos();
+    const filteredMerchant = storedMerchant.filter(
+      (m) => m.id !== memo.id && m.code !== memo.code
+    );
+    const memoToStore: ResellerMemo = {
+      ...memo,
+      merchantCode,
+      merchantName,
+    };
+    localStorage.setItem(STORAGE_KEY_MERCHANT_MEMOS, JSON.stringify([memoToStore, ...filteredMerchant]));
+
+    // Dispatch global sync events
+    window.dispatchEvent(new CustomEvent('fulfillio-warehouse-sync'));
+    window.dispatchEvent(new StorageEvent('storage', { key: STORAGE_KEY_ADMIN_MEMOS }));
+  } catch (err) {
+    console.error('Failed to sync memo to admin:', err);
+  }
+}
+
+export function syncMerchantMemoDeletedToAdmin(memoId: string, memoCode: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    const storedAdmin = getStoredAdminMemos();
+    const nextAdmin = storedAdmin.filter((m) => m.id !== memoId && m.code !== memoCode);
+    localStorage.setItem(STORAGE_KEY_ADMIN_MEMOS, JSON.stringify(nextAdmin));
+
+    const storedMerchant = getStoredMerchantMemos();
+    const nextMerchant = storedMerchant.filter((m) => m.id !== memoId && m.code !== memoCode);
+    localStorage.setItem(STORAGE_KEY_MERCHANT_MEMOS, JSON.stringify(nextMerchant));
+
+    window.dispatchEvent(new CustomEvent('fulfillio-warehouse-sync'));
+    window.dispatchEvent(new StorageEvent('storage', { key: STORAGE_KEY_ADMIN_MEMOS }));
+  } catch (err) {
+    console.error('Failed to sync memo deletion to admin:', err);
+  }
+}
+
+export function getSyncedAdminMemos(baseMemos: SyncedAdminMemoItem[]): SyncedAdminMemoItem[] {
+  if (typeof window === 'undefined') return baseMemos;
+  try {
+    const storedAdmin = getStoredAdminMemos();
+    const storedMerchant = getStoredMerchantMemos();
+
+    // In case there are merchant memos not yet in admin memos
+    const merchantConverted: SyncedAdminMemoItem[] = storedMerchant.map((mm) => {
+      let mCode = mm.merchantCode;
+      let mName = mm.merchantName;
+      if (!mCode || !mName) {
+        try {
+          const rawProf = localStorage.getItem(STORAGE_KEY_MERCHANT_PROFILE);
+          if (rawProf) {
+            const p = JSON.parse(rawProf);
+            mCode = mCode || p.merchantCode;
+            mName = mName || p.storeName;
+          }
+        } catch {}
+      }
+      return {
+        id: mm.id,
+        code: mm.code,
+        resellerName: mm.resellerName || mName || 'Reseller Store',
+        merchantName: mName || "Sabbir's Store",
+        merchantCode: mCode || 'MC-101',
+        phone: mm.phone || '+880 1711-000000',
+        address: mm.address || 'Dhaka, Bangladesh',
+        paperSize: mm.paperSize === 'POS_80MM' ? '80mm POS Slip' : '4x6 Thermal Sticker',
+        isDefault: Boolean(mm.isDefault),
+        color: mm.color || mm.accentColor || '#4f46e5',
+        note: mm.note || 'Thank you for shopping! Return within 7 days with invoice.',
+        sampleItems: mm.sampleItems || [{ name: 'Standard Item Sample', qty: 1, price: '৳ 1,500' }],
+        created: mm.created || new Date().toISOString().slice(0, 10),
+      };
+    });
+
+    const memoMap = new Map<string, SyncedAdminMemoItem>();
+
+    // 1. Put baseMemos first
+    baseMemos.forEach((bm) => {
+      const key = `${bm.merchantCode}-${bm.code}`.toUpperCase();
+      memoMap.set(key, bm);
+    });
+
+    // 2. Override/add with merchant converted
+    merchantConverted.forEach((mc) => {
+      const key = `${mc.merchantCode}-${mc.code}`.toUpperCase();
+      memoMap.set(key, mc);
+    });
+
+    // 3. Override/add with storedAdmin
+    storedAdmin.forEach((sa) => {
+      const key = `${sa.merchantCode}-${sa.code}`.toUpperCase();
+      memoMap.set(key, sa);
+    });
+
+    return Array.from(memoMap.values());
+  } catch {
+    return baseMemos;
+  }
+}
+
+export function getSyncedMerchantMemos(baseMemos: MerchantMemoItem[]): MerchantMemoItem[] {
+  if (typeof window === 'undefined') return baseMemos;
+  try {
+    const adminMemos = getSyncedAdminMemos([]);
+    const memoMap = new Map<string, MerchantMemoItem>();
+
+    // Put baseMemos first
+    baseMemos.forEach((bm) => {
+      const key = `${bm.merchantCode}-${bm.code}`.toUpperCase();
+      memoMap.set(key, bm);
+    });
+
+    // Convert and add adminMemos
+    adminMemos.forEach((am) => {
+      const key = `${am.merchantCode}-${am.code}`.toUpperCase();
+      memoMap.set(key, {
+        id: am.id,
+        merchantCode: am.merchantCode,
+        code: am.code,
+        resellerName: am.resellerName,
+        brandColor: am.color,
+        phone: am.phone,
+        address: am.address,
+        terms: am.note,
+        isDefault: am.isDefault,
+      });
+    });
+
+    return Array.from(memoMap.values());
+  } catch {
+    return baseMemos;
   }
 }

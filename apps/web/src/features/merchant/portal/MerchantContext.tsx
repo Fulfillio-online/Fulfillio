@@ -32,6 +32,8 @@ import {
   syncMerchantProductsAddedToAdmin,
   syncMerchantProductsDeletedToAdmin,
   syncMerchantProductUpdatedToAdmin,
+  syncMerchantMemoToAdmin,
+  syncMerchantMemoDeletedToAdmin,
 } from '@/lib/warehouseSync';
 
 interface MerchantContextType {
@@ -472,11 +474,17 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
   };
 
   const saveMemo = (newMemo: ResellerMemo) => {
+    const memoWithMerchant: ResellerMemo = {
+      ...newMemo,
+      merchantCode: newMemo.merchantCode || profile.merchantCode || 'MC-101',
+      merchantName: newMemo.merchantName || profile.storeName || "Sabbir's Store",
+    };
     setMemoList((prev) => {
-      const filtered = prev.filter((m) => m.id !== newMemo.id && m.code !== newMemo.code);
-      const next = [newMemo, ...filtered];
+      const filtered = prev.filter((m) => m.id !== memoWithMerchant.id && m.code !== memoWithMerchant.code);
+      const next = [memoWithMerchant, ...filtered];
       if (typeof window !== 'undefined') {
         localStorage.setItem(getMerchantMemosKey(profile.merchantCode), JSON.stringify(next));
+        syncMerchantMemoToAdmin(memoWithMerchant, profile);
       }
       return next;
     });
@@ -488,6 +496,10 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       const next = prev.map((m) => ({ ...m, isDefault: m.id === id }));
       if (typeof window !== 'undefined') {
         localStorage.setItem(getMerchantMemosKey(profile.merchantCode), JSON.stringify(next));
+        const target = next.find((m) => m.id === id);
+        if (target) {
+          syncMerchantMemoToAdmin(target, profile);
+        }
       }
       return next;
     });
@@ -496,9 +508,13 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
 
   const deleteMemo = (id: string) => {
     setMemoList((prev) => {
+      const target = prev.find((m) => m.id === id);
       const next = prev.filter((m) => m.id !== id);
       if (typeof window !== 'undefined') {
         localStorage.setItem(getMerchantMemosKey(profile.merchantCode), JSON.stringify(next));
+        if (target) {
+          syncMerchantMemoDeletedToAdmin(target.id, target.code);
+        }
       }
       return next;
     });
