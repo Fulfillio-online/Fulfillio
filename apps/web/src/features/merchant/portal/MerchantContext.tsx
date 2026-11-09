@@ -24,6 +24,13 @@ import {
   STORAGE_KEY_STOCK_REQUESTS,
 } from './mockData';
 import { merchantApi } from './api';
+import {
+  syncMerchantOrderCancelledToAdmin,
+  syncMerchantOrderCreatedToAdmin,
+  syncMerchantProductsAddedToAdmin,
+  syncMerchantProductsDeletedToAdmin,
+  syncMerchantProductUpdatedToAdmin,
+} from '@/lib/warehouseSync';
 
 interface MerchantContextType {
   profile: MerchantProfileData;
@@ -107,8 +114,37 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       }
     }
     loadData();
+
+    const handleExternalSync = (e: Event) => {
+      const ce = e as CustomEvent;
+      if (ce.detail?.source === 'MerchantContext') return;
+      try {
+        const savedProds = localStorage.getItem(STORAGE_KEY_MERCHANT_PRODUCTS);
+        if (savedProds) {
+          const parsedProds = JSON.parse(savedProds);
+          if (Array.isArray(parsedProds) && parsedProds.length > 0) {
+            setProducts(parsedProds);
+          }
+        }
+        const savedOrds = localStorage.getItem(STORAGE_KEY_MERCHANT_ORDERS);
+        if (savedOrds) {
+          const parsedOrds = JSON.parse(savedOrds);
+          if (Array.isArray(parsedOrds) && parsedOrds.length > 0) {
+            setOrders(parsedOrds);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    window.addEventListener('fulfillio-warehouse-sync', handleExternalSync);
+    window.addEventListener('storage', handleExternalSync);
+
     return () => {
       isMounted = false;
+      window.removeEventListener('fulfillio-warehouse-sync', handleExternalSync);
+      window.removeEventListener('storage', handleExternalSync);
     };
   }, []);
 
@@ -134,11 +170,17 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
 
   const adjustStock = (id: string, delta: number) => {
     setProducts((prev) => {
-      const next = prev.map((p) =>
-        p.id === id ? { ...p, stock: Math.max(0, p.stock + delta) } : p
-      );
+      let updatedTarget: MerchantProductItem | null = null;
+      const next = prev.map((p) => {
+        if (p.id !== id) return p;
+        updatedTarget = { ...p, stock: Math.max(0, p.stock + delta) };
+        return updatedTarget;
+      });
       if (typeof window !== 'undefined') {
         localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
+        if (updatedTarget) {
+          syncMerchantProductUpdatedToAdmin(updatedTarget, profile);
+        }
       }
       return next;
     });
@@ -147,9 +189,11 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
 
   const deleteProduct = (id: string) => {
     setProducts((prev) => {
+      const deleted = prev.filter((p) => p.id === id);
       const next = prev.filter((p) => p.id !== id);
       if (typeof window !== 'undefined') {
         localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
+        syncMerchantProductsDeletedToAdmin(deleted);
       }
       return next;
     });
@@ -161,17 +205,26 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       const next = [...newItems, ...prev];
       if (typeof window !== 'undefined') {
         localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
+        syncMerchantProductsAddedToAdmin(newItems, profile);
       }
       return next;
     });
-    showToast(`Generated ${newItems.length} product SKU(s) successfully.`);
+    showToast(`Generated ${newItems.length} product SKU(s) & submitted for Admin Approval.`);
   };
 
   const updateProduct = (id: string, updated: Partial<MerchantProductItem>) => {
     setProducts((prev) => {
-      const next = prev.map((p) => (p.id === id ? { ...p, ...updated } : p));
+      let updatedTarget: MerchantProductItem | null = null;
+      const next = prev.map((p) => {
+        if (p.id !== id) return p;
+        updatedTarget = { ...p, ...updated };
+        return updatedTarget;
+      });
       if (typeof window !== 'undefined') {
         localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
+        if (updatedTarget) {
+          syncMerchantProductUpdatedToAdmin(updatedTarget, profile);
+        }
       }
       return next;
     });
@@ -206,9 +259,11 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
 
   const bulkDeleteProducts = (ids: string[]) => {
     setProducts((prev) => {
+      const deleted = prev.filter((p) => ids.includes(p.id));
       const next = prev.filter((p) => !ids.includes(p.id));
       if (typeof window !== 'undefined') {
         localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
+        syncMerchantProductsDeletedToAdmin(deleted);
       }
       return next;
     });
@@ -249,11 +304,17 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
 
     // Credit stock to product
     setProducts((prev) => {
-      const next = prev.map((p) =>
-        p.id === req.productId ? { ...p, stock: p.stock + req.requestedQty } : p
-      );
+      let updatedTarget: MerchantProductItem | null = null;
+      const next = prev.map((p) => {
+        if (p.id !== req.productId) return p;
+        updatedTarget = { ...p, stock: p.stock + req.requestedQty };
+        return updatedTarget;
+      });
       if (typeof window !== 'undefined') {
         localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
+        if (updatedTarget) {
+          syncMerchantProductUpdatedToAdmin(updatedTarget, profile);
+        }
       }
       return next;
     });
@@ -301,6 +362,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       itemsToDeduct.push({ productId: order.productId, qty: order.qty || 1 });
     }
 
+    let latestProducts = products;
     setProducts((prev) => {
       const next = prev.map((p) => {
         const match = itemsToDeduct.find((it) => it.productId === p.id);
@@ -313,6 +375,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
         }
         return p;
       });
+      latestProducts = next;
       if (typeof window !== 'undefined') {
         localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
       }
@@ -326,10 +389,12 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       }
       return next;
     });
+
+    syncMerchantOrderCreatedToAdmin(order, itemsToDeduct, latestProducts, memoList, profile);
   };
 
   const cancelOrder = (orderId: string) => {
-    const target = orders.find((o) => o.id === orderId);
+    const target = orders.find((o) => o.id === orderId || o.orderNumber === orderId);
     if (!target) return;
 
     const itemsToRestore: { productId: string; qty: number }[] = [];
@@ -341,6 +406,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       itemsToRestore.push({ productId: target.productId, qty: target.qty });
     }
 
+    let latestProducts = products;
     if (itemsToRestore.length > 0) {
       setProducts((prev) => {
         const next = prev.map((p) => {
@@ -354,6 +420,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
           }
           return p;
         });
+        latestProducts = next;
         if (typeof window !== 'undefined') {
           localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
         }
@@ -363,13 +430,17 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
 
     setOrders((prev) => {
       const next = prev.map((o) =>
-        o.id === orderId ? { ...o, status: 'CANCELLED' as const } : o
+        o.id === orderId || o.orderNumber === orderId
+          ? { ...o, status: 'CANCELLED' as const }
+          : o
       );
       if (typeof window !== 'undefined') {
         localStorage.setItem(STORAGE_KEY_MERCHANT_ORDERS, JSON.stringify(next));
       }
       return next;
     });
+
+    syncMerchantOrderCancelledToAdmin(target.orderNumber || target.id, itemsToRestore, latestProducts);
     showToast(`Order ${orderId} cancelled & stock restored.`);
   };
 

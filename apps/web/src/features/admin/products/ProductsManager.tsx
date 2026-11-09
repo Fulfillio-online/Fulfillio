@@ -21,6 +21,10 @@ import { StockAdjustModal } from './components/modals/StockAdjustModal';
 import { ApprovalActionModal } from './components/modals/ApprovalActionModal';
 import { AddProductModal } from './components/modals/AddProductModal';
 import { CreateBinModal } from './components/modals/CreateBinModal';
+import {
+  reconcileAdminProductsWithMerchant,
+  syncAdminProductsToMerchant,
+} from '@/lib/warehouseSync';
 
 export interface ProductsManagerProps {
   activeTab?: WarehouseProductSubTab;
@@ -60,14 +64,17 @@ export function ProductsManager({
     const loadFromStorage = () => {
       try {
         const savedProds = localStorage.getItem(STORAGE_KEY_PRODUCTS);
+        let baseProds = INITIAL_PRODUCTS;
         if (savedProds) {
           const parsed = JSON.parse(savedProds);
-          if (Array.isArray(parsed)) {
-            setProducts(parsed);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            baseProds = parsed;
           }
         } else {
           localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(INITIAL_PRODUCTS));
         }
+        const reconciled = reconcileAdminProductsWithMerchant(baseProds);
+        setProducts(reconciled);
 
         const savedBins = localStorage.getItem(STORAGE_KEY_BINS);
         if (savedBins) {
@@ -92,13 +99,18 @@ export function ProductsManager({
     };
 
     window.addEventListener('fulfillio-warehouse-sync', handleWarehouseSync);
-    return () => window.removeEventListener('fulfillio-warehouse-sync', handleWarehouseSync);
+    window.addEventListener('storage', handleWarehouseSync);
+    return () => {
+      window.removeEventListener('fulfillio-warehouse-sync', handleWarehouseSync);
+      window.removeEventListener('storage', handleWarehouseSync);
+    };
   }, []);
 
   useEffect(() => {
     if (!hydrated) return;
     try {
       localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(products));
+      syncAdminProductsToMerchant(products);
     } catch {
       // ignore
     }
@@ -129,6 +141,7 @@ export function ProductsManager({
       );
       try {
         localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
       } catch {
         // ignore
       }
@@ -141,6 +154,7 @@ export function ProductsManager({
       const next = prev.map((p) => (p.id === productId ? { ...p, binCode: nextBinCode } : p));
       try {
         localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
       } catch {
         // ignore
       }
@@ -173,6 +187,7 @@ export function ProductsManager({
         );
         try {
           localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+          syncAdminProductsToMerchant(next);
         } catch {
           // ignore
         }
@@ -193,6 +208,7 @@ export function ProductsManager({
         const next = prev.filter((p) => p.id !== product.id);
         try {
           localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+          syncAdminProductsToMerchant(next, [product]);
         } catch {
           // ignore
         }
@@ -227,6 +243,7 @@ export function ProductsManager({
       );
       try {
         localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
       } catch {
         // ignore
       }
@@ -244,9 +261,11 @@ export function ProductsManager({
   const handleBulkReject = (productIds: string[]) => {
     const idSet = new Set(productIds);
     setProducts((prev) => {
+      const removed = prev.filter((p) => idSet.has(p.id));
       const next = prev.filter((p) => !idSet.has(p.id));
       try {
         localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next, removed);
       } catch {
         // ignore
       }
@@ -266,6 +285,7 @@ export function ProductsManager({
       const next = [newProduct, ...prev];
       try {
         localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
       } catch {
         // ignore
       }
@@ -372,9 +392,11 @@ export function ProductsManager({
   const handleDeleteProduct = (productId: string) => {
     const prod = products.find((p) => p.id === productId);
     setProducts((prev) => {
+      const removed = prev.filter((p) => p.id === productId);
       const next = prev.filter((p) => p.id !== productId);
       try {
         localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next, removed);
       } catch {
         // ignore
       }
@@ -394,9 +416,11 @@ export function ProductsManager({
     const idSet = new Set(productIds);
     const count = productIds.length;
     setProducts((prev) => {
+      const removed = prev.filter((p) => idSet.has(p.id));
       const next = prev.filter((p) => !idSet.has(p.id));
       try {
         localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next, removed);
       } catch {
         // ignore
       }

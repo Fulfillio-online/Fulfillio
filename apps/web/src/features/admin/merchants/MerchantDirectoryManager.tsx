@@ -18,6 +18,7 @@ import {
 import { MerchantStatsOverview } from './components/MerchantStatsOverview';
 import { MerchantTable } from './components/MerchantTable';
 import { MerchantProfileDrawer } from './components/MerchantProfileDrawer';
+import { getSyncedMerchantDirectoryLists } from '@/lib/warehouseSync';
 
 export interface MerchantDirectoryManagerProps {
   onNavigateTab?: (tabName: any) => void;
@@ -30,7 +31,7 @@ export function MerchantDirectoryManager({
 }: MerchantDirectoryManagerProps) {
   const [merchants, setMerchants] = useState<MerchantRecord[]>(MERCHANTS_DATA);
   const [productsList, setProductsList] = useState<MerchantProductItem[]>(ALL_PRODUCTS);
-  const [ordersList] = useState<MerchantOrderItem[]>(ALL_ORDERS);
+  const [ordersList, setOrdersList] = useState<MerchantOrderItem[]>(ALL_ORDERS);
   const [memosList] = useState<MerchantMemoItem[]>(ALL_MEMOS);
   const [selectedMerchantId, setSelectedMerchantId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -40,19 +41,32 @@ export function MerchantDirectoryManager({
     setTimeout(() => setToastMessage(null), 3200);
   };
 
-  // Load persisted merchants from localStorage on initial client mount
+  // Load persisted merchants & synced products/orders from localStorage
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setMerchants(parsed);
+    const syncData = () => {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setMerchants(parsed);
+          }
         }
+        const { products, orders } = getSyncedMerchantDirectoryLists(ALL_PRODUCTS, ALL_ORDERS);
+        setProductsList(products);
+        setOrdersList(orders);
+      } catch (err) {
+        console.warn('Could not read from localStorage', err);
       }
-    } catch (err) {
-      console.warn('Could not read from localStorage', err);
-    }
+    };
+
+    syncData();
+    window.addEventListener('fulfillio-warehouse-sync', syncData);
+    window.addEventListener('storage', syncData);
+    return () => {
+      window.removeEventListener('fulfillio-warehouse-sync', syncData);
+      window.removeEventListener('storage', syncData);
+    };
   }, []);
 
   // Listen to external reset triggers

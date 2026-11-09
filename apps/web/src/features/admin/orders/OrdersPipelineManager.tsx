@@ -20,6 +20,10 @@ import { ActionConfirmModal } from './components/modals/ActionConfirmModal';
 import { CreateOrderModal } from './components/modals/CreateOrderModal';
 import { MemoPreviewModal } from './components/modals/MemoPreviewModal';
 import { IsolatedPrintPortal } from './components/print/IsolatedPrintPortal';
+import {
+  reconcileAdminOrdersWithMerchant,
+  syncAdminOrdersToMerchant,
+} from '@/lib/warehouseSync';
 
 export interface OrdersPipelineManagerProps {
   initialTab?: PipelineMainTab;
@@ -67,40 +71,39 @@ export function OrdersPipelineManager({
   const [pendingAction, setPendingAction] = useState<PendingConfirmationAction | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
-  // Hydrate orders from localStorage on mount
+  // Hydrate orders from localStorage on mount & reconcile with Merchant orders
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY_ORDERS);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setOrders(parsed);
-        }
-      }
-    } catch (e) {
-      console.error('Failed to load orders from localStorage:', e);
-    }
-  }, []);
-
-  // Sync orders with external changes
-  useEffect(() => {
-    const handleSync = (e: Event) => {
-      const customEvent = e as CustomEvent<{ source?: string }>;
-      if (customEvent.detail?.source === 'OrdersPipelineManager') return;
+    const loadOrders = () => {
       try {
         const stored = localStorage.getItem(STORAGE_KEY_ORDERS);
+        let baseOrders = INITIAL_PIPELINE_ORDERS;
         if (stored) {
           const parsed = JSON.parse(stored);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            setOrders(parsed);
+            baseOrders = parsed;
           }
         }
-      } catch (err) {
-        console.error('Failed to sync orders:', err);
+        const reconciled = reconcileAdminOrdersWithMerchant(baseOrders);
+        setOrders(reconciled);
+      } catch (e) {
+        console.error('Failed to load orders from localStorage:', e);
       }
     };
+
+    loadOrders();
+
+    const handleSync = (e: Event) => {
+      const customEvent = e as CustomEvent<{ source?: string }>;
+      if (customEvent.detail?.source === 'OrdersPipelineManager') return;
+      loadOrders();
+    };
+
     window.addEventListener('fulfillio-warehouse-sync', handleSync);
-    return () => window.removeEventListener('fulfillio-warehouse-sync', handleSync);
+    window.addEventListener('storage', handleSync);
+    return () => {
+      window.removeEventListener('fulfillio-warehouse-sync', handleSync);
+      window.removeEventListener('storage', handleSync);
+    };
   }, []);
 
   // Helper to update orders state and persist to localStorage
@@ -111,6 +114,7 @@ export function OrdersPipelineManager({
       const next = updater(prev);
       try {
         localStorage.setItem(STORAGE_KEY_ORDERS, JSON.stringify(next));
+        syncAdminOrdersToMerchant(next);
         window.dispatchEvent(
           new CustomEvent('fulfillio-warehouse-sync', {
             detail: { source: 'OrdersPipelineManager' },
