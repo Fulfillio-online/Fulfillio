@@ -35,6 +35,13 @@ import {
   STORAGE_KEY_PRODUCTS,
   STORAGE_KEY_BINS,
 } from '../mockData';
+import {
+  findMatchingMerchantProductForAdmin,
+  getRealOrdersForAdminProduct,
+  reconcileAdminProductsWithMerchant,
+  syncAdminProductsToMerchant,
+} from '@/lib/warehouseSync';
+import { WarehousePipelineOrder } from '@/features/admin/orders/types';
 
 interface AdminProductDetailsViewProps {
   productId: string;
@@ -63,12 +70,34 @@ interface ProductOrderRecord {
   qty: number;
   codAmount: number;
   courier: string;
-  stage: 'DELIVERED' | 'DISPATCH' | 'PACK' | 'PICK';
+  stage: 'DELIVERED' | 'DISPATCH' | 'PACK' | 'PICK' | 'CANCELLED';
   createdAt: string;
+}
+
+function resolveColorHex(
+  colorName: string,
+  colors?: { name: string; hex: string }[]
+): string {
+  const clean = (colorName || '').trim().toLowerCase();
+  const matched = colors?.find((c) => c.name.trim().toLowerCase() === clean);
+  if (matched?.hex) return matched.hex;
+
+  if (clean.includes('black') || clean.includes('obsidian')) return '#0f172a';
+  if (clean.includes('white') || clean.includes('ivory') || clean.includes('cream')) return '#f8fafc';
+  if (clean.includes('navy') || clean.includes('blue') || clean.includes('cobalt')) return '#1e3a8a';
+  if (clean.includes('red') || clean.includes('crimson') || clean.includes('maroon')) return '#dc2626';
+  if (clean.includes('green') || clean.includes('olive') || clean.includes('emerald')) return '#15803d';
+  if (clean.includes('brown') || clean.includes('tan') || clean.includes('coffee')) return '#92400e';
+  if (clean.includes('gold') || clean.includes('yellow') || clean.includes('amber')) return '#d97706';
+  if (clean.includes('grey') || clean.includes('gray') || clean.includes('silver')) return '#64748b';
+  if (clean.includes('pink') || clean.includes('rose')) return '#e11d48';
+  if (clean.includes('purple') || clean.includes('violet')) return '#7c3aed';
+  return '#ea580c';
 }
 
 export function AdminProductDetailsView({ productId }: AdminProductDetailsViewProps) {
   const [product, setProduct] = useState<WarehouseProductItem | null>(null);
+  const [productOrders, setProductOrders] = useState<WarehousePipelineOrder[]>([]);
   const [bins, setBins] = useState<WarehouseBin[]>(INITIAL_BINS);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -86,128 +115,231 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Load product & bins from localStorage or initial mock data
+  // Load product, orders & bins from localStorage and keep in sync
   useEffect(() => {
-    try {
-      const storedProducts = localStorage.getItem(STORAGE_KEY_PRODUCTS);
-      const allProducts: WarehouseProductItem[] = storedProducts
-        ? JSON.parse(storedProducts)
-        : INITIAL_PRODUCTS;
+    const loadProductAndOrders = () => {
+      try {
+        const storedProducts = localStorage.getItem(STORAGE_KEY_PRODUCTS);
+        const rawProducts: WarehouseProductItem[] = storedProducts
+          ? JSON.parse(storedProducts)
+          : INITIAL_PRODUCTS;
+        const allProducts = reconcileAdminProductsWithMerchant(rawProducts);
 
-      const found = allProducts.find(
-        (p) => p.id.toLowerCase() === productId.toLowerCase()
-      );
-      setProduct(found || null);
+        const found = allProducts.find(
+          (p) => p.id.toLowerCase() === productId.toLowerCase()
+        );
+        setProduct(found || null);
 
-      const storedBins = localStorage.getItem(STORAGE_KEY_BINS);
-      if (storedBins) {
-        setBins(JSON.parse(storedBins));
+        if (found) {
+          setProductOrders(getRealOrdersForAdminProduct(found));
+        } else {
+          setProductOrders([]);
+        }
+
+        const storedBins = localStorage.getItem(STORAGE_KEY_BINS);
+        if (storedBins) {
+          setBins(JSON.parse(storedBins));
+        }
+      } catch (err) {
+        console.warn('Error loading product details from localStorage', err);
+        const found = INITIAL_PRODUCTS.find(
+          (p) => p.id.toLowerCase() === productId.toLowerCase()
+        );
+        setProduct(found || null);
+      } finally {
+        setIsLoading(false);
       }
-    } catch (err) {
-      console.warn('Error loading product details from localStorage', err);
-      const found = INITIAL_PRODUCTS.find(
-        (p) => p.id.toLowerCase() === productId.toLowerCase()
-      );
-      setProduct(found || null);
-    } finally {
-      setIsLoading(false);
-    }
+    };
+
+    loadProductAndOrders();
+
+    const handleSync = () => loadProductAndOrders();
+    window.addEventListener('fulfillio-warehouse-sync', handleSync);
+    window.addEventListener('storage', handleSync);
+    return () => {
+      window.removeEventListener('fulfillio-warehouse-sync', handleSync);
+      window.removeEventListener('storage', handleSync);
+    };
   }, [productId]);
 
-  // Generate or load variants breakdown for this product
+  // Build real variants breakdown for this product (from merchant's uploaded variantsList/colors/sizes or saved overrides)
   useEffect(() => {
     if (!product) return;
 
+    const matchedMerchantProd = findMatchingMerchantProductForAdmin(product);
+    const sourceVariantsList =
+      product.variantsList && product.variantsList.length > 0
+        ? product.variantsList
+        : matchedMerchantProd?.variantsList && matchedMerchantProd.variantsList.length > 0
+        ? matchedMerchantProd.variantsList
+        : undefined;
+    const sourceColors =
+      product.colors && product.colors.length > 0
+        ? product.colors
+        : matchedMerchantProd?.colors;
+    const sourceSizes =
+      product.sizes && product.sizes.length > 0
+        ? product.sizes
+        : matchedMerchantProd?.sizes;
+
+    // Calculate real reserved count per variant from active (PICK / WAITING / PACK) orders
+    const activeOrders = productOrders.filter(
+      (o) => o.stage === 'PICK' || o.stage === 'WAITING' || o.stage === 'PACK'
+    );
+    const getReservedForVariant = (colorName: string, sizeName: string, isOnlyVariant: boolean) => {
+      if (activeOrders.length === 0) return 0;
+      if (isOnlyVariant) {
+        return activeOrders.reduce((sum, o) => sum + (o.qty || 1), 0);
+      }
+      return activeOrders
+        .filter(
+          (o) =>
+            (o.color || '').trim().toLowerCase() === colorName.trim().toLowerCase() &&
+            (o.size || '').trim().toLowerCase() === sizeName.trim().toLowerCase()
+        )
+        .reduce((sum, o) => sum + (o.qty || 1), 0);
+    };
+
+    // 1. Check if Admin explicitly saved custom variant stock adjustments for this product
     const storageKey = `fulfillio_variants_${product.id}`;
     const savedVariants = localStorage.getItem(storageKey);
     if (savedVariants) {
       try {
-        setVariants(JSON.parse(savedVariants));
-        return;
+        const parsed: ProductVariantStockItem[] = JSON.parse(savedVariants);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setVariants(
+            parsed.map((v) => {
+              const reserved = Math.min(
+                v.stock,
+                getReservedForVariant(v.colorName, v.size, parsed.length === 1)
+              );
+              return {
+                ...v,
+                binCode: product.binCode,
+                reserved,
+                available: Math.max(0, v.stock - reserved),
+              };
+            })
+          );
+          return;
+        }
       } catch {
-        // fallback to generate
+        // fallback to real product variants
       }
     }
 
-    // Generate realistic color & size variant matrix based on category & master product
-    const isApparel = product.category === 'Apparel';
-    const isFootwear = product.category === 'Footwear';
-    const isElectronics = product.category === 'Electronics';
+    // 2. Build from real variantsList uploaded by Merchant
+    if (sourceVariantsList && sourceVariantsList.length > 0) {
+      const mapped: ProductVariantStockItem[] = sourceVariantsList.map((v, idx) => {
+        const colorName = v.color || product.color || 'Standard';
+        const sizeLabel =
+          v.size ||
+          (v.attributeName && v.attributeValue
+            ? `${v.attributeName}: ${v.attributeValue}`
+            : product.size || 'Standard');
+        const rawSku = v.variantSku || `${product.fullSku}-${idx + 1}`;
+        const fullVariantSku = rawSku.toUpperCase().startsWith(`${product.merchantCode.toUpperCase()}-`)
+          ? rawSku.toUpperCase()
+          : `${product.merchantCode.toUpperCase()}-${rawSku.toUpperCase()}`;
+        const stockUnits = Math.max(0, Number(v.stock) || 0);
+        const reserved = Math.min(
+          stockUnits,
+          getReservedForVariant(colorName, sizeLabel, sourceVariantsList.length === 1)
+        );
 
-    const baseSku = product.fullSku.split('-').slice(0, 3).join('-');
-
-    let generated: ProductVariantStockItem[] = [];
-
-    if (isFootwear) {
-      const shoeSizes = ['EU 40', 'EU 41', 'EU 42', 'EU 43', 'EU 44'];
-      const shares = [0.12, 0.22, 0.35, 0.21, 0.1];
-      generated = shoeSizes.map((sz, idx) => {
-        const stockUnits = Math.round(product.stock * shares[idx]);
-        const reserved = Math.min(stockUnits, Math.round(stockUnits * 0.15));
         return {
-          id: `${product.id}-VAR-${idx + 1}`,
-          sku: `${baseSku}-${product.color.toUpperCase().slice(0, 3)}-${sz.replace('EU ', '')}`,
-          colorName: product.color,
-          colorHex: '#92400e',
-          size: sz,
+          id: v.id || `${product.id}-VAR-${idx + 1}`,
+          sku: fullVariantSku,
+          colorName,
+          colorHex: resolveColorHex(colorName, sourceColors),
+          size: sizeLabel,
           binCode: product.binCode,
           stock: stockUnits,
           reserved,
           available: Math.max(0, stockUnits - reserved),
         };
       });
-    } else if (isElectronics) {
-      const colors = [
-        { name: 'Matte Obsidian', hex: '#111827', size: 'Standard Edition', share: 0.5 },
-        { name: 'Space Silver', hex: '#64748b', size: 'Standard Edition', share: 0.3 },
-        { name: 'Midnight Blue', hex: '#1e3a8a', size: 'Pro Edition', share: 0.2 },
-      ];
-      generated = colors.map((c, idx) => {
-        const stockUnits = Math.round(product.stock * c.share);
-        const reserved = Math.min(stockUnits, Math.round(stockUnits * 0.12));
-        return {
-          id: `${product.id}-VAR-${idx + 1}`,
-          sku: `${baseSku}-${c.name.slice(0, 3).toUpperCase()}-${idx + 1}`,
-          colorName: c.name,
-          colorHex: c.hex,
-          size: c.size,
-          binCode: product.binCode,
-          stock: stockUnits,
-          reserved,
-          available: Math.max(0, stockUnits - reserved),
-        };
-      });
-    } else {
-      // Apparel (Default): Multiple sizes and secondary color
-      const apparelVariants = [
-        { color: product.color, hex: '#0f172a', size: 'S', share: 0.15 },
-        { color: product.color, hex: '#0f172a', size: 'M', share: 0.25 },
-        { color: product.color, hex: '#0f172a', size: 'L', share: 0.32 },
-        { color: product.color, hex: '#0f172a', size: 'XL', share: 0.18 },
-        { color: 'Midnight Navy', hex: '#1e3a8a', size: 'M', share: 0.05 },
-        { color: 'Midnight Navy', hex: '#1e3a8a', size: 'L', share: 0.05 },
-      ];
-
-      generated = apparelVariants.map((item, idx) => {
-        const stockUnits = Math.round(product.stock * item.share);
-        const reserved = Math.min(stockUnits, Math.round(stockUnits * 0.12));
-        const colorTag = item.color.toUpperCase().slice(0, 3);
-        return {
-          id: `${product.id}-VAR-${idx + 1}`,
-          sku: `${baseSku}-${colorTag}-${item.size}`,
-          colorName: item.color,
-          colorHex: item.hex,
-          size: item.size,
-          binCode: idx >= 4 ? 'A-01-04' : product.binCode,
-          stock: stockUnits,
-          reserved,
-          available: Math.max(0, stockUnits - reserved),
-        };
-      });
+      setVariants(mapped);
+      return;
     }
 
-    setVariants(generated);
-  }, [product]);
+    // 3. If colors & sizes arrays exist without explicit variantsList, build exact matrix from colors x sizes
+    if (
+      (sourceColors && sourceColors.length > 0) ||
+      (sourceSizes && sourceSizes.length > 0)
+    ) {
+      const colorsList =
+        sourceColors && sourceColors.length > 0
+          ? sourceColors
+          : [{ id: 'c-1', name: product.color || 'Standard', hex: resolveColorHex(product.color) }];
+      const defaultSizes =
+        sourceSizes && sourceSizes.length > 0 ? sourceSizes : [product.size || 'Standard'];
+
+      const combos: { colorName: string; colorHex: string; size: string }[] = [];
+      colorsList.forEach((c) => {
+        const activeSizes =
+          'sizes' in c && Array.isArray(c.sizes) && c.sizes.length > 0
+            ? c.sizes
+            : defaultSizes;
+        activeSizes.forEach((sz) => {
+          combos.push({
+            colorName: c.name || product.color || 'Standard',
+            colorHex: c.hex || resolveColorHex(c.name),
+            size: sz || product.size || 'Standard',
+          });
+        });
+      });
+
+      if (combos.length > 0) {
+        const baseShare = Math.floor(product.stock / combos.length);
+        const remainder = product.stock % combos.length;
+        const mapped: ProductVariantStockItem[] = combos.map((combo, idx) => {
+          const stockUnits = baseShare + (idx < remainder ? 1 : 0);
+          const reserved = Math.min(
+            stockUnits,
+            getReservedForVariant(combo.colorName, combo.size, combos.length === 1)
+          );
+          const colorTag = combo.colorName.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 3) || 'STD';
+          const sizeTag = combo.size.replace(/\s+/g, '').toUpperCase();
+          return {
+            id: `${product.id}-VAR-${idx + 1}`,
+            sku:
+              combos.length === 1
+                ? product.fullSku
+                : `${product.fullSku}-${colorTag}-${sizeTag}`,
+            colorName: combo.colorName,
+            colorHex: combo.colorHex,
+            size: combo.size,
+            binCode: product.binCode,
+            stock: stockUnits,
+            reserved,
+            available: Math.max(0, stockUnits - reserved),
+          };
+        });
+        setVariants(mapped);
+        return;
+      }
+    }
+
+    // 4. Default: Exact single variant from the product itself (no fake extra colors/sizes)
+    const singleReserved = Math.min(
+      product.stock,
+      getReservedForVariant(product.color || 'Standard', product.size || 'Standard', true)
+    );
+    setVariants([
+      {
+        id: `${product.id}-VAR-1`,
+        sku: product.fullSku,
+        colorName: product.color || 'Standard',
+        colorHex: resolveColorHex(product.color),
+        size: product.size || 'Standard',
+        binCode: product.binCode,
+        stock: product.stock,
+        reserved: singleReserved,
+        available: Math.max(0, product.stock - singleReserved),
+      },
+    ]);
+  }, [product, productOrders]);
 
   // Open Variant Stock Adjust Modal and populate drafts
   const handleOpenAdjustModal = () => {
@@ -236,7 +368,7 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
     });
   };
 
-  // Save all modified variant stocks
+  // Save all modified variant stocks and sync back to Admin & Merchant products
   const handleSaveVariantStockAdjustments = () => {
     if (!product) return;
 
@@ -260,15 +392,33 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
     }
 
     const totalUnits = updated.reduce((acc, curr) => acc + curr.stock, 0);
-    setProduct((prod) => (prod ? { ...prod, stock: totalUnits } : null));
+    const updatedVariantsList = updated.map((v) => ({
+      id: v.id,
+      variantSku: v.sku,
+      color: v.colorName,
+      size: v.size,
+      stock: v.stock,
+    }));
+
+    setProduct((prod) =>
+      prod ? { ...prod, stock: totalUnits, variantsList: updatedVariantsList } : null
+    );
 
     try {
       const storedProducts = localStorage.getItem(STORAGE_KEY_PRODUCTS);
-      if (storedProducts) {
-        const all: WarehouseProductItem[] = JSON.parse(storedProducts);
-        const next = all.map((p) => (p.id === product.id ? { ...p, stock: totalUnits } : p));
-        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
-      }
+      const all: WarehouseProductItem[] = storedProducts
+        ? JSON.parse(storedProducts)
+        : INITIAL_PRODUCTS;
+      const next = all.map((p) =>
+        p.id === product.id
+          ? { ...p, stock: totalUnits, variantsList: updatedVariantsList }
+          : p
+      );
+      localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+      syncAdminProductsToMerchant(next);
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'AdminProductDetails' } })
+      );
     } catch (e) {
       console.warn('Could not update master product stock', e);
     }
@@ -289,25 +439,23 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
     };
   }, [product, bins]);
 
-  // Derived Performance & Order Stats
+  // Real Performance & Order Stats computed from actual orders for this product
   const stats = useMemo(() => {
-    if (!product) {
-      return {
-        totalSold: 148,
-        totalRevenue: 214600,
-        totalOrders: 112,
-        delivered: 96,
-        pendingDelivery: 16,
-      };
-    }
-
-    const seed = product.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    const totalOrders = 65 + (seed % 90);
-    const avgQtyPerOrder = 1.3;
-    const totalSold = Math.round(totalOrders * avgQtyPerOrder);
-    const totalRevenue = totalSold * product.price;
-    const delivered = Math.round(totalOrders * 0.84);
-    const pendingDelivery = totalOrders - delivered;
+    const validOrders = productOrders.filter((o) => o.stage !== 'CANCELLED');
+    const totalOrders = validOrders.length;
+    const totalSold = validOrders.reduce((sum, o) => sum + (o.qty || 1), 0);
+    const totalRevenue = validOrders.reduce(
+      (sum, o) => sum + (o.codAmount ?? (o.qty || 1) * (product?.price || 0)),
+      0
+    );
+    const delivered = validOrders.filter((o) => o.stage === 'HANDED_OVER').length;
+    const pendingDelivery = validOrders.filter(
+      (o) =>
+        o.stage === 'PICK' ||
+        o.stage === 'WAITING' ||
+        o.stage === 'PACK' ||
+        o.stage === 'DISPATCH'
+    ).length;
 
     return {
       totalSold,
@@ -316,49 +464,40 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
       delivered,
       pendingDelivery,
     };
-  }, [product]);
+  }, [productOrders, product]);
 
-  // 3 Latest Customer Orders for this specific product
+  // Real Customer Orders for this specific product
   const recentOrders = useMemo<ProductOrderRecord[]>(() => {
-    if (!product) return [];
+    if (!product || productOrders.length === 0) return [];
 
-    const defaultNames = [
-      { name: 'Tariqul Islam', phone: '01812-345678', address: 'House 14, Road 7, Dhanmondi, Dhaka', city: 'Dhaka', courier: 'Steadfast', variant: `${product.color} / L` },
-      { name: 'Kazi Mahbub', phone: '01712-987654', address: 'Sector 4, Road 12, Uttara, Dhaka', city: 'Dhaka', courier: 'Pathao', variant: `${product.color} / M` },
-      { name: 'Tanvir Ahmed', phone: '01911-223344', address: 'GEC Circle, Nasirabad, Chattogram', city: 'Chattogram', courier: 'Steadfast', variant: `${product.color} / XL` },
-    ];
+    return productOrders.slice(0, 10).map((o) => {
+      const mappedStage: ProductOrderRecord['stage'] =
+        o.stage === 'HANDED_OVER'
+          ? 'DELIVERED'
+          : o.stage === 'DISPATCH'
+          ? 'DISPATCH'
+          : o.stage === 'PACK'
+          ? 'PACK'
+          : o.stage === 'CANCELLED'
+          ? 'CANCELLED'
+          : 'PICK';
 
-    const stages: ('DELIVERED' | 'DISPATCH' | 'PICK')[] = [
-      'DELIVERED',
-      'DISPATCH',
-      'PICK',
-    ];
-
-    const dates = [
-      'Today, 10:15 AM',
-      'Today, 09:30 AM',
-      'Yesterday, 04:20 PM',
-    ];
-
-    return defaultNames.map((item, idx) => {
-      const orderNum = 9820 + idx;
-      const qty = idx === 1 ? 2 : 1;
       return {
-        id: `ORD-${orderNum}`,
-        orderNumber: `ORD-${orderNum}`,
-        customerName: item.name,
-        customerPhone: item.phone,
-        customerAddress: item.address,
-        city: item.city,
-        variant: item.variant,
-        qty,
-        codAmount: product.price * qty,
-        courier: item.courier,
-        stage: stages[idx],
-        createdAt: dates[idx],
+        id: o.id,
+        orderNumber: o.id,
+        customerName: o.customerName,
+        customerPhone: o.customerPhone,
+        customerAddress: o.customerAddress,
+        city: o.city || 'Dhaka',
+        variant: `${o.color || product.color || 'Standard'} / ${o.size || product.size || 'Standard'}`,
+        qty: o.qty || 1,
+        codAmount: o.codAmount ?? (o.qty || 1) * product.price,
+        courier: o.courier || 'Steadfast',
+        stage: mappedStage,
+        createdAt: o.createdAt || 'Recent',
       };
     });
-  }, [product]);
+  }, [product, productOrders]);
 
   // Total stock calculated from variants
   const totalVariantStock = useMemo(() => {
@@ -497,7 +636,9 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
             {stats.delivered}
           </div>
           <span className="text-xs text-emerald-600 dark:text-emerald-400 mt-1 inline-block font-semibold">
-            {Math.round((stats.delivered / stats.totalOrders) * 100)}% delivery success
+            {stats.totalOrders > 0
+              ? `${Math.round((stats.delivered / stats.totalOrders) * 100)}% delivery success`
+              : 'No orders delivered yet'}
           </span>
         </div>
 
@@ -539,7 +680,7 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
             {totalVariantStock} <span className="text-xs font-semibold text-slate-500">pcs</span>
           </div>
           <span className="text-xs text-slate-600 dark:text-slate-300 mt-1 inline-block">
-            {variants.length} active variants in Bin <strong className="text-orange-600 dark:text-orange-400 tabular-nums">{product.binCode}</strong>
+            {variants.length} active variant{variants.length === 1 ? '' : 's'} in Bin <strong className="text-orange-600 dark:text-orange-400 tabular-nums">{product.binCode}</strong>
           </span>
         </div>
       </div>
@@ -567,7 +708,17 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
                   <span className="text-xs font-mono font-bold text-orange-600 dark:text-orange-400">
                     {product.fullSku}
                   </span>
-                  <StatusBadge status="Approved" />
+                  <StatusBadge
+                    status={
+                      product.status === 'APPROVED'
+                        ? 'Approved'
+                        : product.status === 'PENDING_APPROVAL'
+                        ? 'Pending Approval'
+                        : product.status === 'REJECTED'
+                        ? 'Rejected'
+                        : 'Draft'
+                    }
+                  />
                 </div>
               </div>
             </div>
@@ -605,7 +756,9 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
                 >
                   {totalVariantStock} units
                 </span>
-                <span className="text-[10px] text-slate-500">Across {variants.length} variants</span>
+                <span className="text-[10px] text-slate-500">
+                  Across {variants.length} variant{variants.length === 1 ? '' : 's'}
+                </span>
               </div>
             </div>
 
@@ -619,11 +772,13 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
                   </span>
                 </div>
                 <span className="px-2 py-0.5 rounded-md text-xs font-mono font-bold bg-orange-500 text-white">
-                  {product.binCode}
+                  {product.status === 'PENDING_APPROVAL' ? 'Pending Approval' : product.binCode}
                 </span>
               </div>
               <p className="text-xs text-slate-600 dark:text-slate-300">
-                {assignedBin?.description || 'Fast moving fulfillment slot in Warehouse Zone A.'}
+                {product.status === 'PENDING_APPROVAL'
+                  ? 'Awaiting warehouse intake approval and bin assignment.'
+                  : assignedBin?.description || 'Fast moving fulfillment slot in Warehouse Zone A.'}
               </p>
               <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-1 border-t border-orange-500/20">
                 <span>Capacity: <strong>{assignedBin?.capacityUnits || 250} units</strong></span>
@@ -631,7 +786,7 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
               </div>
             </div>
 
-            {/* Simulated Barcode & Inbound Info */}
+            {/* Barcode & Inbound Info */}
             <div className="border-t border-slate-200 dark:border-white/10 pt-4 flex items-center justify-between gap-4 text-xs">
               <div>
                 <span className="text-slate-500 dark:text-slate-400 block font-medium">Inbound Timestamp</span>
@@ -643,7 +798,10 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
                 <span className="text-slate-500 dark:text-slate-400 block font-medium">Barcode / EAN-13</span>
                 <div className="flex items-center gap-1.5 font-mono text-xs font-bold text-navy-900 dark:text-slate-100 justify-end mt-0.5">
                   <Barcode className="w-4 h-4 text-slate-500" />
-                  <span>880{product.fullSku.replace(/[^0-9]/g, '').slice(0, 7) || '912048'}</span>
+                  <span>
+                    {product.barcode ||
+                      `880${product.fullSku.replace(/[^0-9]/g, '').slice(0, 7) || '912048'}`}
+                  </span>
                 </div>
               </div>
             </div>
@@ -662,11 +820,11 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
                     <span>Color &amp; Size Variant Inventory Matrix</span>
                   </h3>
                   <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/20">
-                    {variants.length} Variants
+                    {variants.length} Variant{variants.length === 1 ? '' : 's'}
                   </span>
                 </div>
                 <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
-                  Physical warehouse stock breakdown for each specific color and size SKU.
+                  Physical warehouse stock breakdown for each specific color and size SKU configured for this product.
                 </p>
               </div>
 
@@ -729,7 +887,7 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
                         {/* Bin */}
                         <td className="py-3 px-3 align-middle">
                           <span className="font-mono text-slate-600 dark:text-slate-300 font-semibold">
-                            {v.binCode}
+                            {product.status === 'PENDING_APPROVAL' ? 'Pending' : v.binCode}
                           </span>
                         </td>
 
@@ -786,7 +944,7 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
         </div>
       </div>
 
-      {/* SECTION 2: RECENT CUSTOMER ORDERS (3 Latest) + VIEW ALL IN PIPELINE ACTION */}
+      {/* SECTION 2: RECENT CUSTOMER ORDERS + VIEW ALL IN PIPELINE ACTION */}
       <div className="space-y-4">
         <div className="rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-lg overflow-hidden">
           {/* Section Header */}
@@ -798,11 +956,11 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
                   <span>Recent Customer Orders for this Product</span>
                 </h3>
                 <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/20">
-                  3 Latest Orders
+                  {recentOrders.length} {recentOrders.length === 1 ? 'Order' : 'Orders'}
                 </span>
               </div>
               <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
-                Most recent customer dispatches with customer name, contact phone, and delivery destination.
+                Live customer orders placed for this SKU with customer name, contact phone, and delivery destination.
               </p>
             </div>
 
@@ -817,82 +975,103 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
             </Link>
           </div>
 
-          {/* 3 Orders Table */}
-          <div className="divide-y divide-slate-200/80 dark:divide-white/10 overflow-x-auto">
-            {recentOrders.map((order) => {
-              const isDelivered = order.stage === 'DELIVERED';
-              const isDispatched = order.stage === 'DISPATCH';
-              const isPicking = order.stage === 'PICK';
+          {/* Real Orders List or Empty State */}
+          {recentOrders.length === 0 ? (
+            <div className="p-10 text-center space-y-2">
+              <ShoppingCart className="w-9 h-9 text-slate-400 dark:text-slate-600 mx-auto" />
+              <h4 className="text-sm font-bold text-navy-900 dark:text-white">
+                No Customer Orders Placed Yet
+              </h4>
+              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                When a customer or merchant places an order for <span className="font-mono font-semibold text-orange-600 dark:text-orange-400">{product.fullSku}</span>, it will appear here in real time.
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-200/80 dark:divide-white/10 overflow-x-auto">
+              {recentOrders.map((order) => {
+                const isDelivered = order.stage === 'DELIVERED';
+                const isDispatched = order.stage === 'DISPATCH';
+                const isPacked = order.stage === 'PACK';
+                const isCancelled = order.stage === 'CANCELLED';
 
-              const stageBadge = isDelivered ? (
-                <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
-                  Delivered
-                </span>
-              ) : isDispatched ? (
-                <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30">
-                  In Transit
-                </span>
-              ) : (
-                <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30">
-                  Ready to Pick
-                </span>
-              );
+                const stageBadge = isDelivered ? (
+                  <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+                    Delivered
+                  </span>
+                ) : isDispatched ? (
+                  <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30">
+                    In Transit
+                  </span>
+                ) : isPacked ? (
+                  <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                    Packed
+                  </span>
+                ) : isCancelled ? (
+                  <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
+                    Cancelled
+                  </span>
+                ) : (
+                  <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30">
+                    Ready to Pick
+                  </span>
+                );
 
-              return (
-                <div
-                  key={order.id}
-                  className="p-4 sm:p-5 hover:bg-slate-50 dark:hover:bg-navy-800/40 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs"
-                >
-                  {/* Customer, Phone & Delivery Address */}
-                  <div className="space-y-1.5 min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono font-bold text-orange-600 dark:text-orange-400 tabular-nums">
-                        {order.orderNumber}
-                      </span>
-                      <span className="text-slate-400">·</span>
-                      <div className="flex items-center gap-1 font-bold text-navy-900 dark:text-white">
-                        <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <span>{order.customerName}</span>
+                return (
+                  <div
+                    key={order.id}
+                    className="p-4 sm:p-5 hover:bg-slate-50 dark:hover:bg-navy-800/40 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs"
+                  >
+                    {/* Customer, Phone & Delivery Address */}
+                    <div className="space-y-1.5 min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono font-bold text-orange-600 dark:text-orange-400 tabular-nums">
+                          {order.orderNumber}
+                        </span>
+                        <span className="text-slate-400">·</span>
+                        <div className="flex items-center gap-1 font-bold text-navy-900 dark:text-white">
+                          <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span>{order.customerName}</span>
+                        </div>
+                        <span className="text-slate-400">·</span>
+                        <span className="text-slate-500 dark:text-slate-400 font-mono">
+                          {order.customerPhone}
+                        </span>
+                        <span className="text-slate-400">·</span>
+                        <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-navy-800 text-[10px] font-semibold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-white/10">
+                          {order.variant}
+                        </span>
                       </div>
-                      <span className="text-slate-400">·</span>
-                      <span className="text-slate-500 dark:text-slate-400 font-mono">
-                        {order.customerPhone}
-                      </span>
-                      <span className="text-slate-400">·</span>
-                      <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-navy-800 text-[10px] font-semibold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-white/10">
-                        {order.variant}
-                      </span>
+
+                      {/* Address & City */}
+                      <div className="flex items-start gap-1.5 text-slate-600 dark:text-slate-300">
+                        <MapPin className="w-3.5 h-3.5 text-orange-500 shrink-0 mt-0.5" />
+                        <span className="line-clamp-1">{order.customerAddress} ({order.city})</span>
+                      </div>
+
+                      <div className="flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400 pt-0.5">
+                        <span>Ordered: <strong>{order.createdAt}</strong></span>
+                        <span>·</span>
+                        <span>Courier: <strong>{order.courier}</strong></span>
+                      </div>
                     </div>
 
-                    {/* Address & City */}
-                    <div className="flex items-start gap-1.5 text-slate-600 dark:text-slate-300">
-                      <MapPin className="w-3.5 h-3.5 text-orange-500 shrink-0 mt-0.5" />
-                      <span className="line-clamp-1">{order.customerAddress} ({order.city})</span>
-                    </div>
-
-                    <div className="flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400 pt-0.5">
-                      <span>Ordered: <strong>{order.createdAt}</strong></span>
-                      <span>·</span>
-                      <span>Courier: <strong>{order.courier}</strong></span>
+                    {/* Price & Stage Status */}
+                    <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-1.5 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-200/60 dark:border-white/10">
+                      <div>{stageBadge}</div>
+                      <div className="text-right">
+                        <span className="font-extrabold text-sm text-navy-900 dark:text-white tabular-nums block">
+                          ৳{order.codAmount.toLocaleString()}
+                        </span>
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
+                          {order.qty} unit{order.qty > 1 ? 's' : ''} (COD)
+                        </span>
+                      </div>
                     </div>
                   </div>
-
-                  {/* Price & Stage Status */}
-                  <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-1.5 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-200/60 dark:border-white/10">
-                    <div>{stageBadge}</div>
-                    <div className="text-right">
-                      <span className="font-extrabold text-sm text-navy-900 dark:text-white tabular-nums block">
-                        ৳{order.codAmount.toLocaleString()}
-                      </span>
-                      <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
-                        {order.qty} unit{order.qty > 1 ? 's' : ''} (COD)
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 

@@ -31,6 +31,19 @@ export interface WarehouseProductItem {
   isDraft?: boolean;
   submittedAt: string;
   imageUrl: string;
+  barcode?: string;
+  description?: string;
+  colors?: { id: string; name: string; hex: string; imageUrl?: string; sizes?: string[] }[];
+  sizes?: string[];
+  variantsList?: {
+    id: string;
+    variantSku: string;
+    color?: string;
+    size?: string;
+    attributeName?: string;
+    attributeValue?: string;
+    stock: number;
+  }[];
 }
 
 export interface ProductPresetThumbnail {

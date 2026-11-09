@@ -771,10 +771,22 @@ export function convertMerchantProductToWarehouse(
   const { shortSku, fullSku } = normalizeFullSku(item.sku, merchantCode);
 
   const variantParts = (item.variantLabel || '').split('/').map((s) => s.trim());
-  const color = item.colors?.[0]?.name || variantParts[0] || 'Standard';
-  const size = item.sizes?.[0] || variantParts[1] || 'Standard';
+  const color =
+    item.colors?.[0]?.name ||
+    item.variantsList?.[0]?.color ||
+    variantParts[0] ||
+    'Standard';
+  const size =
+    item.sizes?.[0] ||
+    item.variantsList?.[0]?.size ||
+    variantParts[1] ||
+    'Standard';
   const binCode =
-    item.bin && item.bin !== 'Unassigned' && item.bin !== 'PENDING'
+    item.bin &&
+    item.bin !== 'Unassigned' &&
+    item.bin !== 'PENDING' &&
+    item.bin !== 'Pending Approval' &&
+    item.bin !== 'Assigned on intake'
       ? item.bin.split('-').slice(0, 3).join('-') || 'A-01-02'
       : 'A-01-02';
 
@@ -794,6 +806,11 @@ export function convertMerchantProductToWarehouse(
     status,
     submittedAt: 'Just now',
     imageUrl: item.imageUrl || item.colors?.[0]?.imageUrl || PRESET_THUMBNAILS[0].url,
+    barcode: item.barcode,
+    description: item.description,
+    colors: item.colors,
+    sizes: item.sizes,
+    variantsList: item.variantsList,
   };
 }
 
@@ -839,6 +856,64 @@ function isMatchingProduct(
 }
 
 /**
+ * Find the matching MerchantProductItem for an Admin WarehouseProductItem
+ */
+export function findMatchingMerchantProductForAdmin(
+  adminProd: WarehouseProductItem
+): MerchantProductItem | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const merchantProducts = getStoredMerchantProductsForCode(adminProd.merchantCode || 'MC-101');
+    return merchantProducts.find((mp) => isMatchingProduct(mp, adminProd)) || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Get all real orders placed for a specific Admin WarehouseProductItem (from both Admin Pipeline Orders and Merchant Orders).
+ */
+export function getRealOrdersForAdminProduct(
+  adminProd: WarehouseProductItem
+): WarehousePipelineOrder[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const allOrders = reconcileAdminOrdersWithMerchant(getStoredAdminOrders());
+    const matchedMerchantProd = findMatchingMerchantProductForAdmin(adminProd);
+    const fullSkuUpper = adminProd.fullSku.toUpperCase();
+    const shortSkuUpper = adminProd.shortSku.toUpperCase();
+    const merchantSkuUpper = (matchedMerchantProd?.sku || '').toUpperCase();
+    const titleLower = adminProd.title.trim().toLowerCase();
+
+    return allOrders.filter((order) => {
+      const orderSkuUpper = (order.sku || '').toUpperCase();
+      if (
+        orderSkuUpper === fullSkuUpper ||
+        orderSkuUpper === shortSkuUpper ||
+        (merchantSkuUpper && orderSkuUpper === merchantSkuUpper) ||
+        orderSkuUpper.startsWith(`${fullSkuUpper}-`) ||
+        (shortSkuUpper && orderSkuUpper.endsWith(`-${shortSkuUpper}`))
+      ) {
+        return true;
+      }
+
+      const orderTitleLower = (order.productTitle || '').trim().toLowerCase();
+      if (
+        titleLower &&
+        orderTitleLower &&
+        (orderTitleLower === titleLower || orderTitleLower.includes(titleLower))
+      ) {
+        return true;
+      }
+
+      return false;
+    });
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Merchant -> Admin: When Merchant uploads new products, add them to Admin's Pending Approval queue.
  */
 export function syncMerchantProductsAddedToAdmin(
@@ -879,14 +954,33 @@ export function syncMerchantProductUpdatedToAdmin(
       if (!isMatchingProduct(updatedItem, ap)) return ap;
       matched = true;
       const { shortSku, fullSku } = normalizeFullSku(updatedItem.sku, ap.merchantCode);
+      const variantParts = (updatedItem.variantLabel || '').split('/').map((s) => s.trim());
+      const color =
+        updatedItem.colors?.[0]?.name ||
+        updatedItem.variantsList?.[0]?.color ||
+        variantParts[0] ||
+        ap.color;
+      const size =
+        updatedItem.sizes?.[0] ||
+        updatedItem.variantsList?.[0]?.size ||
+        variantParts[1] ||
+        ap.size;
+
       return {
         ...ap,
         title: updatedItem.title,
         shortSku,
         fullSku,
+        color,
+        size,
         stock: updatedItem.stock,
         price: updatedItem.price,
         imageUrl: updatedItem.imageUrl || ap.imageUrl,
+        barcode: updatedItem.barcode || ap.barcode,
+        description: updatedItem.description ?? ap.description,
+        colors: updatedItem.colors ?? ap.colors,
+        sizes: updatedItem.sizes ?? ap.sizes,
+        variantsList: updatedItem.variantsList ?? ap.variantsList,
       };
     });
 
@@ -897,6 +991,8 @@ export function syncMerchantProductUpdatedToAdmin(
     }
 
     localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(nextAdmin));
+    // Clear cached variant matrix override if merchant updated variants
+    localStorage.removeItem(`fulfillio_variants_${updatedItem.id}`);
     window.dispatchEvent(
       new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'MerchantContext' } })
     );
@@ -971,6 +1067,7 @@ export function syncAdminProductsToMerchant(
           title: matchedAdmin.title,
           stock: matchedAdmin.stock,
           price: matchedAdmin.price,
+          variantsList: matchedAdmin.variantsList ?? mp.variantsList,
           bin: matchedAdmin.status === 'APPROVED' ? matchedAdmin.binCode : 'Pending Approval',
           status:
             matchedAdmin.status === 'APPROVED'

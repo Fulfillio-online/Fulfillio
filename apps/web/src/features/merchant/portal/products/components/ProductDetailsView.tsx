@@ -43,16 +43,20 @@ export function ProductDetailsView({
           'Unisex streetwear design',
         ];
 
-  // Dynamic variants display or fallback from variantsList
+  const isPendingApproval =
+    product.status !== 'PUBLISHED' &&
+    (!product.bin || product.bin === 'Pending Approval' || product.bin === 'Assigned on intake');
+
+  // Dynamic variants display from real variantsList or product's primary variant
   const variants =
     product.variantsList && product.variantsList.length > 0
       ? product.variantsList
       : [
-          { variant: 'Black', size: 'M', stock: Math.max(0, Math.floor(product.stock * 0.25)) },
-          { variant: 'Black', size: 'L', stock: Math.max(0, Math.floor(product.stock * 0.35)) },
-          { variant: 'Black', size: 'XL', stock: Math.max(0, Math.floor(product.stock * 0.2)) },
-          { variant: 'Charcoal Grey', size: 'M', stock: Math.max(0, Math.floor(product.stock * 0.1)) },
-          { variant: 'Charcoal Grey', size: 'L', stock: Math.max(0, Math.floor(product.stock * 0.1)) },
+          {
+            variant: product.colors?.[0]?.name || product.variantLabel?.split('/')[0]?.trim() || 'Standard',
+            size: product.sizes?.[0] || product.variantLabel?.split('/')[1]?.trim() || 'Standard',
+            stock: product.stock,
+          },
         ];
 
   return (
@@ -113,11 +117,17 @@ export function ProductDetailsView({
               {product.id} • SKU: <span className="text-emerald-400 font-bold">{product.sku}</span>
             </p>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                Approved
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${
+                  isPendingApproval
+                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                    : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                }`}
+              >
+                {isPendingApproval ? 'Pending Approval' : 'Approved'}
               </span>
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-sky-500/10 text-sky-400 border border-sky-500/30">
-                {product.status || 'Active'}
+                {isPendingApproval ? 'Awaiting Intake' : product.status || 'Active'}
               </span>
               {product.category && (
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
@@ -178,13 +188,19 @@ export function ProductDetailsView({
         <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 shadow-sm">
           <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
             <span>Catalog Status</span>
-            <CheckCircle className="h-4 w-4 text-emerald-400" />
+            <CheckCircle
+              className={`h-4 w-4 ${isPendingApproval ? 'text-amber-400' : 'text-emerald-400'}`}
+            />
           </div>
-          <div className="text-xl sm:text-2xl font-extrabold text-emerald-400 font-mono">
-            Approved
+          <div
+            className={`text-xl sm:text-2xl font-extrabold font-mono ${
+              isPendingApproval ? 'text-amber-400' : 'text-emerald-400'
+            }`}
+          >
+            {isPendingApproval ? 'Pending' : 'Approved'}
           </div>
           <span className="text-[10px] text-slate-500 mt-0.5 block">
-            Verified by Warehouse
+            {isPendingApproval ? 'Awaiting Admin Approval' : 'Verified by Warehouse'}
           </span>
         </div>
 
