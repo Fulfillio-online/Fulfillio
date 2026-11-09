@@ -86,14 +86,14 @@ export function MerchantOrderDetailsTab({
             isCompleted: order.status !== 'PENDING' && order.status !== 'ALLOCATED',
           },
           {
-            title: 'Out for Delivery',
-            description: 'Package is out with the local delivery rider.',
+            title: 'Courier Booked',
+            description: 'Order booked with courier and parcel packed for dispatch.',
             timestamp: `${order.date}, 06:00 PM`,
             isCompleted: order.status === 'DISPATCHED' || order.status === 'DELIVERED',
           },
           {
-            title: 'Delivered',
-            description: 'Package successfully delivered to the customer.',
+            title: 'Handover Completed',
+            description: 'Package successfully handed over to courier / customer delivery.',
             timestamp: `${order.date}, 08:15 PM`,
             isCompleted: order.status === 'DELIVERED',
           },
@@ -105,14 +105,14 @@ export function MerchantOrderDetailsTab({
         return (
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            Delivered
+            Handover
           </span>
         );
       case 'DISPATCHED':
         return (
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/30">
             <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
-            Shipped
+            Courier Booked
           </span>
         );
       case 'PACKED':

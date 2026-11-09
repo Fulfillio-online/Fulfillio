@@ -35,7 +35,7 @@ interface MerchantOrdersTabProps {
   onTriggerToast: (msg: string) => void;
 }
 
-type TabFilter = 'ALL' | 'PENDING' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED';
+type TabFilter = 'ALL' | 'PENDING' | 'PROCESSING' | 'COURIER_BOOKED' | 'HANDOVER';
 
 export function MerchantOrdersTab({
   orders,
@@ -56,13 +56,13 @@ export function MerchantOrdersTab({
   const stats = useMemo(() => {
     const total = orders.length;
     const pending = orders.filter((o) => o.status === 'PENDING').length;
-    const inDelivery = orders.filter((o) => o.status === 'DISPATCHED').length;
-    const delivered = orders.filter((o) => o.status === 'DELIVERED').length;
+    const courierBooked = orders.filter((o) => o.status === 'DISPATCHED').length;
+    const handover = orders.filter((o) => o.status === 'DELIVERED').length;
     const processing = orders.filter(
       (o) => o.status === 'ALLOCATED' || o.status === 'PICKED' || o.status === 'PACKED',
     ).length;
 
-    return { total, pending, inDelivery, delivered, processing };
+    return { total, pending, inDelivery: courierBooked, courierBooked, delivered: handover, handover, processing };
   }, [orders]);
 
   // Filter Orders by Tab and Search
@@ -77,8 +77,8 @@ export function MerchantOrdersTab({
         o.status !== 'PACKED'
       )
         return false;
-      if (activeTab === 'SHIPPED' && o.status !== 'DISPATCHED') return false;
-      if (activeTab === 'DELIVERED' && o.status !== 'DELIVERED') return false;
+      if (activeTab === 'COURIER_BOOKED' && o.status !== 'DISPATCHED') return false;
+      if (activeTab === 'HANDOVER' && o.status !== 'DELIVERED') return false;
 
       // Search filter
       if (searchQuery.trim()) {
@@ -150,14 +150,14 @@ export function MerchantOrdersTab({
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
-            Delivered
+            Handover
           </span>
         );
       case 'DISPATCHED':
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/30">
             <span className="h-1.5 w-1.5 rounded-full bg-blue-400"></span>
-            Shipped
+            Courier Booked
           </span>
         );
       case 'PACKED':
@@ -254,30 +254,30 @@ export function MerchantOrdersTab({
           </div>
         </div>
 
-        {/* Card 3: In Delivery */}
+        {/* Card 3: Courier Booked */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 sm:p-4 flex flex-col justify-between shadow-sm">
           <div className="flex justify-between items-start">
-            <span className="text-[11px] sm:text-xs font-medium text-slate-400">In Delivery</span>
+            <span className="text-[11px] sm:text-xs font-medium text-slate-400">Courier Booked</span>
             <div className="p-1.5 bg-blue-500/10 border border-blue-500/30 rounded-lg text-blue-400">
               <Truck className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </div>
           </div>
           <div className="mt-2.5 sm:mt-3">
-            <div className="text-xl sm:text-2xl font-extrabold text-white">{stats.inDelivery}</div>
-            <div className="text-[10px] sm:text-[11px] text-blue-400/90 font-medium mt-1 truncate">on the way</div>
+            <div className="text-xl sm:text-2xl font-extrabold text-white">{stats.courierBooked}</div>
+            <div className="text-[10px] sm:text-[11px] text-blue-400/90 font-medium mt-1 truncate">with courier</div>
           </div>
         </div>
 
-        {/* Card 4: Delivered */}
+        {/* Card 4: Handover */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 sm:p-4 flex flex-col justify-between shadow-sm">
           <div className="flex justify-between items-start">
-            <span className="text-[11px] sm:text-xs font-medium text-slate-400">Delivered</span>
+            <span className="text-[11px] sm:text-xs font-medium text-slate-400">Handover</span>
             <div className="p-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-400">
               <CheckCircle2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </div>
           </div>
           <div className="mt-2.5 sm:mt-3">
-            <div className="text-xl sm:text-2xl font-extrabold text-white">{stats.delivered}</div>
+            <div className="text-xl sm:text-2xl font-extrabold text-white">{stats.handover}</div>
             <div className="text-[10px] sm:text-[11px] text-emerald-400 font-medium mt-1 truncate">+12.4% completed</div>
           </div>
         </div>
@@ -363,29 +363,29 @@ export function MerchantOrdersTab({
           </button>
           <button
             onClick={() => {
-              setActiveTab('SHIPPED');
+              setActiveTab('COURIER_BOOKED');
               setCurrentPage(1);
             }}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
-              activeTab === 'SHIPPED'
+              activeTab === 'COURIER_BOOKED'
                 ? 'bg-slate-800 text-white border border-slate-700'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
             }`}
           >
-            Shipped ({stats.inDelivery})
+            Courier Booked ({stats.courierBooked})
           </button>
           <button
             onClick={() => {
-              setActiveTab('DELIVERED');
+              setActiveTab('HANDOVER');
               setCurrentPage(1);
             }}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
-              activeTab === 'DELIVERED'
+              activeTab === 'HANDOVER'
                 ? 'bg-slate-800 text-white border border-slate-700'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
             }`}
           >
-            Delivered ({stats.delivered})
+            Handover ({stats.handover})
           </button>
         </div>
 
