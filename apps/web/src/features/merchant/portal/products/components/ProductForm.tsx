@@ -153,9 +153,9 @@ export function ProductForm({
   );
   const [newFeatureText, setNewFeatureText] = useState('');
 
-  // 7. Status
+  // 7. Status (New products start as DRAFT / Pending Admin Approval)
   const [status, setStatus] = useState<'PUBLISHED' | 'DRAFT'>(
-    initialProduct?.status === 'DRAFT' ? 'DRAFT' : 'PUBLISHED'
+    initialProduct?.status === 'PUBLISHED' ? 'PUBLISHED' : 'DRAFT'
   );
 
   // Sync category with productType
@@ -417,13 +417,19 @@ export function ProductForm({
     );
     const finalImageUrl = imageUrl || colors.find((c) => Boolean(c.imageUrl))?.imageUrl || '';
 
+    const isApprovedByAdmin =
+      isEdit &&
+      initialProduct?.bin &&
+      initialProduct.bin !== 'Pending Approval' &&
+      initialProduct.bin !== 'Assigned on intake';
+
     const productPayload: MerchantProductItem = {
       id: initialProduct?.id || `p-${Date.now()}`,
       title: title.trim(),
       variantLabel: initialProduct?.variantLabel || 'Standard',
       sku: masterSku.trim(),
       barcode: initialProduct?.barcode || `890${Math.floor(1000000000 + Math.random() * 9000000000)}`,
-      bin: initialProduct?.bin || 'Assigned on intake',
+      bin: isApprovedByAdmin ? initialProduct.bin : 'Pending Approval',
       category,
       subcategory,
       productType,
@@ -432,7 +438,7 @@ export function ProductForm({
       costPrice: numValue,
       stock: computedTotalStock,
       reserved: initialProduct?.reserved || 0,
-      status,
+      status: isApprovedByAdmin ? status : 'DRAFT',
       imageUrl: finalImageUrl.trim() || undefined,
       keyFeatures: features,
       colors,
@@ -478,7 +484,7 @@ export function ProductForm({
             className="flex-1 sm:flex-initial justify-center px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors cursor-pointer shadow-md shadow-emerald-900/30 flex items-center gap-1.5"
           >
             <Check className="h-4 w-4" />
-            <span>{isEdit ? 'Save Changes' : 'Publish Product'}</span>
+            <span>{isEdit ? 'Save Changes' : 'Submit for Approval'}</span>
           </button>
         </div>
       </div>
@@ -1297,32 +1303,44 @@ export function ProductForm({
         {/* Section 6: Visibility Status */}
         <div className="p-4 sm:p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-sm space-y-2">
           <label className="block text-xs font-semibold text-slate-300">
-            Storefront Visibility
+            Storefront &amp; Warehouse Visibility
           </label>
-          <div className="flex gap-2.5 sm:gap-3 w-full sm:max-w-xs">
-            <button
-              type="button"
-              onClick={() => setStatus('PUBLISHED')}
-              className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                status === 'PUBLISHED'
-                  ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/50'
-                  : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
-              }`}
-            >
-              Published
-            </button>
-            <button
-              type="button"
-              onClick={() => setStatus('DRAFT')}
-              className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                status === 'DRAFT'
-                  ? 'bg-slate-800 text-slate-200 border-slate-600'
-                  : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
-              }`}
-            >
-              Draft
-            </button>
-          </div>
+          {!isEdit ||
+          !initialProduct?.bin ||
+          initialProduct.bin === 'Pending Approval' ||
+          initialProduct.bin === 'Assigned on intake' ? (
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-medium flex items-center gap-2">
+              <ShieldAlert className="h-4 w-4 text-amber-400 shrink-0" />
+              <span>
+                নতুন প্রোডাক্ট আপলোড করার পর এটি <strong>Pending Admin Approval</strong> হিসেবে থাকবে। Admin Panel থেকে Bin অ্যাসাইন ও Approve করার পর স্বয়ংক্রিয়ভাবে <strong>Published</strong> হয়ে যাবে।
+              </span>
+            </div>
+          ) : (
+            <div className="flex gap-2.5 sm:gap-3 w-full sm:max-w-xs">
+              <button
+                type="button"
+                onClick={() => setStatus('PUBLISHED')}
+                className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                  status === 'PUBLISHED'
+                    ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/50'
+                    : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
+                }`}
+              >
+                Published
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatus('DRAFT')}
+                className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                  status === 'DRAFT'
+                    ? 'bg-slate-800 text-slate-200 border-slate-600'
+                    : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
+                }`}
+              >
+                Draft
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Bottom Actions */}
@@ -1338,7 +1356,7 @@ export function ProductForm({
             className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors cursor-pointer shadow-md flex items-center justify-center gap-1.5"
           >
             <Check className="h-4 w-4" />
-            <span>{isEdit ? 'Save Changes' : 'Publish Product'}</span>
+            <span>{isEdit ? 'Save Changes' : 'Submit for Approval'}</span>
           </button>
         </div>
       </form>

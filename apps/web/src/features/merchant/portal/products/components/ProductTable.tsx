@@ -68,6 +68,9 @@ export function ProductTable({
           {products.map((p) => {
             const isSelected = selectedIds.includes(p.id);
             const isPublished = p.status === 'PUBLISHED' || (!p.status && p.stock > 0);
+            const isPendingApproval =
+              !isPublished &&
+              (!p.bin || p.bin === 'Pending Approval' || p.bin === 'Assigned on intake');
             const isLowStock = p.stock <= 30 && p.stock > 0;
             const isOutOfStock = p.stock === 0;
 
@@ -86,11 +89,21 @@ export function ProductTable({
                     className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-all cursor-pointer ${
                       isPublished
                         ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                        : isPendingApproval
+                        ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
                         : 'bg-slate-800 text-slate-400 border-slate-700'
                     }`}
-                    title="Click to toggle status"
+                    title={
+                      isPendingApproval
+                        ? 'Awaiting Admin Approval'
+                        : 'Click to toggle status'
+                    }
                   >
-                    {isPublished ? '● Published' : '○ Draft'}
+                    {isPublished
+                      ? '● Published'
+                      : isPendingApproval
+                      ? '⏳ Pending Approval'
+                      : '○ Draft'}
                   </button>
                 }
                 row1={
@@ -225,6 +238,9 @@ export function ProductTable({
             {products.map((p) => {
               const isSelected = selectedIds.includes(p.id);
               const isPublished = p.status === 'PUBLISHED' || (!p.status && p.stock > 0);
+              const isPendingApproval =
+                !isPublished &&
+                (!p.bin || p.bin === 'Pending Approval' || p.bin === 'Assigned on intake');
               const isLowStock = p.stock <= 30 && p.stock > 0;
               const isOutOfStock = p.stock === 0;
 
@@ -316,26 +332,39 @@ export function ProductTable({
                   {/* Actions */}
                   <td className="p-4 text-right">
                     <div className="flex items-center justify-end gap-2 relative">
-                      {/* Status Toggle Button (Draft / Publish) */}
+                      {/* Status Badge / Toggle Button */}
                       <button
                         type="button"
                         onClick={() => onToggleStatus(p.id)}
                         className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-all flex items-center gap-1.5 cursor-pointer shadow-sm ${
                           isPublished
-                            ? 'bg-slate-800/90 hover:bg-slate-700 text-slate-200 border-slate-700'
-                            : 'bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border-emerald-500/40'
+                            ? 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border-emerald-500/30'
+                            : isPendingApproval
+                            ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/30'
+                            : 'bg-slate-800/90 hover:bg-slate-700 text-slate-300 border-slate-700'
                         }`}
-                        title={isPublished ? 'Click to set as Draft' : 'Click to Publish'}
+                        title={
+                          isPendingApproval
+                            ? 'Awaiting Admin Approval'
+                            : isPublished
+                            ? 'Published (Click to set as Draft)'
+                            : 'Draft (Click to Publish)'
+                        }
                       >
                         {isPublished ? (
                           <>
-                            <FileText className="h-3 w-3 text-slate-400" />
-                            <span>Draft</span>
+                            <Eye className="h-3 w-3 text-emerald-400" />
+                            <span>Published</span>
+                          </>
+                        ) : isPendingApproval ? (
+                          <>
+                            <FileText className="h-3 w-3 text-amber-400" />
+                            <span>Pending Approval</span>
                           </>
                         ) : (
                           <>
-                            <Eye className="h-3 w-3 text-emerald-400" />
-                            <span>Publish</span>
+                            <FileText className="h-3 w-3 text-slate-400" />
+                            <span>Draft</span>
                           </>
                         )}
                       </button>

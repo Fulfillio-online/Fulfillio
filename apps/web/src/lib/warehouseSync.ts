@@ -971,7 +971,7 @@ export function syncAdminProductsToMerchant(
           title: matchedAdmin.title,
           stock: matchedAdmin.stock,
           price: matchedAdmin.price,
-          bin: matchedAdmin.binCode,
+          bin: matchedAdmin.status === 'APPROVED' ? matchedAdmin.binCode : 'Pending Approval',
           status:
             matchedAdmin.status === 'APPROVED'
               ? ('PUBLISHED' as const)

@@ -61,7 +61,7 @@ export function MerchantProductsTab({
   const router = useRouter();
 
   // Filters & State
-  const [activeTab, setActiveTab] = useState<ProductFilterTab>('PUBLISHED');
+  const [activeTab, setActiveTab] = useState<ProductFilterTab>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [sortOption, setSortOption] = useState<ProductSortOption>('NEWEST');

@@ -22,11 +22,11 @@ export function ProductStatusTabs({
   counts,
 }: ProductStatusTabsProps) {
   const tabs: { id: ProductFilterTab; label: string; count: number; isSpecial?: boolean }[] = [
+    { id: 'ALL', label: 'All Items', count: counts.all },
     { id: 'PUBLISHED', label: 'Published', count: counts.published },
-    { id: 'DRAFT', label: 'Drafts', count: counts.draft },
+    { id: 'DRAFT', label: 'Pending / Drafts', count: counts.draft },
     { id: 'OUT_OF_STOCK', label: 'Out of Stock', count: counts.outOfStock },
     { id: 'STOCK_REQUESTS', label: 'Stock Requests', count: counts.stockRequests, isSpecial: true },
-    { id: 'ALL', label: 'All Items', count: counts.all },
   ];
 
   return (

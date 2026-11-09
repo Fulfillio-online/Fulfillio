@@ -166,15 +166,22 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
   };
 
   const addProducts = (newItems: MerchantProductItem[]) => {
+    const pendingItems: MerchantProductItem[] = newItems.map((item) => ({
+      ...item,
+      status: 'DRAFT',
+      bin: 'Pending Approval',
+    }));
     setProducts((prev) => {
-      const next = [...newItems, ...prev];
+      const next = [...pendingItems, ...prev];
       if (typeof window !== 'undefined') {
         localStorage.setItem(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
-        syncMerchantProductsAddedToAdmin(newItems, profile);
+        syncMerchantProductsAddedToAdmin(pendingItems, profile);
       }
       return next;
     });
-    showToast(`Generated ${newItems.length} product SKU(s) & submitted for Admin Approval.`);
+    showToast(
+      `Submitted ${pendingItems.length} product SKU(s) for Admin Approval. It will publish automatically once approved.`
+    );
   };
 
   const updateProduct = (id: string, updated: Partial<MerchantProductItem>) => {
@@ -182,7 +189,13 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       let updatedTarget: MerchantProductItem | null = null;
       const next = prev.map((p) => {
         if (p.id !== id) return p;
-        updatedTarget = { ...p, ...updated };
+        const isPendingApproval =
+          !p.bin || p.bin === 'Pending Approval' || p.bin === 'Assigned on intake';
+        updatedTarget = {
+          ...p,
+          ...updated,
+          status: isPendingApproval ? 'DRAFT' : updated.status ?? p.status,
+        };
         return updatedTarget;
       });
       if (typeof window !== 'undefined') {
@@ -197,6 +210,18 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
   };
 
   const toggleProductStatus = (id: string) => {
+    const target = products.find((p) => p.id === id);
+    if (!target) return;
+    const isPendingApproval =
+      target.status !== 'PUBLISHED' &&
+      (!target.bin || target.bin === 'Pending Approval' || target.bin === 'Assigned on intake');
+    if (isPendingApproval) {
+      showToast(
+        'এই প্রোডাক্টটি এখনো Admin Approval-এর অপেক্ষায় আছে। Admin Panel থেকে Approve করার পর এটি স্বয়ংক্রিয়ভাবে Published হবে।'
+      );
+      return;
+    }
+
     setProducts((prev) => {
       const next = prev.map((p) => {
         if (p.id !== id) return p;
@@ -212,6 +237,20 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
   };
 
   const bulkUpdateStatus = (ids: string[], status: 'PUBLISHED' | 'DRAFT') => {
+    if (status === 'PUBLISHED') {
+      const hasUnapproved = products.some(
+        (p) =>
+          ids.includes(p.id) &&
+          p.status !== 'PUBLISHED' &&
+          (!p.bin || p.bin === 'Pending Approval' || p.bin === 'Assigned on intake')
+      );
+      if (hasUnapproved) {
+        showToast(
+          'Pending Approval প্রোডাক্টগুলো Admin Panel থেকে Approve না হওয়া পর্যন্ত Publish করা যাবে না।'
+        );
+        return;
+      }
+    }
     setProducts((prev) => {
       const next = prev.map((p) => (ids.includes(p.id) ? { ...p, status } : p));
       if (typeof window !== 'undefined') {
