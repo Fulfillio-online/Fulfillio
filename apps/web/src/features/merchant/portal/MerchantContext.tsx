@@ -157,6 +157,23 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
   };
 
   const deleteProduct = (id: string) => {
+    const target = products.find((p) => p.id === id);
+    if (!target) return;
+
+    // Step 1: If product is not in DRAFT, move it to DRAFT first
+    if (target.status !== 'DRAFT') {
+      setProducts((prev) => {
+        const next = prev.map((p) => (p.id === id ? { ...p, status: 'DRAFT' as const } : p));
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
+        }
+        return next;
+      });
+      showToast(`"${target.title}" প্রোডাক্টটি Drafts-এ পাঠানো হয়েছে। স্থায়ীভাবে মুছে ফেলতে Drafts ট্যাব থেকে ডিলিট করুন।`);
+      return;
+    }
+
+    // Step 2: If already in DRAFT, permanently delete from catalog
     setProducts((prev) => {
       const deleted = prev.filter((p) => p.id === id);
       const next = prev.filter((p) => p.id !== id);
@@ -166,7 +183,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       }
       return next;
     });
-    showToast('Product removed from catalog.');
+    showToast(`"${target.title}" স্থায়ীভাবে ক্যাটালগ থেকে মুছে ফেলা হয়েছে।`);
   };
 
   const addProducts = (newItems: MerchantProductItem[]) => {

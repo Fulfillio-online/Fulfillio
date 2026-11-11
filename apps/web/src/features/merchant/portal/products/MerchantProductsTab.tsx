@@ -21,6 +21,8 @@ import { ProductBulkActionBar } from './components/ProductBulkActionBar';
 import { StockRequestsTable } from './components/StockRequestsTable';
 import { ManageStockModal } from './modals/ManageStockModal';
 import { DeleteConfirmModal } from './modals/DeleteConfirmModal';
+import { CreateStockRequestModal } from './modals/CreateStockRequestModal';
+import { ArrowUpRight } from 'lucide-react';
 import { PrintBarcodeModal } from '../components/modals/PrintBarcodeModal';
 
 const isPendingApprovalProduct = (p: MerchantProductItem): boolean => {
@@ -95,6 +97,8 @@ export function MerchantProductsTab({
 
   const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
   const [barcodeProduct, setBarcodeProduct] = useState<MerchantProductItem | null>(null);
+  const [isStockRequestModalOpen, setIsStockRequestModalOpen] = useState(false);
+  const [stockRequestProductTarget, setStockRequestProductTarget] = useState<MerchantProductItem | null>(null);
 
   // Category options extraction
   const categories = useMemo(() => {
@@ -265,11 +269,24 @@ export function MerchantProductsTab({
           </p>
         </div>
 
-        {/* Top Action Button: Navigates to dedicated Add Product page */}
-        <div className="w-full sm:w-auto shrink-0">
+        {/* Top Action Buttons: Stock Request & Add Products */}
+        <div className="flex items-center gap-2.5 w-full sm:w-auto shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              setStockRequestProductTarget(null);
+              setIsStockRequestModalOpen(true);
+            }}
+            className="flex-1 sm:flex-initial px-4 py-2.5 bg-white dark:bg-navy-900 hover:bg-slate-50 dark:hover:bg-navy-800 border border-slate-200 dark:border-white/10 text-navy-900 dark:text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer hover:border-orange-500/40"
+            title="Request replenishment stock for an existing product"
+          >
+            <ArrowUpRight className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+            <span>Stock Request</span>
+          </button>
+
           <Link
             href="/merchant/products/new"
-            className="w-full sm:w-auto px-4 py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-md shadow-orange-500/20 transition-all cursor-pointer"
+            className="flex-1 sm:flex-initial px-4 py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-md shadow-orange-500/20 transition-all cursor-pointer active:scale-95"
           >
             <Plus className="h-4 w-4" />
             <span>Add Products</span>
@@ -409,6 +426,23 @@ export function MerchantProductsTab({
           setBarcodeProduct(null);
         }}
         onTriggerToast={onTriggerToast}
+      />
+
+      {/* Stock Replenishment Request Modal */}
+      <CreateStockRequestModal
+        isOpen={isStockRequestModalOpen}
+        onClose={() => {
+          setIsStockRequestModalOpen(false);
+          setStockRequestProductTarget(null);
+        }}
+        products={products}
+        initialProductId={stockRequestProductTarget?.id}
+        onSubmit={(productId, requestedQty, note) => {
+          if (onRequestStockAdd) {
+            onRequestStockAdd(productId, requestedQty, note);
+          }
+          setActiveTab('STOCK_REQUESTS');
+        }}
       />
     </div>
   );

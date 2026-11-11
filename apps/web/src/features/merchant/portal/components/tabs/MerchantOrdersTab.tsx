@@ -133,15 +133,18 @@ export function MerchantOrdersTab({
       `"${o.memoCode || 'MEMO-DEFAULT'}"`,
     ]);
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
+    // Excel UTF-8 BOM prefix for clean characters
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `fulfillio_orders_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.href = url;
+    link.download = `fulfillio_orders_export_${new Date().toISOString().slice(0, 10)}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    onTriggerToast(`Exported ${filteredOrders.length} orders to CSV successfully.`);
+    URL.revokeObjectURL(url);
+    onTriggerToast(`Exported ${filteredOrders.length} orders to Excel successfully.`);
   };
 
   const getStatusBadge = (status: string) => {
@@ -205,18 +208,11 @@ export function MerchantOrdersTab({
         <div className="flex items-center gap-2.5 w-full sm:w-auto">
           <button
             onClick={handleExportCsv}
-            className="flex-1 sm:flex-initial px-3.5 py-2 bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 border border-slate-200 dark:border-white/10 text-navy-900 dark:text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors shadow-sm cursor-pointer"
+            className="flex-1 sm:flex-initial px-4 py-2 bg-white dark:bg-navy-900 hover:bg-slate-50 dark:hover:bg-navy-800 border border-slate-200 dark:border-white/10 text-navy-900 dark:text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors shadow-xs cursor-pointer hover:border-orange-500/30"
+            title="Export orders to Excel (.csv)"
           >
-            <Download className="h-4 w-4 text-slate-400" />
-            <span>Export</span>
-          </button>
-
-          <button
-            onClick={() => setIsCreateOrderOpen(true)}
-            className="flex-1 sm:flex-initial px-4 py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-bold shadow-md shadow-orange-500/20 flex items-center justify-center gap-2 transition-colors shadow-sm shrink-0 cursor-pointer"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Create Manual Order</span>
+            <Download className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+            <span>Export to Excel</span>
           </button>
         </div>
       </div>
@@ -508,10 +504,10 @@ export function MerchantOrdersTab({
 
                     <Link
                       href={`/print/memo/${o.id}?memoCode=${encodeURIComponent(o.memoCode || 'MEMO-DEFAULT')}&customerName=${encodeURIComponent(o.customer)}&customerPhone=${encodeURIComponent(o.phone)}&customerAddress=${encodeURIComponent(o.address)}&codAmount=${o.amount}`}
-                      className="flex-1 min-w-[120px] py-2 px-3 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                      className="flex-1 min-w-[120px] py-2 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-navy-800 dark:hover:bg-navy-700 border border-slate-200 dark:border-white/10 text-slate-800 dark:text-slate-100 hover:text-orange-600 dark:hover:text-orange-400 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                       title="Print 2-in-1 4x6 Thermal Memo Slip"
                     >
-                      <Printer className="h-3.5 w-3.5" />
+                      <Printer className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" />
                       <span>Print 4x6" Memo</span>
                     </Link>
                   </>
@@ -620,10 +616,10 @@ export function MerchantOrdersTab({
                       <div className="flex items-center justify-center gap-2">
                         <Link
                           href={`/print/memo/${o.id}?memoCode=${encodeURIComponent(o.memoCode || 'MEMO-DEFAULT')}&customerName=${encodeURIComponent(o.customer)}&customerPhone=${encodeURIComponent(o.phone)}&customerAddress=${encodeURIComponent(o.address)}&codAmount=${o.amount}`}
-                          className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 rounded text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                          className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-navy-800 dark:hover:bg-navy-700 border border-slate-200 dark:border-white/10 text-slate-800 dark:text-slate-100 hover:text-orange-600 dark:hover:text-orange-400 rounded-lg text-[11px] font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
                           title="Print 2-in-1 4x6 Thermal Memo Slip"
                         >
-                          <Printer className="h-3 w-3" />
+                          <Printer className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" />
                           <span>Print</span>
                         </Link>
                       </div>
@@ -687,32 +683,23 @@ export function MerchantOrdersTab({
         </div>
       </div>
 
-      {/* Bottom Earnings Banner (matching Image 2) */}
-      <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
-        <div className="flex items-center gap-3 text-emerald-300">
-          <div className="p-1.5 bg-emerald-500/20 rounded-lg shrink-0">
-            <Package className="h-4 w-4 text-emerald-400" />
+      {/* Bottom Earnings Banner */}
+      <div className="bg-emerald-500/10 dark:bg-emerald-950/30 border border-emerald-500/20 dark:border-emerald-500/30 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-3 text-emerald-800 dark:text-emerald-300">
+          <div className="p-1.5 bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-lg shrink-0">
+            <Package className="h-4 w-4" />
           </div>
-          <span>Orders marked as delivered are automatically added to your earnings report.</span>
+          <span className="font-medium">Orders marked as delivered are automatically added to your COD earnings wallet.</span>
         </div>
         <Link
           href="/merchant/billing"
-          className="text-orange-600 dark:text-orange-400 hover:text-emerald-300 font-semibold inline-flex items-center gap-1 shrink-0 transition-colors"
+          className="text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 font-bold inline-flex items-center gap-1 shrink-0 transition-colors"
         >
-          <span>View earnings</span>
-          <span>&rarr;</span>
+          <span>View COD Earnings &rarr;</span>
         </Link>
       </div>
 
-      {/* Create Manual Order Modal */}
-      <CreateManualOrderModal
-        isOpen={isCreateOrderOpen}
-        onClose={() => setIsCreateOrderOpen(false)}
-        products={products}
-        memoList={memoList}
-        onCreateOrder={onCreateOrder}
-        onTriggerToast={onTriggerToast}
-      />
+
     </div>
   );
 }

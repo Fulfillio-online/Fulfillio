@@ -39,7 +39,7 @@ export function MerchantSidebar({
     {
       id: 'overview' as MerchantTab,
       label: 'Overview',
-      href: '/merchant',
+      href: '/merchant/overview',
       icon: LayoutDashboard,
     },
     {
@@ -88,8 +88,8 @@ export function MerchantSidebar({
 
   const checkIsActive = (item: (typeof navItems)[0]) => {
     if (activeTab) return activeTab === item.id;
-    if (item.href === '/merchant') {
-      return pathname === '/merchant';
+    if (item.href === '/merchant/overview') {
+      return pathname === '/merchant' || pathname === '/merchant/overview';
     }
     return pathname.startsWith(item.href);
   };

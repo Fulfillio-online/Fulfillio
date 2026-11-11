@@ -437,7 +437,7 @@ export function ProductTable({
                                 className="w-full px-3 py-2 text-xs text-rose-400 hover:bg-rose-500/10 flex items-center gap-2 cursor-pointer"
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
-                                <span>Delete Product</span>
+                                <span>{p.status === 'DRAFT' ? 'Permanently Delete' : 'Move to Drafts (Delete)'}</span>
                               </button>
                             </div>
                           </>

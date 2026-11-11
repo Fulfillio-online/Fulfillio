@@ -132,7 +132,7 @@ export function MerchantMemoDesignerTab({
                 <span className="font-medium">Memo Code:</span>
                 <span className="text-slate-400 text-[11px]">(Assigned automatically upon creation)</span>
               </div>
-              <span className="font-mono text-xs font-bold text-indigo-300 bg-indigo-950/60 px-2.5 py-1 rounded border border-indigo-800/50">
+              <span className="font-mono text-xs font-bold text-orange-700 bg-orange-50 border border-orange-200 dark:text-indigo-300 dark:bg-indigo-950/60 dark:border-indigo-800/50 px-2.5 py-1 rounded">
                 AUTO-ASSIGNED
               </span>
             </div>
@@ -293,7 +293,7 @@ export function MerchantMemoDesignerTab({
             <div className="pt-2 flex justify-end">
               <button
                 type="submit"
-                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-md"
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white font-bold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-md shadow-orange-500/20 dark:shadow-indigo-500/20 cursor-pointer"
               >
                 <Sparkles className="h-4 w-4" />
                 <span>Save Reseller Memo</span>
@@ -386,7 +386,7 @@ export function MerchantMemoDesignerTab({
             {/* Bottom Controls matching Screenshot_35.png */}
             <div className="flex items-center justify-between pt-3 border-t border-slate-200/80 dark:border-white/10 text-xs text-slate-400">
               <span className="text-[11px]">
-                Memo Code: <span className="text-indigo-400 font-mono font-semibold">Auto-assigned upon save</span>
+                Memo Code: <span className="text-orange-600 dark:text-indigo-400 font-mono font-semibold">Auto-assigned upon save</span>
               </span>
               <div className="flex items-center gap-2">
                 <button

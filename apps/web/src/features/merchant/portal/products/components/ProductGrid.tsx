@@ -237,7 +237,7 @@ export function ProductGrid({
                   type="button"
                   onClick={() => onRequestDelete(p)}
                   className="p-1.5 rounded-lg border border-rose-500/20 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors cursor-pointer"
-                  title="Delete Product"
+                  title={p.status === 'DRAFT' ? 'Permanently Delete' : 'Move to Drafts (Delete)'}
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
