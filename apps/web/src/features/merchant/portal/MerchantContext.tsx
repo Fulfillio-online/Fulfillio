@@ -92,9 +92,9 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       const prof = getStoredMerchantProfileForCode(code);
       setProfile(prof);
       const prods = getStoredMerchantProductsForCode(code);
-      setProducts(prods && prods.length > 0 ? prods : INITIAL_MERCHANT_PRODUCTS);
+      setProducts(prods);
       const ords = getStoredMerchantOrdersForCode(code);
-      setOrders(ords && ords.length > 0 ? ords : INITIAL_MERCHANT_ORDERS);
+      setOrders(ords);
       setMemoList(getStoredMerchantMemosForCode(code, prof));
       setAsns(getStoredMerchantAsnsForCode(code));
       setStockRequests(getStoredMerchantStockRequestsForCode(code));

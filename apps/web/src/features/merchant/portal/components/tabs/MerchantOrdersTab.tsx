@@ -227,16 +227,22 @@ export function MerchantOrdersTab({
         <div className="bg-white dark:bg-navy-900 border border-slate-200/80 dark:border-white/10 rounded-xl shadow-xs p-3 sm:p-4 flex flex-col justify-between shadow-sm">
           <div className="flex justify-between items-start">
             <span className="text-[11px] sm:text-xs font-medium text-slate-400">Total Orders</span>
-            <div className="p-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-400">
+            <div className="p-1.5 bg-orange-500/10 border border-orange-500/30 rounded-lg text-orange-500">
               <Package className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </div>
           </div>
           <div className="mt-2.5 sm:mt-3">
             <div className="text-xl sm:text-2xl font-extrabold text-navy-900 dark:text-white">{stats.total}</div>
-            <div className="flex items-center gap-1 text-[10px] sm:text-[11px] text-emerald-400 font-medium mt-1 truncate">
-              <TrendingUp className="h-3 w-3 shrink-0" />
-              <span>+18.2%</span>
-            </div>
+{stats.total > 0 ? (
+              <div className="flex items-center gap-1 text-[10px] sm:text-[11px] text-emerald-500 font-medium mt-1 truncate">
+                <TrendingUp className="h-3 w-3 shrink-0" />
+                <span>+18.2%</span>
+              </div>
+            ) : (
+              <div className="text-[10px] sm:text-[11px] text-slate-400 font-normal mt-1 truncate">
+                <span>0 orders</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -278,7 +284,7 @@ export function MerchantOrdersTab({
           </div>
           <div className="mt-2.5 sm:mt-3">
             <div className="text-xl sm:text-2xl font-extrabold text-navy-900 dark:text-white">{stats.handover}</div>
-            <div className="text-[10px] sm:text-[11px] text-emerald-400 font-medium mt-1 truncate">+12.4% completed</div>
+            <div className="text-[10px] sm:text-[11px] text-slate-400 font-normal mt-1 truncate">{stats.handover > 0 ? '+12.4% completed' : 'No dispatches yet'}</div>
           </div>
         </div>
       </div>

@@ -1,3 +1,4 @@
+import { getActiveMerchantSession, getMerchantProductsKey, getMerchantOrdersKey } from '@/lib/warehouseSync';
 import {
   MerchantAsnRecord,
   MerchantOrderItem,
@@ -95,11 +96,13 @@ export const merchantApi = {
       );
     }
     if (typeof window !== 'undefined') {
-      const local = localStorage.getItem(STORAGE_KEY_MERCHANT_PRODUCTS);
-      if (local) {
+      const session = getActiveMerchantSession();
+      const code = session?.merchantCode || 'MC-101';
+      const local = localStorage.getItem(getMerchantProductsKey(code));
+      if (local !== null) {
         try {
           const parsed = JSON.parse(local);
-          if (Array.isArray(parsed) && parsed.length > 0) {
+          if (Array.isArray(parsed)) {
             return parsed.map((p: any) => {
               const price = Number(p.price) || 0;
               const costPrice = p.costPrice !== undefined ? Number(p.costPrice) : Math.round(price * 0.52);
@@ -119,8 +122,9 @@ export const merchantApi = {
           }
         } catch {}
       }
+      return code === 'MC-101' ? INITIAL_MERCHANT_PRODUCTS : [];
     }
-    return INITIAL_MERCHANT_PRODUCTS;
+    return [];
   },
 
   async getOrders(): Promise<MerchantOrderItem[]> {
@@ -142,14 +146,18 @@ export const merchantApi = {
       }));
     }
     if (typeof window !== 'undefined') {
-      const local = localStorage.getItem(STORAGE_KEY_MERCHANT_ORDERS);
-      if (local) {
+      const session = getActiveMerchantSession();
+      const code = session?.merchantCode || 'MC-101';
+      const local = localStorage.getItem(getMerchantOrdersKey(code));
+      if (local !== null) {
         try {
-          return JSON.parse(local);
+          const parsed = JSON.parse(local);
+          if (Array.isArray(parsed)) return parsed;
         } catch {}
       }
+      return code === 'MC-101' ? INITIAL_MERCHANT_ORDERS : [];
     }
-    return INITIAL_MERCHANT_ORDERS;
+    return [];
   },
 
   async getMemos(): Promise<ResellerMemo[]> {

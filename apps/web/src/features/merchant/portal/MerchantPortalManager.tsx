@@ -65,8 +65,8 @@ function MerchantPortalInner() {
 
   // States
   const [profile, setProfile] = useState<MerchantProfileData>(INITIAL_MERCHANT_PROFILE);
-  const [products, setProducts] = useState<MerchantProductItem[]>(INITIAL_MERCHANT_PRODUCTS);
-  const [orders, setOrders] = useState<MerchantOrderItem[]>(INITIAL_MERCHANT_ORDERS);
+  const [products, setProducts] = useState<MerchantProductItem[]>([]);
+  const [orders, setOrders] = useState<MerchantOrderItem[]>([]);
   const [memoList, setMemoList] = useState<ResellerMemo[]>(INITIAL_MERCHANT_MEMOS);
   const [asns, setAsns] = useState<MerchantAsnRecord[]>(INITIAL_MERCHANT_ASNS);
 

@@ -53,12 +53,12 @@ export function MerchantOverviewTab({ memoCount, onSelectTab }: MerchantOverview
   };
 
   // Dynamic calculations based on live context
-  const totalOrdersCount = orders.length > 0 ? orders.length : 24;
-  const totalGrossRevenue = orders.reduce((sum, o) => sum + (Number(o.amount) || 0), 0) || 184500;
-  const totalStockUnits = products.reduce((sum, p) => sum + (p.stock || 0), 0) || 480;
-  const activeSkusCount = products.length > 0 ? products.length : 3;
-  const pendingOrdersCount = orders.filter((o) => o.status === 'PENDING' || o.status === 'ALLOCATED').length || 4;
-  const deliveredOrdersCount = orders.filter((o) => o.status === 'DISPATCHED' || o.status === 'DELIVERED').length || 18;
+  const totalOrdersCount = orders.length;
+  const totalGrossRevenue = orders.reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
+  const totalStockUnits = products.reduce((sum, p) => sum + (p.stock || 0), 0);
+  const activeSkusCount = products.length;
+  const pendingOrdersCount = orders.filter((o) => o.status === 'PENDING' || o.status === 'ALLOCATED').length;
+  const deliveredOrdersCount = orders.filter((o) => o.status === 'DISPATCHED' || o.status === 'DELIVERED').length;
 
   // 3PL Financial estimates
   const estFulfillmentFees = Math.round(totalGrossRevenue * 0.045);
@@ -102,7 +102,7 @@ export function MerchantOverviewTab({ memoCount, onSelectTab }: MerchantOverview
       title: 'Inbound ASNs & Warehouse Dock',
       desc: 'Advance shipping notices, carrier tracking, and intake verification',
       icon: Truck,
-      badge: `${asns.length || 2} Inbound ASNs`,
+      badge: `${asns.length} Inbound ASNs`,
       color: 'text-amber-600 dark:text-amber-400',
     },
     {
@@ -189,10 +189,16 @@ export function MerchantOverviewTab({ memoCount, onSelectTab }: MerchantOverview
               <div className="text-2xl sm:text-3xl font-extrabold text-navy-900 dark:text-white tabular-nums">
                 ৳ {totalGrossRevenue.toLocaleString()}
               </div>
-              <div className="flex items-center gap-1.5 mt-1 text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
-                <TrendingUp className="h-3.5 w-3.5" />
-                <span>+14.8% vs previous period</span>
-              </div>
+{totalGrossRevenue > 0 ? (
+                <div className="flex items-center gap-1.5 mt-1 text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
+                  <TrendingUp className="h-3.5 w-3.5" />
+                  <span>+14.8% vs previous period</span>
+                </div>
+              ) : (
+                <div className="text-xs text-slate-400 font-normal mt-1">
+                  <span>৳ 0.00 Gross Sales</span>
+                </div>
+              )}
             </div>
           </div>
           <div className="mt-4 pt-3 border-t border-slate-100 dark:border-white/5 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
@@ -216,15 +222,21 @@ export function MerchantOverviewTab({ memoCount, onSelectTab }: MerchantOverview
               <div className="text-2xl sm:text-3xl font-extrabold text-navy-900 dark:text-white tabular-nums">
                 {totalStockUnits.toLocaleString()} <span className="text-sm font-medium text-slate-400">Units</span>
               </div>
-              <div className="flex items-center gap-1.5 mt-1 text-xs text-indigo-600 dark:text-indigo-400 font-semibold">
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                <span>Across {activeSkusCount} active catalog items</span>
-              </div>
+{activeSkusCount > 0 ? (
+                <div className="flex items-center gap-1.5 mt-1 text-xs text-indigo-600 dark:text-indigo-400 font-semibold">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  <span>Across {activeSkusCount} active catalog items</span>
+                </div>
+              ) : (
+                <div className="text-xs text-slate-400 font-normal mt-1">
+                  <span>0 Products in Catalog</span>
+                </div>
+              )}
             </div>
           </div>
           <div className="mt-4 pt-3 border-t border-slate-100 dark:border-white/5 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
             <span>Stock Health</span>
-            <span className="font-bold text-emerald-600 dark:text-emerald-400">100% Available</span>
+            <span className="font-bold text-emerald-600 dark:text-emerald-400">{totalStockUnits > 0 ? '100% Available' : 'No Stock'}</span>
           </div>
         </div>
 
@@ -243,10 +255,16 @@ export function MerchantOverviewTab({ memoCount, onSelectTab }: MerchantOverview
               <div className="text-2xl sm:text-3xl font-extrabold text-navy-900 dark:text-white tabular-nums">
                 {totalOrdersCount} <span className="text-sm font-medium text-slate-400">Orders</span>
               </div>
-              <div className="flex items-center gap-1.5 mt-1 text-xs text-orange-600 dark:text-orange-400 font-semibold">
-                <Clock className="h-3.5 w-3.5" />
-                <span>{pendingOrdersCount} orders in picking & packing</span>
-              </div>
+{totalOrdersCount > 0 ? (
+                <div className="flex items-center gap-1.5 mt-1 text-xs text-orange-600 dark:text-orange-400 font-semibold">
+                  <Clock className="h-3.5 w-3.5" />
+                  <span>{pendingOrdersCount} orders in picking & packing</span>
+                </div>
+              ) : (
+                <div className="text-xs text-slate-400 font-normal mt-1">
+                  <span>0 Orders Placed</span>
+                </div>
+              )}
             </div>
           </div>
           <div className="mt-4 pt-3 border-t border-slate-100 dark:border-white/5 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
@@ -392,7 +410,7 @@ export function MerchantOverviewTab({ memoCount, onSelectTab }: MerchantOverview
                   </div>
                 </div>
                 <span className="font-mono font-bold text-xs text-navy-900 dark:text-white px-2 py-0.5 rounded bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10">
-                  {Math.max(1, Math.round(pendingOrdersCount * 0.5))}
+                  {Math.round(pendingOrdersCount * 0.5)}
                 </span>
               </div>
 
