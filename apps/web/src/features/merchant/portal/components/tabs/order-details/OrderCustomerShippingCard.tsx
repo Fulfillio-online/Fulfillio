@@ -46,15 +46,15 @@ export function OrderCustomerShippingCard({
     (order.customer ? order.customer.substring(0, 2).toUpperCase() : 'CU');
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-md space-y-5">
+    <div className="rounded-2xl border border-slate-200/80 dark:border-white/10 bg-white dark:bg-navy-900 p-5 shadow-md space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between pb-3.5 border-b border-slate-800">
+      <div className="flex items-center justify-between pb-3.5 border-b border-slate-200/80 dark:border-white/10">
         <div className="flex items-center gap-2.5">
           <div className="h-8 w-8 rounded-lg bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-400">
             <User className="h-4 w-4" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-slate-100">Customer &amp; Shipping</h3>
+            <h3 className="text-sm font-bold text-navy-900 dark:text-white">Customer &amp; Shipping</h3>
             <p className="text-xs text-slate-400">Recipient details and assigned delivery courier</p>
           </div>
         </div>
@@ -75,20 +75,20 @@ export function OrderCustomerShippingCard({
         </div>
 
         <div className="min-w-0 flex-1 space-y-1">
-          <h4 className="text-sm font-bold text-slate-100 truncate">{order.customer}</h4>
+          <h4 className="text-sm font-bold text-navy-900 dark:text-white truncate">{order.customer}</h4>
           <div className="flex items-center gap-2 text-xs text-slate-400">
             <Phone className="h-3.5 w-3.5 text-slate-500 shrink-0" />
             <a
               href={`tel:${order.phone}`}
-              className="font-mono text-slate-300 hover:text-emerald-400 transition-colors"
+              className="font-mono text-slate-700 dark:text-slate-300 hover:text-emerald-400 transition-colors"
             >
               {order.phone}
             </a>
           </div>
 
-          <div className="flex items-start gap-2 text-xs text-slate-300 pt-1">
+          <div className="flex items-start gap-2 text-xs text-slate-700 dark:text-slate-300 pt-1">
             <MapPin className="h-3.5 w-3.5 text-indigo-400 shrink-0 mt-0.5" />
-            <span className="leading-relaxed text-slate-300">{order.address}</span>
+            <span className="leading-relaxed text-slate-700 dark:text-slate-300">{order.address}</span>
           </div>
         </div>
       </div>
@@ -102,11 +102,11 @@ export function OrderCustomerShippingCard({
       </div>
 
       {/* Courier Logistics Box */}
-      <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-4 space-y-3">
+      <div className="rounded-xl bg-slate-50 dark:bg-navy-950/70 border border-slate-200/80 dark:border-white/10 p-4 space-y-3">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2">
             <Truck className="h-4 w-4 text-emerald-400" />
-            <span className="text-xs font-bold text-slate-200">
+            <span className="text-xs font-bold text-navy-900 dark:text-slate-200">
               {order.courier || 'Steadfast Courier'}
             </span>
           </div>
@@ -116,13 +116,13 @@ export function OrderCustomerShippingCard({
           </span>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/80 text-xs">
+        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/80 dark:border-white/10/80 text-xs">
           <div>
             <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">
               Tracking ID
             </span>
             <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="font-mono text-slate-200 font-bold text-xs truncate">
+              <span className="font-mono text-navy-900 dark:text-slate-200 font-bold text-xs truncate">
                 {trackingCode}
               </span>
               <button
@@ -144,16 +144,16 @@ export function OrderCustomerShippingCard({
             <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">
               Delivery Fee
             </span>
-            <span className="font-bold text-slate-200 text-xs mt-0.5 block">
+            <span className="font-bold text-navy-900 dark:text-slate-200 text-xs mt-0.5 block">
               ৳{Number(deliveryFee).toLocaleString()}
             </span>
           </div>
         </div>
 
-        <div className="pt-2 border-t border-slate-800/80">
+        <div className="pt-2 border-t border-slate-200/80 dark:border-white/10/80">
           <Link
             href={`/tracking?trackingCode=${encodeURIComponent(trackingCode)}`}
-            className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+            className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-navy-900 dark:text-slate-200 hover:text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-sm"
           >
             <span>Track Live Shipment</span>
             <ExternalLink className="h-3 w-3 text-emerald-400" />

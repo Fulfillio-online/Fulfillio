@@ -127,7 +127,7 @@ export function MerchantMemoDesignerTab({
             </h3>
 
             <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-navy-950/70 border border-slate-200 dark:border-white/10 flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2 text-slate-300">
+              <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 <span className="font-medium">Memo Code:</span>
                 <span className="text-slate-400 text-[11px]">(Assigned automatically upon creation)</span>
@@ -249,7 +249,7 @@ export function MerchantMemoDesignerTab({
                     </button>
                   </div>
                 ) : (
-                  <div className="w-20 h-16 rounded-xl bg-slate-950 border border-dashed border-slate-800 flex flex-col items-center justify-center text-slate-500 shrink-0">
+                  <div className="w-20 h-16 rounded-xl bg-slate-50 dark:bg-navy-950 border border-dashed border-slate-200/80 dark:border-white/10 flex flex-col items-center justify-center text-slate-500 shrink-0">
                     <ImageIcon className="h-5 w-5 mb-0.5 opacity-50" />
                     <span className="text-[9px]">No Logo</span>
                   </div>
@@ -268,7 +268,7 @@ export function MerchantMemoDesignerTab({
                     <button
                       type="button"
                       onClick={() => logoInputRef.current?.click()}
-                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-navy-900 dark:text-white text-xs font-medium flex items-center gap-1.5 border border-slate-700 transition-colors"
+                      className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-700 text-navy-900 dark:text-white text-xs font-medium flex items-center gap-1.5 border border-slate-700 transition-colors"
                     >
                       <Upload className="h-3.5 w-3.5 text-indigo-400" />
                       <span>{resellerLogo ? 'Change Logo' : 'Upload Logo'}</span>
@@ -384,7 +384,7 @@ export function MerchantMemoDesignerTab({
             </div>
 
             {/* Bottom Controls matching Screenshot_35.png */}
-            <div className="flex items-center justify-between pt-3 border-t border-slate-800 text-xs text-slate-400">
+            <div className="flex items-center justify-between pt-3 border-t border-slate-200/80 dark:border-white/10 text-xs text-slate-400">
               <span className="text-[11px]">
                 Memo Code: <span className="text-indigo-400 font-mono font-semibold">Auto-assigned upon save</span>
               </span>
@@ -427,7 +427,7 @@ export function MerchantMemoDesignerTab({
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs font-bold text-indigo-300 bg-slate-950 px-2 py-0.5 rounded border border-slate-800 inline-block">
+                    <span className="font-mono text-xs font-bold text-indigo-300 bg-slate-50 dark:bg-navy-950 px-2 py-0.5 rounded border border-slate-200/80 dark:border-white/10 inline-block">
                       {memo.code}
                     </span>
                     {memo.isDefault && (
@@ -521,7 +521,7 @@ export function MerchantMemoDesignerTab({
               </div>
 
               {/* Bottom Actions */}
-              <div className="pt-2 flex items-center justify-between border-t border-slate-800 text-xs">
+              <div className="pt-2 flex items-center justify-between border-t border-slate-200/80 dark:border-white/10 text-xs">
                 <span className="text-[11px] text-slate-500">
                   Created: <span className="text-slate-400">{memo.created || '2026-10-15'}</span>
                 </span>
@@ -530,7 +530,7 @@ export function MerchantMemoDesignerTab({
                   <button
                     type="button"
                     onClick={() => handleCopyCode(memo.code)}
-                    className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-navy-900 dark:text-white text-xs font-semibold flex items-center gap-1 transition-colors border border-slate-700"
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-700 text-navy-900 dark:text-white text-xs font-semibold flex items-center gap-1 transition-colors border border-slate-700"
                   >
                     {copiedCode === memo.code ? (
                       <>

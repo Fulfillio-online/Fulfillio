@@ -40,19 +40,19 @@ export function PayoutAccountCard({
   };
 
   return (
-    <div className="p-5 sm:p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-md relative overflow-hidden space-y-5">
+    <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-navy-900 border border-slate-200/80 dark:border-white/10 shadow-md relative overflow-hidden space-y-5">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-200/80 dark:border-white/10">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0">
             <CreditCard className="h-5 w-5" />
           </div>
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-base font-bold text-slate-100">COD Payout &amp; Disbursement</h2>
+              <h2 className="text-base font-bold text-navy-900 dark:text-white">COD Payout &amp; Disbursement</h2>
               <VerificationStatusBadge status={payoutAccount.status} />
             </div>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               Net COD customer remittances deposited to this designated account.
             </p>
           </div>
@@ -61,7 +61,7 @@ export function PayoutAccountCard({
         <button
           type="button"
           onClick={onManagePayout}
-          className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 rounded-xl text-xs font-semibold transition-colors cursor-pointer self-start sm:self-auto min-h-[38px]"
+          className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-navy-900 dark:text-slate-200 hover:text-white border border-slate-200 dark:border-white/10 rounded-xl text-xs font-semibold transition-colors cursor-pointer self-start sm:self-auto min-h-[38px]"
         >
           <Pencil className="h-3.5 w-3.5 text-indigo-400" />
           <span>Configure Account</span>
@@ -69,7 +69,7 @@ export function PayoutAccountCard({
       </div>
 
       {/* Fintech Styled Bank Card Container */}
-      <div className="p-5 sm:p-6 rounded-xl bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border border-slate-800/90 shadow-lg relative overflow-hidden space-y-5 group hover:border-slate-700/80 transition-all">
+      <div className="p-5 sm:p-6 rounded-xl bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border border-slate-200/80 dark:border-white/10/90 shadow-lg relative overflow-hidden space-y-5 group hover:border-slate-200 dark:border-white/10/80 transition-all">
         {/* Subtle decorative glow */}
         <div className="absolute top-0 right-0 -mr-16 -mt-16 h-36 w-36 rounded-full bg-emerald-500/5 blur-2xl pointer-events-none" />
 
@@ -108,19 +108,19 @@ export function PayoutAccountCard({
         </div>
 
         {/* Account Number & Holder */}
-        <div className="pt-2 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="pt-2 border-t border-slate-200/80 dark:border-white/10/80 grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">
               Account Number / MFS #
             </span>
             <div className="flex items-center gap-2">
-              <span className="font-mono text-base sm:text-lg font-bold text-slate-100 tracking-wider">
+              <span className="font-mono text-base sm:text-lg font-bold text-navy-900 dark:text-white tracking-wider">
                 {payoutAccount.accountNumber}
               </span>
               <button
                 type="button"
                 onClick={handleCopyAccount}
-                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                className="p-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-500 dark:text-slate-400 hover:text-white transition-colors cursor-pointer"
                 title="Copy Account Number"
               >
                 {copiedAccount ? (
@@ -136,20 +136,20 @@ export function PayoutAccountCard({
             <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">
               Account Holder Full Name
             </span>
-            <span className="text-sm font-semibold text-slate-200 block">
+            <span className="text-sm font-semibold text-navy-900 dark:text-slate-200 block">
               {payoutAccount.accountHolder}
             </span>
           </div>
         </div>
 
         {/* Routing, Branch & Schedule Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-3 border-t border-slate-800/80 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-3 border-t border-slate-200/80 dark:border-white/10/80 text-xs">
           <div className="space-y-0.5">
             <span className="text-slate-500 text-[11px] block">Branch &amp; Routing:</span>
-            <span className="text-slate-300 font-medium">
+            <span className="text-slate-700 dark:text-slate-300 font-medium">
               {payoutAccount.branchName || 'Online Banking'}{' '}
               {payoutAccount.routingNumber && (
-                <span className="font-mono text-slate-400 text-[11px]">
+                <span className="font-mono text-slate-500 dark:text-slate-400 text-[11px]">
                   (Routing: {payoutAccount.routingNumber})
                 </span>
               )}
@@ -166,16 +166,16 @@ export function PayoutAccountCard({
 
           <div className="space-y-0.5 sm:col-span-2 lg:col-span-1">
             <span className="text-slate-500 text-[11px] block">Settlement Currency:</span>
-            <span className="text-slate-300 font-medium font-mono">BDT (Bangladeshi Taka)</span>
+            <span className="text-slate-700 dark:text-slate-300 font-medium font-mono">BDT (Bangladeshi Taka)</span>
           </div>
         </div>
 
         {/* Cheque Leaf Verification Row */}
-        <div className="pt-3 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2 text-slate-400 min-w-0">
+        <div className="pt-3 border-t border-slate-200/80 dark:border-white/10/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 min-w-0">
             <FileText className="h-4 w-4 text-emerald-400 shrink-0" />
-            <span className="text-slate-400 shrink-0">Cheque Leaf Document:</span>
-            <span className="font-mono text-slate-300 text-[11px] truncate">
+            <span className="text-slate-500 dark:text-slate-400 shrink-0">Cheque Leaf Document:</span>
+            <span className="font-mono text-slate-700 dark:text-slate-300 text-[11px] truncate">
               {payoutAccount.chequeLeafUrl
                 ? 'cheque_leaf_verified_attachment.png'
                 : 'No cheque leaf submitted'}
@@ -186,7 +186,7 @@ export function PayoutAccountCard({
             <button
               type="button"
               onClick={() => setIsViewerOpen(true)}
-              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-700 cursor-pointer self-start sm:self-auto shrink-0 shadow-sm"
+              className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-navy-900 dark:text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-200 dark:border-white/10 cursor-pointer self-start sm:self-auto shrink-0 shadow-sm"
             >
               <Eye className="h-3.5 w-3.5 text-emerald-400" />
               <span>View Cheque Leaf</span>

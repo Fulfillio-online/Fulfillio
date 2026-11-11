@@ -35,13 +35,13 @@ export function MerchantExpandableCard({
       className={`rounded-xl border transition-all shadow-sm overflow-hidden select-none ${
         isSelected
           ? 'border-emerald-500/50 bg-emerald-950/20'
-          : 'border-slate-800 bg-slate-900/90 hover:bg-slate-850/60'
+          : 'border-slate-200/80 dark:border-white/10 bg-white dark:bg-navy-900 hover:bg-slate-50 dark:hover:bg-navy-850/60'
       } ${className}`}
     >
       {/* Collapsed Header: Tapping expands/collapses */}
       <div
         onClick={() => setIsExpanded(!isExpanded)}
-        className="p-3.5 flex items-start justify-between gap-2.5 cursor-pointer active:bg-slate-800/60 transition-colors"
+        className="p-3.5 flex items-start justify-between gap-2.5 cursor-pointer active:bg-slate-100 dark:active:bg-navy-800/60 transition-colors"
       >
         {/* Left Side: 3 Stacked Rows */}
         <div className="min-w-0 flex-1 space-y-1.5">
@@ -54,7 +54,7 @@ export function MerchantExpandableCard({
                 onClick={(e) => e.stopPropagation()}
                 onChange={onToggleSelect}
                 aria-label="Select item"
-                className="rounded border-slate-700 bg-slate-800 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-0 cursor-pointer h-4 w-4 shrink-0"
+                className="rounded border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-0 cursor-pointer h-4 w-4 shrink-0"
               />
             )}
             <div className="flex items-center gap-1.5 min-w-0 flex-1">
@@ -80,7 +80,7 @@ export function MerchantExpandableCard({
           <button
             type="button"
             aria-label={isExpanded ? 'Collapse card' : 'Expand card'}
-            className="p-1 rounded-lg bg-slate-800/80 text-slate-400 hover:text-white transition-colors mt-auto"
+            className="p-1 rounded-lg bg-slate-100 dark:bg-navy-800 text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white transition-colors mt-auto"
           >
             <ChevronDown
               className={`w-4 h-4 transition-transform duration-200 text-slate-400 ${
@@ -93,7 +93,7 @@ export function MerchantExpandableCard({
 
       {/* Expanded Drawer */}
       {isExpanded && (
-        <div className="px-3.5 pb-3.5 pt-2 border-t border-slate-800/80 bg-slate-950/60 text-xs space-y-3 animate-in fade-in-50 duration-150">
+        <div className="px-3.5 pb-3.5 pt-2 border-t border-slate-100 dark:border-white/10 bg-slate-50/70 dark:bg-navy-950/60 text-xs space-y-3 animate-in fade-in-50 duration-150">
           {expandedContent}
 
           {/* Direct Quick Action Buttons */}

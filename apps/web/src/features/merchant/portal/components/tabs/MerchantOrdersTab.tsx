@@ -321,7 +321,7 @@ export function MerchantOrdersTab({
         </div>
 
         {/* Tab Filters */}
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar border-t border-slate-800/80 pt-3 pb-1 -mx-1 px-1">
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar border-t border-slate-200 dark:border-white/10/80 pt-3 pb-1 -mx-1 px-1">
           <button
             onClick={() => {
               setActiveTab('ALL');
@@ -392,7 +392,7 @@ export function MerchantOrdersTab({
         {/* Mobile Orders Card View (block md:hidden) */}
         <div className="block md:hidden space-y-2.5">
           {paginatedOrders.length === 0 ? (
-            <div className="py-12 text-center text-slate-500 bg-slate-50/80 dark:bg-navy-950/60 rounded-xl border border-slate-800">
+            <div className="py-12 text-center text-slate-500 bg-slate-50/80 dark:bg-navy-950/60 rounded-xl border border-slate-200 dark:border-white/10">
               <Package className="h-8 w-8 mx-auto text-slate-600 mb-2" />
               <p className="text-xs">No orders found matching your filters.</p>
             </div>
@@ -453,7 +453,7 @@ export function MerchantOrdersTab({
                 expandedContent={
                   <div className="space-y-2.5">
                     {/* Customer Details Box with 1-tap Phone Call */}
-                    <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 space-y-1.5">
+                    <div className="p-2.5 rounded-lg bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 space-y-1.5">
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-slate-400 text-[11px]">Customer & Phone:</span>
                         <a
@@ -465,7 +465,7 @@ export function MerchantOrdersTab({
                         </a>
                       </div>
                       {o.address && (
-                        <div className="text-[11px] text-slate-300 leading-snug">
+                        <div className="text-[11px] text-slate-700 dark:text-slate-300 leading-snug">
                           <span className="text-slate-500">Address: </span>
                           {o.address}
                         </div>
@@ -474,12 +474,12 @@ export function MerchantOrdersTab({
 
                     {/* Courier & Delivery Grid */}
                     <div className="grid grid-cols-2 gap-2 text-[11px]">
-                      <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                      <div className="p-2 rounded-lg bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10">
                         <span className="text-slate-500 text-[10px] uppercase font-semibold block">Courier</span>
                         <span className="font-semibold text-navy-900 dark:text-white block mt-0.5">{o.courier}</span>
                         <span className="text-slate-400 text-[10px]">Fee: ৳{o.deliveryFee ?? 60}</span>
                       </div>
-                      <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                      <div className="p-2 rounded-lg bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10">
                         <span className="text-slate-500 text-[10px] uppercase font-semibold block">Invoice Code</span>
                         <span className="font-mono font-semibold text-indigo-300 block mt-0.5">
                           {o.memoCode || 'MEMO-DEFAULT'}
@@ -516,9 +516,9 @@ export function MerchantOrdersTab({
         </div>
 
         {/* Desktop Orders Data Table (hidden md:block) */}
-        <div className="hidden md:block overflow-x-auto rounded-lg border border-slate-800">
+        <div className="hidden md:block overflow-x-auto rounded-lg border border-slate-200 dark:border-white/10">
           <table className="w-full min-w-[840px] text-left text-xs">
-            <thead className="bg-slate-950/70 text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-200 dark:border-white/10">
+            <thead className="bg-slate-50 dark:bg-navy-950/70 text-slate-600 dark:text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-200 dark:border-white/10">
               <tr>
                 <th className="py-3.5 px-4">Order</th>
                 <th className="py-3.5 px-4">Customer</th>
@@ -547,7 +547,7 @@ export function MerchantOrdersTab({
                     {/* ORDER ID & Items */}
                     <td className="py-3.5 px-4">
                       <div className="flex items-center gap-2.5">
-                        <div className="p-1.5 bg-slate-800 rounded text-slate-400 group-hover:text-emerald-400 group-hover:bg-slate-700/80 transition-colors">
+                        <div className="p-1.5 bg-slate-100 dark:bg-navy-800 rounded text-slate-500 dark:text-slate-400 group-hover:text-emerald-400 group-hover:bg-slate-700/80 transition-colors">
                           <Package className="h-3.5 w-3.5" />
                         </div>
                         <div>
@@ -568,7 +568,7 @@ export function MerchantOrdersTab({
                     </td>
 
                     {/* DATE */}
-                    <td className="py-3.5 px-4 text-slate-300 font-medium">{o.date}</td>
+                    <td className="py-3.5 px-4 text-slate-700 dark:text-slate-300 font-medium">{o.date}</td>
 
                     {/* AMOUNT */}
                     <td className="py-3.5 px-4">
@@ -643,13 +643,13 @@ export function MerchantOrdersTab({
             <button
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage === 1}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:hover:bg-slate-800 text-slate-300 rounded-lg font-medium transition-colors cursor-pointer"
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-medium transition-colors cursor-pointer"
             >
               &lt; Previous
             </button>
 
             {/* Mobile simplified page indicator */}
-            <span className="sm:hidden px-2 py-1 text-slate-300 font-semibold text-xs">
+            <span className="sm:hidden px-2 py-1 text-slate-700 dark:text-slate-300 font-semibold text-xs">
               {currentPage} / {totalPages}
             </span>
 
@@ -662,7 +662,7 @@ export function MerchantOrdersTab({
                   className={`h-7 w-7 rounded-lg font-semibold flex items-center justify-center transition-colors cursor-pointer ${
                     currentPage === page
                       ? 'bg-slate-100 text-slate-950 font-bold'
-                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-700 dark:text-slate-300'
                   }`}
                 >
                   {page}
@@ -673,7 +673,7 @@ export function MerchantOrdersTab({
             <button
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:hover:bg-slate-800 text-slate-300 rounded-lg font-medium transition-colors cursor-pointer"
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-medium transition-colors cursor-pointer"
             >
               Next &gt;
             </button>

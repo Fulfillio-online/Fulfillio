@@ -72,18 +72,18 @@ export function PayoutHistorySection({
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
       {/* Left: Payout history & requests */}
-      <div className="lg:col-span-8 rounded-2xl bg-slate-900 border border-slate-800 p-5 sm:p-6 shadow-sm space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+      <div className="lg:col-span-8 rounded-2xl bg-white dark:bg-navy-900 border border-slate-200/80 dark:border-white/10 p-5 sm:p-6 shadow-sm space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-white/10 pb-3">
           <div>
-            <h3 className="font-bold text-sm text-slate-100 flex items-center gap-2">
+            <h3 className="font-bold text-sm text-navy-900 dark:text-white flex items-center gap-2">
               <CreditCard className="h-4 w-4 text-emerald-400" />
               <span>Payout history & requests</span>
             </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               Recent payouts, ongoing clearing, and pending admin approvals.
             </p>
           </div>
-          <span className="text-xs text-slate-400 font-mono">
+          <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
             {payoutRequests.length} record(s)
           </span>
         </div>
@@ -97,22 +97,22 @@ export function PayoutHistorySection({
             payoutRequests.map((req) => (
               <div
                 key={req.id}
-                className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80 hover:border-slate-700 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                className="p-3.5 rounded-xl bg-slate-50 dark:bg-navy-950/60 border border-slate-200/80 dark:border-white/10/80 hover:border-slate-200 dark:border-white/10 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3"
               >
                 <div className="flex items-start sm:items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0">
+                  <div className="w-9 h-9 rounded-xl bg-white dark:bg-navy-900 border border-slate-200/80 dark:border-white/10 flex items-center justify-center shrink-0">
                     {getMethodIcon(req.method)}
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-slate-100">
+                      <span className="text-sm font-bold text-navy-900 dark:text-white">
                         ৳ {req.amount.toLocaleString()}
                       </span>
-                      <span className="font-mono text-[10px] text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
+                      <span className="font-mono text-[10px] text-slate-500 bg-white dark:bg-navy-900 px-1.5 py-0.5 rounded border border-slate-200/80 dark:border-white/10">
                         {req.id}
                       </span>
                     </div>
-                    <div className="text-[11px] text-slate-400 mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                       <span>{req.accountDetails?.provider || req.method}</span>
                       <span className="font-mono text-slate-500">
                         ({req.accountDetails?.accountNumber})
@@ -144,40 +144,40 @@ export function PayoutHistorySection({
       </div>
 
       {/* Right: Payout schedule card */}
-      <div className="lg:col-span-4 rounded-2xl bg-slate-900 border border-slate-800 p-5 sm:p-6 shadow-sm flex flex-col justify-between">
+      <div className="lg:col-span-4 rounded-2xl bg-white dark:bg-navy-900 border border-slate-200/80 dark:border-white/10 p-5 sm:p-6 shadow-sm flex flex-col justify-between">
         <div className="space-y-4">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
               <Calendar className="w-4 h-4" />
             </div>
             <div>
-              <h4 className="font-bold text-sm text-slate-100">Payout schedule</h4>
-              <p className="text-[11px] text-slate-400">Your earnings are paid automatically.</p>
+              <h4 className="font-bold text-sm text-navy-900 dark:text-white">Payout schedule</h4>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">Your earnings are paid automatically.</p>
             </div>
           </div>
 
-          <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 space-y-2">
+          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-navy-950/70 border border-slate-200/80 dark:border-white/10 space-y-2">
             <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block">
               Next scheduled payout
             </span>
-            <div className="text-base font-extrabold text-slate-100">October 22, 2026</div>
+            <div className="text-base font-extrabold text-navy-900 dark:text-white">October 22, 2026</div>
             <span className="text-[11px] text-emerald-400 font-medium block">
               Direct to verified account
             </span>
           </div>
 
-          <div className="space-y-2 text-xs border-t border-slate-800 pt-3">
-            <div className="flex justify-between text-slate-400">
+          <div className="space-y-2 text-xs border-t border-slate-200/80 dark:border-white/10 pt-3">
+            <div className="flex justify-between text-slate-500 dark:text-slate-400">
               <span>Frequency:</span>
-              <span className="font-semibold text-slate-200">Weekly</span>
+              <span className="font-semibold text-navy-900 dark:text-slate-200">Weekly</span>
             </div>
-            <div className="flex justify-between text-slate-400">
+            <div className="flex justify-between text-slate-500 dark:text-slate-400">
               <span>Minimum payout:</span>
-              <span className="font-semibold text-slate-200">৳ 1,000</span>
+              <span className="font-semibold text-navy-900 dark:text-slate-200">৳ 1,000</span>
             </div>
-            <div className="flex justify-between text-slate-400">
+            <div className="flex justify-between text-slate-500 dark:text-slate-400">
               <span>Hold period:</span>
-              <span className="font-semibold text-slate-200">3-5 days</span>
+              <span className="font-semibold text-navy-900 dark:text-slate-200">3-5 days</span>
             </div>
           </div>
         </div>
@@ -185,7 +185,7 @@ export function PayoutHistorySection({
         <button
           type="button"
           onClick={onManageAccount}
-          className="mt-4 pt-3 border-t border-slate-800 text-xs font-semibold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 transition-colors group cursor-pointer"
+          className="mt-4 pt-3 border-t border-slate-200/80 dark:border-white/10 text-xs font-semibold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 transition-colors group cursor-pointer"
         >
           <span>Manage payout settings</span>
           <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />

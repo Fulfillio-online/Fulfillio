@@ -76,11 +76,11 @@ export function MerchantProfileTab({
     <div className="space-y-6 max-w-7xl mx-auto pb-10">
       {/* Tab Page Header */}
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-100 flex items-center gap-2">
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-navy-900 dark:text-white flex items-center gap-2">
           <User className="h-6 w-6 text-emerald-400 shrink-0" />
           <span>My Store Profile &amp; Merchant Identity</span>
         </h1>
-        <p className="text-xs sm:text-sm text-slate-400 mt-1">
+        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
           Manage your verified store branding, COD disbursement account, compliance documents, and connected channels.
         </p>
       </div>
