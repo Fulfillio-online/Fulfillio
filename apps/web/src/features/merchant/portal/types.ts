@@ -69,10 +69,14 @@ export interface ResellerMemo {
   address: string;
   note: string;
   accentColor?: string;
+  color?: string;
   logoUrl?: string;
   paperSize: string;
   isDefault: boolean;
   created: string;
+  merchantCode?: string;
+  merchantName?: string;
+  sampleItems?: { name: string; qty: number; price: string }[];
 }
 
 export interface OrderLineItem {
@@ -146,9 +150,17 @@ export interface MerchantProductItem {
   minPrice?: number;
   maxPrice?: number;
   keyFeatures?: string[];
-  colors?: { id: string; name: string; hex: string; imageUrl?: string }[];
+  colors?: { id: string; name: string; hex: string; imageUrl?: string; sizes?: string[] }[];
   sizes?: string[];
-  variantsList?: { id: string; variantSku: string; color?: string; size?: string; stock: number }[];
+  variantsList?: {
+    id: string;
+    variantSku: string;
+    color?: string;
+    size?: string;
+    attributeName?: string;
+    attributeValue?: string;
+    stock: number;
+  }[];
   imageUrl?: string;
   status?: 'PUBLISHED' | 'DRAFT' | 'ARCHIVED';
   totalOrders?: number;

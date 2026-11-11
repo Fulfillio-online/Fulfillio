@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import {
   X,
@@ -19,8 +19,11 @@ import {
   MapPin,
   User,
   Layers,
+  Palette,
+  Check,
 } from 'lucide-react';
 import { MerchantOrderItem, MerchantProductItem, ResellerMemo, OrderLineItem } from '../../types';
+import { ProductThumbnail } from '../../products/components/ProductThumbnail';
 
 interface OrderLineItemDraft {
   rowId: string;
@@ -32,6 +35,9 @@ interface OrderLineItemDraft {
   qty: number;
   maxStock: number;
   imageUrl?: string;
+  selectedColor?: string;
+  selectedSize?: string;
+  selectedVariantId?: string;
 }
 
 interface CreateManualOrderModalProps {
@@ -41,10 +47,150 @@ interface CreateManualOrderModalProps {
   memoList: ResellerMemo[];
   onCreateOrder: (
     order: MerchantOrderItem,
-    productIdOrItems?: string | { productId: string; qty: number }[],
+    productIdOrItems?: string | { productId: string; qty: number; variantSku?: string }[],
     qty?: number
   ) => void;
   onTriggerToast: (msg: string) => void;
+}
+
+export function getAttributeLabel(productType?: string): string {
+  if (productType === 'FASHION') return 'Size';
+  if (productType === 'ELECTRONICS') return 'Storage / Spec';
+  if (productType === 'BEAUTY') return 'Volume / Shade';
+  if (productType === 'GROCERY') return 'Pack Size';
+  return 'Variant / Size';
+}
+
+export function getAvailableSizesForColor(
+  p: MerchantProductItem,
+  selectedColorName?: string
+): string[] {
+  // 1. If color has explicit sizes
+  if (selectedColorName && p.colors && p.colors.length > 0) {
+    const colorObj = p.colors.find((c) => c.name === selectedColorName);
+    if (colorObj?.sizes && colorObj.sizes.length > 0) {
+      return colorObj.sizes;
+    }
+  }
+
+  // 2. If variantsList has matching entries for this color
+  if (p.variantsList && p.variantsList.length > 0) {
+    const matching = selectedColorName
+      ? p.variantsList.filter((v) => !v.color || v.color === selectedColorName)
+      : p.variantsList;
+    const sizes = matching
+      .map((v) => v.size || v.attributeValue)
+      .filter((s): s is string => Boolean(s));
+    if (sizes.length > 0) {
+      return Array.from(new Set(sizes));
+    }
+  }
+
+  // 3. Fallback to product sizes
+  if (p.sizes && p.sizes.length > 0) {
+    return p.sizes;
+  }
+
+  return [];
+}
+
+export function getOptionStock(
+  p: MerchantProductItem,
+  colorName?: string,
+  sizeOrAttr?: string
+): number {
+  if (!p.variantsList || p.variantsList.length === 0) {
+    return p.stock || 0;
+  }
+  const match = p.variantsList.find((v) => {
+    const colorMatches = !colorName || !v.color || v.color === colorName;
+    const sizeMatches =
+      !sizeOrAttr ||
+      v.size === sizeOrAttr ||
+      v.attributeValue === sizeOrAttr;
+    return colorMatches && sizeMatches;
+  });
+  return match ? match.stock : p.stock || 0;
+}
+
+export function resolveVariantConfig(
+  p: MerchantProductItem,
+  colorName?: string,
+  sizeOrAttr?: string
+): {
+  sku: string;
+  variantLabel: string;
+  maxStock: number;
+  imageUrl?: string;
+  selectedColor?: string;
+  selectedSize?: string;
+  selectedVariantId?: string;
+} {
+  const hasColors = Boolean(p.colors && p.colors.length > 0);
+  const resolvedColor = hasColors
+    ? colorName || p.colors![0]?.name
+    : undefined;
+
+  const colorObj = hasColors && resolvedColor
+    ? p.colors!.find((c) => c.name === resolvedColor)
+    : undefined;
+  const resolvedImage = colorObj?.imageUrl || p.imageUrl;
+
+  const availableSizes = getAvailableSizesForColor(p, resolvedColor);
+  let resolvedSize: string | undefined = undefined;
+  if (availableSizes.length > 0) {
+    if (sizeOrAttr && availableSizes.includes(sizeOrAttr) && getOptionStock(p, resolvedColor, sizeOrAttr) > 0) {
+      resolvedSize = sizeOrAttr;
+    } else {
+      const inStockSize = availableSizes.find((sz) => getOptionStock(p, resolvedColor, sz) > 0);
+      resolvedSize = inStockSize || (sizeOrAttr && availableSizes.includes(sizeOrAttr) ? sizeOrAttr : availableSizes[0]);
+    }
+  }
+
+  // Find in variantsList
+  let matchedVariant = p.variantsList?.find((v) => {
+    const colorMatches = !resolvedColor || !v.color || v.color === resolvedColor;
+    const sizeMatches =
+      !resolvedSize ||
+      v.size === resolvedSize ||
+      v.attributeValue === resolvedSize;
+    return colorMatches && sizeMatches;
+  });
+
+  if (!matchedVariant && resolvedColor && p.variantsList) {
+    matchedVariant = p.variantsList.find((v) => v.color === resolvedColor);
+  }
+
+  if (matchedVariant) {
+    const labelParts = [
+      matchedVariant.color,
+      matchedVariant.size || matchedVariant.attributeValue,
+    ].filter(Boolean);
+    const label =
+      labelParts.length > 0 ? labelParts.join(' / ') : p.variantLabel || 'Standard';
+    return {
+      sku: matchedVariant.variantSku,
+      variantLabel: label,
+      maxStock: matchedVariant.stock,
+      imageUrl: resolvedImage,
+      selectedColor: resolvedColor,
+      selectedSize: resolvedSize,
+      selectedVariantId: matchedVariant.id,
+    };
+  }
+
+  // Fallback if no specific variantsList item
+  const labelParts = [resolvedColor, resolvedSize].filter(Boolean);
+  const label =
+    labelParts.length > 0 ? labelParts.join(' / ') : p.variantLabel || 'Standard';
+  return {
+    sku: p.sku,
+    variantLabel: label,
+    maxStock: p.stock || 0,
+    imageUrl: resolvedImage,
+    selectedColor: resolvedColor,
+    selectedSize: resolvedSize,
+  };
 }
 
 export function CreateManualOrderModal({
@@ -68,22 +214,72 @@ export function CreateManualOrderModal({
   // 2. Multi-Product Line Items
   const [items, setItems] = useState<OrderLineItemDraft[]>(() => {
     const p = products[0];
-    return p
-      ? [
-          {
-            rowId: `row-${Date.now()}-1`,
-            productId: p.id,
-            title: p.title,
-            variantLabel: p.variantLabel || 'Standard',
-            sku: p.sku,
-            unitPrice: p.price || 0,
-            qty: 1,
-            maxStock: p.stock || 0,
-            imageUrl: p.imageUrl,
-          },
-        ]
-      : [];
+    if (!p) return [];
+    const cfg = resolveVariantConfig(p);
+    return [
+      {
+        rowId: `row-${Date.now()}-1`,
+        productId: p.id,
+        title: p.title,
+        variantLabel: cfg.variantLabel,
+        sku: cfg.sku,
+        unitPrice: p.price || 0,
+        qty: cfg.maxStock > 0 ? 1 : 0,
+        maxStock: cfg.maxStock,
+        imageUrl: cfg.imageUrl,
+        selectedColor: cfg.selectedColor,
+        selectedSize: cfg.selectedSize,
+        selectedVariantId: cfg.selectedVariantId,
+      },
+    ];
   });
+
+  // Re-sync line items when modal opens or products data is updated
+  useEffect(() => {
+    if (isOpen) {
+      setItems((prev) => {
+        if (prev.length === 0) {
+          const p = products[0];
+          if (!p) return [];
+          const cfg = resolveVariantConfig(p);
+          return [
+            {
+              rowId: `row-${Date.now()}-1`,
+              productId: p.id,
+              title: p.title,
+              variantLabel: cfg.variantLabel,
+              sku: cfg.sku,
+              unitPrice: p.price || 0,
+              qty: cfg.maxStock > 0 ? 1 : 0,
+              maxStock: cfg.maxStock,
+              imageUrl: cfg.imageUrl,
+              selectedColor: cfg.selectedColor,
+              selectedSize: cfg.selectedSize,
+              selectedVariantId: cfg.selectedVariantId,
+            },
+          ];
+        }
+        return prev.map((item) => {
+          const p = products.find((prod) => prod.id === item.productId);
+          if (!p) return item;
+          const cfg = resolveVariantConfig(p, item.selectedColor, item.selectedSize);
+          const nextMaxStock = cfg.maxStock;
+          const nextQty = nextMaxStock <= 0 ? 0 : Math.min(item.qty > 0 ? item.qty : 1, nextMaxStock);
+          return {
+            ...item,
+            variantLabel: cfg.variantLabel,
+            sku: cfg.sku,
+            maxStock: nextMaxStock,
+            qty: nextQty,
+            imageUrl: cfg.imageUrl || item.imageUrl,
+            selectedColor: cfg.selectedColor,
+            selectedSize: cfg.selectedSize,
+            selectedVariantId: cfg.selectedVariantId,
+          };
+        });
+      });
+    }
+  }, [isOpen, products]);
 
   // 3. Pricing Adjustments: Delivery, Discount, Advance
   const [deliveryArea, setDeliveryArea] = useState<'INSIDE_DHAKA' | 'SUB_DHAKA' | 'OUTSIDE_DHAKA' | 'FREE' | 'CUSTOM'>('INSIDE_DHAKA');
@@ -130,16 +326,20 @@ export function CreateManualOrderModal({
       onTriggerToast('No more products available to add.');
       return;
     }
+    const cfg = resolveVariantConfig(available);
     const newItem: OrderLineItemDraft = {
       rowId: `row-${Date.now()}-${items.length + 1}`,
       productId: available.id,
       title: available.title,
-      variantLabel: available.variantLabel || 'Standard',
-      sku: available.sku,
+      variantLabel: cfg.variantLabel,
+      sku: cfg.sku,
       unitPrice: available.price || 0,
-      qty: 1,
-      maxStock: available.stock || 0,
-      imageUrl: available.imageUrl,
+      qty: cfg.maxStock > 0 ? 1 : 0,
+      maxStock: cfg.maxStock,
+      imageUrl: cfg.imageUrl,
+      selectedColor: cfg.selectedColor,
+      selectedSize: cfg.selectedSize,
+      selectedVariantId: cfg.selectedVariantId,
     };
     setItems((prev) => [...prev, newItem]);
   };
@@ -155,6 +355,8 @@ export function CreateManualOrderModal({
   const handleProductChange = (rowId: string, newProductId: string) => {
     const p = products.find((prod) => prod.id === newProductId);
     if (!p) return;
+    const cfg = resolveVariantConfig(p);
+    const nextQty = cfg.maxStock > 0 ? 1 : 0;
     setItems((prev) =>
       prev.map((it) =>
         it.rowId === rowId
@@ -162,14 +364,63 @@ export function CreateManualOrderModal({
               ...it,
               productId: p.id,
               title: p.title,
-              variantLabel: p.variantLabel || 'Standard',
-              sku: p.sku,
+              variantLabel: cfg.variantLabel,
+              sku: cfg.sku,
               unitPrice: p.price || 0,
-              maxStock: p.stock || 0,
-              imageUrl: p.imageUrl,
+              qty: nextQty,
+              maxStock: cfg.maxStock,
+              imageUrl: cfg.imageUrl,
+              selectedColor: cfg.selectedColor,
+              selectedSize: cfg.selectedSize,
+              selectedVariantId: cfg.selectedVariantId,
             }
           : it
       )
+    );
+  };
+
+  const handleColorChange = (rowId: string, newColorName: string) => {
+    setItems((prev) =>
+      prev.map((it) => {
+        if (it.rowId !== rowId) return it;
+        const p = products.find((prod) => prod.id === it.productId);
+        if (!p) return it;
+        const cfg = resolveVariantConfig(p, newColorName, it.selectedSize);
+        const nextQty = cfg.maxStock <= 0 ? 0 : Math.min(cfg.maxStock, Math.max(1, it.qty));
+        return {
+          ...it,
+          variantLabel: cfg.variantLabel,
+          sku: cfg.sku,
+          maxStock: cfg.maxStock,
+          qty: nextQty,
+          imageUrl: cfg.imageUrl,
+          selectedColor: cfg.selectedColor,
+          selectedSize: cfg.selectedSize,
+          selectedVariantId: cfg.selectedVariantId,
+        };
+      })
+    );
+  };
+
+  const handleSizeChange = (rowId: string, newSize: string) => {
+    setItems((prev) =>
+      prev.map((it) => {
+        if (it.rowId !== rowId) return it;
+        const p = products.find((prod) => prod.id === it.productId);
+        if (!p) return it;
+        const cfg = resolveVariantConfig(p, it.selectedColor, newSize);
+        const nextQty = cfg.maxStock <= 0 ? 0 : Math.min(cfg.maxStock, Math.max(1, it.qty));
+        return {
+          ...it,
+          variantLabel: cfg.variantLabel,
+          sku: cfg.sku,
+          maxStock: cfg.maxStock,
+          qty: nextQty,
+          imageUrl: cfg.imageUrl,
+          selectedSize: cfg.selectedSize,
+          selectedVariantId: cfg.selectedVariantId,
+        };
+      })
     );
   };
 
@@ -183,9 +434,14 @@ export function CreateManualOrderModal({
 
   const handleQtyChange = (rowId: string, newQty: number) => {
     setItems((prev) =>
-      prev.map((it) =>
-        it.rowId === rowId ? { ...it, qty: Math.max(1, newQty) } : it
-      )
+      prev.map((it) => {
+        if (it.rowId !== rowId) return it;
+        if (it.maxStock <= 0) {
+          return { ...it, qty: 0 };
+        }
+        const clamped = Math.min(it.maxStock, Math.max(1, newQty));
+        return { ...it, qty: clamped };
+      })
     );
   };
 
@@ -212,9 +468,15 @@ export function CreateManualOrderModal({
 
     // Stock validation
     for (const item of items) {
+      if (item.maxStock <= 0 || item.qty <= 0) {
+        onTriggerToast(
+          `"${item.title} (${item.variantLabel})" এর কোনো স্টক নেই! অনুগ্রহ করে অন্য কালার/সাইজ নির্বাচন করুন।`
+        );
+        return;
+      }
       if (item.qty > item.maxStock) {
         onTriggerToast(
-          `Insufficient stock for "${item.title}". Requested: ${item.qty}, Available: ${item.maxStock}`
+          `"${item.title} (${item.variantLabel})" এর পর্যাপ্ত স্টক নেই! আপনি চেয়েছেন: ${item.qty} টি, কিন্তু ওয়্যারহাউসে আছে: ${item.maxStock} টি।`
         );
         return;
       }
@@ -285,10 +547,11 @@ export function CreateManualOrderModal({
       ],
     };
 
-    // Deduct stock for all items
+    // Deduct stock for all items (including variant-level stock)
     const itemsToDeduct = items.map((it) => ({
       productId: it.productId,
       qty: it.qty,
+      variantSku: it.sku,
     }));
 
     onCreateOrder(newOrder, itemsToDeduct);
@@ -435,35 +698,125 @@ export function CreateManualOrderModal({
 
             <div className="space-y-3">
               {items.map((item, index) => {
-                const isOutOfStock = item.qty > item.maxStock;
+                const p = products.find((prod) => prod.id === item.productId);
+                const hasColors = Boolean(p && p.colors && p.colors.length > 0);
+                const availableSizes = p ? getAvailableSizesForColor(p, item.selectedColor) : [];
+                const hasSizes = availableSizes.length > 0;
+                const hasVariants = Boolean(p && p.variantsList && p.variantsList.length > 0);
+                const isOutOfStock = item.maxStock === 0 || item.qty > item.maxStock;
+
                 return (
                   <div
                     key={item.rowId}
-                    className={`p-3 sm:p-4 rounded-xl bg-slate-900 border transition-all ${
+                    className={`p-3 sm:p-4 rounded-xl bg-slate-900 border transition-all space-y-3 ${
                       isOutOfStock ? 'border-rose-500/60 bg-rose-950/10' : 'border-slate-800'
                     }`}
                   >
-                    <div className="flex flex-col lg:flex-row lg:items-center gap-3">
-                      {/* Product Selector */}
-                      <div className="flex-1 min-w-0">
-                        <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                          Product #{index + 1}
-                        </label>
-                        <select
-                          value={item.productId}
-                          onChange={(e) => handleProductChange(item.rowId, e.target.value)}
-                          className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
-                        >
-                          {products.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.title} ({p.variantLabel || 'Std'}) — SKU: {p.sku} | Stock: {p.stock} pcs (৳{p.price})
-                            </option>
-                          ))}
-                        </select>
+                    {/* Top Row: Full-width Product Selector & Delete button */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                        <ProductThumbnail src={item.imageUrl} alt={item.title} size="sm" />
+                        <div className="flex-1 min-w-0">
+                          <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                            Product #{index + 1}
+                          </label>
+                          <select
+                            value={item.productId}
+                            onChange={(e) => handleProductChange(item.rowId, e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                          >
+                            {products.map((prod) => (
+                              <option key={prod.id} value={prod.id}>
+                                {prod.title} — Base Stock: {prod.stock} pcs (৳{prod.price})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
 
-                      {/* Unit Price */}
-                      <div className="w-full lg:w-32">
+                      {items.length > 1 && (
+                        <div className="pt-5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItem(item.rowId)}
+                            className="p-2 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition-colors cursor-pointer"
+                            title="Remove this product"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Middle Row: Responsive Grid for Color Dropdown, Size/Spec Dropdown, Unit Price, and Quantity */}
+                    <div
+                      className={`grid gap-3 pt-3 border-t border-slate-800/80 items-end ${
+                        hasColors && hasSizes
+                          ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4'
+                          : hasColors || hasSizes
+                          ? 'grid-cols-1 sm:grid-cols-3'
+                          : 'grid-cols-1 sm:grid-cols-2'
+                      }`}
+                    >
+                      {/* Color Dropdown */}
+                      {hasColors && p && (
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-400 mb-1 flex items-center justify-between">
+                            <span className="flex items-center gap-1.5">
+                              <Palette className="h-3.5 w-3.5 text-emerald-400" />
+                              Color
+                            </span>
+                            {(() => {
+                              const activeColor = p.colors?.find((c) => c.name === item.selectedColor);
+                              return activeColor ? (
+                                <span
+                                  className="inline-block w-2.5 h-2.5 rounded-full border border-white/30"
+                                  style={{ backgroundColor: activeColor.hex }}
+                                  title={activeColor.name}
+                                />
+                              ) : null;
+                            })()}
+                          </label>
+                          <select
+                            value={item.selectedColor || ''}
+                            onChange={(e) => handleColorChange(item.rowId, e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                          >
+                            {p.colors!.map((c) => (
+                              <option key={c.id || c.name} value={c.name}>
+                                {c.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Size / Specification Dropdown */}
+                      {hasSizes && p && (
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                            {getAttributeLabel(p.productType)}
+                          </label>
+                          <select
+                            value={item.selectedSize || ''}
+                            onChange={(e) => handleSizeChange(item.rowId, e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                          >
+                            {availableSizes.map((sizeName) => {
+                              const stockForOption = getOptionStock(p, item.selectedColor, sizeName);
+                              const isZeroStock = stockForOption <= 0;
+                              return (
+                                <option key={sizeName} value={sizeName} disabled={isZeroStock}>
+                                  {sizeName} {isZeroStock ? '(Out of Stock — 0 pcs)' : `(${stockForOption} in stock)`}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Unit Price (৳) */}
+                      <div>
                         <label className="block text-[11px] font-semibold text-slate-400 mb-1">
                           Unit Price (৳)
                         </label>
@@ -479,67 +832,81 @@ export function CreateManualOrderModal({
                       </div>
 
                       {/* Quantity with +/- */}
-                      <div className="w-full lg:w-36">
+                      <div>
                         <label className="block text-[11px] font-semibold text-slate-400 mb-1">
                           Qty (Stock: {item.maxStock})
                         </label>
                         <div className="flex items-center">
                           <button
                             type="button"
+                            disabled={item.qty <= 1 || item.maxStock <= 0}
                             onClick={() => handleQtyChange(item.rowId, item.qty - 1)}
-                            className="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-l-lg text-xs font-bold border border-slate-700"
+                            className="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-300 rounded-l-lg text-xs font-bold border border-slate-700 cursor-pointer"
                           >
                             -
                           </button>
                           <input
                             type="number"
-                            min="1"
-                            max={item.maxStock || 999}
+                            min={item.maxStock > 0 ? 1 : 0}
+                            max={item.maxStock}
+                            disabled={item.maxStock <= 0}
                             value={item.qty}
                             onChange={(e) =>
-                              handleQtyChange(item.rowId, Number(e.target.value) || 1)
+                              handleQtyChange(item.rowId, Number(e.target.value) || 0)
                             }
-                            className="w-full py-2 bg-slate-950 border-y border-slate-800 text-xs font-bold text-center text-slate-200 focus:outline-none"
+                            className="w-full py-2 bg-slate-950 border-y border-slate-800 text-xs font-bold text-center text-slate-200 focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
                           />
                           <button
                             type="button"
+                            disabled={item.qty >= item.maxStock || item.maxStock <= 0}
                             onClick={() => handleQtyChange(item.rowId, item.qty + 1)}
-                            className="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-r-lg text-xs font-bold border border-slate-700"
+                            className="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-300 rounded-r-lg text-xs font-bold border border-slate-700 cursor-pointer"
                           >
                             +
                           </button>
                         </div>
                       </div>
-
-                      {/* Line Subtotal */}
-                      <div className="w-full lg:w-32 text-right">
-                        <span className="block text-[11px] font-semibold text-slate-400 mb-1">
-                          Line Total
-                        </span>
-                        <div className="py-2 px-1 text-sm font-bold text-emerald-400 font-mono">
-                          ৳{(item.unitPrice * item.qty).toLocaleString()}
-                        </div>
-                      </div>
-
-                      {/* Delete Item */}
-                      {items.length > 1 && (
-                        <div className="lg:pt-5 flex justify-end">
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveItem(item.rowId)}
-                            className="p-2 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition-colors"
-                            title="Remove this product"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      )}
                     </div>
 
+                    {/* Bottom Row: Variant Pill, SKU, Stock Status & Line Total */}
+                    <div className="pt-2.5 border-t border-slate-800/60 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+                      <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                        <span className="px-2 py-0.5 rounded bg-slate-950 text-slate-300 font-mono border border-slate-800">
+                          SKU: <strong className="text-white">{item.sku}</strong>
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800">
+                          Variant: <strong className="text-slate-200">{item.variantLabel}</strong>
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded font-mono border font-semibold ${
+                            item.maxStock === 0
+                              ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                              : item.maxStock < 5
+                              ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                              : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                          }`}
+                        >
+                          {item.maxStock === 0 ? 'Out of Stock' : `${item.maxStock} in stock`}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 ml-auto">
+                        <span className="text-[11px] text-slate-400">Total:</span>
+                        <span className="font-bold text-emerald-400 font-mono text-sm">
+                          ৳{(item.unitPrice * item.qty).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Out of Stock Alert */}
                     {isOutOfStock && (
-                      <div className="flex items-center gap-1.5 mt-2 text-[11px] text-rose-400 font-medium">
-                        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                        <span>Insufficient warehouse stock! Available: {item.maxStock} units</span>
+<div className="flex items-center gap-1.5 mt-2.5 p-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400 font-medium">
+                        <AlertCircle className="h-4 w-4 shrink-0" />
+                        <span>
+                          {item.maxStock === 0
+                            ? `এই ভ্যারিয়েন্টের কোনো স্টক নেই! ("${item.title} - ${item.variantLabel}")`
+                            : `ওয়্যারহাউস স্টকে পর্যাপ্ত প্রোডাক্ট নেই! মোট উপলব্ধ স্টক: ${item.maxStock} টি (আপনি চেয়েছেন: ${item.qty} টি)`}
+                        </span>
                       </div>
                     )}
                   </div>

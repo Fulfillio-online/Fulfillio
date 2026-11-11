@@ -47,6 +47,9 @@ export function ProductGrid({
           p.profitMargin ??
           (p.price > 0 ? Math.round((profit / p.price) * 100) : 50);
         const isPublished = p.status === 'PUBLISHED' || (!p.status && p.stock > 0);
+        const isPendingApproval =
+          !isPublished &&
+          (!p.bin || p.bin === 'Pending Approval' || p.bin === 'Assigned on intake');
         const isLowStock = p.stock <= 30 && p.stock > 0;
         const isOutOfStock = p.stock === 0;
 
@@ -64,13 +67,23 @@ export function ProductGrid({
                 className="w-full h-full relative cursor-pointer block"
               >
                 {p.imageUrl ? (
-                  <Image
-                    src={p.imageUrl}
-                    alt={p.title}
-                    fill
-                    sizes="(max-width: 768px) 100vw, 300px"
-                    className="object-cover"
-                  />
+                  p.imageUrl.startsWith('data:') ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={p.imageUrl}
+                      alt={p.title}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <Image
+                      src={p.imageUrl}
+                      alt={p.title}
+                      fill
+                      unoptimized={true}
+                      sizes="(max-width: 768px) 100vw, 300px"
+                      className="object-cover"
+                    />
+                  )
                 ) : (
                   <div className="h-full w-full flex items-center justify-center">
                     <Package className="h-10 w-10 text-slate-700" />
@@ -95,10 +108,12 @@ export function ProductGrid({
                   className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border backdrop-blur shadow-sm ${
                     isPublished
                       ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                      : isPendingApproval
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
                       : 'bg-slate-800/80 text-slate-300 border-slate-700'
                   }`}
                 >
-                  {isPublished ? 'Published' : 'Draft'}
+                  {isPublished ? 'Published' : isPendingApproval ? 'Pending Approval' : 'Draft'}
                 </span>
               </div>
 
@@ -180,6 +195,8 @@ export function ProductGrid({
                   className={`text-xs font-semibold px-2 py-1.5 rounded-lg border transition-all flex items-center gap-1 cursor-pointer flex-1 justify-center ${
                     isPublished
                       ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                      : isPendingApproval
+                      ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/30'
                       : 'bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border-emerald-500/40'
                   }`}
                 >
@@ -187,6 +204,11 @@ export function ProductGrid({
                     <>
                       <FileText className="h-3 w-3" />
                       <span>Draft</span>
+                    </>
+                  ) : isPendingApproval ? (
+                    <>
+                      <FileText className="h-3 w-3 text-amber-400" />
+                      <span>Pending</span>
                     </>
                   ) : (
                     <>

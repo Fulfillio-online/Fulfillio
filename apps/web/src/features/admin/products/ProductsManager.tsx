@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { Package, CheckCircle2, Plus, MapPin, ShieldCheck } from 'lucide-react';
 import {
   InboundStockReplenishment,
@@ -34,6 +35,10 @@ import { StockAdjustModal } from './components/modals/StockAdjustModal';
 import { ApprovalActionModal } from './components/modals/ApprovalActionModal';
 import { AddProductModal } from './components/modals/AddProductModal';
 import { CreateBinModal } from './components/modals/CreateBinModal';
+import {
+  reconcileAdminProductsWithMerchant,
+  syncAdminProductsToMerchant,
+} from '@/lib/warehouseSync';
 
 export interface ProductsManagerProps {
   activeTab?: WarehouseProductSubTab;
@@ -82,10 +87,11 @@ export function ProductsManager({
     const loadFromStorage = () => {
       try {
         const savedProds = localStorage.getItem(STORAGE_KEY_PRODUCTS);
+        let baseProds = INITIAL_PRODUCTS;
         if (savedProds) {
           const parsed = JSON.parse(savedProds);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            const healed = parsed.map((p: any) => {
+const healed = parsed.map((p: any) => {
               const init = INITIAL_PRODUCTS.find((ip) => ip.id === p.id || ip.fullSku === p.fullSku);
               const cleanedBin = cleanBinCode(p.binCode) || (init ? cleanBinCode(init.binCode) : 'A-01-02');
               const safeStock = typeof p.stock === 'number' && !isNaN(p.stock) ? p.stock : (init?.stock ?? 100);
@@ -97,15 +103,13 @@ export function ProductsManager({
                 status: safeStatus === 'REJECTED' ? 'REJECTED' : 'APPROVED',
               };
             });
-            setProducts(healed);
-            localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(healed));
-          } else {
-            setProducts(INITIAL_PRODUCTS);
-            localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(INITIAL_PRODUCTS));
+            baseProds = healed;
           }
         } else {
           localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(INITIAL_PRODUCTS));
         }
+        const reconciled = reconcileAdminProductsWithMerchant(baseProds);
+        setProducts(reconciled);
 
         const savedBins = localStorage.getItem(STORAGE_KEY_BINS);
         if (savedBins) {
@@ -182,13 +186,18 @@ export function ProductsManager({
     };
 
     window.addEventListener('fulfillio-warehouse-sync', handleWarehouseSync);
-    return () => window.removeEventListener('fulfillio-warehouse-sync', handleWarehouseSync);
+    window.addEventListener('storage', handleWarehouseSync);
+    return () => {
+      window.removeEventListener('fulfillio-warehouse-sync', handleWarehouseSync);
+      window.removeEventListener('storage', handleWarehouseSync);
+    };
   }, []);
 
   useEffect(() => {
     if (!hydrated) return;
     try {
       localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(products));
+      syncAdminProductsToMerchant(products);
     } catch {
       // ignore
     }
@@ -289,6 +298,7 @@ export function ProductsManager({
       );
       try {
         localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
       } catch {
         // ignore
       }
@@ -296,11 +306,73 @@ export function ProductsManager({
     });
   };
 
+  const handleSaveVariantStocks = (
+    productId: string,
+    updatedVariants: {
+      id: string;
+      variantSku: string;
+      color?: string;
+      size?: string;
+      attributeName?: string;
+      attributeValue?: string;
+      stock: number;
+    }[],
+    totalStock: number,
+    reason?: string
+  ) => {
+    setProducts((prev) => {
+      const next = prev.map((p) =>
+        p.id === productId
+          ? {
+              ...p,
+              stock: totalStock,
+              variantsList: updatedVariants,
+            }
+          : p
+      );
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        localStorage.setItem(
+          `fulfillio_variants_${productId}`,
+          JSON.stringify(
+            updatedVariants.map((v) => ({
+              id: v.id,
+              sku: v.variantSku,
+              colorName: v.color || 'Standard',
+              colorHex: '#ea580c',
+              size: v.size || v.attributeValue || 'Standard',
+              binCode: 'A-01-01',
+              stock: v.stock,
+              reserved: 0,
+              available: v.stock,
+            }))
+          )
+        );
+        syncAdminProductsToMerchant(next);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
+          );
+        }
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+
+    const target = products.find((p) => p.id === productId);
+    triggerToast(
+      `Stock updated for "${target?.title || productId}" to ${totalStock} pcs across ${updatedVariants.length} variants.`
+    );
+    setStockAdjustProduct(null);
+  };
+
   const handleChangeProductBin = (productId: string, nextBinCode: string) => {
     setProducts((prev) => {
       const next = prev.map((p) => (p.id === productId ? { ...p, binCode: nextBinCode } : p));
       try {
         localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
       } catch {
         // ignore
       }
@@ -334,6 +406,7 @@ export function ProductsManager({
         );
         try {
           localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+          syncAdminProductsToMerchant(next);
         } catch {
           // ignore
         }
@@ -372,6 +445,7 @@ export function ProductsManager({
         const next = prev.filter((p) => p.id !== product.id);
         try {
           localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+          syncAdminProductsToMerchant(next, [product]);
         } catch {
           // ignore
         }
@@ -409,7 +483,10 @@ export function ProductsManager({
       });
       try {
         localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
-      } catch {}
+syncAdminProductsToMerchant(next);
+      } catch {
+        // ignore
+      }
       return next;
     });
 
@@ -459,7 +536,7 @@ export function ProductsManager({
     }
   };
 
-  const handleRejectReplenishment = (
+const handleRejectReplenishment = (
     replenishment: InboundStockReplenishment,
     reason?: string
   ) => {
@@ -470,6 +547,18 @@ export function ProductsManager({
       try {
         localStorage.setItem(STORAGE_KEY_STOCK_REQUESTS, JSON.stringify(next));
       } catch {}
+
+const handleBulkReject = (productIds: string[]) => {
+    const idSet = new Set(productIds);
+    setProducts((prev) => {
+      const removed = prev.filter((p) => idSet.has(p.id));
+      const next = prev.filter((p) => !idSet.has(p.id));
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next, removed);
+      } catch {
+        // ignore
+      }
       return next;
     });
 
@@ -858,6 +947,7 @@ export function ProductsManager({
       const next = [newProduct, ...prev];
       try {
         localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
       } catch {
         // ignore
       }
@@ -964,9 +1054,11 @@ export function ProductsManager({
   const handleDeleteProduct = (productId: string) => {
     const prod = products.find((p) => p.id === productId);
     setProducts((prev) => {
+      const removed = prev.filter((p) => p.id === productId);
       const next = prev.filter((p) => p.id !== productId);
       try {
         localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next, removed);
       } catch {
         // ignore
       }
@@ -986,9 +1078,11 @@ export function ProductsManager({
     const idSet = new Set(productIds);
     const count = productIds.length;
     setProducts((prev) => {
+      const removed = prev.filter((p) => idSet.has(p.id));
       const next = prev.filter((p) => !idSet.has(p.id));
       try {
         localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next, removed);
       } catch {
         // ignore
       }
@@ -1040,14 +1134,13 @@ export function ProductsManager({
 
         {/* Action Button */}
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setAddProductModalOpen(true)}
+          <Link
+            href="/admin/products/new"
             className="px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs sm:text-sm font-semibold flex items-center gap-2 shadow-lg shadow-orange-500/25 transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Add Product (Under Merchant)</span>
-          </button>
+          </Link>
         </div>
       </div>
 
@@ -1216,6 +1309,7 @@ export function ProductsManager({
         onClose={() => setStockAdjustProduct(null)}
         product={stockAdjustProduct}
         onAdjustStock={(id, delta) => handleAdjustStock(id, delta)}
+        onSaveVariantStocks={handleSaveVariantStocks}
       />
 
       <ApprovalActionModal

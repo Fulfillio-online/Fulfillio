@@ -191,6 +191,11 @@ export function MerchantSidebar({
             <span className="text-slate-400 dark:text-slate-500 text-[11px]">Mode: Merchant</span>
             <Link
               href="/login"
+onClick={() => {
+                try {
+                  localStorage.removeItem('fulfillio_active_merchant_session_v1');
+                } catch {}
+              }}
               className="text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 font-semibold transition-colors flex items-center gap-1 cursor-pointer"
             >
               <LogOut className="h-3.5 w-3.5" />

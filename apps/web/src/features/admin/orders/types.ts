@@ -45,6 +45,7 @@ export interface WarehousePipelineOrder {
   resellerName: string;
   resellerPhone: string;
   resellerAddress: string;
+  resellerLogo?: string;
   codAmount: number;
   courier: CourierPartner;
   trackingCode?: string;
@@ -73,6 +74,7 @@ export interface ResellerMemoItem {
   resellerName: string;
   phone: string;
   address: string;
+  logoUrl?: string;
 }
 
 export type PendingConfirmationAction =

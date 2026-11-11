@@ -10,6 +10,7 @@ export interface UnifiedThermalStickerProps {
   resellerPhone: string;
   resellerAddress: string;
   brandColor?: string;
+  logoUrl?: string;
   customerName: string;
   customerPhone: string;
   customerAddress: string;
@@ -37,6 +38,7 @@ export function UnifiedThermalSticker({
   resellerPhone,
   resellerAddress,
   brandColor = '#111827',
+  logoUrl,
   customerName,
   customerPhone,
   customerAddress,
@@ -56,17 +58,29 @@ export function UnifiedThermalSticker({
     >
       {/* TOP SECTION: WHITE-LABEL RESELLER BRANDED MEMO (ZERO 3PL LEAKAGE) */}
       <div
-        className="border-b-2 border-black pb-2.5 flex items-start justify-between"
+        className="border-b-2 border-black pb-2.5 flex items-start justify-between gap-2"
         style={{ borderTop: `6px solid ${brandColor}`, paddingTop: '8px' }}
       >
-        <div>
-          <h2 className="text-lg font-black uppercase tracking-tight leading-none text-black">
-            {resellerName}
-          </h2>
-          <p className="text-[10px] font-semibold text-neutral-700 mt-1">{resellerAddress}</p>
-          <p className="text-[11px] font-bold text-black">Hotline: {resellerPhone}</p>
+        <div className="flex items-start gap-2.5 flex-1 min-w-0">
+          {logoUrl ? (
+            <div className="w-12 h-10 flex items-center justify-center p-0.5 rounded bg-white border border-neutral-300 shrink-0 overflow-hidden">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={logoUrl}
+                alt={resellerName}
+                className="max-h-full max-w-full object-contain"
+              />
+            </div>
+          ) : null}
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg font-black uppercase tracking-tight leading-none text-black truncate">
+              {resellerName}
+            </h2>
+            <p className="text-[10px] font-semibold text-neutral-700 mt-1 line-clamp-1">{resellerAddress}</p>
+            <p className="text-[11px] font-bold text-black">Hotline: {resellerPhone}</p>
+          </div>
         </div>
-        <div className="text-right">
+        <div className="text-right shrink-0">
           <span className="inline-block bg-black text-white text-[10px] font-mono font-bold px-2 py-0.5 rounded">
             {memoCode}
           </span>

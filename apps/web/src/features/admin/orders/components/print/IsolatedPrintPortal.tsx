@@ -29,6 +29,7 @@ export function IsolatedPrintPortal({
               resellerName={ord.resellerName}
               resellerPhone={ord.resellerPhone}
               resellerAddress={ord.resellerAddress}
+              logoUrl={ord.resellerLogo}
               customerName={ord.customerName}
               customerPhone={ord.customerPhone}
               customerAddress={ord.customerAddress}

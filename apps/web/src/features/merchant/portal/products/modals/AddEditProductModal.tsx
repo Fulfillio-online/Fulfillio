@@ -14,6 +14,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { MerchantProductItem } from '../../types';
+import { compressImage } from '../utils/imageCompressor';
 
 interface ColorSwatch {
   id: string;
@@ -153,20 +154,24 @@ export function AddEditProductModal({
   if (!isOpen) return null;
 
   // Color Swatch Image Upload
-  const handleColorFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleColorFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !activeColorUploadId) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64 = event.target?.result as string;
+    try {
+      const compressed = await compressImage(file, 800, 800, 0.8);
       setColors((prev) =>
-        prev.map((c) => (c.id === activeColorUploadId ? { ...c, imageUrl: base64 } : c))
+        prev.map((c) => (c.id === activeColorUploadId ? { ...c, imageUrl: compressed } : c))
       );
-      if (!imageUrl) setImageUrl(base64);
+      if (!imageUrl) setImageUrl(compressed);
+    } catch (err) {
+      console.error('Image compression error:', err);
+    } finally {
       setActiveColorUploadId(null);
-    };
-    reader.readAsDataURL(file);
+      if (colorFileInputRef.current) {
+        colorFileInputRef.current.value = '';
+      }
+    }
   };
 
   const handleAddColor = () => {
@@ -492,13 +497,23 @@ export function AddEditProductModal({
                         <div className="flex items-center gap-2">
                           <div className="relative h-8 w-8 rounded-lg bg-slate-950 border border-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
                             {c.imageUrl ? (
-                              <Image
-                                src={c.imageUrl}
-                                alt={c.name}
-                                fill
-                                sizes="32px"
-                                className="object-cover"
-                              />
+                              c.imageUrl.startsWith('data:') ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={c.imageUrl}
+                                  alt={c.name}
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <Image
+                                  src={c.imageUrl}
+                                  alt={c.name}
+                                  fill
+                                  unoptimized={true}
+                                  sizes="32px"
+                                  className="object-cover"
+                                />
+                              )
                             ) : (
                               <Package className="h-4 w-4 text-slate-600" />
                             )}

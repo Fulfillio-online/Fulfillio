@@ -23,6 +23,7 @@ import {
   STORAGE_KEY_MERCHANT_PROFILE,
 } from './mockData';
 import { merchantApi } from './api';
+import { syncMerchantMemoToAdmin, syncMerchantMemoDeletedToAdmin } from '@/lib/warehouseSync';
 import { MerchantSidebar } from './components/MerchantSidebar';
 import { MerchantHeader } from './components/MerchantHeader';
 import { MerchantOverviewTab } from './components/tabs/MerchantOverviewTab';
@@ -222,17 +223,17 @@ function MerchantPortalInner() {
 
   const handleCreateOrder = (
     order: MerchantOrderItem,
-    productIdOrItems?: string | { productId: string; qty: number }[],
+    productIdOrItems?: string | { productId: string; qty: number; variantSku?: string }[],
     qty?: number
   ) => {
-    const itemsToDeduct: { productId: string; qty: number }[] = [];
+    const itemsToDeduct: { productId: string; qty: number; variantSku?: string }[] = [];
     if (Array.isArray(productIdOrItems)) {
       itemsToDeduct.push(...productIdOrItems);
     } else if (typeof productIdOrItems === 'string') {
       itemsToDeduct.push({ productId: productIdOrItems, qty: qty || order.qty || 1 });
     } else if (order.lineItems && order.lineItems.length > 0) {
       order.lineItems.forEach((li) => {
-        itemsToDeduct.push({ productId: li.id, qty: li.quantity });
+        itemsToDeduct.push({ productId: li.id, qty: li.quantity, variantSku: li.sku });
       });
     } else if (order.productId) {
       itemsToDeduct.push({ productId: order.productId, qty: order.qty || 1 });
@@ -240,12 +241,26 @@ function MerchantPortalInner() {
 
     setProducts((prev) => {
       const next = prev.map((p) => {
-        const match = itemsToDeduct.find((it) => it.productId === p.id);
-        if (match) {
+        const matches = itemsToDeduct.filter((it) => it.productId === p.id);
+        if (matches.length > 0) {
+          const totalQty = matches.reduce((sum, it) => sum + it.qty, 0);
+          let updatedVariants = p.variantsList;
+          if (p.variantsList && p.variantsList.length > 0) {
+            updatedVariants = p.variantsList.map((v) => {
+              const vQty = matches
+                .filter((it) => it.variantSku && it.variantSku === v.variantSku)
+                .reduce((s, it) => s + it.qty, 0);
+              if (vQty > 0) {
+                return { ...v, stock: Math.max(0, v.stock - vQty) };
+              }
+              return v;
+            });
+          }
           return {
             ...p,
-            stock: Math.max(0, p.stock - match.qty),
-            reserved: p.reserved + match.qty,
+            stock: Math.max(0, p.stock - totalQty),
+            reserved: (p.reserved || 0) + totalQty,
+            variantsList: updatedVariants,
           };
         }
         return p;
@@ -269,10 +284,10 @@ function MerchantPortalInner() {
     const target = orders.find((o) => o.id === orderId);
     if (!target) return;
 
-    const itemsToRestore: { productId: string; qty: number }[] = [];
+    const itemsToRestore: { productId: string; qty: number; variantSku?: string }[] = [];
     if (target.lineItems && target.lineItems.length > 0) {
       target.lineItems.forEach((li) => {
-        itemsToRestore.push({ productId: li.id, qty: li.quantity });
+        itemsToRestore.push({ productId: li.id, qty: li.quantity, variantSku: li.sku });
       });
     } else if (target.productId) {
       itemsToRestore.push({ productId: target.productId, qty: target.qty });
@@ -281,12 +296,26 @@ function MerchantPortalInner() {
     if (itemsToRestore.length > 0) {
       setProducts((prev) => {
         const next = prev.map((p) => {
-          const match = itemsToRestore.find((it) => it.productId === p.id);
-          if (match) {
+          const matches = itemsToRestore.filter((it) => it.productId === p.id);
+          if (matches.length > 0) {
+            const totalQty = matches.reduce((sum, it) => sum + it.qty, 0);
+            let updatedVariants = p.variantsList;
+            if (p.variantsList && p.variantsList.length > 0) {
+              updatedVariants = p.variantsList.map((v) => {
+                const vQty = matches
+                  .filter((it) => it.variantSku && it.variantSku === v.variantSku)
+                  .reduce((s, it) => s + it.qty, 0);
+                if (vQty > 0) {
+                  return { ...v, stock: v.stock + vQty };
+                }
+                return v;
+              });
+            }
             return {
               ...p,
-              stock: p.stock + match.qty,
-              reserved: Math.max(0, p.reserved - match.qty),
+              stock: p.stock + totalQty,
+              reserved: Math.max(0, (p.reserved || 0) - totalQty),
+              variantsList: updatedVariants,
             };
           }
           return p;
@@ -322,11 +351,17 @@ function MerchantPortalInner() {
   };
 
   const handleSaveMemo = (newMemo: ResellerMemo) => {
+    const memoWithMerchant: ResellerMemo = {
+      ...newMemo,
+      merchantCode: newMemo.merchantCode || profile.merchantCode || 'MC-101',
+      merchantName: newMemo.merchantName || profile.storeName || "Sabbir's Store",
+    };
     setMemoList((prev) => {
-      const filtered = prev.filter((m) => m.id !== newMemo.id && m.code !== newMemo.code);
-      const next = [newMemo, ...filtered];
+      const filtered = prev.filter((m) => m.id !== memoWithMerchant.id && m.code !== memoWithMerchant.code);
+      const next = [memoWithMerchant, ...filtered];
       if (typeof window !== 'undefined') {
         localStorage.setItem(STORAGE_KEY_MERCHANT_MEMOS, JSON.stringify(next));
+        syncMerchantMemoToAdmin(memoWithMerchant, profile);
       }
       return next;
     });
@@ -338,6 +373,10 @@ function MerchantPortalInner() {
       const next = prev.map((m) => ({ ...m, isDefault: m.id === id }));
       if (typeof window !== 'undefined') {
         localStorage.setItem(STORAGE_KEY_MERCHANT_MEMOS, JSON.stringify(next));
+        const target = next.find((m) => m.id === id);
+        if (target) {
+          syncMerchantMemoToAdmin(target, profile);
+        }
       }
       return next;
     });
@@ -346,9 +385,13 @@ function MerchantPortalInner() {
 
   const handleDeleteMemo = (id: string) => {
     setMemoList((prev) => {
+      const target = prev.find((m) => m.id === id);
       const next = prev.filter((m) => m.id !== id);
       if (typeof window !== 'undefined') {
         localStorage.setItem(STORAGE_KEY_MERCHANT_MEMOS, JSON.stringify(next));
+        if (target) {
+          syncMerchantMemoDeletedToAdmin(target.id, target.code);
+        }
       }
       return next;
     });

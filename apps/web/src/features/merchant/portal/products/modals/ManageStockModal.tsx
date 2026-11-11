@@ -69,13 +69,23 @@ export function ManageStockModal({
         <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-950 border border-slate-800">
           <div className="relative h-12 w-12 rounded-lg bg-slate-800 border border-slate-700 overflow-hidden shrink-0 flex items-center justify-center">
             {product.imageUrl ? (
-              <Image
-                src={product.imageUrl}
-                alt={product.title}
-                fill
-                sizes="48px"
-                className="object-cover"
-              />
+              product.imageUrl.startsWith('data:') ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={product.imageUrl}
+                  alt={product.title}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <Image
+                  src={product.imageUrl}
+                  alt={product.title}
+                  fill
+                  unoptimized={true}
+                  sizes="48px"
+                  className="object-cover"
+                />
+              )
             ) : (
               <Package className="h-6 w-6 text-slate-500" />
             )}

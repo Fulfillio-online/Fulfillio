@@ -13,3 +13,5 @@ export * from './modals/AddEditProductModal';
 export * from './modals/ManageStockModal';
 export * from './modals/DeleteConfirmModal';
 export * from './modals/ProductDetailsModal';
+export * from './components/ProductThumbnail';
+export * from './utils/imageCompressor';

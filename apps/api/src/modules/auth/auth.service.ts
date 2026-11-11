@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
@@ -19,6 +19,7 @@ export class AuthService {
    */
   async registerMerchant(data: {
     businessName: string;
+    ownerName?: string;
     email: string;
     phone?: string;
     password: string;
@@ -33,6 +34,7 @@ export class AuthService {
 
     const result = await this.authRepo.registerMerchantWithUser({
       businessName: data.businessName,
+      ownerName: data.ownerName,
       email: data.email,
       phone: data.phone,
       passwordHash,
@@ -56,6 +58,19 @@ export class AuthService {
     const isValid = await bcrypt.compare(pass, user.passwordHash);
     if (!isValid) {
       throw new UnauthorizedException('Invalid credentials.');
+    }
+
+    if (user.role === UserRole.MERCHANT && user.merchant) {
+      if (user.merchant.status === 'PENDING') {
+        throw new ForbiddenException(
+          'Your merchant account is pending admin approval. Please wait for approval before signing in.',
+        );
+      }
+      if (user.merchant.status === 'SUSPENDED') {
+        throw new ForbiddenException(
+          'Your merchant account is currently suspended. Please contact warehouse administration.',
+        );
+      }
     }
 
     return this.issueTokens(user);
@@ -112,6 +127,8 @@ export class AuthService {
         role: user.role,
         merchantId: user.merchantId,
         merchantCode: user.merchant?.merchantCode || 'MC-101',
+        businessName: user.merchant?.businessName || user.name,
+        phone: user.merchant?.phone || '',
         merchantStatus: user.merchant?.status,
       },
     };

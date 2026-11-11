@@ -26,6 +26,7 @@ import {
   ProductType,
   ProductVariantConfig,
 } from '../types';
+import { compressImage } from '../utils/imageCompressor';
 
 interface ProductFormProps {
   initialProduct?: MerchantProductItem | null;
@@ -41,6 +42,7 @@ export function ProductForm({
   const router = useRouter();
   const isEdit = Boolean(initialProduct);
 
+  const mainImageInputRef = useRef<HTMLInputElement>(null);
   const colorFileInputRef = useRef<HTMLInputElement>(null);
   const [activeColorUploadId, setActiveColorUploadId] = useState<string | null>(null);
 
@@ -137,10 +139,7 @@ export function ProductForm({
   );
 
   // 5. Main Image
-  const [imageUrl, setImageUrl] = useState(
-    initialProduct?.imageUrl ||
-      'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=400&q=80'
-  );
+  const [imageUrl, setImageUrl] = useState(initialProduct?.imageUrl || '');
 
   // 6. Key Features
   const [features, setFeatures] = useState<string[]>(
@@ -154,9 +153,9 @@ export function ProductForm({
   );
   const [newFeatureText, setNewFeatureText] = useState('');
 
-  // 7. Status
+  // 7. Status (New products start as DRAFT / Pending Admin Approval)
   const [status, setStatus] = useState<'PUBLISHED' | 'DRAFT'>(
-    initialProduct?.status === 'DRAFT' ? 'DRAFT' : 'PUBLISHED'
+    initialProduct?.status === 'PUBLISHED' ? 'PUBLISHED' : 'DRAFT'
   );
 
   // Sync category with productType
@@ -297,20 +296,42 @@ export function ProductForm({
     }));
   };
 
-  const handleColorFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleMainImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const compressed = await compressImage(file, 800, 800, 0.8);
+      setImageUrl(compressed);
+    } catch (err) {
+      console.error('Failed to compress image:', err);
+    } finally {
+      if (mainImageInputRef.current) {
+        mainImageInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleColorFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !activeColorUploadId) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64 = event.target?.result as string;
+    try {
+      const compressed = await compressImage(file, 800, 800, 0.8);
       setColors((prev) =>
-        prev.map((c) => (c.id === activeColorUploadId ? { ...c, imageUrl: base64 } : c))
+        prev.map((c) => (c.id === activeColorUploadId ? { ...c, imageUrl: compressed } : c))
       );
-      if (!imageUrl) setImageUrl(base64);
+      if (!imageUrl) {
+        setImageUrl(compressed);
+      }
+    } catch (err) {
+      console.error('Image compression error:', err);
+    } finally {
       setActiveColorUploadId(null);
-    };
-    reader.readAsDataURL(file);
+      if (colorFileInputRef.current) {
+        colorFileInputRef.current.value = '';
+      }
+    }
   };
 
   const handleAddColor = () => {
@@ -396,13 +417,19 @@ export function ProductForm({
     );
     const finalImageUrl = imageUrl || colors.find((c) => Boolean(c.imageUrl))?.imageUrl || '';
 
+    const isApprovedByAdmin =
+      isEdit &&
+      initialProduct?.bin &&
+      initialProduct.bin !== 'Pending Approval' &&
+      initialProduct.bin !== 'Assigned on intake';
+
     const productPayload: MerchantProductItem = {
       id: initialProduct?.id || `p-${Date.now()}`,
       title: title.trim(),
       variantLabel: initialProduct?.variantLabel || 'Standard',
       sku: masterSku.trim(),
       barcode: initialProduct?.barcode || `890${Math.floor(1000000000 + Math.random() * 9000000000)}`,
-      bin: initialProduct?.bin || 'Assigned on intake',
+      bin: isApprovedByAdmin ? initialProduct.bin : 'Pending Approval',
       category,
       subcategory,
       productType,
@@ -411,7 +438,7 @@ export function ProductForm({
       costPrice: numValue,
       stock: computedTotalStock,
       reserved: initialProduct?.reserved || 0,
-      status,
+      status: isApprovedByAdmin ? status : 'DRAFT',
       imageUrl: finalImageUrl.trim() || undefined,
       keyFeatures: features,
       colors,
@@ -421,6 +448,9 @@ export function ProductForm({
     };
 
     onSave(productPayload);
+    if (!isApprovedByAdmin && typeof window !== 'undefined') {
+      sessionStorage.setItem('fulfillio_products_initial_tab', 'PENDING_APPROVAL');
+    }
     router.push('/merchant/products');
   };
 
@@ -457,7 +487,7 @@ export function ProductForm({
             className="flex-1 sm:flex-initial justify-center px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors cursor-pointer shadow-md shadow-emerald-900/30 flex items-center gap-1.5"
           >
             <Check className="h-4 w-4" />
-            <span>{isEdit ? 'Save Changes' : 'Publish Product'}</span>
+            <span>{isEdit ? 'Save Changes' : 'Submit for Approval'}</span>
           </button>
         </div>
       </div>
@@ -537,6 +567,73 @@ export function ProductForm({
               placeholder="Describe the product specifications, materials, and details..."
               className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
             />
+          </div>
+        </div>
+
+        {/* Product Photo Upload Section */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-sm space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-200 uppercase tracking-wider">
+              <UploadCloud className="h-4 w-4 text-emerald-400" />
+              <span>Product Display Photo</span>
+            </div>
+            <span className="text-[11px] text-slate-400">
+              Primary image shown across tables, orders & catalog
+            </span>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 pt-1">
+            {imageUrl ? (
+              <div className="relative group h-24 w-24 rounded-xl bg-slate-950 border border-slate-700 overflow-hidden shrink-0 flex items-center justify-center shadow-md">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={imageUrl}
+                  alt="Product Image"
+                  className="h-full w-full object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={() => setImageUrl('')}
+                  className="absolute top-1 right-1 p-1 rounded-full bg-rose-600/90 text-white hover:bg-rose-500 shadow transition-colors cursor-pointer"
+                  title="Remove image"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : (
+              <div
+                onClick={() => mainImageInputRef.current?.click()}
+                className="h-24 w-24 rounded-xl bg-slate-950 border-2 border-dashed border-slate-800 hover:border-emerald-500/50 flex flex-col items-center justify-center text-slate-500 hover:text-emerald-400 cursor-pointer transition-colors shrink-0"
+              >
+                <Package className="h-6 w-6 mb-1 opacity-60" />
+                <span className="text-[10px] font-semibold">Upload Photo</span>
+              </div>
+            )}
+
+            <div className="space-y-1.5 flex-1">
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => mainImageInputRef.current?.click()}
+                  className="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition-colors cursor-pointer"
+                >
+                  <UploadCloud className="h-3.5 w-3.5 text-emerald-400" />
+                  <span>{imageUrl ? 'Change Photo' : 'Upload Product Photo'}</span>
+                </button>
+                {imageUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setImageUrl('')}
+                    className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold border border-rose-500/20 transition-colors cursor-pointer"
+                  >
+                    Remove Photo
+                  </button>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Supports PNG, JPG, or WebP. Auto-compressed for fast loading and zero broken images.
+              </p>
+            </div>
           </div>
         </div>
 
@@ -715,13 +812,23 @@ export function ProductForm({
                           <div className="flex items-center gap-2 w-full sm:w-auto">
                             <div className="relative h-9 w-9 rounded-lg bg-slate-900 border border-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
                               {c.imageUrl ? (
-                                <Image
-                                  src={c.imageUrl}
-                                  alt={c.name}
-                                  fill
-                                  sizes="36px"
-                                  className="object-cover"
-                                />
+                                c.imageUrl.startsWith('data:') ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    src={c.imageUrl}
+                                    alt={c.name}
+                                    className="h-full w-full object-cover"
+                                  />
+                                ) : (
+                                  <Image
+                                    src={c.imageUrl}
+                                    alt={c.name}
+                                    fill
+                                    unoptimized={true}
+                                    sizes="36px"
+                                    className="object-cover"
+                                  />
+                                )
                               ) : (
                                 <Package className="h-4 w-4 text-slate-600" />
                               )}
@@ -1199,32 +1306,44 @@ export function ProductForm({
         {/* Section 6: Visibility Status */}
         <div className="p-4 sm:p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-sm space-y-2">
           <label className="block text-xs font-semibold text-slate-300">
-            Storefront Visibility
+            Storefront &amp; Warehouse Visibility
           </label>
-          <div className="flex gap-2.5 sm:gap-3 w-full sm:max-w-xs">
-            <button
-              type="button"
-              onClick={() => setStatus('PUBLISHED')}
-              className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                status === 'PUBLISHED'
-                  ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/50'
-                  : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
-              }`}
-            >
-              Published
-            </button>
-            <button
-              type="button"
-              onClick={() => setStatus('DRAFT')}
-              className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                status === 'DRAFT'
-                  ? 'bg-slate-800 text-slate-200 border-slate-600'
-                  : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
-              }`}
-            >
-              Draft
-            </button>
-          </div>
+          {!isEdit ||
+          !initialProduct?.bin ||
+          initialProduct.bin === 'Pending Approval' ||
+          initialProduct.bin === 'Assigned on intake' ? (
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-medium flex items-center gap-2">
+              <ShieldAlert className="h-4 w-4 text-amber-400 shrink-0" />
+              <span>
+                নতুন প্রোডাক্ট আপলোড করার পর এটি <strong>Pending Admin Approval</strong> হিসেবে থাকবে। Admin Panel থেকে Bin অ্যাসাইন ও Approve করার পর স্বয়ংক্রিয়ভাবে <strong>Published</strong> হয়ে যাবে।
+              </span>
+            </div>
+          ) : (
+            <div className="flex gap-2.5 sm:gap-3 w-full sm:max-w-xs">
+              <button
+                type="button"
+                onClick={() => setStatus('PUBLISHED')}
+                className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                  status === 'PUBLISHED'
+                    ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/50'
+                    : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
+                }`}
+              >
+                Published
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatus('DRAFT')}
+                className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                  status === 'DRAFT'
+                    ? 'bg-slate-800 text-slate-200 border-slate-600'
+                    : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
+                }`}
+              >
+                Draft
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Bottom Actions */}
@@ -1240,10 +1359,19 @@ export function ProductForm({
             className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors cursor-pointer shadow-md flex items-center justify-center gap-1.5"
           >
             <Check className="h-4 w-4" />
-            <span>{isEdit ? 'Save Changes' : 'Publish Product'}</span>
+            <span>{isEdit ? 'Save Changes' : 'Submit for Approval'}</span>
           </button>
         </div>
       </form>
+
+      {/* Hidden file input for main product photo */}
+      <input
+        type="file"
+        ref={mainImageInputRef}
+        onChange={handleMainImageChange}
+        accept="image/*"
+        className="hidden"
+      />
 
       {/* Hidden file input for color swatches */}
       <input

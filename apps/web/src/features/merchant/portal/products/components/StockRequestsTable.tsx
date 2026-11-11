@@ -12,6 +12,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { StockRequestItem } from '../types';
+import { ProductThumbnail } from './ProductThumbnail';
 
 interface StockRequestsTableProps {
   requests: StockRequestItem[];
@@ -59,19 +60,7 @@ export function StockRequestsTable({
                 <tr key={r.id} className="hover:bg-slate-800/30 transition-colors">
                   <td className="p-4">
                     <div className="flex items-center gap-3">
-                      <div className="relative h-11 w-11 rounded-lg bg-slate-800 border border-slate-700 overflow-hidden shrink-0 flex items-center justify-center">
-                        {r.imageUrl ? (
-                          <Image
-                            src={r.imageUrl}
-                            alt={r.productTitle}
-                            fill
-                            sizes="44px"
-                            className="object-cover"
-                          />
-                        ) : (
-                          <Package className="h-5 w-5 text-slate-500" />
-                        )}
-                      </div>
+                      <ProductThumbnail src={r.imageUrl} alt={r.productTitle} size="md" />
                       <div className="min-w-0">
                         <span className="font-semibold text-slate-200 text-sm block truncate max-w-xs">
                           {r.productTitle}

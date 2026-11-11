@@ -28,6 +28,7 @@ export interface ProductVariantConfig {
 export type ProductFilterTab =
   | 'ALL'
   | 'PUBLISHED'
+  | 'PENDING_APPROVAL'
   | 'DRAFT'
   | 'OUT_OF_STOCK'
   | 'STOCK_REQUESTS';

@@ -14,41 +14,54 @@ import {
   AlertCircle,
   Sparkles
 } from 'lucide-react';
+import { authenticateMerchantLogin } from '@/lib/warehouseSync';
+import { MerchantRegisterModal } from '@/features/marketing';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('merchant@urbanthreads.com');
+  const [email, setEmail] = useState('sabbir@example.com');
   const [password, setPassword] = useState('password123');
   const [selectedRole, setSelectedRole] = useState<'SUPER_ADMIN' | 'MERCHANT' | 'WAREHOUSE_OPERATOR'>('MERCHANT');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
 
   const handleRoleSelect = (role: 'SUPER_ADMIN' | 'MERCHANT' | 'WAREHOUSE_OPERATOR') => {
     setSelectedRole(role);
+    setError(null);
     if (role === 'SUPER_ADMIN') {
       setEmail('admin@fulfillio.online');
     } else if (role === 'MERCHANT') {
-      setEmail('merchant@urbanthreads.com');
+      setEmail('sabbir@example.com');
     } else {
       setEmail('worker@fulfillio.online');
     }
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+
+    if (selectedRole === 'MERCHANT') {
+      const res = await authenticateMerchantLogin(email, password);
+      setLoading(false);
+      if (!res.ok) {
+        setError(res.error || 'লগইন করা সম্ভব হয়নি।');
+        return;
+      }
+      router.push('/merchant');
+      return;
+    }
 
     setTimeout(() => {
       setLoading(false);
       if (selectedRole === 'SUPER_ADMIN') {
         router.push('/admin');
-      } else if (selectedRole === 'MERCHANT') {
-        router.push('/merchant');
       } else {
         router.push('/wms/pick');
       }
-    }, 600);
+    }, 450);
   };
 
   return (
@@ -68,7 +81,7 @@ export default function LoginPage() {
             </span>
           </Link>
           <p className="text-sm text-slate-400">
-            Unified Warehouse Management & Reseller Fulfillment
+            Unified Warehouse Management &amp; Reseller Fulfillment
           </p>
         </div>
 
@@ -83,7 +96,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => handleRoleSelect('MERCHANT')}
-                className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center gap-1.5 ${
+                className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center gap-1.5 cursor-pointer ${
                   selectedRole === 'MERCHANT'
                     ? 'bg-indigo-950/60 border-indigo-500 text-indigo-300 shadow-sm'
                     : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
@@ -96,7 +109,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => handleRoleSelect('SUPER_ADMIN')}
-                className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center gap-1.5 ${
+                className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center gap-1.5 cursor-pointer ${
                   selectedRole === 'SUPER_ADMIN'
                     ? 'bg-emerald-950/60 border-emerald-500 text-emerald-300 shadow-sm'
                     : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
@@ -109,7 +122,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => handleRoleSelect('WAREHOUSE_OPERATOR')}
-                className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center gap-1.5 ${
+                className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center gap-1.5 cursor-pointer ${
                   selectedRole === 'WAREHOUSE_OPERATOR'
                     ? 'bg-teal-950/60 border-teal-500 text-teal-300 shadow-sm'
                     : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
@@ -120,6 +133,13 @@ export default function LoginPage() {
               </button>
             </div>
           </div>
+
+          {error && (
+            <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-semibold flex items-start gap-2.5 animate-in fade-in">
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
+          )}
 
           {/* Form */}
           <form onSubmit={handleLogin} className="space-y-4">
@@ -158,7 +178,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-lg shadow-emerald-950 flex items-center justify-center gap-2 active:scale-98 transition-all disabled:opacity-50"
+              className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-lg shadow-emerald-950 flex items-center justify-center gap-2 active:scale-98 transition-all disabled:opacity-50 cursor-pointer"
             >
               {loading ? (
                 <span>Authenticating...</span>
@@ -171,8 +191,18 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="pt-2 border-t border-slate-800/80 text-center">
-            <span className="text-xs text-slate-500">
+          <div className="pt-3 border-t border-slate-800/80 text-center space-y-2">
+            <div className="text-xs text-slate-400">
+              <span>নতুন মার্চেন্ট? </span>
+              <button
+                type="button"
+                onClick={() => setIsRegisterModalOpen(true)}
+                className="text-emerald-400 hover:text-emerald-300 font-bold hover:underline cursor-pointer"
+              >
+                এখানে একাউন্ট খুলুন (Sign Up)
+              </button>
+            </div>
+            <span className="text-[11px] text-slate-500 block">
               Protected by JWT Role-Based Access Control
             </span>
           </div>
@@ -185,6 +215,11 @@ export default function LoginPage() {
           </Link>
         </div>
       </div>
+
+      <MerchantRegisterModal
+        isOpen={isRegisterModalOpen}
+        onClose={() => setIsRegisterModalOpen(false)}
+      />
     </div>
   );
 }
