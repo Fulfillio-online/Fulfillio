@@ -315,7 +315,7 @@ export function CreateManualOrderModal({
             <div>
               <h2 className="text-base sm:text-lg font-bold text-white">Create Manual Order</h2>
               <p className="text-xs text-slate-400">
-                একাধিক প্রোডাক্ট যুক্ত করুন, ডেলিভারি চার্জ অ্যাডজাস্ট করুন এবং কাস্টমারের অগ্রিম বা সম্পূর্ণ পেমেন্ট ক্যালকুলেট করুন।
+                Add products, configure delivery charges, and manage advance COD settlements.
               </p>
             </div>
           </div>
@@ -539,7 +539,7 @@ export function CreateManualOrderModal({
                     {isOutOfStock && (
                       <div className="flex items-center gap-1.5 mt-2 text-[11px] text-rose-400 font-medium">
                         <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                        <span>ওয়্যারহাউস স্টকে পর্যাপ্ত প্রোডাক্ট নেই! মোট স্টক: {item.maxStock} টি</span>
+                        <span>Insufficient warehouse stock! Available: {item.maxStock} units</span>
                       </div>
                     )}
                   </div>
@@ -556,7 +556,7 @@ export function CreateManualOrderModal({
                 <span>Pricing Calculation & Payment Collection Engine</span>
               </div>
               <span className="text-[11px] text-slate-400 hidden sm:inline">
-                প্রোডাক্টের ধরন, ডেলিভারি চার্জ ও অগ্রিম পেমেন্টের হিসাব
+                Order Financials & Payment Breakdown
               </span>
             </div>
 
@@ -568,9 +568,9 @@ export function CreateManualOrderModal({
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
                       <Truck className="h-3.5 w-3.5 text-blue-400" />
-                      <span>ডেলিভারি চার্জ (Delivery Charge)</span>
+                      <span>Delivery Charge</span>
                     </label>
-                    <span className="text-[11px] text-slate-400">ওজন বা লোকেশন অনুযায়ী কম-বেশি হতে পারে</span>
+                    <span className="text-[11px] text-slate-400">Calculated based on parcel weight & destination</span>
                   </div>
 
                   {/* Preset Pills */}
@@ -646,9 +646,9 @@ export function CreateManualOrderModal({
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
                       <Tag className="h-3.5 w-3.5 text-amber-400" />
-                      <span>স্পেশাল ডিসকাউন্ট (Special Discount)</span>
+                      <span>Special Discount</span>
                     </label>
-                    <span className="text-[11px] text-slate-400">টোটাল থেকে বাদ যাবে</span>
+                    <span className="text-[11px] text-slate-400">Deducted from order total</span>
                   </div>
 
                   <div className="relative">
@@ -664,15 +664,15 @@ export function CreateManualOrderModal({
                   </div>
                 </div>
 
-                {/* 3. Advance Payment (অগ্রিম পেমেন্ট) */}
+                {/* 3. Advance Payment */}
                 <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
                       <CreditCard className="h-3.5 w-3.5 text-emerald-400" />
-                      <span>অগ্রিম পেমেন্ট (Advance Received)</span>
+                      <span>Advance Received</span>
                     </label>
                     <span className="text-[11px] text-slate-400">
-                      কাস্টমার অগ্রিম টাকা দিলে এখানে লিখুন
+                      Enter advance amount paid by customer
                     </span>
                   </div>
 
@@ -736,9 +736,9 @@ export function CreateManualOrderModal({
                       disabled={advancePayment <= 0}
                       className="px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500 disabled:opacity-50"
                     >
-                      <option value="bKash">bKash (বিকাশ)</option>
-                      <option value="Nagad">Nagad (নগদ)</option>
-                      <option value="Rocket">Rocket (রকেট)</option>
+                      <option value="bKash">bKash</option>
+                      <option value="Nagad">Nagad</option>
+                      <option value="Rocket">Rocket</option>
                       <option value="Bank Transfer">Bank Transfer</option>
                       <option value="Cash">Cash Handover</option>
                     </select>
@@ -834,10 +834,10 @@ export function CreateManualOrderModal({
 
                   <p className="text-[11px] leading-relaxed opacity-90">
                     {codAmount === 0
-                      ? '✅ কাস্টমার সম্পূর্ণ মূল্য পরিশোধ করেছেন। কুরিয়ার কোনো টাকা কালেক্ট করবে না।'
+                      ? '✅ Order fully prepaid. Courier will collect ৳0 on delivery.'
                       : advancePayment > 0
-                      ? `⚠️ কাস্টমার ৳${advancePayment.toLocaleString()} অগ্রিম দিয়েছেন। বাকি ৳${codAmount.toLocaleString()} কুরিয়ার ডেলিভারির সময় কালেক্ট করবে।`
-                      : `📦 সম্পূর্ণ ৳${codAmount.toLocaleString()} ডেলিভারির সময় কুরিয়ার কাস্টমার থেকে কালেক্ট করবে।`}
+                      ? `⚠️ Customer paid ৳${advancePayment.toLocaleString()} advance. Courier will collect remaining ৳${codAmount.toLocaleString()} COD.`
+                      : `📦 Full ৳${codAmount.toLocaleString()} will be collected by courier as COD.`}
                   </p>
                 </div>
 

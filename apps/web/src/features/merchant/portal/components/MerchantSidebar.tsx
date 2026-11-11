@@ -13,6 +13,8 @@ import {
   Key,
   User,
   X,
+  LogOut,
+  ShieldCheck,
 } from 'lucide-react';
 import { MerchantProfileData, MerchantTab } from '../types';
 
@@ -36,31 +38,31 @@ export function MerchantSidebar({
   const navItems = [
     {
       id: 'overview' as MerchantTab,
-      label: 'Overview',
+      label: 'Store Overview',
       href: '/merchant',
       icon: LayoutDashboard,
     },
     {
       id: 'products' as MerchantTab,
-      label: 'Products',
+      label: 'Products Catalog',
       href: '/merchant/products',
       icon: Package,
     },
     {
       id: 'orders' as MerchantTab,
-      label: 'Orders',
+      label: 'Customer Orders',
       href: '/merchant/orders',
       icon: ShoppingCart,
     },
     {
       id: 'memo-designer' as MerchantTab,
-      label: 'Memos',
+      label: 'Memo / Invoice Slip',
       href: '/merchant/memos',
       icon: Layers,
     },
     {
       id: 'inbound' as MerchantTab,
-      label: 'Inbound ASNs & Warehouse',
+      label: 'Inbound ASNs & Dock',
       href: '/merchant/inbound',
       icon: Truck,
     },
@@ -94,47 +96,55 @@ export function MerchantSidebar({
 
   return (
     <>
-      {/* Mobile Backdrop */}
+      {/* Mobile Backdrop Overlay */}
       {isMobileOpen && (
         <div
-          className="fixed inset-0 z-40 bg-slate-950/80 backdrop-blur-sm lg:hidden animate-in fade-in"
+          className="fixed inset-0 z-40 bg-navy-950/80 backdrop-blur-sm lg:hidden animate-in fade-in"
           onClick={onCloseMobile}
         />
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 border-r border-slate-800 p-4 flex flex-col justify-between transition-transform duration-200 ease-in-out lg:translate-x-0 ${
-          isMobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'
+        className={`fixed inset-y-0 left-0 z-50 w-72 lg:w-64 h-full bg-white dark:bg-navy-950 border-r border-slate-200 dark:border-white/10 flex flex-col justify-between shrink-0 transition-transform duration-200 ease-in-out lg:translate-x-0 ${
+          isMobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
         }`}
       >
-        <div className="space-y-6">
-          {/* Logo / Header */}
-          <div className="flex items-center justify-between px-2">
-            <Link href="/merchant" className="flex items-center gap-2 group">
-              <div className="h-8 w-8 rounded-lg bg-emerald-600 flex items-center justify-center font-black text-white text-lg tracking-wider group-hover:scale-105 transition-transform">
-                F
-              </div>
-              <div className="leading-none">
-                <span className="text-base font-extrabold tracking-tight text-white block">
-                  FULFILLIO
-                </span>
-                <span className="text-[10px] font-semibold text-emerald-400 tracking-wider">
-                  MERCHANT PORTAL
-                </span>
-              </div>
-            </Link>
+        {/* 1. FIXED TOP CORNER: Logo & Brand Header */}
+        <div className="shrink-0 px-5 py-4 border-b border-slate-200 dark:border-white/10 bg-white/95 dark:bg-navy-950/95 backdrop-blur-xs flex items-center justify-between">
+          <Link
+            href="/merchant"
+            onClick={onCloseMobile}
+            className="flex items-center gap-3 group cursor-pointer"
+          >
+            <div className="h-10 w-10 rounded-xl bg-orange-600 flex items-center justify-center font-extrabold text-white text-lg shadow-md shadow-orange-500/25 group-hover:scale-105 group-hover:bg-orange-500 transition-all">
+              F
+            </div>
+            <div className="min-w-0">
+              <p className="font-extrabold text-xl tracking-tight text-navy-900 dark:text-white leading-tight">
+                Fulfill<span className="text-orange-500">io</span>
+              </p>
+              <span className="inline-block text-[10px] uppercase font-bold text-orange-600 dark:text-orange-400 tracking-wider">
+                MERCHANT PORTAL
+              </span>
+            </div>
+          </Link>
 
-            <button
-              onClick={onCloseMobile}
-              className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-              aria-label="Close sidebar"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
+          <button
+            onClick={onCloseMobile}
+            className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-navy-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-navy-900 transition-colors cursor-pointer"
+            aria-label="Close sidebar"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
 
-          {/* Navigation Links */}
+        {/* 2. SCROLLABLE MIDDLE: Navigation Menu */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-4 overscroll-contain">
           <nav className="space-y-1">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 px-3 block mb-2">
+              Store Management
+            </span>
+
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = checkIsActive(item);
@@ -146,10 +156,10 @@ export function MerchantSidebar({
                     if (onSelectTab) onSelectTab(item.id);
                     onCloseMobile();
                   }}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all ${
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                     isActive
-                      ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25 font-bold'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                      ? 'bg-orange-600 text-white shadow-sm font-bold'
+                      : 'text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-slate-100 hover:bg-slate-100/60 dark:hover:bg-navy-800/60'
                   }`}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
@@ -160,27 +170,31 @@ export function MerchantSidebar({
           </nav>
         </div>
 
-        {/* Store & Nav Footer */}
-        <div className="border-t border-slate-800 pt-3 space-y-2">
-          <div className="px-2">
-            <span className="text-xs font-semibold text-slate-200 block truncate">
-              {profile.storeName}
-            </span>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="h-2 w-2 rounded-full bg-emerald-400" />
-              <span className="text-[11px] text-emerald-400 font-medium">
-                Store Verified ({profile.merchantCode})
+        {/* 3. FIXED BOTTOM CORNER: Store Profile & Sign Out */}
+        <div className="shrink-0 p-4 border-t border-slate-200 dark:border-white/10 bg-white/95 dark:bg-navy-950/95 backdrop-blur-xs space-y-3">
+          <div className="p-3 rounded-xl bg-slate-50 dark:bg-navy-900/70 border border-slate-200/80 dark:border-white/10">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-navy-900 dark:text-white truncate block max-w-[130px]">
+                {profile.storeName || 'Merchant Store'}
               </span>
+              <span className="text-[10px] font-mono font-bold text-orange-600 dark:text-orange-400 bg-orange-500/10 dark:bg-orange-500/20 px-1.5 py-0.5 rounded">
+                {profile.merchantCode}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 mt-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              <span>Verified Merchant</span>
             </div>
           </div>
 
-          <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-xs text-slate-400 px-2">
-            <span className="text-slate-500 text-[11px]">Merchant Mode</span>
+          <div className="flex items-center justify-between text-xs px-1">
+            <span className="text-slate-400 dark:text-slate-500 text-[11px]">Mode: Merchant</span>
             <Link
               href="/login"
-              className="text-rose-400 hover:text-rose-300 font-semibold transition-colors flex items-center gap-1"
+              className="text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 font-semibold transition-colors flex items-center gap-1 cursor-pointer"
             >
-              Sign Out
+              <LogOut className="h-3.5 w-3.5" />
+              <span>Sign Out</span>
             </Link>
           </div>
         </div>

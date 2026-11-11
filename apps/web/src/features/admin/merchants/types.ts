@@ -1,4 +1,4 @@
-export type MerchantSubTab = 'overview' | 'profile' | 'memo' | 'orders' | 'products' | 'payout';
+export type MerchantSubTab = 'overview' | 'profile' | 'memo' | 'orders' | 'products' | 'payout' | 'ledger';
 export type OrderPeriodFilter = 'DAY' | 'WEEK' | '1M' | '3M' | '6M' | '1Y' | 'ALL';
 export type OverviewRangeFilter = OrderPeriodFilter;
 

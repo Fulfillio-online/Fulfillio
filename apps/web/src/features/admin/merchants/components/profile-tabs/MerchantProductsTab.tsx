@@ -19,6 +19,7 @@ export interface MerchantProductsTabProps {
   productsList: MerchantProductItem[];
   onAdjustStock: (productId: string, delta: number) => void;
   onAddProduct: (newProduct: MerchantProductItem) => void;
+  onNavigateSubTab?: (tab: any) => void;
 }
 
 export function MerchantProductsTab({
@@ -26,6 +27,7 @@ export function MerchantProductsTab({
   productsList,
   onAdjustStock,
   onAddProduct,
+  onNavigateSubTab,
 }: MerchantProductsTabProps) {
   const [productSearch, setProductSearch] = useState('');
   const [productCategory, setProductCategory] = useState<'ALL' | 'Apparel' | 'Footwear' | 'Electronics' | 'Beauty'>('ALL');
@@ -123,6 +125,20 @@ export function MerchantProductsTab({
 
   return (
     <div className="space-y-5">
+      {onNavigateSubTab && (
+        <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-orange-500/10 border border-orange-500/20 text-xs">
+          <span className="text-slate-600 dark:text-slate-300">
+            Need audit documentation for previous stock intakes, restocks or recalls?
+          </span>
+          <button
+            type="button"
+            onClick={() => onNavigateSubTab('ledger')}
+            className="font-bold text-orange-600 dark:text-orange-400 hover:underline cursor-pointer flex items-center gap-1"
+          >
+            <span>View Digital Proof Ledger →</span>
+          </button>
+        </div>
+      )}
       {/* 4 Interactive Product Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <button

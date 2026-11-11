@@ -1,19 +1,19 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
-  MapPin,
   Eye,
   AlertTriangle,
-  ArrowRight,
-  RefreshCw,
   Printer,
   Truck,
   CheckCircle2,
   XCircle,
   ChevronDown,
+  PackageCheck,
 } from 'lucide-react';
-import { CourierPartner, WarehousePipelineOrder } from '../../types';
+import { CourierPartner, OrderStage, WarehousePipelineOrder, formatOrderDate } from '../../types';
 
 export interface OrdersTableRowProps {
   order: WarehousePipelineOrder;
@@ -22,6 +22,11 @@ export interface OrdersTableRowProps {
   onToggleSelect: (id: string) => void;
   onPreviewMemo: (order: WarehousePipelineOrder) => void;
   onInlineCourierChange: (orderId: string, newCourier: CourierPartner) => void;
+  onInlineStageChange?: (
+    orderId: string,
+    newStage: OrderStage | 'COURIER_BOOKED',
+    customHoldReason?: string
+  ) => void;
   onMarkWaiting: (order: WarehousePipelineOrder) => void;
   onMarkPicked: (order: WarehousePipelineOrder) => void;
   onResumePick: (order: WarehousePipelineOrder) => void;
@@ -29,6 +34,7 @@ export interface OrdersTableRowProps {
   onBookCourier: (order: WarehousePipelineOrder) => void;
   onConfirmHandover: (order: WarehousePipelineOrder) => void;
   onCancelOrder: (order: WarehousePipelineOrder) => void;
+  onViewOrder?: (order: WarehousePipelineOrder) => void;
 }
 
 export function OrdersTableRow({
@@ -38,6 +44,7 @@ export function OrdersTableRow({
   onToggleSelect,
   onPreviewMemo,
   onInlineCourierChange,
+  onInlineStageChange,
   onMarkWaiting,
   onMarkPicked,
   onResumePick,
@@ -45,9 +52,11 @@ export function OrdersTableRow({
   onBookCourier,
   onConfirmHandover,
   onCancelOrder,
+  onViewOrder,
 }: OrdersTableRowProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -63,184 +72,182 @@ export function OrdersTableRow({
     };
   }, [isMenuOpen]);
 
+  const handleView = () => {
+    setIsMenuOpen(false);
+    if (onViewOrder) {
+      onViewOrder(order);
+    } else {
+      router.push(`/admin/orders/${encodeURIComponent(order.id)}`);
+    }
+  };
+
+  const handlePrintMemo = () => {
+    setIsMenuOpen(false);
+    onPreviewMemo(order);
+  };
+
+  const dateDisplay = formatOrderDate(order.createdAt);
+
   return (
     <tr
-      className={`transition-colors ${
+      className={`transition-colors border-b border-slate-100 dark:border-white/5 text-xs ${
         isSelected
           ? 'bg-emerald-50 dark:bg-emerald-950/20'
           : order.stage === 'WAITING'
-          ? 'bg-amber-50 dark:bg-amber-950/10 hover:bg-amber-50 dark:hover:bg-amber-950/20'
-          : 'hover:bg-slate-100/40 dark:hover:bg-navy-800/40'
+          ? 'bg-amber-50/70 dark:bg-amber-950/10 hover:bg-amber-50 dark:hover:bg-amber-950/20'
+          : 'hover:bg-slate-50 dark:hover:bg-navy-800/40'
       }`}
     >
-      {/* Checkbox */}
-      <td className="p-4">
+      {/* 1. Checkbox */}
+      <td className="py-3 px-2 sm:px-3 align-top w-8">
         <input
           type="checkbox"
           checked={isSelected}
           onChange={() => onToggleSelect(order.id)}
           aria-label={`Select order ${order.id}`}
-          className="h-4 w-4 rounded border-slate-300 dark:border-white/15 bg-slate-50 dark:bg-navy-950 text-orange-600 dark:text-orange-500 cursor-pointer"
+          className="h-3.5 w-3.5 rounded border-slate-300 dark:border-white/15 bg-white dark:bg-navy-950 text-orange-600 dark:text-orange-500 cursor-pointer mt-0.5"
         />
       </td>
 
-      {/* Order ID & Merchant */}
-      <td className="p-4">
-        <span className="tabular-nums text-xs font-extrabold text-navy-800 dark:text-white block">
-          {order.id}
-        </span>
-        <span className="text-xs tabular-nums text-orange-600 dark:text-orange-400 font-semibold">
-          {order.merchantCode} · {order.merchantName}
-        </span>
-        <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
-          {order.createdAt}
-        </span>
-      </td>
-
-      {/* Product Thumbnail + Variant (Image, Size, Color, Qty in row 1; SKU and Title in row 2) */}
-      <td className="p-4">
-        <div>
-          {/* Row 1: Image, Size, Color, and Quantity all together in one row */}
-          <div className="flex items-center gap-2.5">
-            <img
-              src={order.productImage}
-              alt={order.productTitle}
-              className="h-10 w-10 rounded-lg object-cover border border-slate-300 dark:border-white/15 bg-slate-50 dark:bg-navy-950 shrink-0"
-            />
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="px-2 py-0.5 rounded bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs font-semibold text-navy-800 dark:text-slate-100">
-                {order.size} · {order.color}
-              </span>
-              <span className="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-xs tabular-nums font-bold text-emerald-600 dark:text-emerald-400">
-                Qty: {order.qty}
-              </span>
-            </div>
+      {/* 2. Order ID & Merchant (Stacked: Order ID -> Merchant Name -> Date) */}
+      <td className="py-3 px-2 sm:px-3 align-top">
+        <div className="space-y-0.5">
+          <Link
+            href={`/admin/orders/${encodeURIComponent(order.id)}`}
+            className="tabular-nums font-black text-navy-900 dark:text-white hover:text-orange-600 dark:hover:text-orange-400 block transition-colors leading-tight"
+          >
+            {order.id}
+          </Link>
+          <div className="font-semibold text-slate-700 dark:text-slate-300 truncate max-w-[140px] leading-tight">
+            {order.merchantName}
           </div>
-
-          {/* Row 2: One line SKU, and next line Product Title */}
-          <div className="mt-2 space-y-0.5">
-            <div className="tabular-nums text-xs font-bold text-orange-600 dark:text-orange-400 tracking-wide">
-              {order.sku}
-            </div>
-            <div className="text-xs font-bold text-navy-800 dark:text-navy-800 dark:text-white leading-snug line-clamp-1">
-              {order.productTitle}
-            </div>
+          <div className="text-[11px] font-medium text-slate-400 dark:text-slate-400 leading-tight">
+            {dateDisplay}
           </div>
         </div>
       </td>
 
-      {/* Bin Location & Stock Availability (Without "Bin:" text) */}
-      <td className="p-4">
-        <div className="flex flex-col items-start gap-1.5">
-          <span
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs tabular-nums font-extrabold border ${
-              order.stage === 'WAITING'
-                ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/40'
-                : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/40'
-            }`}
-          >
-            <MapPin className="w-3.5 h-3.5 shrink-0" />
-            <span>{order.bin}</span>
+      {/* 3. Memo / Invoice */}
+      <td className="py-3 px-2 sm:px-3 align-top">
+        <div className="space-y-0.5">
+          <span className="tabular-nums font-bold px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30 inline-block font-mono text-[11px]">
+            {order.memoCode.replace(/^MEMO-?/i, '')}
           </span>
-
-          <span
-            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] tabular-nums font-bold border ${
-              order.stockAvailable > 0
-                ? 'bg-slate-50 dark:bg-navy-950 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-white/10'
-                : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30'
-            }`}
-          >
-            {order.stockAvailable > 0 ? `${order.stockAvailable} in stock` : 'Stock Out'}
+          <span className="text-[11px] text-slate-500 dark:text-slate-400 block truncate max-w-[130px] font-medium leading-tight">
+            {order.resellerName}
           </span>
         </div>
       </td>
 
-      {/* Reseller Memo Code (Without redundant "MEMO" prefix) */}
-      <td className="p-4">
-        <span className="tabular-nums text-xs font-bold px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30 inline-block">
-          {order.memoCode.replace(/^MEMO-?/i, '')}
-        </span>
-        <span className="text-xs text-slate-600 dark:text-slate-300 block mt-1">
-          {order.resellerName}
-        </span>
+      {/* 4. Customer (Name, Phone Number, Address) */}
+      <td className="py-3 px-2 sm:px-3 align-top">
+        <div className="space-y-0.5 max-w-[160px] sm:max-w-[200px]">
+          <div className="font-bold text-navy-900 dark:text-white truncate">
+            {order.customerName}
+          </div>
+          <div className="tabular-nums text-slate-600 dark:text-slate-300 font-medium text-[11px]">
+            {order.customerPhone}
+          </div>
+          <div
+            className="text-[11px] text-slate-500 dark:text-slate-400 truncate leading-tight"
+            title={order.customerAddress || order.city}
+          >
+            {order.customerAddress || order.city}
+          </div>
+        </div>
       </td>
 
-      {/* Customer & Inline Courier Override Dropdown */}
-      <td className="p-4">
-        <div className="text-xs font-bold text-navy-800 dark:text-slate-100">{order.customerName}</div>
-        <div className="text-xs tabular-nums text-slate-600 dark:text-slate-300">
-          {order.customerPhone} · {order.city}
-        </div>
-        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-          <span className="text-xs tabular-nums font-extrabold text-orange-600 dark:text-orange-400">
-            ৳ {order.codAmount.toLocaleString()}
-          </span>
-
+      {/* 5. Courier (Partner & Tracking) */}
+      <td className="py-3 px-2 sm:px-3 align-top">
+        <div className="space-y-1">
           <select
             value={order.courier}
             onChange={(e) => onInlineCourierChange(order.id, e.target.value as CourierPartner)}
             disabled={order.stage === 'CANCELLED'}
             aria-label="Change Courier Partner"
-            className="text-xs font-bold px-2 py-0.5 rounded-lg bg-slate-50 dark:bg-navy-950 text-sky-700 dark:text-sky-300 border border-slate-300 dark:border-white/15 hover:border-sky-500/60 focus:outline-none focus:border-orange-500 cursor-pointer"
+            className="text-xs font-bold px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-navy-950 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-white/15 hover:border-orange-500/60 focus:outline-none focus:border-orange-500 cursor-pointer shadow-2xs"
           >
             <option value="Steadfast">Steadfast</option>
             <option value="Pathao">Pathao</option>
             <option value="RedX">RedX</option>
           </select>
+
+          {order.trackingCode && (
+            <div className="text-[10px] font-mono font-bold text-amber-600 dark:text-amber-400 block truncate max-w-[110px]">
+              {order.trackingCode}
+            </div>
+          )}
         </div>
-        {order.trackingCode && (
-          <span className="text-[11px] tabular-nums text-amber-700 dark:text-amber-300 block mt-1">
-            {order.trackingCode}
+      </td>
+
+      {/* 6. Total / Amount (Order Value / COD) */}
+      <td className="py-3 px-2 sm:px-3 align-top whitespace-nowrap">
+        <div className="space-y-0.5">
+          <div className="font-black text-navy-900 dark:text-white tabular-nums text-xs sm:text-sm">
+            ৳ {order.codAmount.toLocaleString()}
+          </div>
+          <span className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 block tracking-wider leading-none">
+            COD Total
           </span>
-        )}
+        </div>
       </td>
 
-      {/* Stage Badge + Waiting Reason */}
-      <td className="p-4">
-        <span
-          className={`text-xs font-bold px-2.5 py-1 rounded-full border inline-block ${
-            order.stage === 'PICK'
-              ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30'
+      {/* 7. Stage / Status (Clean, single-line Badge ONLY - NO Dropdown) */}
+      <td className="py-3 px-2 sm:px-3 align-top whitespace-nowrap">
+        <div className="space-y-0.5">
+          <span
+            className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border whitespace-nowrap inline-flex items-center gap-1 leading-none ${
+              order.stage === 'PICK'
+                ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30'
+                : order.stage === 'WAITING'
+                ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/40'
+                : order.stage === 'PACK'
+                ? 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-500/30'
+                : order.stage === 'DISPATCH'
+                ? order.isCourierBooked
+                  ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/40'
+                  : 'bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/30'
+                : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30'
+            }`}
+          >
+            {order.stage === 'PICK'
+              ? 'TO PICK'
               : order.stage === 'WAITING'
-              ? 'bg-rose-500/15 text-amber-800 dark:text-amber-200 border-amber-500/40'
+              ? 'ON HOLD'
               : order.stage === 'PACK'
-              ? 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-500/30'
+              ? 'TO PACK'
               : order.stage === 'DISPATCH'
-              ? 'bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/30'
-              : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30'
-          }`}
-        >
-          {order.stage === 'PICK'
-            ? 'TO PICK'
-            : order.stage === 'WAITING'
-            ? 'WAITING: NOT IN BIN'
-            : order.stage === 'PACK'
-            ? 'TO PACK'
-            : order.stage === 'DISPATCH'
-            ? order.isCourierBooked
-              ? 'COURIER BOOKED'
-              : 'READY DISPATCH'
-            : order.stage}
-        </span>
-        {order.stage === 'WAITING' && order.holdReason && (
-          <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-1 max-w-[180px] leading-tight">
-            {order.holdReason}
-          </p>
-        )}
+              ? order.isCourierBooked
+                ? 'COURIER BOOKED'
+                : 'READY DISPATCH'
+              : order.stage}
+          </span>
+
+          {order.stage === 'WAITING' && (
+            <p
+              className="text-[10px] text-amber-700 dark:text-amber-300 font-medium truncate max-w-[130px] leading-tight block pt-0.5"
+              title={order.holdReason || 'Awaiting merchant stock delivery'}
+            >
+              {order.holdReason || 'Awaiting merchant stock delivery'}
+            </p>
+          )}
+        </div>
       </td>
 
-      {/* Actions Dropdown Menu */}
-      <td className="p-4 text-right">
+      {/* 8. Actions (Fully visible, text-right, whitespace-nowrap) */}
+      <td className="py-3 px-2 sm:px-3 align-top text-right whitespace-nowrap">
         <div className="relative inline-block text-left" ref={menuRef}>
           <button
             type="button"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-bold text-navy-800 dark:text-slate-100 border border-slate-300 dark:border-white/15 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+            className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-bold text-navy-900 dark:text-slate-100 border border-slate-300 dark:border-white/15 inline-flex items-center gap-1 transition-colors cursor-pointer shadow-2xs whitespace-nowrap"
           >
             <span>Actions</span>
             <ChevronDown
               className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                isMenuOpen ? 'rotate-180 text-orange-600 dark:text-orange-400' : 'text-slate-600 dark:text-slate-300'
+                isMenuOpen
+                  ? 'rotate-180 text-orange-600 dark:text-orange-400'
+                  : 'text-slate-600 dark:text-slate-300'
               }`}
             />
           </button>
@@ -248,88 +255,87 @@ export function OrdersTableRow({
           {isMenuOpen && (
             <div
               className={`absolute right-0 ${
-                isNearBottom ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
-              } w-52 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-2xl py-1.5 z-[100] text-left font-sans text-xs`}
+                isNearBottom ? 'bottom-full mb-1' : 'top-full mt-1'
+              } w-52 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-2xl py-1 z-[100] text-left font-sans text-xs`}
             >
-              {/* Preview Memo */}
+              {/* Option 1: View Order Details */}
               <button
                 type="button"
-                onClick={() => {
-                  setIsMenuOpen(false);
-                  onPreviewMemo(order);
-                }}
-                className="w-full px-3 py-2 text-left text-navy-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 transition-colors cursor-pointer"
+                onClick={handleView}
+                className="w-full px-3 py-2 text-left text-navy-900 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 transition-colors cursor-pointer font-semibold"
               >
-                <Eye className="w-4 h-4 text-orange-600 dark:text-orange-400" />
-                <span>View / Print Memo</span>
+                <Eye className="w-4 h-4 text-orange-600 dark:text-orange-400 shrink-0" />
+                <span>View Order Details</span>
               </button>
 
-              {/* Stage Specific Actions */}
-              {order.stage === 'PICK' && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsMenuOpen(false);
-                      onMarkPicked(order);
-                    }}
-                    className="w-full px-3 py-2 text-left text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer"
-                  >
-                    <ArrowRight className="w-4 h-4 text-orange-600 dark:text-orange-400" />
-                    <span>Mark Picked</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsMenuOpen(false);
-                      onMarkWaiting(order);
-                    }}
-                    className="w-full px-3 py-2 text-left text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 flex items-center gap-2 transition-colors cursor-pointer"
-                  >
-                    <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                    <span>Not Found / Hold</span>
-                  </button>
-                </>
-              )}
+              {/* Option 2: Print Memo */}
+              <button
+                type="button"
+                onClick={handlePrintMemo}
+                className="w-full px-3 py-2 text-left text-navy-900 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 transition-colors cursor-pointer font-semibold"
+              >
+                <Printer className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                <span>Print Memo Invoice</span>
+              </button>
 
-              {order.stage === 'WAITING' && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsMenuOpen(false);
-                      onResumePick(order);
-                    }}
-                    className="w-full px-3 py-2 text-left text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer"
-                  >
-                    <RefreshCw className="w-4 h-4 text-orange-600 dark:text-orange-400" />
-                    <span>Found → Resume Pick</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsMenuOpen(false);
-                      onMarkPicked(order);
-                    }}
-                    className="w-full px-3 py-2 text-left text-navy-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 transition-colors cursor-pointer"
-                  >
-                    <ArrowRight className="w-4 h-4 text-slate-600 dark:text-slate-300" />
-                    <span>Mark Picked</span>
-                  </button>
-                </>
-              )}
+              <div className="border-t border-slate-100 dark:border-white/10 my-1" />
 
-              {order.stage === 'PACK' && (
+              {/* Stage Transitions (English Only) */}
+              {order.stage !== 'PACK' && order.stage !== 'CANCELLED' && (
                 <button
                   type="button"
                   onClick={() => {
                     setIsMenuOpen(false);
-                    onPrintAndPack(order);
+                    if (onInlineStageChange) {
+                      onInlineStageChange(order.id, 'PACK');
+                    } else {
+                      onMarkPicked(order);
+                    }
+                  }}
+                  className="w-full px-3 py-2 text-left text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer"
+                >
+                  <PackageCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                  <span>Move to Pack</span>
+                </button>
+              )}
+
+              {order.stage !== 'WAITING' && order.stage !== 'CANCELLED' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    if (onInlineStageChange) {
+                      onInlineStageChange(
+                        order.id,
+                        'WAITING',
+                        'Awaiting merchant stock delivery'
+                      );
+                    } else {
+                      onMarkWaiting(order);
+                    }
+                  }}
+                  className="w-full px-3 py-2 text-left text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer"
+                >
+                  <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <span>Put on Hold</span>
+                </button>
+              )}
+
+              {order.stage !== 'DISPATCH' && order.stage !== 'CANCELLED' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    if (onInlineStageChange) {
+                      onInlineStageChange(order.id, 'DISPATCH');
+                    } else {
+                      onPrintAndPack(order);
+                    }
                   }}
                   className="w-full px-3 py-2 text-left text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer"
                 >
-                  <Printer className="w-4 h-4 text-orange-600 dark:text-orange-400" />
-                  <span>Print 4x6&quot; &amp; Pack</span>
+                  <Truck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span>Move to Dispatch</span>
                 </button>
               )}
 
@@ -342,7 +348,7 @@ export function OrdersTableRow({
                   }}
                   className="w-full px-3 py-2 text-left text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer"
                 >
-                  <Truck className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                  <Truck className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
                   <span>Book Courier</span>
                 </button>
               )}
@@ -356,23 +362,23 @@ export function OrdersTableRow({
                   }}
                   className="w-full px-3 py-2 text-left text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer"
                 >
-                  <CheckCircle2 className="w-4 h-4 text-orange-600 dark:text-orange-400" />
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                   <span>Confirm Handover</span>
                 </button>
               )}
 
               {/* Cancel Order */}
-              {(order.stage === 'PICK' || order.stage === 'WAITING' || order.stage === 'PACK') && (
-                <div className="border-t border-slate-200 dark:border-white/10 my-1 pt-1">
+              {order.stage !== 'CANCELLED' && order.stage !== 'HANDED_OVER' && (
+                <div className="border-t border-slate-100 dark:border-white/10 my-1 pt-1">
                   <button
                     type="button"
                     onClick={() => {
                       setIsMenuOpen(false);
                       onCancelOrder(order);
                     }}
-                    className="w-full px-3 py-2 text-left text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center gap-2 transition-colors cursor-pointer"
+                    className="w-full px-3 py-2 text-left text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center gap-2 transition-colors cursor-pointer font-semibold"
                   >
-                    <XCircle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+                    <XCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
                     <span>Cancel Order</span>
                   </button>
                 </div>

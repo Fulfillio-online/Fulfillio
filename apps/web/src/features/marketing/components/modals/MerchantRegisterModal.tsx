@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect } from 'react';
 import {
@@ -91,26 +91,26 @@ export function MerchantRegisterModal({
             <div>
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-100 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/20 text-orange-800 dark:text-orange-400 text-[11px] font-bold uppercase tracking-wider mb-2">
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>মার্চেন্ট অনবোর্ডিং</span>
+                <span>Merchant Onboarding</span>
               </div>
               <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-                Fulfillio মার্চেন্ট একাউন্ট খুলুন
+                Create Your Fulfillio Merchant Account
               </h3>
               <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-                ঢাকার সেন্ট্রাল ওয়্যারহাউসে ইনভেন্টরি সংরক্ষণ, বারকোড প্যাকিং এবং দ্রুত COD সেটেলমেন্ট পান।
+                Store inventory in central warehouse, automate barcode packaging, and receive weekly COD payouts.
               </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4 text-xs font-sans">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">আপনার পূর্ণ নাম *</label>
+                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">Full Name *</label>
                   <div className="relative">
                     <User className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
                       required
-                      placeholder="e.g. তানভীর হাসান"
+                      placeholder="e.g. Tanvir Hasan"
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
                       className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-orange-500"
@@ -119,7 +119,7 @@ export function MerchantRegisterModal({
                 </div>
 
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">স্টোর বা ব্র্যান্ডের নাম *</label>
+                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">Store or Brand Name *</label>
                   <div className="relative">
                     <Building2 className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
@@ -136,7 +136,7 @@ export function MerchantRegisterModal({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">ফোন নাম্বার (হোয়াটসঅ্যাপ) *</label>
+                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">Phone Number (WhatsApp) *</label>
                   <div className="relative">
                     <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
@@ -151,7 +151,7 @@ export function MerchantRegisterModal({
                 </div>
 
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">ইমেইল এড্রেস *</label>
+                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">Email Address *</label>
                   <div className="relative">
                     <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
@@ -168,39 +168,39 @@ export function MerchantRegisterModal({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">প্রোডাক্ট ক্যাটাগরি *</label>
+                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">Product Category *</label>
                   <select
                     value={category}
                     onChange={(e) => setCategory(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:border-orange-500"
                   >
-                    <option value="Fashion & Apparel">ফ্যাশন ও ক্লোথিং</option>
-                    <option value="Electronics & Gadgets">ইলেকট্রনিক্স ও গ্যাজেটস</option>
-                    <option value="Health, Skin & Cosmetics">স্কিন কেয়ার ও কসমেটিক্স</option>
-                    <option value="Footwear & Bags">জুতা ও ব্যাগ</option>
-                    <option value="Lifestyle & Home">লাইফস্টাইল ও হোম ডেকোর</option>
-                    <option value="Other">অন্যান্য প্রোডাক্ট</option>
+                    <option value="Fashion & Apparel">Fashion & Apparel</option>
+                    <option value="Electronics & Gadgets">Electronics & Gadgets</option>
+                    <option value="Health, Skin & Cosmetics">Skin Care & Cosmetics</option>
+                    <option value="Footwear & Bags">Footwear & Bags</option>
+                    <option value="Lifestyle & Home">Lifestyle & Home Decor</option>
+                    <option value="Other">Other Products</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">মাসিক আনুমানিক পার্সেল *</label>
+                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">Monthly Parcel Volume *</label>
                   <select
                     value={orderVolume}
                     onChange={(e) => setOrderVolume(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:border-orange-500"
                   >
-                    <option value="< 100 orders/mo">&lt; ১০০ পার্সেল / মাস (স্টার্টআপ)</option>
-                    <option value="100 - 500 orders/mo">১০০ - ৫০০ পার্সেল / মাস</option>
-                    <option value="500 - 2,000 orders/mo">৫০০ - ২,০০০ পার্সেল / মাস</option>
-                    <option value="2,000+ orders/mo">২,০০০+ পার্সেল / মাস (হাই ভলিউম)</option>
+                    <option value="< 100 orders/mo">&lt; 100 parcels / mo (Startup)</option>
+                    <option value="100 - 500 orders/mo">100 - 500 parcels / mo</option>
+                    <option value="500 - 2,000 orders/mo">500 - 2,000 parcels / mo</option>
+                    <option value="2,000+ orders/mo">2,000+ parcels / mo (High Volume)</option>
                   </select>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">ফেসবুক পেজ বা ওয়েবসাইট লিংক</label>
+                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">Facebook Page or Website URL</label>
                   <div className="relative">
                     <Globe className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
@@ -214,13 +214,13 @@ export function MerchantRegisterModal({
                 </div>
 
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">পাসওয়ার্ড সেট করুন *</label>
+                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">Set Password *</label>
                   <div className="relative">
                     <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
                       type="password"
                       required
-                      placeholder="কমপক্ষে ৬ ক্যারেক্টার"
+                      placeholder="At least 6 characters"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-orange-500"
@@ -239,7 +239,7 @@ export function MerchantRegisterModal({
                     className="mt-0.5 rounded border-slate-300 dark:border-slate-700 text-orange-600 focus:ring-orange-500"
                   />
                   <span>
-                    আমি Fulfillio ওয়্যারহাউস টার্মস ও সাপ্তাহিক COD সেটেলমেন্ট নিয়মনীতিতে সম্মতি দিচ্ছি।
+                    I agree to Fulfillio Warehouse Terms of Service and weekly COD settlement policies.
                   </span>
                 </label>
               </div>
@@ -253,7 +253,7 @@ export function MerchantRegisterModal({
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <>
-                    <span>আবেদন সাবমিট করুন</span>
+                    <span>Submit Application</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
@@ -261,7 +261,7 @@ export function MerchantRegisterModal({
             </form>
 
             <div className="pt-2 border-t border-slate-200 dark:border-slate-800 text-center text-xs text-slate-500 dark:text-slate-400">
-              <span>ইতিমধ্যে মার্চেন্ট আছেন? </span>
+              <span>Already registered? </span>
               <button
                 type="button"
                 onClick={() => {
@@ -270,7 +270,7 @@ export function MerchantRegisterModal({
                 }}
                 className="text-orange-600 dark:text-orange-400 font-bold hover:underline cursor-pointer"
               >
-                ড্যাশবোর্ডে লগইন করুন
+                Sign in here
               </button>
             </div>
           </div>
@@ -283,13 +283,13 @@ export function MerchantRegisterModal({
 
             <div>
               <span className="text-[11px] uppercase tracking-wider font-bold text-orange-600 dark:text-orange-400 block mb-1">
-                আবেদন সফল হয়েছে
+                Application Submitted Successfully
               </span>
               <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-                স্বাগতম, {storeName || 'মার্চেন্ট'}!
+                Welcome, {storeName || 'Merchant'}!
               </h3>
               <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-2 max-w-md mx-auto leading-relaxed">
-                আপনার অনবোর্ডিং রিকোয়েস্ট রিসিভ করা হয়েছে। আমাদের ওয়্যারহাউস টিম শীঘ্রই আপনার দেওয়া হোয়াটসঅ্যাপ নাম্বারে (<span className="text-orange-600 dark:text-orange-400 font-mono font-semibold">{phone || 'প্রদত্ত নাম্বার'}</span>) যোগাযোগ করে প্রথম প্রোডাক্ট ইনবাউন্ড শিডিউল বুঝিয়ে দেবে।
+                Your onboarding application has been received. Our warehouse fulfillment team will contact you via WhatsApp at (<span className="text-orange-600 dark:text-orange-400 font-mono font-semibold">{phone || 'your phone number'}</span>) to coordinate your first product inbound delivery.
               </p>
             </div>
 
@@ -298,7 +298,7 @@ export function MerchantRegisterModal({
               onClick={onClose}
               className="px-6 py-2.5 rounded-xl font-bold text-xs bg-orange-600 hover:bg-orange-500 text-white transition-all shadow-md cursor-pointer"
             >
-              সম্পন্ন &amp; হোমপেজে ফিরুন
+              Done &amp; Return to Homepage
             </button>
           </div>
         )}

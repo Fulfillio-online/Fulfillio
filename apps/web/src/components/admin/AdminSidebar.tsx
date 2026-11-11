@@ -339,6 +339,7 @@ function ProductsSubNav({
     { tab: 'all', label: 'All Products' },
     { tab: 'approval', label: 'Product Approval' },
     { tab: 'bins', label: 'Warehouse Bins' },
+    { tab: 'ledger', label: 'Stock Movement Ledger' },
   ];
 
   return (

@@ -77,11 +77,18 @@ export function AdminHeader({ onOpenMobileSidebar }: AdminHeaderProps) {
         subtitle: 'Performance, Stock & Recent Orders',
       };
     }
-    if (pathname.startsWith('/admin/orders')) {
+    if (pathname === '/admin/orders') {
       return {
         title: 'Orders Pipeline',
         icon: Layers,
         subtitle: 'Pick, Pack & Dispatch Queue',
+      };
+    }
+    if (pathname.startsWith('/admin/orders/')) {
+      return {
+        title: 'Order Details',
+        icon: Layers,
+        subtitle: 'Customer, Shipping, Items & 4x6 Slip',
       };
     }
     if (pathname.startsWith('/admin/delivery')) {

@@ -3,97 +3,242 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Sparkles,
-  Layers,
+  Truck,
+  PlusCircle,
+  BellRing,
   CheckCircle2,
-  Clock,
-  Check,
   XCircle,
-  Store,
   Eye,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Search,
+  ChevronDown,
   AlertTriangle,
+  RotateCcw,
+  Store,
+  MapPin,
+  Tag,
+  ArrowRight,
+  Package,
+  PackageMinus,
+  Check,
 } from 'lucide-react';
-import { WarehouseBin, WarehouseProductItem } from '../../types';
+import { SearchInput } from '@/components/ui';
 import { Modal } from '@/components/admin/AdminModal';
+import {
+  InboundStockReplenishment,
+  StockWithdrawalRequest,
+  UnifiedApprovalItem,
+  WarehouseBin,
+  WarehouseProductItem,
+} from '../../types';
+import { RestockIntakeModal } from '../modals/RestockIntakeModal';
+import { SendRestockNoticeModal } from '../modals/SendRestockNoticeModal';
+import { ManualRestockModal } from '../modals/ManualRestockModal';
+import { ConfirmWithdrawalModal } from '../modals/ConfirmWithdrawalModal';
+import { ManualWithdrawalModal } from '../modals/ManualWithdrawalModal';
+import { ApprovalItemDetailsModal } from '../modals/ApprovalItemDetailsModal';
 
 interface ProductsApprovalTabProps {
   products: WarehouseProductItem[];
   bins: WarehouseBin[];
+  stockReplenishments: InboundStockReplenishment[];
+  stockWithdrawals?: StockWithdrawalRequest[];
   onOpenApprovalModal: (
     mode: 'APPROVE' | 'REJECT',
     product: WarehouseProductItem,
     selectedBin: string
   ) => void;
-  onBulkApprove?: (
-    productIds: string[],
-    binSelections: Record<string, string>
+  onApproveReplenishment: (
+    replenishment: InboundStockReplenishment,
+    finalQty: number,
+    targetBin: string
   ) => void;
-  onBulkReject?: (productIds: string[]) => void;
+  onRejectReplenishment: (
+    replenishment: InboundStockReplenishment,
+    reason?: string
+  ) => void;
+  onApproveWithdrawal?: (
+    withdrawal: StockWithdrawalRequest,
+    verifiedQty: number,
+    dispatchNote?: string
+  ) => void;
+  onRejectWithdrawal?: (
+    withdrawal: StockWithdrawalRequest,
+    reason?: string
+  ) => void;
+  onBulkApproveUnified?: (items: UnifiedApprovalItem[]) => void;
+  onBulkRejectUnified?: (items: UnifiedApprovalItem[]) => void;
+  onSendRestockNotice?: (productId: string, suggestedQty: number, note?: string) => void;
+  onRecordManualRestock?: (
+    productId: string,
+    quantity: number,
+    binCode: string,
+    note?: string
+  ) => void;
+  onRecordManualWithdrawal?: (
+    productId: string,
+    quantity: number,
+    reason?: string
+  ) => void;
   onSwitchToAllTab: () => void;
 }
 
 export function ProductsApprovalTab({
   products,
   bins,
+  stockReplenishments,
+  stockWithdrawals = [],
   onOpenApprovalModal,
-  onBulkApprove,
-  onBulkReject,
+  onApproveReplenishment,
+  onRejectReplenishment,
+  onApproveWithdrawal,
+  onRejectWithdrawal,
+  onBulkApproveUnified,
+  onBulkRejectUnified,
+  onSendRestockNotice,
+  onRecordManualRestock,
+  onRecordManualWithdrawal,
   onSwitchToAllTab,
 }: ProductsApprovalTabProps) {
+  // 1. Separate pending subsets
   const pendingProducts = useMemo(
     () => products.filter((p) => p.status === 'PENDING_APPROVAL'),
     [products]
   );
 
-  // Search & Filter state
+  const pendingReplenishments = useMemo(
+    () => stockReplenishments.filter((r) => r.status === 'PENDING_APPROVAL'),
+    [stockReplenishments]
+  );
+
+  const pendingWithdrawals = useMemo(
+    () => stockWithdrawals.filter((w) => w.status === 'PENDING_APPROVAL'),
+    [stockWithdrawals]
+  );
+
+  // 2. Build Unified Requests list
+  const unifiedItems: UnifiedApprovalItem[] = useMemo(() => {
+    const newItems: UnifiedApprovalItem[] = pendingProducts.map((p) => ({
+      id: p.id,
+      approvalType: 'NEW_PRODUCT',
+      productId: p.id,
+      title: p.title,
+      category: p.category,
+      merchantCode: p.merchantCode,
+      merchantName: p.merchantName,
+      sku: p.fullSku,
+      color: p.color,
+      size: p.size,
+      currentStock: 0,
+      inboundQty: p.stock || 50,
+      binCode: p.binCode || 'Unassigned',
+      status: p.status,
+      submittedAt: p.submittedAt,
+      imageUrl: p.imageUrl,
+      price: p.price,
+      rawProduct: p,
+    }));
+
+    const restockItems: UnifiedApprovalItem[] = pendingReplenishments.map((r) => {
+      const liveProd = products.find((p) => p.id === r.productId || p.fullSku === r.productSku);
+      return {
+        id: r.id,
+        approvalType: 'RESTOCK',
+        productId: r.productId,
+        title: r.productTitle,
+        category: r.category,
+        merchantCode: r.merchantCode,
+        merchantName: r.merchantName,
+        sku: r.productSku,
+        currentStock: liveProd ? liveProd.stock : r.currentStock,
+        inboundQty: r.requestedQty,
+        binCode: (liveProd ? liveProd.binCode : r.binCode) || 'A-01-02',
+        status: r.status,
+        submittedAt: r.submittedAt,
+        imageUrl: r.imageUrl,
+        note: r.note,
+        trackingRef: r.trackingRef,
+        rawReplenishment: r,
+        rawProduct: liveProd,
+      };
+    });
+
+    const withdrawalItems: UnifiedApprovalItem[] = pendingWithdrawals.map((w) => {
+      const liveProd = products.find((p) => p.id === w.productId || p.fullSku === w.productSku);
+      return {
+        id: w.id,
+        approvalType: 'WITHDRAWAL',
+        productId: w.productId,
+        title: w.productTitle,
+        category: w.category,
+        merchantCode: w.merchantCode,
+        merchantName: w.merchantName,
+        sku: w.productSku,
+        currentStock: liveProd ? liveProd.stock : w.currentStock,
+        inboundQty: w.withdrawQty,
+        binCode: (liveProd ? liveProd.binCode : w.binCode) || 'A-01-02',
+        status: w.status,
+        submittedAt: w.submittedAt,
+        imageUrl: w.imageUrl,
+        note: w.reason,
+        trackingRef: w.trackingRef,
+        rawWithdrawal: w,
+        rawProduct: liveProd,
+      };
+    });
+
+    return [...withdrawalItems, ...restockItems, ...newItems];
+  }, [pendingProducts, pendingReplenishments, pendingWithdrawals, products]);
+
+  // Counts for WordPress-style tabs
+  const allCount = unifiedItems.length;
+  const newProductsCount = pendingProducts.length;
+  const restocksCount = pendingReplenishments.length;
+  const withdrawalsCount = pendingWithdrawals.length;
+
+  // Filter States
+  const [activeTypeFilter, setActiveTypeFilter] = useState<'ALL' | 'NEW_PRODUCT' | 'RESTOCK' | 'WITHDRAWAL'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [merchantFilter, setMerchantFilter] = useState('ALL');
+  const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [binFilter, setBinFilter] = useState('ALL');
 
-  // Pagination & Rows limit
-  const [pageSize, setPageSize] = useState<number>(10);
-  const [currentPage, setCurrentPage] = useState<number>(1);
+  // Bulk Selection & Action
+  const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
+  const [bulkAction, setBulkAction] = useState<string>('');
 
-  // Bulk Selection
-  const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
+  // Dropdown Menu State for row actions
+  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
 
-  // Bulk Confirmation Modals
-  const [bulkApproveModalOpen, setBulkApproveModalOpen] = useState(false);
-  const [bulkRejectModalOpen, setBulkRejectModalOpen] = useState(false);
-
-  // Actions Dropdown state
-  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
-
-  // Mobile Accordion expanded items
-  const [expandedItemIds, setExpandedItemIds] = useState<Set<string>>(new Set());
-
-  // Viewing Product Modal
-  const [viewingProduct, setViewingProduct] = useState<WarehouseProductItem | null>(null);
-
-  // Selected bin per product
-  const [pendingBinSelection, setPendingBinSelection] = useState<Record<string, string>>({
-    'PRD-2001': 'A-02-01',
-    'PRD-2002': 'B-01-03',
-    'PRD-2003': 'C-01-02',
-    'PRD-2004': 'D-01-01',
-  });
-
-  // Close dropdown on outside click
+  // Close dropdown on click outside
   useEffect(() => {
-    if (!activeMenuId) return;
+    if (!openDropdownId) return;
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (!target.closest('[data-dropdown-container]')) {
-        setActiveMenuId(null);
+      if (!target.closest('[data-actions-dropdown]')) {
+        setOpenDropdownId(null);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [activeMenuId]);
+  }, [openDropdownId]);
 
-  // Unique merchants for filter
+  // Pagination
+  const [pageSize, setPageSize] = useState<number>(10);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+
+  // Modals
+  const [restockModalTarget, setRestockModalTarget] = useState<InboundStockReplenishment | null>(null);
+  const [withdrawalModalTarget, setWithdrawalModalTarget] = useState<StockWithdrawalRequest | null>(null);
+  const [sendNoticeModalOpen, setSendNoticeModalOpen] = useState(false);
+  const [manualRestockModalOpen, setManualRestockModalOpen] = useState(false);
+  const [manualWithdrawalModalOpen, setManualWithdrawalModalOpen] = useState(false);
+  const [detailsModalItem, setDetailsModalItem] = useState<UnifiedApprovalItem | null>(null);
+  const [rejectModalItem, setRejectModalItem] = useState<UnifiedApprovalItem | null>(null);
+  const [bulkApproveModalOpen, setBulkApproveModalOpen] = useState(false);
+  const [bulkRejectModalOpen, setBulkRejectModalOpen] = useState(false);
+
+  // Unique merchants
   const merchantsList = useMemo(() => {
     const map = new Map<string, string>();
     products.forEach((p) => {
@@ -104,35 +249,79 @@ export function ProductsApprovalTab({
     return Array.from(map.entries()).map(([code, name]) => ({ code, name }));
   }, [products]);
 
-  // Filtered products
-  const filteredProducts = useMemo(() => {
-    return pendingProducts.filter((item) => {
-      const q = searchQuery.trim().toLowerCase();
-      const matchSearch =
-        !q ||
-        item.title.toLowerCase().includes(q) ||
-        item.fullSku.toLowerCase().includes(q) ||
-        item.merchantName.toLowerCase().includes(q) ||
-        item.merchantCode.toLowerCase().includes(q);
-      const matchMerchant = merchantFilter === 'ALL' || item.merchantCode === merchantFilter;
-      return matchSearch && matchMerchant;
+  // Unique categories
+  const categoriesList = useMemo(() => {
+    const set = new Set<string>();
+    products.forEach((p) => {
+      if (p.category) set.add(p.category);
     });
-  }, [pendingProducts, searchQuery, merchantFilter]);
+    return Array.from(set);
+  }, [products]);
+
+  // Active filter check
+  const hasActiveFilters =
+    Boolean(searchQuery.trim()) ||
+    merchantFilter !== 'ALL' ||
+    categoryFilter !== 'ALL' ||
+    binFilter !== 'ALL';
+
+  const handleResetFilters = () => {
+    setSearchQuery('');
+    setMerchantFilter('ALL');
+    setCategoryFilter('ALL');
+    setBinFilter('ALL');
+    setCurrentPage(1);
+  };
+
+  // Filtered items
+  const filteredItems = useMemo(() => {
+    return unifiedItems.filter((item) => {
+      // Type Tab
+      if (activeTypeFilter !== 'ALL' && item.approvalType !== activeTypeFilter) {
+        return false;
+      }
+      // Search
+      const q = searchQuery.trim().toLowerCase();
+      if (q) {
+        const matchSearch =
+          item.title.toLowerCase().includes(q) ||
+          item.sku.toLowerCase().includes(q) ||
+          item.merchantName.toLowerCase().includes(q) ||
+          item.merchantCode.toLowerCase().includes(q) ||
+          (item.note && item.note.toLowerCase().includes(q)) ||
+          (item.trackingRef && item.trackingRef.toLowerCase().includes(q)) ||
+          item.binCode.toLowerCase().includes(q);
+        if (!matchSearch) return false;
+      }
+      // Merchant
+      if (merchantFilter !== 'ALL' && item.merchantCode !== merchantFilter) {
+        return false;
+      }
+      // Category
+      if (categoryFilter !== 'ALL' && item.category !== categoryFilter) {
+        return false;
+      }
+      // Bin
+      if (binFilter !== 'ALL' && item.binCode !== binFilter) {
+        return false;
+      }
+      return true;
+    });
+  }, [unifiedItems, activeTypeFilter, searchQuery, merchantFilter, categoryFilter, binFilter]);
 
   // Pagination calculation
-  const totalItems = filteredProducts.length;
+  const totalItems = filteredItems.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
   const safePage = Math.min(Math.max(1, currentPage), totalPages);
   const startIndex = (safePage - 1) * pageSize;
-  const paginatedProducts = filteredProducts.slice(startIndex, startIndex + pageSize);
+  const paginatedItems = filteredItems.slice(startIndex, startIndex + pageSize);
 
-  // Bulk Selection Helpers
+  // Bulk Selection
   const isAllPageSelected =
-    paginatedProducts.length > 0 &&
-    paginatedProducts.every((p) => selectedProductIds.has(p.id));
+    paginatedItems.length > 0 && paginatedItems.every((item) => selectedItemIds.has(item.id));
 
   const toggleSelect = (id: string) => {
-    setSelectedProductIds((prev) => {
+    setSelectedItemIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -141,95 +330,173 @@ export function ProductsApprovalTab({
   };
 
   const toggleSelectAllPage = () => {
-    setSelectedProductIds((prev) => {
+    setSelectedItemIds((prev) => {
       const next = new Set(prev);
       if (isAllPageSelected) {
-        paginatedProducts.forEach((p) => next.delete(p.id));
+        paginatedItems.forEach((item) => next.delete(item.id));
       } else {
-        paginatedProducts.forEach((p) => next.add(p.id));
+        paginatedItems.forEach((item) => next.add(item.id));
       }
       return next;
     });
   };
 
-  const toggleExpand = (id: string) => {
-    setExpandedItemIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const handlePageChange = (newPage: number) => {
-    if (newPage >= 1 && newPage <= totalPages) {
-      setCurrentPage(newPage);
-      setActiveMenuId(null);
+  const handleApplyBulkAction = () => {
+    if (!bulkAction || selectedItemIds.size === 0) return;
+    if (bulkAction === 'APPROVE') {
+      setBulkApproveModalOpen(true);
+    } else if (bulkAction === 'REJECT') {
+      setBulkRejectModalOpen(true);
     }
   };
 
-  const handlePageSizeChange = (newSize: number) => {
-    setPageSize(newSize);
-    setCurrentPage(1);
-    setActiveMenuId(null);
-  };
-
-  // Bulk Approve Execution
-  const handleConfirmBulkApprove = () => {
-    const ids = Array.from(selectedProductIds);
-    if (ids.length === 0) return;
-    onBulkApprove?.(ids, pendingBinSelection);
-    setSelectedProductIds(new Set());
+  const executeBulkApprove = () => {
+    const selectedList = unifiedItems.filter((item) => selectedItemIds.has(item.id));
+    if (onBulkApproveUnified) {
+      onBulkApproveUnified(selectedList);
+    } else {
+      selectedList.forEach((item) => {
+        if (item.approvalType === 'NEW_PRODUCT' && item.rawProduct) {
+          onOpenApprovalModal('APPROVE', item.rawProduct, bins[0]?.code || 'A-01-02');
+        } else if (item.approvalType === 'RESTOCK' && item.rawReplenishment) {
+          onApproveReplenishment(item.rawReplenishment, item.inboundQty, item.binCode);
+        } else if (item.approvalType === 'WITHDRAWAL' && item.rawWithdrawal && onApproveWithdrawal) {
+          onApproveWithdrawal(item.rawWithdrawal, item.inboundQty);
+        }
+      });
+    }
+    setSelectedItemIds(new Set());
+    setBulkAction('');
     setBulkApproveModalOpen(false);
   };
 
-  // Bulk Reject Execution
-  const handleConfirmBulkReject = () => {
-    const ids = Array.from(selectedProductIds);
-    if (ids.length === 0) return;
-    onBulkReject?.(ids);
-    setSelectedProductIds(new Set());
+  const executeBulkReject = () => {
+    const selectedList = unifiedItems.filter((item) => selectedItemIds.has(item.id));
+    if (onBulkRejectUnified) {
+      onBulkRejectUnified(selectedList);
+    } else {
+      selectedList.forEach((item) => {
+        if (item.approvalType === 'NEW_PRODUCT' && item.rawProduct) {
+          onOpenApprovalModal('REJECT', item.rawProduct, item.binCode);
+        } else if (item.approvalType === 'RESTOCK' && item.rawReplenishment) {
+          onRejectReplenishment(item.rawReplenishment, 'Rejected via bulk action');
+        } else if (item.approvalType === 'WITHDRAWAL' && item.rawWithdrawal && onRejectWithdrawal) {
+          onRejectWithdrawal(item.rawWithdrawal, 'Rejected via bulk action');
+        }
+      });
+    }
+    setSelectedItemIds(new Set());
+    setBulkAction('');
     setBulkRejectModalOpen(false);
   };
 
   return (
     <div className="space-y-4">
-      {/* Top Banner */}
-      <div className="bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-md">
-        <div>
-          <h3 className="text-base font-bold text-navy-800 dark:text-white flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-            <span>Inbound Merchant Product Submissions Awaiting Bin Assignment</span>
-          </h3>
-          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-0.5">
-            Review inbound product submissions, assign warehouse storage bins, and approve into active catalog.
+      {/* 1. TOP BANNER & INVENTORY ACTIONS */}
+      <div className="bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 shadow-md">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-orange-500/15 border border-orange-500/30 flex items-center justify-center text-orange-600 dark:text-orange-400">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <h3 className="text-base sm:text-lg font-extrabold text-navy-800 dark:text-white">
+              Warehouse Inventory Approvals &amp; Stock Movements
+            </h3>
+          </div>
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 max-w-2xl">
+            Single control center for <strong>new catalog products</strong>,{' '}
+            <strong>inbound stock replenishments</strong>, and <strong>merchant stock recalls</strong>.
+            Inspect physical goods, assign bins, and release outbound withdrawals.
           </p>
         </div>
-        <div className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1.5 self-start sm:self-auto bg-slate-50 dark:bg-navy-950 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-white/10">
-          <Layers className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
-          <span>Bins can be configured from <strong>Warehouse Bins</strong> tab</span>
+
+        {/* Top Quick Actions */}
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setSendNoticeModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-bold text-navy-800 dark:text-slate-100 border border-slate-200 dark:border-white/10 shadow-sm transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+            title="Send notification to merchant requesting restock for low or out-of-stock items"
+          >
+            <BellRing className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
+            <span>Send Restock Notice</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setManualRestockModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-500/20 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+            title="Log manual inbound replenishment for goods received directly at dock"
+          >
+            <PlusCircle className="w-3.5 h-3.5" />
+            <span>Record Inbound Restock</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setManualWithdrawalModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-md shadow-rose-500/20 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+            title="Process stock withdrawal / return to merchant"
+          >
+            <PackageMinus className="w-3.5 h-3.5" />
+            <span>Record Stock Withdrawal</span>
+          </button>
         </div>
       </div>
 
-      {/* Filter & Controls Bar */}
-      <div className="bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-md">
-        {/* Search Input */}
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-600 dark:text-slate-300 pointer-events-none" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setCurrentPage(1);
-            }}
-            placeholder="Search by title, SKU, or merchant..."
-            className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 focus:border-orange-500 rounded-xl text-xs sm:text-sm text-navy-800 dark:text-slate-100 placeholder-slate-500 dark:placeholder-slate-400 focus:outline-none transition-colors"
-          />
+      {/* 2. FILTER BAR (2-Row Layout Matching Orders & Products Catalog) */}
+      <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-navy-900/90 p-3 sm:p-4 shadow-sm space-y-3">
+        {/* Row 1: Standalone Search Bar */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+          <div className="flex-1 w-full min-w-0">
+            <SearchInput
+              value={searchQuery}
+              onChange={(val) => {
+                setSearchQuery(val);
+                setCurrentPage(1);
+              }}
+              onClear={() => {
+                setSearchQuery('');
+                setCurrentPage(1);
+              }}
+              placeholder="Search product title, SKU, merchant, or tracking reference..."
+              className="w-full text-xs"
+            />
+          </div>
         </div>
 
-        {/* Merchant Filter & Per-Page Controls */}
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+        {/* Row 2: Bulk Actions -> Apply -> All Merchants -> All Categories -> All Warehouse Bins -> Reset */}
+        <div className="flex flex-wrap items-center gap-2 pt-2.5 border-t border-slate-100 dark:border-white/5">
+          {/* 1. Bulk Actions Dropdown */}
+          <select
+            value={bulkAction}
+            onChange={(e) => setBulkAction(e.target.value)}
+            aria-label="Bulk Actions"
+            className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs font-semibold text-navy-800 dark:text-slate-100 focus:outline-none focus:border-orange-500 cursor-pointer shadow-2xs"
+          >
+            <option value="">Bulk Actions</option>
+            <option value="APPROVE">Approve Selected Requests</option>
+            <option value="REJECT">Decline Selected Requests</option>
+          </select>
+
+          {/* 2. Apply Button */}
+          <button
+            type="button"
+            onClick={handleApplyBulkAction}
+            disabled={!bulkAction || selectedItemIds.size === 0}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
+              bulkAction && selectedItemIds.size > 0
+                ? 'bg-orange-600 hover:bg-orange-500 text-white border-orange-600 shadow-sm cursor-pointer active:scale-95'
+                : 'bg-slate-100 dark:bg-navy-800 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-white/10 cursor-not-allowed opacity-60'
+            }`}
+          >
+            Apply
+          </button>
+
+          {/* Subtle Divider */}
+          <div className="hidden sm:block h-5 w-[1px] bg-slate-200 dark:bg-white/10 mx-0.5" />
+
+          {/* 3. All Merchants Dropdown */}
           <select
             value={merchantFilter}
             onChange={(e) => {
@@ -237,7 +504,7 @@ export function ProductsApprovalTab({
               setCurrentPage(1);
             }}
             aria-label="Filter by Merchant"
-            className="px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-medium text-navy-800 dark:text-slate-100 focus:outline-none focus:border-orange-500 cursor-pointer"
+            className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs font-semibold text-navy-800 dark:text-slate-100 focus:outline-none focus:border-orange-500 cursor-pointer shadow-2xs"
           >
             <option value="ALL">All Merchants</option>
             {merchantsList.map((m) => (
@@ -247,521 +514,411 @@ export function ProductsApprovalTab({
             ))}
           </select>
 
-          {/* Rows Limit Selector */}
-          <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl px-2.5 py-1.5">
-            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">Show:</span>
-            <select
-              value={pageSize}
-              onChange={(e) => handlePageSizeChange(Number(e.target.value))}
-              aria-label="Items per page"
-              className="bg-transparent text-xs font-bold text-orange-600 dark:text-orange-400 focus:outline-none cursor-pointer"
+          {/* 4. All Categories Dropdown */}
+          <select
+            value={categoryFilter}
+            onChange={(e) => {
+              setCategoryFilter(e.target.value);
+              setCurrentPage(1);
+            }}
+            aria-label="Filter by Category"
+            className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs font-semibold text-navy-800 dark:text-slate-100 focus:outline-none focus:border-orange-500 cursor-pointer shadow-2xs"
+          >
+            <option value="ALL">All Categories</option>
+            {categoriesList.map((cat) => (
+              <option key={cat} value={cat}>
+                {cat}
+              </option>
+            ))}
+          </select>
+
+          {/* 5. All Warehouse Bins Dropdown */}
+          <select
+            value={binFilter}
+            onChange={(e) => {
+              setBinFilter(e.target.value);
+              setCurrentPage(1);
+            }}
+            aria-label="Filter by Bin Location"
+            className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs font-semibold text-navy-800 dark:text-slate-100 focus:outline-none focus:border-orange-500 cursor-pointer shadow-2xs"
+          >
+            <option value="ALL">All Warehouse Bins</option>
+            {bins.map((b) => (
+              <option key={b.code} value={b.code}>
+                Bin {b.code} ({b.zone})
+              </option>
+            ))}
+          </select>
+
+          {/* 6. Reset Button */}
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              title="Reset active filters"
+              className="px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-white/10 shadow-2xs active:scale-95 animate-in fade-in"
             >
-              <option value={10} className="bg-slate-50 dark:bg-navy-950 text-navy-800 dark:text-slate-100">10</option>
-              <option value={25} className="bg-slate-50 dark:bg-navy-950 text-navy-800 dark:text-slate-100">25</option>
-              <option value={50} className="bg-slate-50 dark:bg-navy-950 text-navy-800 dark:text-slate-100">50</option>
-            </select>
-            <span className="text-xs text-slate-500 dark:text-slate-400">rows</span>
-          </div>
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Reset</span>
+            </button>
+          )}
+        </div>
+
+        {/* Row 3: WordPress-style Status Tabs */}
+        <div className="flex flex-wrap items-center gap-2 pt-2.5 border-t border-slate-100 dark:border-white/5 text-xs">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTypeFilter('ALL');
+              setCurrentPage(1);
+              setSelectedItemIds(new Set());
+            }}
+            className={`cursor-pointer transition-colors ${
+              activeTypeFilter === 'ALL'
+                ? 'text-orange-600 dark:text-orange-400 font-bold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white font-medium'
+            }`}
+          >
+            All Requests{' '}
+            <span className="text-slate-400 dark:text-slate-500 font-normal">({allCount})</span>
+          </button>
+          <span className="text-slate-300 dark:text-slate-700">|</span>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTypeFilter('NEW_PRODUCT');
+              setCurrentPage(1);
+              setSelectedItemIds(new Set());
+            }}
+            className={`cursor-pointer transition-colors ${
+              activeTypeFilter === 'NEW_PRODUCT'
+                ? 'text-indigo-600 dark:text-indigo-400 font-bold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white font-medium'
+            }`}
+          >
+            New Product Submissions{' '}
+            <span className="text-slate-400 dark:text-slate-500 font-normal">({newProductsCount})</span>
+          </button>
+          <span className="text-slate-300 dark:text-slate-700">|</span>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTypeFilter('RESTOCK');
+              setCurrentPage(1);
+              setSelectedItemIds(new Set());
+            }}
+            className={`cursor-pointer transition-colors ${
+              activeTypeFilter === 'RESTOCK'
+                ? 'text-amber-600 dark:text-amber-400 font-bold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white font-medium'
+            }`}
+          >
+            Stock Restocks{' '}
+            <span className="text-slate-400 dark:text-slate-500 font-normal">({restocksCount})</span>
+          </button>
+          <span className="text-slate-300 dark:text-slate-700">|</span>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTypeFilter('WITHDRAWAL');
+              setCurrentPage(1);
+              setSelectedItemIds(new Set());
+            }}
+            className={`cursor-pointer transition-colors ${
+              activeTypeFilter === 'WITHDRAWAL'
+                ? 'text-rose-600 dark:text-rose-400 font-bold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white font-medium'
+            }`}
+          >
+            Stock Withdrawals{' '}
+            <span className="text-slate-400 dark:text-slate-500 font-normal">({withdrawalsCount})</span>
+          </button>
         </div>
       </div>
 
-      {/* Bulk Action Bar (Visible when 1+ pending products selected) */}
-      {selectedProductIds.size > 0 && (
-        <div className="bg-white dark:bg-navy-900 border border-orange-500/50 rounded-2xl p-3 sm:p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xl animate-in fade-in-50 duration-200">
-          <div className="flex items-center gap-3">
-            <span className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 tabular-nums font-bold flex items-center justify-center text-xs">
-              {selectedProductIds.size}
+      {/* 3. TABLE CARD CONTAINER (Clean layout with attached header/footer) */}
+      <div className="bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl overflow-visible shadow-lg">
+        {/* Top Attached Sub-header: Selection Info & Rows Selector */}
+        <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50/80 dark:bg-navy-950/80 border-b border-slate-200 dark:border-white/10 text-xs text-slate-600 dark:text-slate-300 rounded-t-2xl">
+          <div>
+            <span className="text-slate-500 dark:text-slate-400 text-xs font-medium">
+              {selectedItemIds.size > 0
+                ? `${selectedItemIds.size} ${selectedItemIds.size === 1 ? 'request' : 'requests'} selected`
+                : 'Select requests to apply bulk actions'}
             </span>
-            <div className="text-xs sm:text-sm">
-              <span className="text-navy-800 dark:text-white font-bold">{selectedProductIds.size}</span>
-              <span className="text-slate-600 dark:text-slate-300"> pending submissions selected</span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-500 dark:text-slate-400 font-medium">Show</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              aria-label="Requests per page"
+              className="bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg px-2 py-0.5 text-xs font-bold text-orange-600 dark:text-orange-400 focus:outline-none cursor-pointer"
+            >
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+            <span className="text-slate-500 dark:text-slate-400 font-medium">rows</span>
+          </div>
+        </div>
+
+        {/* Empty State */}
+        {paginatedItems.length === 0 ? (
+          <div className="text-center py-16 px-4">
+            <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-navy-800 text-slate-400 flex items-center justify-center mx-auto mb-3">
+              <CheckCircle2 className="w-7 h-7 text-emerald-500" />
             </div>
+            <h4 className="text-sm font-bold text-navy-800 dark:text-white">
+              No Pending Requests in Queue
+            </h4>
+            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto mt-1">
+              All merchant product catalog submissions, stock replenishment batches, and withdrawals
+              have been processed.
+            </p>
             <button
               type="button"
-              onClick={() => setSelectedProductIds(new Set())}
-              className="text-xs text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-white underline underline-offset-2 ml-2 cursor-pointer"
+              onClick={onSwitchToAllTab}
+              className="mt-4 px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold shadow-md shadow-orange-500/20 transition-all cursor-pointer"
             >
-              Deselect All
+              Browse Active Warehouse Catalog
             </button>
           </div>
-
-          <div className="flex items-center gap-2">
-            {/* Bulk Actions Dropdown */}
-            <div className="relative inline-flex items-center text-left" data-dropdown-container>
-              <button
-                type="button"
-                onClick={() =>
-                  setActiveMenuId(activeMenuId === 'bulk-actions-approval' ? null : 'bulk-actions-approval')
-                }
-                className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-bold text-navy-800 dark:text-slate-100 border border-slate-300 dark:border-white/15 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
-              >
-                <span>Bulk Actions</span>
-                <ChevronDown
-                  className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                    activeMenuId === 'bulk-actions-approval' ? 'rotate-180 text-orange-600 dark:text-orange-400' : 'text-slate-600 dark:text-slate-300'
-                  }`}
-                />
-              </button>
-
-              {activeMenuId === 'bulk-actions-approval' && (
-                <div className="absolute right-0 top-full mt-1.5 w-60 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-2xl py-1.5 z-[100] text-left font-sans text-xs">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveMenuId(null);
-                      setBulkApproveModalOpen(true);
-                    }}
-                    className="w-full px-3.5 py-2 text-left text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 flex items-center gap-2.5 transition-colors cursor-pointer"
-                  >
-                    <Check className="w-4 h-4 text-orange-600 dark:text-orange-400 pointer-events-none" />
-                    <span>Approve Selected ({selectedProductIds.size})</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveMenuId(null);
-                      setBulkRejectModalOpen(true);
-                    }}
-                    className="w-full px-3.5 py-2 text-left text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center gap-2.5 transition-colors cursor-pointer border-t border-slate-200/80 dark:border-white/10"
-                  >
-                    <XCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 pointer-events-none" />
-                    <span>Reject Selected ({selectedProductIds.size})</span>
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Direct Approve Button */}
-            <button
-              type="button"
-              onClick={() => setBulkApproveModalOpen(true)}
-              className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-orange-500/25 transition-all cursor-pointer"
-            >
-              <Check className="w-4 h-4 pointer-events-none" />
-              <span>Approve Selected ({selectedProductIds.size})</span>
-            </button>
-
-            {/* Direct Reject Button */}
-            <button
-              type="button"
-              onClick={() => setBulkRejectModalOpen(true)}
-              className="px-3.5 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/40 text-rose-700 dark:text-rose-300 hover:text-navy-800 dark:hover:text-white active:scale-95 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-            >
-              <XCircle className="w-4 h-4 pointer-events-none" />
-              <span>Reject ({selectedProductIds.size})</span>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {pendingProducts.length === 0 ? (
-        <div className="bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl p-12 text-center space-y-3">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
-            <CheckCircle2 className="w-6 h-6" />
-          </div>
-          <h4 className="text-base font-bold text-navy-800 dark:text-white">
-            All Merchant Product Submissions Approved!
-          </h4>
-          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 max-w-md mx-auto">
-            Every pending product has been assigned a warehouse storage bin and moved into the active catalog.
-          </p>
-          <button
-            type="button"
-            onClick={onSwitchToAllTab}
-            className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold cursor-pointer"
-          >
-            View All Approved Products
-          </button>
-        </div>
-      ) : filteredProducts.length === 0 ? (
-        <div className="bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl p-8 text-center text-slate-600 dark:text-slate-300 text-sm">
-          No pending products match your search or filter.
-        </div>
-      ) : (
-        <div className="bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl overflow-visible shadow-xl">
-          {/* 1. Mobile Accordion Card View (Visible on < md) */}
-          <div className="block md:hidden p-3 space-y-2.5">
-            {paginatedProducts.map((item, idx) => {
-              const isNearBottom = idx > 0 && idx === paginatedProducts.length - 1;
-              const chosenBin =
-                pendingBinSelection[item.id] || item.binCode || bins[0]?.code || 'A-01-02';
-              const isSelected = selectedProductIds.has(item.id);
-              const isExpanded = expandedItemIds.has(item.id);
-              const isMenuOpen = activeMenuId === `mobile-${item.id}`;
-
-              return (
-                <div
-                  key={item.id}
-                  className={`relative rounded-xl border transition-colors shadow-sm p-3.5 space-y-2.5 ${
-                    isMenuOpen ? 'z-50' : 'z-0'
-                  } ${
-                    isSelected
-                      ? 'border-emerald-500/50 bg-emerald-50 dark:bg-emerald-950/20'
-                      : 'border-slate-200 dark:border-white/10 bg-slate-50/70 dark:bg-navy-950/70'
-                  }`}
-                >
-                  {/* Row 1: Checkbox + Product Thumbnail + Title + Status + Accordion Toggle */}
-                  <div className="flex items-center justify-between gap-2.5">
-                    <div className="pt-0.5" onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => toggleSelect(item.id)}
-                        aria-label={`Select ${item.title}`}
-                        className="w-4 h-4 rounded bg-slate-50 dark:bg-navy-950 border-slate-300 dark:border-white/15 text-orange-600 dark:text-orange-500 focus:ring-orange-500 cursor-pointer accent-orange-500"
-                      />
-                    </div>
-
-                    <div
-                      className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer"
-                      onClick={() => toggleExpand(item.id)}
-                    >
-                      <img
-                        src={item.imageUrl}
-                        alt={item.title}
-                        className="w-10 h-10 rounded-lg object-cover border border-slate-200 dark:border-white/10 shrink-0 bg-white dark:bg-navy-900"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-bold text-navy-800 dark:text-white truncate">{item.title}</div>
-                        <div className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
-                          <span>{item.category}</span>
-                          <span>·</span>
-                          <span className="text-orange-600 dark:text-orange-400 tabular-nums font-semibold">{item.fullSku}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <span className="px-2 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
-                        Pending
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => toggleExpand(item.id)}
-                        className="p-1 rounded-lg text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-white cursor-pointer"
-                        aria-label="Toggle details"
-                      >
-                        <ChevronDown
-                          className={`w-4 h-4 transition-transform duration-200 ${
-                            isExpanded ? 'rotate-180 text-orange-600 dark:text-orange-400' : ''
-                          }`}
-                        />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Row 2: Merchant Info & Stock */}
-                  <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100 dark:border-white/5">
-                    <div className="flex items-center gap-1 text-slate-700 dark:text-slate-200">
-                      <Store className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
-                      <span>{item.merchantName}</span>
-                      <span className="text-orange-600 dark:text-orange-400 tabular-nums font-bold">({item.merchantCode})</span>
-                    </div>
-                    <div className="text-cyan-700 dark:text-cyan-300 tabular-nums font-bold">
-                      {item.stock} <span className="text-[11px] font-normal text-slate-600 dark:text-slate-300">units</span>
-                    </div>
-                  </div>
-
-                  {/* Row 3: Target Bin & Actions Dropdown */}
-                  <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-white/5 gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-slate-600 dark:text-slate-300 font-medium">Bin:</span>
-                      <select
-                        value={chosenBin}
-                        onChange={(e) =>
-                          setPendingBinSelection((prev) => ({
-                            ...prev,
-                            [item.id]: e.target.value,
-                          }))
-                        }
-                        className="px-2 py-1 rounded-lg bg-white dark:bg-navy-900 border border-slate-300 dark:border-white/15 text-xs tabular-nums font-bold text-orange-700 dark:text-orange-300 focus:outline-none"
-                      >
-                        {bins.map((b) => (
-                          <option key={b.code} value={b.code}>
-                            {b.code}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Actions Dropdown */}
-                    <div className="relative inline-flex items-center justify-end text-left" data-dropdown-container>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setActiveMenuId(isMenuOpen ? null : `mobile-${item.id}`)
-                        }
-                        className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-bold text-navy-800 dark:text-slate-100 border border-slate-300 dark:border-white/15 flex items-center gap-1.5 transition-colors cursor-pointer"
-                      >
-                        <span>Actions</span>
-                        <ChevronDown
-                          className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                            isMenuOpen ? 'rotate-180 text-orange-600 dark:text-orange-400' : 'text-slate-600 dark:text-slate-300'
-                          }`}
-                        />
-                      </button>
-
-                      {isMenuOpen && (
-                        <div
-                          className={`absolute right-0 ${
-                            isNearBottom ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
-                          } w-52 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-2xl py-1.5 z-[100] text-left text-xs pointer-events-auto`}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setActiveMenuId(null);
-                              setViewingProduct(item);
-                            }}
-                            className="w-full px-3.5 py-2 text-left text-navy-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 transition-colors cursor-pointer"
-                          >
-                            <Eye className="w-4 h-4 text-orange-600 dark:text-orange-400 pointer-events-none" />
-                            <span>View Details</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setActiveMenuId(null);
-                              onOpenApprovalModal('APPROVE', item, chosenBin);
-                            }}
-                            className="w-full px-3.5 py-2 text-left text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer"
-                          >
-                            <Check className="w-4 h-4 text-orange-600 dark:text-orange-400 pointer-events-none" />
-                            <span>Approve &amp; Assign Bin</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setActiveMenuId(null);
-                              onOpenApprovalModal('REJECT', item, chosenBin);
-                            }}
-                            className="w-full px-3.5 py-2 text-left text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center gap-2 transition-colors cursor-pointer border-t border-slate-200/80 dark:border-white/10"
-                          >
-                            <XCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 pointer-events-none" />
-                            <span>Reject / QC Fail</span>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Expanded Accordion Details */}
-                  {isExpanded && (
-                    <div className="pt-2 border-t border-slate-200/80 dark:border-white/10 space-y-2 text-xs text-slate-700 dark:text-slate-200">
-                      <div className="grid grid-cols-2 gap-2 bg-white/60 dark:bg-navy-900/60 p-2.5 rounded-lg border border-slate-200/60 dark:border-white/10">
-                        <div>
-                          <div className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold uppercase">Variant</div>
-                          <div className="font-medium text-navy-800 dark:text-slate-100">{item.color} · {item.size}</div>
-                        </div>
-                        <div>
-                          <div className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold uppercase">Price</div>
-                          <div className="tabular-nums font-bold text-navy-800 dark:text-white">৳{item.price.toLocaleString()}</div>
-                        </div>
-                        <div className="col-span-2">
-                          <div className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold uppercase">Submitted</div>
-                          <div className="text-slate-600 dark:text-slate-300">{item.submittedAt}</div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* 2. Desktop Full Table View (Visible on md and larger) */}
-          <div className="hidden md:block overflow-x-auto overflow-y-visible">
-            <table className="w-full text-left border-collapse">
+        ) : (
+          <div className="overflow-visible">
+            <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-slate-200 dark:border-white/10 bg-slate-50/70 dark:bg-navy-950/70 text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
-                  <th className="py-3.5 pl-4 pr-2 w-10 align-middle">
+                <tr className="border-b border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-navy-950/50 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  <th className="py-3 px-4 w-10 text-center">
                     <input
                       type="checkbox"
                       checked={isAllPageSelected}
                       onChange={toggleSelectAllPage}
-                      aria-label="Select all pending products on this page"
-                      className="w-4 h-4 rounded bg-slate-50 dark:bg-navy-950 border-slate-300 dark:border-white/15 text-orange-600 dark:text-orange-500 focus:ring-orange-500 cursor-pointer accent-orange-500"
+                      aria-label="Select all on this page"
+                      className="w-4 h-4 rounded border-slate-300 dark:border-white/20 text-orange-600 focus:ring-orange-500 cursor-pointer"
                     />
                   </th>
-                  <th className="py-3.5 px-3 align-middle">Product</th>
-                  <th className="py-3.5 px-3 align-middle">Merchant</th>
-                  <th className="py-3.5 px-3 align-middle">SKU &amp; Variant</th>
-                  <th className="py-3.5 px-3 align-middle">Received Qty &amp; Price</th>
-                  <th className="py-3.5 px-3 align-middle">Target Bin</th>
-                  <th className="py-3.5 px-3 align-middle">Submitted</th>
-                  <th className="py-3.5 pl-3 pr-5 text-right align-middle">Actions</th>
+                  <th className="py-3 px-4">Product &amp; Request Type</th>
+                  <th className="py-3 px-4">Merchant</th>
+                  <th className="py-3 px-4">Quantity &amp; Stock Math</th>
+                  <th className="py-3 px-4">Storage Bin</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200/60 dark:divide-white/10 text-xs">
-                {paginatedProducts.map((item, idx) => {
-                  const isNearBottom = idx > 0 && idx >= paginatedProducts.length - 2;
-                  const chosenBin =
-                    pendingBinSelection[item.id] || item.binCode || bins[0]?.code || 'A-01-02';
-                  const isSelected = selectedProductIds.has(item.id);
-                  const isMenuOpen = activeMenuId === `desktop-${item.id}`;
+              <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                {paginatedItems.map((item) => {
+                  const isSelected = selectedItemIds.has(item.id);
+                  const isRestock = item.approvalType === 'RESTOCK';
+                  const isWithdrawal = item.approvalType === 'WITHDRAWAL';
+                  const isNewProduct = item.approvalType === 'NEW_PRODUCT';
+                  const isMenuOpen = openDropdownId === item.id;
 
                   return (
                     <tr
                       key={item.id}
-                      className={`hover:bg-slate-100/40 dark:hover:bg-navy-800/40 transition-colors group ${
-                        isSelected ? 'bg-emerald-50 dark:bg-emerald-950/15' : ''
+                      className={`transition-colors hover:bg-slate-50/60 dark:hover:bg-navy-800/40 ${
+                        isSelected ? 'bg-orange-50/40 dark:bg-orange-950/15' : ''
                       }`}
                     >
                       {/* Checkbox */}
-                      <td className="py-3 pl-4 pr-2 w-10 align-middle" onClick={(e) => e.stopPropagation()}>
+                      <td className="py-3.5 px-4 text-center">
                         <input
                           type="checkbox"
                           checked={isSelected}
                           onChange={() => toggleSelect(item.id)}
                           aria-label={`Select ${item.title}`}
-                          className="w-4 h-4 rounded bg-slate-50 dark:bg-navy-950 border-slate-300 dark:border-white/15 text-orange-600 dark:text-orange-500 focus:ring-orange-500 cursor-pointer accent-orange-500"
+                          className="w-4 h-4 rounded border-slate-300 dark:border-white/20 text-orange-600 focus:ring-orange-500 cursor-pointer"
                         />
                       </td>
 
-                      {/* Product Thumbnail & Title */}
-                      <td className="py-3 px-3 align-middle">
+                      {/* Product & Type Badge */}
+                      <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">
                           <img
                             src={item.imageUrl}
                             alt={item.title}
-                            className="w-11 h-11 rounded-xl object-cover border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-navy-950 shrink-0"
+                            className="w-11 h-11 rounded-xl object-cover border border-slate-200 dark:border-white/10 shrink-0"
                           />
-                          <div className="min-w-0 max-w-[220px]">
-                            <div
-                              className="text-sm font-bold text-navy-800 dark:text-white truncate cursor-pointer hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
-                              title={item.title}
-                              onClick={() => setViewingProduct(item)}
-                            >
-                              {item.title}
-                            </div>
-                            <div className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1.5 mt-0.5">
-                              <span className="px-1.5 py-0.2 rounded bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-[11px] font-medium text-slate-700 dark:text-slate-200">
+                          <div className="space-y-0.5 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {isWithdrawal ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30">
+                                  📤 Stock Recall (-{item.inboundQty})
+                                </span>
+                              ) : isRestock ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30">
+                                  🔄 Restock (+{item.inboundQty})
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 border border-indigo-500/30">
+                                  ✨ New Catalog SKU
+                                </span>
+                              )}
+                              <span className="text-[10px] text-slate-400 font-medium">
                                 {item.category}
                               </span>
+                            </div>
+                            <div className="font-bold text-navy-800 dark:text-white truncate max-w-xs">
+                              {item.title}
+                            </div>
+                            <div className="font-mono text-[11px] text-orange-600 dark:text-orange-400 tabular-nums">
+                              {item.sku}
                             </div>
                           </div>
                         </div>
                       </td>
 
                       {/* Merchant */}
-                      <td className="py-3 px-3 align-middle">
-                        <div className="font-semibold text-navy-800 dark:text-slate-100">{item.merchantName}</div>
-                        <div className="tabular-nums text-xs font-bold text-orange-600 dark:text-orange-400">
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        <div className="font-bold text-navy-800 dark:text-white">
+                          {item.merchantName}
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400">
                           {item.merchantCode}
                         </div>
                       </td>
 
-                      {/* SKU & Variant */}
-                      <td className="py-3 px-3 align-middle">
-                        <div className="tabular-nums font-bold text-orange-600 dark:text-orange-400 text-xs" title={item.fullSku}>
-                          {item.fullSku}
-                        </div>
-                        <div className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
-                          {item.color} · {item.size}
-                        </div>
+                      {/* Quantity & Stock Math */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        {isWithdrawal ? (
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-1 text-[11px]">
+                              <span className="text-slate-500 dark:text-slate-400">Current:</span>
+                              <strong className="text-navy-800 dark:text-white">
+                                {item.currentStock} pcs
+                              </strong>
+                            </div>
+                            <div className="text-rose-600 dark:text-rose-400 font-extrabold text-xs flex items-center gap-1">
+                              <span>-{item.inboundQty} withdraw</span>
+                              <span className="text-slate-400 font-normal">
+                                → Remaining: {Math.max(0, item.currentStock - item.inboundQty)} pcs
+                              </span>
+                            </div>
+                          </div>
+                        ) : isRestock ? (
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-1 text-[11px]">
+                              <span className="text-slate-500 dark:text-slate-400">Current:</span>
+                              {item.currentStock === 0 ? (
+                                <span className="px-1.5 py-0.2 rounded font-bold text-rose-600 bg-rose-500/15 border border-rose-500/30">
+                                  0 (Depleted)
+                                </span>
+                              ) : (
+                                <strong className="text-navy-800 dark:text-white">
+                                  {item.currentStock} pcs
+                                </strong>
+                              )}
+                            </div>
+                            <div className="text-emerald-600 dark:text-emerald-400 font-extrabold text-xs flex items-center gap-1">
+                              <span>+{item.inboundQty} inbound</span>
+                              <span className="text-slate-400 font-normal">
+                                → Total: {item.currentStock + item.inboundQty} pcs
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-0.5">
+                            <div className="font-extrabold text-indigo-600 dark:text-indigo-400 text-xs">
+                              +{item.inboundQty} pcs initial
+                            </div>
+                            <div className="text-[11px] text-slate-400">
+                              Brand new item submission
+                            </div>
+                          </div>
+                        )}
                       </td>
 
-                      {/* Received Qty & Price */}
-                      <td className="py-3 px-3 align-middle">
-                        <div className="tabular-nums font-bold text-cyan-700 dark:text-cyan-300 text-xs">
-                          {item.stock} <span className="text-[11px] font-normal text-slate-600 dark:text-slate-300">units</span>
-                        </div>
-                        <div className="tabular-nums text-xs text-slate-700 dark:text-slate-200 mt-0.5">
-                          ৳{item.price.toLocaleString()}
-                        </div>
+                      {/* Storage Bin (Clean static indicator - No select dropdown!) */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        {isNewProduct ? (
+                          <span className="text-slate-400 dark:text-slate-500 italic text-[11px]">
+                            Unassigned (Pending QC)
+                          </span>
+                        ) : isWithdrawal ? (
+                          <span className="inline-flex items-center gap-1 font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-navy-800 px-2 py-0.5 rounded text-xs border border-slate-200 dark:border-white/10">
+                            Bin {item.binCode}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 font-bold text-orange-600 dark:text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded text-xs border border-orange-500/20">
+                            Bin {item.binCode}
+                          </span>
+                        )}
                       </td>
 
-                      {/* Target Bin Assignment */}
-                      <td className="py-3 px-3 align-middle">
-                        <select
-                          value={chosenBin}
-                          onChange={(e) =>
-                            setPendingBinSelection((prev) => ({
-                              ...prev,
-                              [item.id]: e.target.value,
-                            }))
-                          }
-                          aria-label={`Select Bin for ${item.title}`}
-                          className="px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/15 text-xs tabular-nums font-bold text-orange-700 dark:text-orange-300 focus:outline-none focus:border-orange-500 cursor-pointer shadow-inner"
-                        >
-                          {bins.map((b) => (
-                            <option key={b.code} value={b.code}>
-                              {b.code} ({b.zone})
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-
-                      {/* Submitted At */}
-                      <td className="py-3 px-3 whitespace-nowrap text-slate-600 dark:text-slate-300 text-xs align-middle">
-                        <div className="flex items-center gap-1.5">
-                          <Clock className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 shrink-0" />
-                          <span>{item.submittedAt}</span>
-                        </div>
-                      </td>
-
-                      {/* Actions Single Dropdown (Truly Floating Without Baseline Shift) */}
-                      <td className="py-3 pl-3 pr-5 text-right align-middle">
-                        <div className="relative inline-flex items-center justify-end text-left align-middle" data-dropdown-container>
+                      {/* Actions: Clean Dropdown Menu */}
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap relative">
+                        <div className="inline-block text-left" data-actions-dropdown>
                           <button
                             type="button"
-                            onClick={() =>
-                              setActiveMenuId(isMenuOpen ? null : `desktop-${item.id}`)
-                            }
-                            className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-bold text-navy-800 dark:text-slate-100 border border-slate-300 dark:border-white/15 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+                            onClick={() => setOpenDropdownId(isMenuOpen ? null : item.id)}
+                            className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-navy-800 hover:bg-slate-100 dark:hover:bg-navy-700 text-xs font-bold text-navy-800 dark:text-slate-100 shadow-2xs transition-all flex items-center gap-1 cursor-pointer active:scale-95"
                           >
                             <span>Actions</span>
-                            <ChevronDown
-                              className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                                isMenuOpen ? 'rotate-180 text-orange-600 dark:text-orange-400' : 'text-slate-600 dark:text-slate-300'
-                              }`}
-                            />
+                            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-150 ${isMenuOpen ? 'rotate-180' : ''}`} />
                           </button>
 
+                          {/* Dropdown Popover */}
                           {isMenuOpen && (
-                            <div
-                              className={`absolute right-0 ${
-                                isNearBottom ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
-                              } w-52 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-2xl py-1.5 z-[100] text-left font-sans text-xs pointer-events-auto`}
-                            >
-                              {/* 1. View Details */}
+                            <div className="absolute right-4 mt-1 w-48 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-xl py-1 z-30 animate-in fade-in zoom-in-95">
+                              {/* Option 1: Approve */}
                               <button
                                 type="button"
                                 onClick={() => {
-                                  setActiveMenuId(null);
-                                  setViewingProduct(item);
+                                  setOpenDropdownId(null);
+                                  if (isWithdrawal && item.rawWithdrawal) {
+                                    setWithdrawalModalTarget(item.rawWithdrawal);
+                                  } else if (isRestock && item.rawReplenishment) {
+                                    setRestockModalTarget(item.rawReplenishment);
+                                  } else if (item.rawProduct) {
+                                    onOpenApprovalModal('APPROVE', item.rawProduct, bins[0]?.code || 'A-01-02');
+                                  }
                                 }}
-                                className="w-full px-3.5 py-2 text-left text-navy-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2.5 transition-colors cursor-pointer"
+                                className="w-full text-left px-3.5 py-2 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 flex items-center gap-2 cursor-pointer transition-colors"
                               >
-                                <Eye className="w-4 h-4 text-orange-600 dark:text-orange-400 pointer-events-none" />
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>
+                                  {isWithdrawal
+                                    ? 'Approve & Release'
+                                    : isRestock
+                                    ? 'Approve & Intake'
+                                    : 'Approve & Assign Bin'}
+                                </span>
+                              </button>
+
+                              {/* Option 2: Decline / Reject */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenDropdownId(null);
+                                  setRejectModalItem(item);
+                                }}
+                                className="w-full text-left px-3.5 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 flex items-center gap-2 cursor-pointer transition-colors"
+                              >
+                                <XCircle className="w-3.5 h-3.5" />
+                                <span>Decline Request</span>
+                              </button>
+
+                              <div className="my-1 border-t border-slate-100 dark:border-white/5" />
+
+                              {/* Option 3: View Details */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenDropdownId(null);
+                                  setDetailsModalItem(item);
+                                }}
+                                className="w-full text-left px-3.5 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors"
+                              >
+                                <Eye className="w-3.5 h-3.5 text-slate-500" />
                                 <span>View Details</span>
-                              </button>
-
-                              {/* 2. Approve & Assign Bin */}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setActiveMenuId(null);
-                                  onOpenApprovalModal('APPROVE', item, chosenBin);
-                                }}
-                                className="w-full px-3.5 py-2 text-left text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 font-semibold flex items-center gap-2.5 transition-colors cursor-pointer"
-                              >
-                                <Check className="w-4 h-4 text-orange-600 dark:text-orange-400 pointer-events-none" />
-                                <span>Approve &amp; Assign Bin</span>
-                              </button>
-
-                              {/* 3. Reject */}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setActiveMenuId(null);
-                                  onOpenApprovalModal('REJECT', item, chosenBin);
-                                }}
-                                className="w-full px-3.5 py-2 text-left text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center gap-2.5 transition-colors cursor-pointer border-t border-slate-200/80 dark:border-white/10"
-                              >
-                                <XCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 pointer-events-none" />
-                                <span>Reject / QC Fail</span>
                               </button>
                             </div>
                           )}
@@ -773,194 +930,163 @@ export function ProductsApprovalTab({
               </tbody>
             </table>
           </div>
+        )}
 
-          {/* 3. Pagination Footer */}
-          <div className="p-4 border-t border-slate-200 dark:border-white/10 bg-slate-50/60 dark:bg-navy-950/60 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600 dark:text-slate-300">
-            <div>
-              Showing <strong className="text-navy-800 dark:text-white">{totalItems === 0 ? 0 : startIndex + 1}</strong> to{' '}
-              <strong className="text-navy-800 dark:text-white">
-                {Math.min(startIndex + pageSize, totalItems)}
-              </strong>{' '}
-              of <strong className="text-navy-800 dark:text-white">{totalItems}</strong> pending submissions
-            </div>
+        {/* Bottom Attached Pagination Footer (Zero-Gap) */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 bg-slate-50/80 dark:bg-navy-950/80 border-t border-slate-200 dark:border-white/10 text-xs text-slate-600 dark:text-slate-300 rounded-b-2xl">
+          <div>
+            Showing{' '}
+            <span className="font-bold text-navy-800 dark:text-white">
+              {totalItems === 0 ? 0 : startIndex + 1}
+            </span>{' '}
+            to{' '}
+            <span className="font-bold text-navy-800 dark:text-white">
+              {Math.min(startIndex + pageSize, totalItems)}
+            </span>{' '}
+            of <span className="font-bold text-navy-800 dark:text-white">{totalItems}</span> requests
+          </div>
 
-            <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
+            <span className="text-slate-600 dark:text-slate-300 font-medium">
+              Page <span className="text-navy-800 dark:text-white font-bold">{safePage}</span> of{' '}
+              <span className="text-navy-800 dark:text-white font-bold">{totalPages}</span>
+            </span>
+
+            <div className="flex items-center gap-1">
               <button
                 type="button"
-                onClick={() => handlePageChange(safePage - 1)}
                 disabled={safePage <= 1}
-                className="p-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-navy-900 text-slate-700 dark:text-slate-200 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
-                aria-label="Previous Page"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                aria-label="Previous page"
+                className="p-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-navy-900 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors shadow-2xs"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
-
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
-                <button
-                  key={pageNum}
-                  type="button"
-                  onClick={() => handlePageChange(pageNum)}
-                  className={`w-7 h-7 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                    pageNum === safePage
-                      ? 'bg-orange-600 text-white shadow-sm'
-                      : 'bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 hover:text-white'
-                  }`}
-                >
-                  {pageNum}
-                </button>
-              ))}
-
               <button
                 type="button"
-                onClick={() => handlePageChange(safePage + 1)}
                 disabled={safePage >= totalPages}
-                className="p-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-navy-900 text-slate-700 dark:text-slate-200 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
-                aria-label="Next Page"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                aria-label="Next page"
+                className="p-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-navy-900 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors shadow-2xs"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
           </div>
         </div>
-      )}
+      </div>
 
-      {/* Product Submission Details Modal */}
-      {viewingProduct && (
+      {/* 4. MODALS */}
+      {/* Restock Intake & Put-Away Modal */}
+      <RestockIntakeModal
+        isOpen={Boolean(restockModalTarget)}
+        onClose={() => setRestockModalTarget(null)}
+        replenishment={restockModalTarget}
+        bins={bins}
+        onConfirm={(rep, qty, targetBin) => {
+          onApproveReplenishment(rep, qty, targetBin);
+          setRestockModalTarget(null);
+        }}
+      />
+
+      {/* Stock Withdrawal Confirmation Modal */}
+      <ConfirmWithdrawalModal
+        isOpen={Boolean(withdrawalModalTarget)}
+        onClose={() => setWithdrawalModalTarget(null)}
+        withdrawal={withdrawalModalTarget}
+        onConfirm={(wth, verifiedQty, note) => {
+          onApproveWithdrawal?.(wth, verifiedQty, note);
+          setWithdrawalModalTarget(null);
+        }}
+      />
+
+      {/* Send Restock Notice Modal */}
+      <SendRestockNoticeModal
+        isOpen={sendNoticeModalOpen}
+        onClose={() => setSendNoticeModalOpen(false)}
+        products={products}
+        onSend={(prodId, qty, note) => {
+          onSendRestockNotice?.(prodId, qty, note);
+        }}
+      />
+
+      {/* Manual Direct Inbound Restock Modal */}
+      <ManualRestockModal
+        isOpen={manualRestockModalOpen}
+        onClose={() => setManualRestockModalOpen(false)}
+        products={products}
+        bins={bins}
+        onConfirm={(prodId, qty, binCode, note) => {
+          onRecordManualRestock?.(prodId, qty, binCode, note);
+        }}
+      />
+
+      {/* Manual Direct Stock Withdrawal Modal */}
+      <ManualWithdrawalModal
+        isOpen={manualWithdrawalModalOpen}
+        onClose={() => setManualWithdrawalModalOpen(false)}
+        products={products}
+        onConfirm={(prodId, qty, reason) => {
+          onRecordManualWithdrawal?.(prodId, qty, reason);
+        }}
+      />
+
+      {/* Request Details View Modal */}
+      <ApprovalItemDetailsModal
+        isOpen={Boolean(detailsModalItem)}
+        onClose={() => setDetailsModalItem(null)}
+        item={detailsModalItem}
+      />
+
+      {/* Reject Confirmation Modal */}
+      {rejectModalItem && (
         <Modal
-          isOpen={!!viewingProduct}
-          onClose={() => setViewingProduct(null)}
-          title="Product Submission Details"
-          subtitle={`Inbound review for SKU: ${viewingProduct.fullSku}`}
-          size="lg"
+          isOpen={Boolean(rejectModalItem)}
+          onClose={() => setRejectModalItem(null)}
+          title={
+            rejectModalItem.approvalType === 'WITHDRAWAL'
+              ? 'Confirm Decline Stock Withdrawal Request'
+              : rejectModalItem.approvalType === 'RESTOCK'
+              ? 'Confirm Decline Stock Restock Request'
+              : 'Confirm Reject Product Submission'
+          }
+          size="sm"
         >
           <div className="space-y-4">
-            {/* Product Overview Header */}
-            <div className="flex flex-col sm:flex-row items-start gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10">
-              <img
-                src={viewingProduct.imageUrl}
-                alt={viewingProduct.title}
-                className="w-full sm:w-36 h-36 rounded-xl object-cover border border-slate-200 dark:border-white/10 shrink-0 bg-white dark:bg-navy-900"
-              />
-              <div className="space-y-2 flex-1 min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
-                    Pending Approval
-                  </span>
-                  <span className="px-2 py-0.5 rounded-md text-xs font-bold uppercase tracking-wider bg-white dark:bg-navy-900 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-white/10">
-                    {viewingProduct.category}
-                  </span>
-                  <span className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1 sm:ml-auto">
-                    <Clock className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
-                    Submitted {viewingProduct.submittedAt}
-                  </span>
-                </div>
-                <h3 className="text-base font-bold text-navy-800 dark:text-white leading-snug">
-                  {viewingProduct.title}
-                </h3>
-                <div className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-200">
-                  <Store className="w-3.5 h-3.5 text-slate-600 dark:text-slate-300" />
-                  <span>Merchant: <strong className="text-navy-800 dark:text-white">{viewingProduct.merchantName}</strong> ({viewingProduct.merchantCode})</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Specifications Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-              <div className="p-3 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10">
-                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Full SKU</div>
-                <div className="text-xs tabular-nums font-bold text-orange-600 dark:text-orange-400 truncate mt-1">
-                  {viewingProduct.fullSku}
-                </div>
-              </div>
-              <div className="p-3 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10">
-                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Variant</div>
-                <div className="text-xs font-medium text-navy-800 dark:text-slate-100 truncate mt-1">
-                  {viewingProduct.color} · {viewingProduct.size}
-                </div>
-              </div>
-              <div className="p-3 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10">
-                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Unit Price</div>
-                <div className="text-xs tabular-nums font-bold text-navy-800 dark:text-white mt-1">
-                  ৳{viewingProduct.price.toLocaleString()}
-                </div>
-              </div>
-              <div className="p-3 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10">
-                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Received Stock</div>
-                <div className="text-xs tabular-nums font-bold text-cyan-700 dark:text-cyan-300 mt-1">
-                  {viewingProduct.stock} pcs
-                </div>
-              </div>
-            </div>
-
-            {/* Assign Target Bin */}
-            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-3 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-700 dark:text-rose-300">
+              <AlertTriangle className="w-5 h-5 shrink-0" />
               <div>
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
-                  <Layers className="w-4 h-4 text-orange-600 dark:text-orange-400" />
-                  <span>Assign Target Storage Bin</span>
-                </label>
-                <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">Physical location where this inventory will be shelved</p>
+                Are you sure you want to decline{' '}
+                <strong>
+                  {rejectModalItem.title} ({rejectModalItem.sku})
+                </strong>{' '}
+                from merchant {rejectModalItem.merchantName}?
               </div>
-              <select
-                value={pendingBinSelection[viewingProduct.id] || viewingProduct.binCode || bins[0]?.code}
-                onChange={(e) =>
-                  setPendingBinSelection((prev) => ({
-                    ...prev,
-                    [viewingProduct.id]: e.target.value,
-                  }))
-                }
-                className="bg-white dark:bg-navy-900 border border-slate-300 dark:border-white/15 rounded-xl px-3.5 py-2 text-xs tabular-nums font-bold text-orange-700 dark:text-orange-300 focus:outline-none focus:border-orange-500 cursor-pointer"
-              >
-                {bins.map((b) => (
-                  <option key={b.code} value={b.code}>
-                    {b.code} — {b.zone}
-                  </option>
-                ))}
-              </select>
             </div>
 
-            {/* Modal Actions */}
-            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-200 dark:border-white/10">
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-white/10">
               <button
                 type="button"
-                onClick={() => setViewingProduct(null)}
-                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-200 text-xs font-semibold cursor-pointer transition-colors"
+                onClick={() => setRejectModalItem(null)}
+                className="px-4 py-2 rounded-xl border border-slate-300 dark:border-white/10 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-navy-800 transition-colors cursor-pointer"
               >
-                Close
+                Cancel
               </button>
               <button
                 type="button"
                 onClick={() => {
-                  const bin =
-                    pendingBinSelection[viewingProduct.id] ||
-                    viewingProduct.binCode ||
-                    bins[0]?.code ||
-                    'A-01-02';
-                  const prod = viewingProduct;
-                  setViewingProduct(null);
-                  onOpenApprovalModal('REJECT', prod, bin);
+                  if (rejectModalItem.approvalType === 'NEW_PRODUCT' && rejectModalItem.rawProduct) {
+                    onOpenApprovalModal('REJECT', rejectModalItem.rawProduct, rejectModalItem.binCode);
+                  } else if (rejectModalItem.approvalType === 'RESTOCK' && rejectModalItem.rawReplenishment) {
+                    onRejectReplenishment(rejectModalItem.rawReplenishment, 'Warehouse declined inbound restock');
+                  } else if (rejectModalItem.approvalType === 'WITHDRAWAL' && rejectModalItem.rawWithdrawal && onRejectWithdrawal) {
+                    onRejectWithdrawal(rejectModalItem.rawWithdrawal, 'Warehouse declined stock withdrawal');
+                  }
+                  setRejectModalItem(null);
                 }}
-                className="px-4 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-all cursor-pointer"
               >
-                <XCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 pointer-events-none" />
-                <span>Reject / QC Fail</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const bin =
-                    pendingBinSelection[viewingProduct.id] ||
-                    viewingProduct.binCode ||
-                    bins[0]?.code ||
-                    'A-01-02';
-                  const prod = viewingProduct;
-                  setViewingProduct(null);
-                  onOpenApprovalModal('APPROVE', prod, bin);
-                }}
-                className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-orange-500/25 cursor-pointer transition-colors"
-              >
-                <Check className="w-4 h-4 pointer-events-none" />
-                <span>Approve &amp; Assign Bin</span>
+                Decline Request
               </button>
             </div>
           </div>
@@ -971,39 +1097,28 @@ export function ProductsApprovalTab({
       <Modal
         isOpen={bulkApproveModalOpen}
         onClose={() => setBulkApproveModalOpen(false)}
-        title="Confirm Bulk Approval & Bin Assignment"
-        size="md"
+        title="Confirm Bulk Approval & Execution"
+        size="sm"
       >
-        <div className="space-y-4">
-          <div className="flex items-start gap-3.5">
-            <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border bg-emerald-500/15 border-emerald-500/30 text-emerald-600 dark:text-emerald-400">
-              <CheckCircle2 className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-sm text-navy-800 dark:text-slate-100 font-semibold">
-                Confirm approving {selectedProductIds.size} selected products?
-              </p>
-              <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
-                All {selectedProductIds.size} products will be assigned their target warehouse bins and activated into the live inventory catalog.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-200 dark:border-white/10">
+        <div className="space-y-4 text-xs">
+          <p className="text-slate-700 dark:text-slate-300">
+            Confirm approving all <strong>{selectedItemIds.size} selected requests</strong>{' '}
+            (new products, restocks, and withdrawals)?
+          </p>
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-white/10">
             <button
               type="button"
               onClick={() => setBulkApproveModalOpen(false)}
-              className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-200 text-xs font-semibold cursor-pointer transition-colors"
+              className="px-4 py-2 rounded-xl border border-slate-300 dark:border-white/10 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="button"
-              onClick={handleConfirmBulkApprove}
-              className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-orange-500/25 cursor-pointer transition-colors"
+              onClick={executeBulkApprove}
+              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold cursor-pointer"
             >
-              <Check className="w-4 h-4 pointer-events-none" />
-              <span>Approve {selectedProductIds.size} Products</span>
+              Approve All {selectedItemIds.size} Requests
             </button>
           </div>
         </div>
@@ -1014,38 +1129,27 @@ export function ProductsApprovalTab({
         isOpen={bulkRejectModalOpen}
         onClose={() => setBulkRejectModalOpen(false)}
         title="Confirm Bulk Rejection"
-        size="md"
+        size="sm"
       >
-        <div className="space-y-4">
-          <div className="flex items-start gap-3.5">
-            <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border bg-rose-500/15 border-rose-500/30 text-rose-600 dark:text-rose-400">
-              <AlertTriangle className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-sm text-navy-800 dark:text-slate-100 font-semibold">
-                Are you sure you want to reject {selectedProductIds.size} product submissions?
-              </p>
-              <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
-                These submissions will be marked as rejected/QC failed and will not be added to active inventory.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-200 dark:border-white/10">
+        <div className="space-y-4 text-xs">
+          <p className="text-slate-700 dark:text-slate-300">
+            Are you sure you want to decline all{' '}
+            <strong>{selectedItemIds.size} selected requests</strong>?
+          </p>
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-white/10">
             <button
               type="button"
               onClick={() => setBulkRejectModalOpen(false)}
-              className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-200 text-xs font-semibold cursor-pointer transition-colors"
+              className="px-4 py-2 rounded-xl border border-slate-300 dark:border-white/10 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="button"
-              onClick={handleConfirmBulkReject}
-              className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-rose-600/20 cursor-pointer transition-colors"
+              onClick={executeBulkReject}
+              className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold cursor-pointer"
             >
-              <XCircle className="w-4 h-4 pointer-events-none" />
-              <span>Reject {selectedProductIds.size} Submissions</span>
+              Decline All {selectedItemIds.size} Requests
             </button>
           </div>
         </div>

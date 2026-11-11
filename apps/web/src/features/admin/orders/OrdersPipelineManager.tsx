@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Truck, Plus, CheckCircle2, ExternalLink, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
 import {
   CourierPartner,
   OrderStage,
@@ -17,7 +17,6 @@ import { OrdersPickTab } from './components/tabs/OrdersPickTab';
 import { OrdersPackTab } from './components/tabs/OrdersPackTab';
 import { OrdersDispatchTab } from './components/tabs/OrdersDispatchTab';
 import { ActionConfirmModal } from './components/modals/ActionConfirmModal';
-import { CreateOrderModal } from './components/modals/CreateOrderModal';
 import { MemoPreviewModal } from './components/modals/MemoPreviewModal';
 import { IsolatedPrintPortal } from './components/print/IsolatedPrintPortal';
 
@@ -65,7 +64,6 @@ export function OrdersPipelineManager({
   const [printMode, setPrintMode] = useState<'MEMOS' | 'PICK_SHEET' | 'MANIFEST' | null>(null);
   const [printingOrders, setPrintingOrders] = useState<WarehousePipelineOrder[]>([]);
   const [pendingAction, setPendingAction] = useState<PendingConfirmationAction | null>(null);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   // Hydrate orders from localStorage on mount
   useEffect(() => {
@@ -73,12 +71,16 @@ export function OrdersPipelineManager({
       const stored = localStorage.getItem(STORAGE_KEY_ORDERS);
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed) && parsed.length >= 15) {
           setOrders(parsed);
+          return;
         }
       }
+      setOrders(INITIAL_PIPELINE_ORDERS);
+      localStorage.setItem(STORAGE_KEY_ORDERS, JSON.stringify(INITIAL_PIPELINE_ORDERS));
     } catch (e) {
       console.error('Failed to load orders from localStorage:', e);
+      setOrders(INITIAL_PIPELINE_ORDERS);
     }
   }, []);
 
@@ -249,6 +251,130 @@ export function OrdersPipelineManager({
     showToast(`Courier for ${orderId} updated to ${newCourier}.`);
   };
 
+  // Direct Inline Stage Change for single row
+  const handleInlineStageChange = (
+    orderId: string,
+    newStage: OrderStage | 'COURIER_BOOKED',
+    customHoldReason?: string
+  ) => {
+    updateOrdersAndPersist((prev) =>
+      prev.map((o) => {
+        if (o.id !== orderId) return o;
+        if (newStage === 'COURIER_BOOKED') {
+          const prefix = o.courier.slice(0, 3).toUpperCase();
+          const code =
+            o.trackingCode || `TRK-${prefix}-${Math.floor(100000 + Math.random() * 900000)}`;
+          return {
+            ...o,
+            stage: 'DISPATCH',
+            isCourierBooked: true,
+            trackingCode: code,
+            holdReason: undefined,
+          };
+        }
+        if (newStage === 'WAITING') {
+          return {
+            ...o,
+            stage: 'WAITING',
+            holdReason:
+              customHoldReason || o.holdReason || 'Awaiting merchant stock delivery',
+          };
+        }
+        if (newStage === 'PACK') {
+          return {
+            ...o,
+            stage: 'PACK',
+            holdReason: undefined,
+          };
+        }
+        if (newStage === 'DISPATCH') {
+          return {
+            ...o,
+            stage: 'DISPATCH',
+            isMemoPrinted: true,
+            holdReason: undefined,
+          };
+        }
+        if (newStage === 'CANCELLED') {
+          return {
+            ...o,
+            stage: 'CANCELLED',
+            stockAvailable: o.stockAvailable + o.qty,
+          };
+        }
+        return {
+          ...o,
+          stage: newStage,
+          holdReason: undefined,
+        };
+      })
+    );
+    showToast(`Order ${orderId} moved to ${newStage}.`);
+  };
+
+  // Bulk Stage Change for multiple selected rows
+  const handleBulkChangeStage = (
+    targetStage: OrderStage | 'COURIER_BOOKED',
+    holdReason?: string
+  ) => {
+    if (selectedIds.length === 0) return;
+    const count = selectedIds.length;
+    updateOrdersAndPersist((prev) =>
+      prev.map((o) => {
+        if (!selectedIds.includes(o.id)) return o;
+        if (targetStage === 'COURIER_BOOKED') {
+          const prefix = o.courier.slice(0, 3).toUpperCase();
+          const code =
+            o.trackingCode || `TRK-${prefix}-${Math.floor(100000 + Math.random() * 900000)}`;
+          return {
+            ...o,
+            stage: 'DISPATCH',
+            isCourierBooked: true,
+            trackingCode: code,
+            holdReason: undefined,
+          };
+        }
+        if (targetStage === 'WAITING') {
+          return {
+            ...o,
+            stage: 'WAITING',
+            holdReason:
+              holdReason || o.holdReason || 'Awaiting merchant stock delivery',
+          };
+        }
+        if (targetStage === 'PACK') {
+          return {
+            ...o,
+            stage: 'PACK',
+            holdReason: undefined,
+          };
+        }
+        if (targetStage === 'DISPATCH') {
+          return {
+            ...o,
+            stage: 'DISPATCH',
+            isMemoPrinted: true,
+            holdReason: undefined,
+          };
+        }
+        if (targetStage === 'CANCELLED') {
+          return {
+            ...o,
+            stage: 'CANCELLED',
+            stockAvailable: o.stockAvailable + o.qty,
+          };
+        }
+        return {
+          ...o,
+          stage: targetStage,
+          holdReason: undefined,
+        };
+      })
+    );
+    setSelectedIds([]);
+    showToast(`${count} order(s) successfully moved to ${targetStage}!`);
+  };
+
   // Execute Confirmed Stage Actions
   const handleConfirmAction = (
     action: PendingConfirmationAction,
@@ -267,7 +393,7 @@ export function OrdersPipelineManager({
         break;
 
       case 'MARK_WAITING': {
-        const reason = holdReasonInput?.trim() || 'Item not found in assigned Bin';
+        const reason = holdReasonInput?.trim() || 'Awaiting merchant stock delivery';
         updateOrdersAndPersist((prev) =>
           prev.map((o) => (ids.includes(o.id) ? { ...o, stage: 'WAITING', holdReason: reason } : o))
         );
@@ -372,53 +498,13 @@ export function OrdersPipelineManager({
       )}
 
       {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <h1 className="text-2xl font-bold tracking-tight text-navy-800 dark:text-white">
-              Warehouse Orders Pipeline
-            </h1>
-            <span className="px-2.5 py-0.5 rounded-full text-xs tabular-nums font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
-              In-Warehouse Fulfillment Only
-            </span>
-          </div>
-          <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
-            Active warehouse operations: All Orders → 1. Pick List (Bin Verified) → 2. Pack &amp;
-            4x6&quot; Print → 3. Courier Dispatch. Handed-over parcels move to Delivery Tracker.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            type="button"
-            onClick={() => {
-              if (onOpenDeliveryTracker) {
-                onOpenDeliveryTracker();
-              } else {
-                showToast(
-                  `${counts.handedOver} dispatched order(s) are tracked in Dispatched & Delivery Tracker.`
-                );
-              }
-            }}
-            className="px-3.5 py-2.5 rounded-xl bg-white dark:bg-navy-900 hover:bg-slate-100 dark:hover:bg-navy-800 border border-sky-500/40 text-xs font-bold text-sky-700 dark:text-sky-300 flex items-center gap-2 shadow-sm transition-colors cursor-pointer"
-          >
-            <Truck className="w-4 h-4 text-sky-600 dark:text-sky-400" />
-            <span>View Dispatched &amp; Delivery Tracker</span>
-            <span className="px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-800 dark:text-sky-200 tabular-nums text-xs border border-sky-500/30">
-              {counts.handedOver} Sent
-            </span>
-            <ExternalLink className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setIsCreateModalOpen(true)}
-            className="px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-xs font-bold text-white flex items-center gap-1.5 shadow-lg transition-colors cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Create Manual Order</span>
-          </button>
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-navy-900 dark:text-white">
+          Warehouse Orders Pipeline
+        </h1>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+          Active warehouse operations: Pick List (Bin Verified) → Pack &amp; 4x6&quot; Print → Courier Dispatch.
+        </p>
       </div>
 
       {/* 4 Stage KPI Cards */}
@@ -486,6 +572,10 @@ export function OrdersPipelineManager({
         onConfirmHandover={() =>
           setPendingAction({ type: 'CONFIRM_HANDOVER', orders: selectedOrders })
         }
+        onBulkChangeStage={handleBulkChangeStage}
+        onPrintMemos={() => triggerIsolatedPrint('MEMOS', selectedOrders)}
+        onClearSelection={() => setSelectedIds([])}
+        onCancelSelected={() => setPendingAction({ type: 'CANCEL_ORDER', orders: selectedOrders })}
       />
 
       {/* Tab Views */}
@@ -496,8 +586,17 @@ export function OrdersPipelineManager({
           onToggleSelectRow={toggleSelectRow}
           onToggleSelectAll={toggleSelectAll}
           allVisibleSelected={allVisibleSelected}
+          onClearSelection={() => setSelectedIds([])}
+          totalItems={totalItems}
+          startIndex={startIndex}
+          pageSize={pageSize}
+          safePage={safePage}
+          totalPages={totalPages}
+          onPageSizeChange={setPageSize}
+          onPageChange={setCurrentPage}
           onPreviewMemo={(ord) => setPreviewMemoOrder(ord)}
           onInlineCourierChange={handleInlineCourierChange}
+          onInlineStageChange={handleInlineStageChange}
           onMarkWaiting={(ord) => setPendingAction({ type: 'MARK_WAITING', orders: [ord] })}
           onMarkPicked={(ord) => setPendingAction({ type: 'MARK_PICKED', orders: [ord] })}
           onResumePick={(ord) => setPendingAction({ type: 'RESUME_PICK', orders: [ord] })}
@@ -517,14 +616,23 @@ export function OrdersPipelineManager({
           onToggleSelectRow={toggleSelectRow}
           onToggleSelectAll={toggleSelectAll}
           allVisibleSelected={allVisibleSelected}
+          onClearSelection={() => setSelectedIds([])}
           pickSubFilter={pickSubFilter}
           onPickSubFilterChange={(sub) => {
             setPickSubFilter(sub);
             setSelectedIds([]);
           }}
           counts={counts}
+          totalItems={totalItems}
+          startIndex={startIndex}
+          pageSize={pageSize}
+          safePage={safePage}
+          totalPages={totalPages}
+          onPageSizeChange={setPageSize}
+          onPageChange={setCurrentPage}
           onPreviewMemo={(ord) => setPreviewMemoOrder(ord)}
           onInlineCourierChange={handleInlineCourierChange}
+          onInlineStageChange={handleInlineStageChange}
           onMarkWaiting={(ord) => setPendingAction({ type: 'MARK_WAITING', orders: [ord] })}
           onMarkPicked={(ord) => setPendingAction({ type: 'MARK_PICKED', orders: [ord] })}
           onResumePick={(ord) => setPendingAction({ type: 'RESUME_PICK', orders: [ord] })}
@@ -544,8 +652,17 @@ export function OrdersPipelineManager({
           onToggleSelectRow={toggleSelectRow}
           onToggleSelectAll={toggleSelectAll}
           allVisibleSelected={allVisibleSelected}
+          onClearSelection={() => setSelectedIds([])}
+          totalItems={totalItems}
+          startIndex={startIndex}
+          pageSize={pageSize}
+          safePage={safePage}
+          totalPages={totalPages}
+          onPageSizeChange={setPageSize}
+          onPageChange={setCurrentPage}
           onPreviewMemo={(ord) => setPreviewMemoOrder(ord)}
           onInlineCourierChange={handleInlineCourierChange}
+          onInlineStageChange={handleInlineStageChange}
           onMarkWaiting={(ord) => setPendingAction({ type: 'MARK_WAITING', orders: [ord] })}
           onMarkPicked={(ord) => setPendingAction({ type: 'MARK_PICKED', orders: [ord] })}
           onResumePick={(ord) => setPendingAction({ type: 'RESUME_PICK', orders: [ord] })}
@@ -565,8 +682,17 @@ export function OrdersPipelineManager({
           onToggleSelectRow={toggleSelectRow}
           onToggleSelectAll={toggleSelectAll}
           allVisibleSelected={allVisibleSelected}
+          onClearSelection={() => setSelectedIds([])}
+          totalItems={totalItems}
+          startIndex={startIndex}
+          pageSize={pageSize}
+          safePage={safePage}
+          totalPages={totalPages}
+          onPageSizeChange={setPageSize}
+          onPageChange={setCurrentPage}
           onPreviewMemo={(ord) => setPreviewMemoOrder(ord)}
           onInlineCourierChange={handleInlineCourierChange}
+          onInlineStageChange={handleInlineStageChange}
           onMarkWaiting={(ord) => setPendingAction({ type: 'MARK_WAITING', orders: [ord] })}
           onMarkPicked={(ord) => setPendingAction({ type: 'MARK_PICKED', orders: [ord] })}
           onResumePick={(ord) => setPendingAction({ type: 'RESUME_PICK', orders: [ord] })}
@@ -579,67 +705,7 @@ export function OrdersPipelineManager({
         />
       )}
 
-      {/* Pagination & Limit Selector */}
-      {filteredOrders.length > 0 && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl shadow-sm text-xs text-slate-600 dark:text-slate-300">
-          <div className="flex items-center gap-3">
-            <span>
-              Showing <span className="font-bold text-navy-800 dark:text-white">{startIndex + 1}</span> to{' '}
-              <span className="font-bold text-navy-800 dark:text-white">
-                {Math.min(startIndex + pageSize, totalItems)}
-              </span>{' '}
-              of <span className="font-bold text-navy-800 dark:text-white">{totalItems}</span> orders
-            </span>
 
-            <div className="flex items-center gap-1.5 border-l border-slate-200 dark:border-white/10 pl-3">
-              <span>Show</span>
-              <select
-                value={pageSize}
-                onChange={(e) => {
-                  setPageSize(Number(e.target.value));
-                  setCurrentPage(1);
-                }}
-                aria-label="Rows per page"
-                className="px-2 py-1 rounded-lg bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs font-semibold text-navy-800 dark:text-slate-100 focus:outline-none focus:border-orange-500 cursor-pointer"
-              >
-                <option value={10}>10</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-              </select>
-              <span>rows</span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="text-slate-600 dark:text-slate-300 font-medium">
-              Page <span className="text-navy-800 dark:text-white font-bold">{safePage}</span> of{' '}
-              <span className="text-navy-800 dark:text-white font-bold">{totalPages}</span>
-            </span>
-
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                disabled={safePage <= 1}
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                aria-label="Previous page"
-                className="p-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-navy-950 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                disabled={safePage >= totalPages}
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                aria-label="Next page"
-                className="p-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-navy-950 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Modals */}
       <ActionConfirmModal
@@ -647,16 +713,6 @@ export function OrdersPipelineManager({
         onClose={() => setPendingAction(null)}
         pendingAction={pendingAction}
         onConfirm={handleConfirmAction}
-      />
-
-      <CreateOrderModal
-        isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
-        ordersCount={orders.length}
-        onCreateOrder={(newOrder) => {
-          updateOrdersAndPersist((prev) => [newOrder, ...prev]);
-          showToast(`Order ${newOrder.id} created & sent to 1. Pick List!`);
-        }}
       />
 
       <MemoPreviewModal

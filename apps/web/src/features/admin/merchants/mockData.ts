@@ -662,7 +662,7 @@ export const ALL_MEMOS: MerchantMemoItem[] = [
     brandColor: '#10b981',
     phone: '+880 1712-345678',
     address: 'Plot 22, Banani, Dhaka-1213',
-    terms: 'ডেলিভারি ম্যানের সামনে পণ্য চেক করে নিন। ৭ দিনের মধ্যে এক্সচেঞ্জ সুবিধা।',
+    terms: 'Please check products before signing. 7-day exchange warranty available.',
     isDefault: true,
   },
   {
@@ -673,7 +673,7 @@ export const ALL_MEMOS: MerchantMemoItem[] = [
     brandColor: '#6366f1',
     phone: '+880 1811-998877',
     address: 'Gulshan-2 Circle, Dhaka',
-    terms: 'আনবক্সিং ভিডিও ছাড়া কোনো রিটার্ন ক্লেম গ্রহণযোগ্য নয়।',
+    terms: 'Unboxing video required for any claim or exchange request.',
     isDefault: false,
   },
   {

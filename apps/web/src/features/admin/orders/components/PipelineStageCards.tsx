@@ -5,8 +5,8 @@ import { Boxes, ClipboardList, PackageCheck, Truck } from 'lucide-react';
 import { PipelineMainTab } from '../types';
 
 interface PipelineStageCardsProps {
-  activeTab: PipelineMainTab;
-  onSelectTab: (tab: PipelineMainTab) => void;
+  activeTab?: PipelineMainTab;
+  onSelectTab?: (tab: PipelineMainTab) => void;
   counts: {
     all: number;
     pickReady: number;
@@ -18,76 +18,87 @@ interface PipelineStageCardsProps {
   };
 }
 
-export function PipelineStageCards({
-  activeTab,
-  onSelectTab,
-  counts,
-}: PipelineStageCardsProps) {
-  const tabs = [
+export function PipelineStageCards({ counts }: PipelineStageCardsProps) {
+  const cards = [
     {
-      id: 'all' as PipelineMainTab,
+      id: 'all',
       label: 'All Active Orders',
       count: counts.all,
       subtitle: `${counts.handedOver} handed over to courier`,
       icon: Boxes,
+      containerClass:
+        'border-orange-500/25 bg-gradient-to-br from-orange-500/10 via-white dark:via-navy-900 to-transparent',
+      iconBoxClass:
+        'bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/30',
+      badgeClass: 'text-orange-600 dark:text-orange-400',
     },
     {
-      id: 'pick' as PipelineMainTab,
-      label: '1. Pick List',
+      id: 'pick',
+      label: '1. Pick List (Bin Verified)',
       count: counts.pickReady,
       subtitle:
         counts.pickWaiting > 0
-          ? `${counts.pickReady} Ready · ${counts.pickWaiting} Waiting/Hold`
-          : 'Bin-guided picking queue',
+          ? `${counts.pickReady} Ready · ${counts.pickWaiting} On Hold`
+          : 'Ready in warehouse bins',
       icon: ClipboardList,
+      containerClass:
+        'border-indigo-500/25 bg-gradient-to-br from-indigo-500/10 via-white dark:via-navy-900 to-transparent',
+      iconBoxClass:
+        'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30',
+      badgeClass: 'text-indigo-600 dark:text-indigo-400',
     },
     {
-      id: 'pack' as PipelineMainTab,
+      id: 'pack',
       label: '2. Pack & 4x6" Print',
       count: counts.pack,
-      subtitle: 'Select & print 4x6" memo',
+      subtitle: 'Verified & ready for memo slip',
       icon: PackageCheck,
+      containerClass:
+        'border-purple-500/25 bg-gradient-to-br from-purple-500/10 via-white dark:via-navy-900 to-transparent',
+      iconBoxClass:
+        'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/30',
+      badgeClass: 'text-purple-600 dark:text-purple-400',
     },
     {
-      id: 'dispatch' as PipelineMainTab,
+      id: 'dispatch',
       label: '3. Courier Dispatch',
       count: counts.dispatch,
       subtitle: `${counts.dispatchBooked} booked · Ready handover`,
       icon: Truck,
+      containerClass:
+        'border-emerald-500/25 bg-gradient-to-br from-emerald-500/10 via-white dark:via-navy-900 to-transparent',
+      iconBoxClass:
+        'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30',
+      badgeClass: 'text-emerald-600 dark:text-emerald-400',
     },
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      {tabs.map((tab) => {
-        const Icon = tab.icon;
-        const isActive = activeTab === tab.id;
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+      {cards.map((card) => {
+        const Icon = card.icon;
         return (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => onSelectTab(tab.id)}
-            className={`text-left rounded-2xl border p-4 transition-all flex items-center justify-between cursor-pointer ${
-              isActive
-                ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/25 shadow-lg'
-                : 'border-slate-200 dark:border-white/10 bg-white/90 dark:bg-navy-900/90 hover:border-slate-300 dark:hover:border-white/15'
-            }`}
+          <div
+            key={card.id}
+            className={`rounded-2xl border p-5 sm:p-6 flex items-center justify-between gap-4 shadow-sm select-none transition-all ${card.containerClass}`}
           >
-            <div>
-              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 block">{tab.label}</span>
-              <div className="text-2xl font-extrabold text-navy-800 dark:text-white mt-1 tabular-nums">{tab.count}</div>
-              <span className="text-xs text-orange-600 dark:text-orange-400 mt-0.5 block">{tab.subtitle}</span>
+            <div className="space-y-1.5 min-w-0 flex-1">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block truncate">
+                {card.label}
+              </span>
+              <div className="text-2xl sm:text-3xl font-black text-navy-900 dark:text-white mt-1 tabular-nums tracking-tight">
+                {card.count.toLocaleString()}
+              </div>
+              <span className={`text-xs font-semibold mt-1 block truncate ${card.badgeClass}`}>
+                {card.subtitle}
+              </span>
             </div>
             <div
-              className={`h-11 w-11 rounded-xl flex items-center justify-center border shrink-0 ${
-                isActive
-                  ? 'bg-orange-600 text-white border-orange-500'
-                  : 'bg-slate-50 dark:bg-navy-950 text-orange-600 dark:text-orange-400 border-slate-200 dark:border-white/10'
-              }`}
+              className={`h-12 w-12 rounded-2xl flex items-center justify-center shrink-0 shadow-xs ${card.iconBoxClass}`}
             >
-              <Icon className="w-5 h-5" />
+              <Icon className="w-6 h-6" />
             </div>
-          </button>
+          </div>
         );
       })}
     </div>

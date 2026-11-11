@@ -13,7 +13,7 @@ function ProductsContent() {
 
   const tabParam = searchParams.get('tab') as WarehouseProductSubTab | null;
   const activeTab: WarehouseProductSubTab =
-    tabParam === 'approval' || tabParam === 'bins' ? tabParam : 'all';
+    tabParam === 'approval' || tabParam === 'bins' || tabParam === 'ledger' ? tabParam : 'all';
 
   const handleTabChange = (newTab: WarehouseProductSubTab) => {
     router.replace(`/admin/products?tab=${newTab}`, { scroll: false });

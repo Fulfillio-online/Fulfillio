@@ -416,7 +416,7 @@ export function AddEditProductModal({
               </div>
             </div>
             <p className="text-[11px] text-slate-500 leading-relaxed">
-              ℹ️ যদি ওয়্যারহাউস বা কুরিয়ারে কোনো সমস্যা, হারিয়ে যাওয়া বা ড্যামেজ হয়, তবে ক্ষতিপূরণ ও ইনস্যুরেন্স ভ্যালু নির্ধারণে এই মূল্য ব্যবহার করা হবে। কাস্টমার অর্ডার আসলে তাতে বিক্রয়মূল্য আলাদাভাবে সংযুক্ত হবে।
+              ℹ️ Used for warehouse declared inventory value & insurance claims in case of loss or transit damage. Sale price is assigned per order.
             </p>
           </div>
 

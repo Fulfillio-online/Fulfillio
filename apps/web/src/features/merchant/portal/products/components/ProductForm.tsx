@@ -569,7 +569,7 @@ export function ProductForm({
             </div>
           </div>
           <p className="text-[11px] text-slate-500 leading-relaxed">
-            ℹ️ যদি কোনো প্রোডাক্টে কোনো সমস্যা হয় বা ওয়্যারহাউসে হারিয়ে যায়, তবে ক্ষতিপূরণ ও ইনস্যুরেন্স ক্লেইমের জন্য এই ভ্যালু ব্যবহার করা হবে। কাস্টমার অর্ডারের বিক্রয়মূল্য অর্ডারের সাথে সংযুক্ত থাকবে।
+            ℹ️ Used for warehouse declared inventory value & insurance claims in case of loss or transit damage. Sale price is assigned per order.
           </p>
         </div>
 

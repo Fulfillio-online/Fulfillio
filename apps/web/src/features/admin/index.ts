@@ -11,6 +11,7 @@ export * as ProductsFeature from './products';
 export * as ReturnsFeature from './returns';
 export * as StockFeature from './stock';
 export * as BillingFeature from './billing';
+export * as DashboardFeature from './dashboard/ExecutiveDashboard';
 
 export { CourierIntegrationManager } from './couriers';
 export { WarehouseDeliveryTracker } from './delivery';
@@ -20,3 +21,4 @@ export { ProductsManager } from './products';
 export { WarehouseReturnsManager } from './returns';
 export { WarehouseStockCycleManager } from './stock';
 export { AdminBillingManager } from './billing';
+export { ExecutiveDashboard } from './dashboard/ExecutiveDashboard';

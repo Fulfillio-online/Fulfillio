@@ -14,10 +14,6 @@ import {
   AlertTriangle,
   Check,
   Eye,
-  Layers,
-  Globe,
-  AlertCircle,
-  FileEdit,
   RotateCcw,
   Archive,
 } from 'lucide-react';
@@ -278,139 +274,100 @@ export function ProductsCatalogTab({
     setSelectedProductIds(new Set());
   };
 
+  const [bulkAction, setBulkAction] = useState<string>('');
+
+  const handleApplyBulkAction = () => {
+    if (!bulkAction || selectedProductIds.size === 0) return;
+    if (bulkAction === 'MOVE_TO_DRAFT') {
+      setIsPermanentDeleteMode(false);
+      setBulkDeleteModalOpen(true);
+    } else if (bulkAction === 'RESTORE') {
+      handleBulkRestoreAction();
+    } else if (bulkAction === 'PERMANENT_DELETE') {
+      setIsPermanentDeleteMode(true);
+      setBulkDeleteModalOpen(true);
+    }
+    setBulkAction('');
+  };
+
+  const hasActiveFilters =
+    Boolean(searchQuery.trim()) ||
+    merchantFilter !== 'ALL' ||
+    categoryFilter !== 'ALL' ||
+    binFilter !== 'ALL';
+
+  const handleResetFilters = () => {
+    setSearchQuery('');
+    setMerchantFilter('ALL');
+    setCategoryFilter('ALL');
+    setBinFilter('ALL');
+    setCurrentPage(1);
+  };
+
   return (
     <div className="space-y-4">
-      {/* 1. TOP SEGMENT STATUS TABS: All Products, Public, Out of Stock, Draft */}
-      <div className="bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl p-2 sm:p-2.5 shadow-md flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-          {/* Tab 1: All Products */}
-          <button
-            type="button"
-            onClick={() => {
-              setActiveCatalogTab('ALL');
-              setCurrentPage(1);
-            }}
-            className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all cursor-pointer ${
-              activeCatalogTab === 'ALL'
-                ? 'bg-orange-600 text-white shadow-md shadow-orange-500/25'
-                : 'text-slate-600 dark:text-slate-300 hover:text-navy-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-navy-800'
-            }`}
-          >
-            <Layers className="w-4 h-4" />
-            <span>All Products</span>
-            <span
-              className={`px-2 py-0.5 rounded-full text-[11px] font-extrabold tabular-nums ${
-                activeCatalogTab === 'ALL'
-                  ? 'bg-white/20 text-white'
-                  : 'bg-slate-200 dark:bg-navy-800 text-slate-700 dark:text-slate-300'
-              }`}
-            >
-              {catalogCounts.allCount}
-            </span>
-          </button>
-
-          {/* Tab 2: Public */}
-          <button
-            type="button"
-            onClick={() => {
-              setActiveCatalogTab('PUBLIC');
-              setCurrentPage(1);
-            }}
-            className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all cursor-pointer ${
-              activeCatalogTab === 'PUBLIC'
-                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/25'
-                : 'text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20'
-            }`}
-          >
-            <Globe className="w-4 h-4" />
-            <span>Public</span>
-            <span
-              className={`px-2 py-0.5 rounded-full text-[11px] font-extrabold tabular-nums ${
-                activeCatalogTab === 'PUBLIC'
-                  ? 'bg-white/20 text-white'
-                  : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30'
-              }`}
-            >
-              {catalogCounts.publicCount}
-            </span>
-          </button>
-
-          {/* Tab 3: Out of Stock */}
-          <button
-            type="button"
-            onClick={() => {
-              setActiveCatalogTab('OUT_OF_STOCK');
-              setCurrentPage(1);
-            }}
-            className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all cursor-pointer ${
-              activeCatalogTab === 'OUT_OF_STOCK'
-                ? 'bg-rose-600 text-white shadow-md shadow-rose-500/25'
-                : 'text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20'
-            }`}
-          >
-            <AlertCircle className="w-4 h-4" />
-            <span>Out of Stock</span>
-            <span
-              className={`px-2 py-0.5 rounded-full text-[11px] font-extrabold tabular-nums ${
-                activeCatalogTab === 'OUT_OF_STOCK'
-                  ? 'bg-white/20 text-white'
-                  : 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30'
-              }`}
-            >
-              {catalogCounts.outOfStockCount}
-            </span>
-          </button>
-
-          {/* Tab 4: Draft */}
-          <button
-            type="button"
-            onClick={() => {
-              setActiveCatalogTab('DRAFT');
-              setCurrentPage(1);
-            }}
-            className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all cursor-pointer ${
-              activeCatalogTab === 'DRAFT'
-                ? 'bg-amber-600 text-white shadow-md shadow-amber-500/25'
-                : 'text-slate-600 dark:text-slate-300 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/20'
-            }`}
-          >
-            <FileEdit className="w-4 h-4" />
-            <span>Draft</span>
-            <span
-              className={`px-2 py-0.5 rounded-full text-[11px] font-extrabold tabular-nums ${
-                activeCatalogTab === 'DRAFT'
-                  ? 'bg-white/20 text-white'
-                  : 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30'
-              }`}
-            >
-              {catalogCounts.draftCount}
-            </span>
-          </button>
+      {/* 2. Filter Bar (2-Row Layout matching Orders Pipeline) */}
+      <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-navy-900/90 p-3 sm:p-4 shadow-sm space-y-3">
+        {/* Row 1: Dedicated Search Bar (spacious, standalone row) */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+          <div className="flex-1 w-full min-w-0">
+            <SearchInput
+              value={searchQuery}
+              onChange={(val) => {
+                setSearchQuery(val);
+                setCurrentPage(1);
+              }}
+              onClear={() => {
+                setSearchQuery('');
+                setCurrentPage(1);
+              }}
+              placeholder="Search product title or 2-Part SKU (e.g. MC-101-HOODIE)..."
+              className="w-full text-xs"
+            />
+          </div>
         </div>
 
-        {/* Informational Status Legend */}
-        <div className="text-xs text-slate-500 dark:text-slate-400 px-2 font-medium hidden lg:block">
-          {activeCatalogTab === 'ALL' && 'Viewing all catalog products (Public, Stock-out, & Drafts)'}
-          {activeCatalogTab === 'PUBLIC' && 'Live in warehouse store with positive physical stock'}
-          {activeCatalogTab === 'OUT_OF_STOCK' && 'Warehouse stock depleted (0 units remaining)'}
-          {activeCatalogTab === 'DRAFT' && 'Unpublished drafts & products deleted from catalog'}
-        </div>
-      </div>
+        {/* Row 2: Bulk Actions -> Apply -> All Merchants -> All Categories -> All Warehouse Bins -> Reset */}
+        <div className="flex flex-wrap items-center gap-2 pt-2.5 border-t border-slate-100 dark:border-white/5">
+          {/* 1. Bulk Actions Dropdown */}
+          <select
+            value={bulkAction}
+            onChange={(e) => setBulkAction(e.target.value)}
+            aria-label="Bulk Actions"
+            className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs font-semibold text-navy-800 dark:text-slate-100 focus:outline-none focus:border-orange-500 cursor-pointer shadow-2xs"
+          >
+            <option value="">Bulk Actions</option>
+            {activeCatalogTab === 'DRAFT' ? (
+              <>
+                <option value="RESTORE">Restore to Public</option>
+                <option value="PERMANENT_DELETE">Permanently Delete</option>
+              </>
+            ) : (
+              <>
+                <option value="MOVE_TO_DRAFT">Move to Draft</option>
+                <option value="PERMANENT_DELETE">Permanently Delete</option>
+              </>
+            )}
+          </select>
 
-      {/* 2. Filter Bar */}
-      <div className="bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 shadow-md">
-        <div className="lg:col-span-2">
-          <SearchInput
-            value={searchQuery}
-            onChange={(val) => {
-              setSearchQuery(val);
-              setCurrentPage(1);
-            }}
-            placeholder="Search product title or 2-Part SKU (e.g. MC-101-HOODIE)..."
-          />
-        </div>
+          {/* 2. Apply Button */}
+          <button
+            type="button"
+            onClick={handleApplyBulkAction}
+            disabled={!bulkAction || selectedProductIds.size === 0}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
+              bulkAction && selectedProductIds.size > 0
+                ? 'bg-orange-600 hover:bg-orange-500 text-white border-orange-600 shadow-sm cursor-pointer active:scale-95'
+                : 'bg-slate-100 dark:bg-navy-800 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-white/10 cursor-not-allowed opacity-60'
+            }`}
+          >
+            Apply
+          </button>
 
-        <div>
+          {/* Subtle Divider */}
+          <div className="hidden sm:block h-5 w-[1px] bg-slate-200 dark:bg-white/10 mx-0.5" />
+
+          {/* 3. All Merchants Dropdown */}
           <select
             value={merchantFilter}
             onChange={(e) => {
@@ -418,18 +375,17 @@ export function ProductsCatalogTab({
               setCurrentPage(1);
             }}
             aria-label="Filter by Merchant"
-            className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-sm text-navy-800 dark:text-slate-100 focus:outline-none focus:border-orange-500"
+            className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs font-semibold text-navy-800 dark:text-slate-100 focus:outline-none focus:border-orange-500 cursor-pointer shadow-2xs"
           >
-            <option value="ALL">All Merchants (MC-101 – MC-104)</option>
+            <option value="ALL">All Merchants</option>
             {MERCHANTS.map((m) => (
               <option key={m.code} value={m.code}>
                 {m.code} — {m.name}
               </option>
             ))}
           </select>
-        </div>
 
-        <div>
+          {/* 4. All Categories Dropdown */}
           <select
             value={categoryFilter}
             onChange={(e) => {
@@ -437,7 +393,7 @@ export function ProductsCatalogTab({
               setCurrentPage(1);
             }}
             aria-label="Filter by Category"
-            className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-sm text-navy-800 dark:text-slate-100 focus:outline-none focus:border-orange-500"
+            className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs font-semibold text-navy-800 dark:text-slate-100 focus:outline-none focus:border-orange-500 cursor-pointer shadow-2xs"
           >
             <option value="ALL">All Categories</option>
             <option value="Apparel">Apparel</option>
@@ -445,9 +401,8 @@ export function ProductsCatalogTab({
             <option value="Electronics">Electronics</option>
             <option value="Accessories">Accessories</option>
           </select>
-        </div>
 
-        <div>
+          {/* 6. All Warehouse Bins Dropdown */}
           <select
             value={binFilter}
             onChange={(e) => {
@@ -455,7 +410,7 @@ export function ProductsCatalogTab({
               setCurrentPage(1);
             }}
             aria-label="Filter by Bin Location"
-            className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-sm tabular-nums text-orange-700 dark:text-orange-300 focus:outline-none focus:border-orange-500"
+            className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs font-semibold text-navy-800 dark:text-slate-100 focus:outline-none focus:border-orange-500 cursor-pointer shadow-2xs"
           >
             <option value="ALL">All Warehouse Bins</option>
             {bins.map((b) => (
@@ -464,86 +419,122 @@ export function ProductsCatalogTab({
               </option>
             ))}
           </select>
+
+          {/* 6. Reset Button (Conditionally visible only when active filters exist) */}
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              title="Reset active filters"
+              className="px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-white/10 shadow-2xs active:scale-95 animate-in fade-in"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Reset</span>
+            </button>
+          )}
+        </div>
+
+        {/* Row 3: WordPress-style Status Tabs (All | Public | Out of Stock | Draft) */}
+        <div className="flex flex-wrap items-center gap-2 pt-2.5 border-t border-slate-100 dark:border-white/5 text-xs">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveCatalogTab('ALL');
+              setCurrentPage(1);
+              setSelectedProductIds(new Set());
+            }}
+            className={`cursor-pointer transition-colors ${
+              activeCatalogTab === 'ALL'
+                ? 'text-orange-600 dark:text-orange-400 font-bold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white font-medium'
+            }`}
+          >
+            All <span className="text-slate-400 dark:text-slate-500 font-normal">({catalogCounts.allCount})</span>
+          </button>
+          <span className="text-slate-300 dark:text-slate-700">|</span>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveCatalogTab('PUBLIC');
+              setCurrentPage(1);
+              setSelectedProductIds(new Set());
+            }}
+            className={`cursor-pointer transition-colors ${
+              activeCatalogTab === 'PUBLIC'
+                ? 'text-emerald-600 dark:text-emerald-400 font-bold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white font-medium'
+            }`}
+          >
+            Public <span className="text-slate-400 dark:text-slate-500 font-normal">({catalogCounts.publicCount})</span>
+          </button>
+          <span className="text-slate-300 dark:text-slate-700">|</span>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveCatalogTab('OUT_OF_STOCK');
+              setCurrentPage(1);
+              setSelectedProductIds(new Set());
+            }}
+            className={`cursor-pointer transition-colors ${
+              activeCatalogTab === 'OUT_OF_STOCK'
+                ? 'text-rose-600 dark:text-rose-400 font-bold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white font-medium'
+            }`}
+          >
+            Out of Stock <span className="text-slate-400 dark:text-slate-500 font-normal">({catalogCounts.outOfStockCount})</span>
+          </button>
+          <span className="text-slate-300 dark:text-slate-700">|</span>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveCatalogTab('DRAFT');
+              setCurrentPage(1);
+              setSelectedProductIds(new Set());
+            }}
+            className={`cursor-pointer transition-colors ${
+              activeCatalogTab === 'DRAFT'
+                ? 'text-amber-600 dark:text-amber-400 font-bold'
+                : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white font-medium'
+            }`}
+          >
+            Draft <span className="text-slate-400 dark:text-slate-500 font-normal">({catalogCounts.draftCount})</span>
+          </button>
         </div>
       </div>
 
-      {/* 3. Bulk Action Bar (Visible when 1+ products selected) */}
-      {selectedProductIds.size > 0 && (
-        <div className="bg-white dark:bg-navy-900 border border-orange-500/50 rounded-2xl p-3 sm:p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xl animate-in fade-in-50 duration-200">
-          <div className="flex items-center gap-3">
-            <span className="w-8 h-8 rounded-xl bg-orange-500/20 text-orange-600 dark:text-orange-400 tabular-nums font-bold flex items-center justify-center text-xs">
-              {selectedProductIds.size}
+      {/* 4. Product Catalog Display: Mobile Accordions & Desktop Table */}
+      <div className="bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl overflow-hidden shadow-lg">
+        {/* Top Attached Sub-header Row: Bulk Selection Info (Left) & Rows-to-Show Selector (Right) */}
+        <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50/80 dark:bg-navy-950/80 border-b border-slate-200 dark:border-white/10 text-xs text-slate-600 dark:text-slate-300">
+          {/* Left: subtle typography */}
+          <div>
+            <span className="text-slate-500 dark:text-slate-400 text-xs font-medium">
+              {selectedProductIds.size > 0
+                ? `${selectedProductIds.size} ${selectedProductIds.size === 1 ? 'product' : 'products'} selected`
+                : 'Select products to apply bulk actions'}
             </span>
-            <div className="text-xs sm:text-sm">
-              <span className="text-navy-800 dark:text-white font-bold">{selectedProductIds.size}</span>
-              <span className="text-slate-600 dark:text-slate-300"> products selected</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setSelectedProductIds(new Set())}
-              className="text-xs text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-white underline underline-offset-2 ml-2 cursor-pointer"
-            >
-              Deselect All
-            </button>
           </div>
 
-          <div className="flex items-center gap-2">
-            {activeCatalogTab === 'DRAFT' ? (
-              <>
-                <button
-                  type="button"
-                  onClick={handleBulkRestoreAction}
-                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-500/20 cursor-pointer transition-colors"
-                >
-                  <RotateCcw className="w-4 h-4 pointer-events-none" />
-                  <span>Restore Selected ({selectedProductIds.size})</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsPermanentDeleteMode(true);
-                    setBulkDeleteModalOpen(true);
-                  }}
-                  className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-rose-600/20 cursor-pointer transition-colors"
-                >
-                  <Trash2 className="w-4 h-4 pointer-events-none" />
-                  <span>Permanently Delete ({selectedProductIds.size})</span>
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsPermanentDeleteMode(false);
-                    setBulkDeleteModalOpen(true);
-                  }}
-                  className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-amber-500/20 cursor-pointer transition-colors"
-                >
-                  <Archive className="w-4 h-4 pointer-events-none" />
-                  <span>Move Selected to Draft ({selectedProductIds.size})</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsPermanentDeleteMode(true);
-                    setBulkDeleteModalOpen(true);
-                  }}
-                  className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-600 dark:text-rose-400 text-xs font-bold flex items-center gap-1.5 border border-slate-200 dark:border-white/10 cursor-pointer transition-colors"
-                >
-                  <Trash2 className="w-3.5 h-3.5 pointer-events-none" />
-                  <span>Permanent Delete</span>
-                </button>
-              </>
-            )}
+          {/* Right: Show rows per page selector */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-500 dark:text-slate-400 font-medium">Show</span>
+            <select
+              value={pageSize}
+              onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+              aria-label="Rows per page"
+              className="px-2 py-1 rounded-lg bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 text-xs font-semibold text-navy-800 dark:text-slate-100 focus:outline-none focus:border-orange-500 cursor-pointer shadow-2xs"
+            >
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+            <span className="text-slate-500 dark:text-slate-400 font-medium">rows</span>
           </div>
         </div>
-      )}
-
-      {/* 4. Product Catalog Display: Mobile Accordions & Desktop Table */}
-      <div className="bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl overflow-visible shadow-xl p-3 sm:p-0">
         {/* Mobile View */}
         <div className="block md:hidden space-y-2.5">
           {paginatedProducts.length === 0 ? (
@@ -1109,55 +1100,39 @@ export function ProductsCatalogTab({
           </table>
         </div>
 
-        {/* 6. Pagination Footer */}
-        <div className="p-4 border-t border-slate-200 dark:border-white/10 bg-slate-50/60 dark:bg-navy-950/60 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600 dark:text-slate-300">
-          <div>
-            Showing <strong className="text-navy-800 dark:text-white">{totalItems === 0 ? 0 : startIndex + 1}</strong> to{' '}
-            <strong className="text-navy-800 dark:text-white">
+        {/* Bottom Attached Footer: Zero Gap */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 bg-slate-50/80 dark:bg-navy-950/80 border-t border-slate-200 dark:border-white/10 text-xs text-slate-600 dark:text-slate-300">
+          <div className="text-slate-600 dark:text-slate-300">
+            Showing <span className="font-bold text-navy-800 dark:text-white">{totalItems === 0 ? 0 : startIndex + 1}</span> to{' '}
+            <span className="font-bold text-navy-800 dark:text-white">
               {Math.min(startIndex + pageSize, totalItems)}
-            </strong>{' '}
-            of <strong className="text-navy-800 dark:text-white">{totalItems}</strong> products in {activeCatalogTab === 'ALL' ? 'all status' : activeCatalogTab.toLowerCase().replace('_', ' ')}
+            </span>{' '}
+            of <span className="font-bold text-navy-800 dark:text-white">{totalItems}</span> products in{' '}
+            {activeCatalogTab === 'ALL' ? 'all status' : activeCatalogTab.toLowerCase().replace('_', ' ')}
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-1.5 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-xl px-2.5 py-1">
-              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">Show:</span>
-              <select
-                value={pageSize}
-                onChange={(e) => handlePageSizeChange(Number(e.target.value))}
-                aria-label="Products per page"
-                className="bg-transparent text-xs font-bold text-orange-600 dark:text-orange-400 focus:outline-none cursor-pointer"
-              >
-                <option value={10} className="bg-slate-50 dark:bg-navy-950 text-navy-800 dark:text-slate-100">10</option>
-                <option value={25} className="bg-slate-50 dark:bg-navy-950 text-navy-800 dark:text-slate-100">25</option>
-                <option value={50} className="bg-slate-50 dark:bg-navy-950 text-navy-800 dark:text-slate-100">50</option>
-                <option value={100} className="bg-slate-50 dark:bg-navy-950 text-navy-800 dark:text-slate-100">100</option>
-              </select>
-              <span className="text-xs text-slate-500 dark:text-slate-400">rows</span>
-            </div>
+          <div className="flex items-center gap-2">
+            <span className="text-slate-600 dark:text-slate-300 font-medium">
+              Page <span className="text-navy-800 dark:text-white font-bold">{safePage}</span> of{' '}
+              <span className="text-navy-800 dark:text-white font-bold">{totalPages}</span>
+            </span>
 
             <div className="flex items-center gap-1">
               <button
                 type="button"
-                onClick={() => handlePageChange(safePage - 1)}
                 disabled={safePage <= 1}
+                onClick={() => handlePageChange(safePage - 1)}
                 aria-label="Previous page"
-                className="p-1.5 rounded-lg bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-white hover:border-slate-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                className="p-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-navy-900 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors shadow-2xs"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
-
-              <span className="px-2 text-xs font-semibold tabular-nums text-slate-600 dark:text-slate-300">
-                Page <strong className="text-navy-800 dark:text-white">{safePage}</strong> of{' '}
-                <strong className="text-navy-800 dark:text-white">{totalPages}</strong>
-              </span>
-
               <button
                 type="button"
-                onClick={() => handlePageChange(safePage + 1)}
                 disabled={safePage >= totalPages}
+                onClick={() => handlePageChange(safePage + 1)}
                 aria-label="Next page"
-                className="p-1.5 rounded-lg bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-white hover:border-slate-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                className="p-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-navy-900 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors shadow-2xs"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>

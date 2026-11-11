@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -105,13 +105,13 @@ export function AuthModal({
           <div>
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-100 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/20 text-orange-800 dark:text-orange-400 text-[11px] font-bold uppercase tracking-wider mb-2">
               <Sparkles className="w-3.5 h-3.5" />
-              <span>পোর্টাল সাইন ইন</span>
+              <span>Portal Sign In</span>
             </div>
             <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-              আপনার একাউন্টে প্রবেশ করুন
+              Sign in to your account
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              রোল অনুযায়ী ড্যাশবোর্ড অ্যাক্সেস করতে নিচের ট্যাব নির্বাচন করুন।
+              Select your role below to access your dedicated workspace.
             </p>
           </div>
 
@@ -127,7 +127,7 @@ export function AuthModal({
               }`}
             >
               <Building2 className="w-4 h-4" />
-              <span>মার্চেন্ট</span>
+              <span>Merchant</span>
             </button>
 
             <button
@@ -140,7 +140,7 @@ export function AuthModal({
               }`}
             >
               <ShieldCheck className="w-4 h-4" />
-              <span>এডমিন</span>
+              <span>Admin</span>
             </button>
 
             <button
@@ -153,7 +153,7 @@ export function AuthModal({
               }`}
             >
               <HardHat className="w-4 h-4" />
-              <span>কর্মী</span>
+              <span>Staff</span>
             </button>
           </div>
 
@@ -161,7 +161,7 @@ export function AuthModal({
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                ইমেইল বা ইউজারনেম
+                Email or Username
               </label>
               <div className="relative">
                 <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -177,8 +177,8 @@ export function AuthModal({
 
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">পাসওয়ার্ড</label>
-                <span className="text-[11px] text-orange-600 dark:text-orange-400 font-medium">ডেমো অটোফিল সক্রিয়</span>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">Password</label>
+                <span className="text-[11px] text-orange-600 dark:text-orange-400 font-medium">Demo autofill active</span>
               </div>
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -209,7 +209,7 @@ export function AuthModal({
               ) : (
                 <>
                   <span>
-                    {selectedRole === 'MERCHANT' ? 'মার্চেন্ট ড্যাশবোর্ডে প্রবেশ করুন' : selectedRole === 'SUPER_ADMIN' ? 'এডমিন প্যানেলে প্রবেশ করুন' : 'ওয়ার্কার প্যানেলে প্রবেশ করুন'}
+                    {selectedRole === 'MERCHANT' ? 'Sign In to Merchant Dashboard' : selectedRole === 'SUPER_ADMIN' ? 'Sign In to Admin Portal' : 'Sign In to Warehouse Station'}
                   </span>
                   <ArrowRight className="w-4 h-4" />
                 </>
@@ -219,7 +219,7 @@ export function AuthModal({
 
           {/* Bottom Switcher */}
           <div className="pt-2 border-t border-slate-200 dark:border-slate-800 text-center text-xs text-slate-500 dark:text-slate-400">
-            <span>নতুন মার্চেন্ট? </span>
+            <span>New Merchant? </span>
             <button
               type="button"
               onClick={() => {
@@ -228,7 +228,7 @@ export function AuthModal({
               }}
               className="text-orange-600 dark:text-orange-400 font-bold hover:underline cursor-pointer"
             >
-              এখানে একাউন্ট খুলুন
+              Create an account
             </button>
           </div>
         </div>
