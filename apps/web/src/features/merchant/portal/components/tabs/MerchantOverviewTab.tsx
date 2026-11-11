@@ -47,12 +47,35 @@ interface TimeframeDataPoint {
   orderCount: number;
 }
 
+// Helper to calculate solid SVG Pie Slice path
+function getPieSectorPath(
+  cx: number,
+  cy: number,
+  r: number,
+  startAngleDeg: number,
+  endAngleDeg: number
+): string {
+  const rad = Math.PI / 180;
+  const startRad = (startAngleDeg - 90) * rad;
+  const endRad = (endAngleDeg - 90) * rad;
+
+  const x1 = cx + r * Math.cos(startRad);
+  const y1 = cy + r * Math.sin(startRad);
+  const x2 = cx + r * Math.cos(endRad);
+  const y2 = cy + r * Math.sin(endRad);
+
+  const largeArcFlag = endAngleDeg - startAngleDeg > 180 ? 1 : 0;
+
+  return `M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${largeArcFlag} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z`;
+}
+
 export function MerchantOverviewTab({ memoCount, onSelectTab }: MerchantOverviewTabProps) {
   const { profile, products, orders, asns } = useMerchant();
   const [timeframe, setTimeframe] = useState<MerchantTimeframe>('7d');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState('Just now');
   const [activeBarIndex, setActiveBarIndex] = useState<number | null>(null);
+  const [hoveredSlice, setHoveredSlice] = useState<'net' | 'courier' | 'fee' | null>(null);
 
   const handleRefresh = () => {
     setIsRefreshing(true);
@@ -90,6 +113,26 @@ export function MerchantOverviewTab({ memoCount, onSelectTab }: MerchantOverview
   const feePercent = totalGrossRevenue > 0 ? 5 : 5;
   const courierPercent =
     totalGrossRevenue > 0 ? Math.max(0, 100 - netPercent - feePercent) : 13;
+
+  // Solid Pie Chart Sector Calculations
+  const angleNet = (netPercent / 100) * 360;
+  const angleCourier = (courierPercent / 100) * 360;
+  const angleFee = 360 - angleNet - angleCourier;
+
+  const netStart = 0;
+  const netEnd = angleNet;
+  const courierStart = netEnd;
+  const courierEnd = courierStart + angleCourier;
+  const feeStart = courierEnd;
+  const feeEnd = 360;
+
+  const pieCx = 90;
+  const pieCy = 90;
+  const pieR = 80;
+
+  const pathNet = getPieSectorPath(pieCx, pieCy, pieR, netStart, netEnd);
+  const pathCourier = getPieSectorPath(pieCx, pieCy, pieR, courierStart, courierEnd);
+  const pathFee = getPieSectorPath(pieCx, pieCy, pieR, feeStart, feeEnd);
 
   const timeframeOptions: { id: MerchantTimeframe; label: string }[] = [
     { id: 'today', label: 'Today (Live Hourly)' },
@@ -606,108 +649,133 @@ export function MerchantOverviewTab({ memoCount, onSelectTab }: MerchantOverview
             </span>
           </div>
 
-          {/* CIRCLE / DONUT GRAPH + LEGEND LAYOUT */}
+          {/* SOLID PIE CHART GRAPH + LEGEND LAYOUT */}
           <div className="flex flex-col sm:flex-row items-center justify-around gap-6 py-2">
-            {/* SVG Donut / Pie Graphic */}
-            <div className="relative shrink-0 flex items-center justify-center">
+            {/* Real Solid SVG Pie Chart */}
+            <div className="relative shrink-0 flex flex-col items-center justify-center">
               <svg
-                width="160"
-                height="160"
-                viewBox="0 0 160 160"
-                className="transform -rotate-90 drop-shadow-sm"
+                width="180"
+                height="180"
+                viewBox="0 0 180 180"
+                className="drop-shadow-md overflow-visible"
               >
-                {/* Background Ring */}
-                <circle
-                  cx="80"
-                  cy="80"
-                  r={donutRadius}
-                  fill="transparent"
-                  stroke="currentColor"
-                  strokeWidth="16"
-                  className="text-slate-100 dark:text-navy-800"
-                />
-
                 {totalGrossRevenue > 0 ? (
                   <>
-                    {/* Segment 1: Net Wallet Balance (Emerald) */}
-                    <circle
-                      cx="80"
-                      cy="80"
-                      r={donutRadius}
-                      fill="transparent"
-                      stroke="#10b981"
-                      strokeWidth="16"
-                      strokeDasharray={`${strokeNet} ${circumference}`}
-                      strokeDashoffset="0"
-                      strokeLinecap="round"
-                      className="transition-all duration-700 ease-out"
-                    />
+                    {/* Sector 1: Net Merchant Payout (Emerald) */}
+                    <path
+                      d={pathNet}
+                      fill="#10b981"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      className={`text-white dark:text-navy-900 transition-all duration-300 cursor-pointer ${
+                        hoveredSlice === 'net' ? 'opacity-100 scale-105 origin-center' : 'opacity-95 hover:opacity-100'
+                      }`}
+                      onMouseEnter={() => setHoveredSlice('net')}
+                      onMouseLeave={() => setHoveredSlice(null)}
+                    >
+                      <title>{`Net Payout: ৳${estNetWalletBalance.toLocaleString()} (${netPercent}%)`}</title>
+                    </path>
 
-                    {/* Segment 2: Courier Charges (Amber) */}
-                    <circle
-                      cx="80"
-                      cy="80"
-                      r={donutRadius}
-                      fill="transparent"
-                      stroke="#f59e0b"
-                      strokeWidth="16"
-                      strokeDasharray={`${strokeCourier} ${circumference}`}
-                      strokeDashoffset={`-${strokeNet}`}
-                      strokeLinecap="round"
-                      className="transition-all duration-700 ease-out"
-                    />
+                    {/* Sector 2: Courier Delivery Charges (Amber) */}
+                    <path
+                      d={pathCourier}
+                      fill="#f59e0b"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      className={`text-white dark:text-navy-900 transition-all duration-300 cursor-pointer ${
+                        hoveredSlice === 'courier' ? 'opacity-100 scale-105 origin-center' : 'opacity-95 hover:opacity-100'
+                      }`}
+                      onMouseEnter={() => setHoveredSlice('courier')}
+                      onMouseLeave={() => setHoveredSlice(null)}
+                    >
+                      <title>{`Courier Charges: ৳${estCourierFees.toLocaleString()} (${courierPercent}%)`}</title>
+                    </path>
 
-                    {/* Segment 3: 3PL Warehouse Fee (Rose) */}
-                    <circle
-                      cx="80"
-                      cy="80"
-                      r={donutRadius}
-                      fill="transparent"
-                      stroke="#f43f5e"
-                      strokeWidth="16"
-                      strokeDasharray={`${strokeFee} ${circumference}`}
-                      strokeDashoffset={`-${strokeNet + strokeCourier}`}
-                      strokeLinecap="round"
-                      className="transition-all duration-700 ease-out"
-                    />
+                    {/* Sector 3: 3PL Pick & Pack Fee (Rose) */}
+                    <path
+                      d={pathFee}
+                      fill="#f43f5e"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      className={`text-white dark:text-navy-900 transition-all duration-300 cursor-pointer ${
+                        hoveredSlice === 'fee' ? 'opacity-100 scale-105 origin-center' : 'opacity-95 hover:opacity-100'
+                      }`}
+                      onMouseEnter={() => setHoveredSlice('fee')}
+                      onMouseLeave={() => setHoveredSlice(null)}
+                    >
+                      <title>{`3PL Fee: ৳${estFulfillmentFees.toLocaleString()} (${feePercent}%)`}</title>
+                    </path>
                   </>
                 ) : (
-                  <circle
-                    cx="80"
-                    cy="80"
-                    r={donutRadius}
-                    fill="transparent"
-                    stroke="#f97316"
-                    strokeWidth="16"
-                    strokeDasharray={`12 ${circumference}`}
-                    className="opacity-40"
-                  />
+                  <>
+                    {/* Empty State Pie with 3 placeholder sectors showing authentic pie slices */}
+                    <path
+                      d={getPieSectorPath(pieCx, pieCy, pieR, 0, 297)}
+                      fill="#10b981"
+                      fillOpacity="0.3"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      className="text-white dark:text-navy-900"
+                    />
+                    <path
+                      d={getPieSectorPath(pieCx, pieCy, pieR, 297, 342)}
+                      fill="#f59e0b"
+                      fillOpacity="0.3"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      className="text-white dark:text-navy-900"
+                    />
+                    <path
+                      d={getPieSectorPath(pieCx, pieCy, pieR, 342, 360)}
+                      fill="#f43f5e"
+                      fillOpacity="0.3"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      className="text-white dark:text-navy-900"
+                    />
+                  </>
                 )}
               </svg>
 
-              {/* Inside Donut Center Metrics */}
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-2">
-                <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
-                  Net Wallet
-                </span>
-                <span className="text-base font-black text-navy-900 dark:text-white font-mono leading-tight">
-                  ৳ {estNetWalletBalance.toLocaleString()}
-                </span>
-                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
-                  {totalGrossRevenue > 0 ? `${netPercent}% Claimable` : '0% Balance'}
-                </span>
+              {/* Hover Info Badge below the Pie */}
+              <div className="mt-3 text-center">
+                {hoveredSlice === 'net' ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                    Net Payout: {netPercent}% (৳ {estNetWalletBalance.toLocaleString()})
+                  </span>
+                ) : hoveredSlice === 'courier' ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                    Courier Charges: {courierPercent}% (৳ {estCourierFees.toLocaleString()})
+                  </span>
+                ) : hoveredSlice === 'fee' ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+                    3PL Fees: {feePercent}% (৳ {estFulfillmentFees.toLocaleString()})
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-navy-800 border border-slate-200 dark:border-white/10">
+                    Solid Pie Chart • Hover slices
+                  </span>
+                )}
               </div>
             </div>
 
             {/* Legend Breakdown Details */}
             <div className="flex-1 w-full space-y-3 text-xs">
               {/* Item 1: Net Payout */}
-              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-navy-950/60 border border-slate-200/80 dark:border-white/10 flex items-center justify-between">
+              <div
+                onMouseEnter={() => setHoveredSlice('net')}
+                onMouseLeave={() => setHoveredSlice(null)}
+                className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
+                  hoveredSlice === 'net'
+                    ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 shadow-xs'
+                    : 'bg-slate-50 dark:bg-navy-950/60 border-slate-200/80 dark:border-white/10'
+                } flex items-center justify-between`}
+              >
                 <div className="flex items-center gap-2">
                   <span className="h-3 w-3 rounded-full bg-emerald-500 shrink-0" />
                   <div>
                     <span className="font-bold text-navy-900 dark:text-white block">
-                      Net Merchant Payout
+                      Net Merchant Payout ({netPercent}%)
                     </span>
                     <span className="text-[11px] text-slate-400">
                       Disbursed directly to your bank/bKash
@@ -720,12 +788,20 @@ export function MerchantOverviewTab({ memoCount, onSelectTab }: MerchantOverview
               </div>
 
               {/* Item 2: Courier Charges */}
-              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-navy-950/60 border border-slate-200/80 dark:border-white/10 flex items-center justify-between">
+              <div
+                onMouseEnter={() => setHoveredSlice('courier')}
+                onMouseLeave={() => setHoveredSlice(null)}
+                className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
+                  hoveredSlice === 'courier'
+                    ? 'border-amber-500 bg-amber-50/50 dark:bg-amber-950/20 shadow-xs'
+                    : 'bg-slate-50 dark:bg-navy-950/60 border-slate-200/80 dark:border-white/10'
+                } flex items-center justify-between`}
+              >
                 <div className="flex items-center gap-2">
                   <span className="h-3 w-3 rounded-full bg-amber-500 shrink-0" />
                   <div>
                     <span className="font-bold text-navy-900 dark:text-white block">
-                      Courier Delivery Charges
+                      Courier Delivery Charges ({courierPercent}%)
                     </span>
                     <span className="text-[11px] text-slate-400">
                       Steadfast / Pathao / RedX handovers
@@ -738,12 +814,20 @@ export function MerchantOverviewTab({ memoCount, onSelectTab }: MerchantOverview
               </div>
 
               {/* Item 3: 3PL Warehousing Fee */}
-              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-navy-950/60 border border-slate-200/80 dark:border-white/10 flex items-center justify-between">
+              <div
+                onMouseEnter={() => setHoveredSlice('fee')}
+                onMouseLeave={() => setHoveredSlice(null)}
+                className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
+                  hoveredSlice === 'fee'
+                    ? 'border-rose-500 bg-rose-50/50 dark:bg-rose-950/20 shadow-xs'
+                    : 'bg-slate-50 dark:bg-navy-950/60 border-slate-200/80 dark:border-white/10'
+                } flex items-center justify-between`}
+              >
                 <div className="flex items-center gap-2">
                   <span className="h-3 w-3 rounded-full bg-rose-500 shrink-0" />
                   <div>
                     <span className="font-bold text-navy-900 dark:text-white block">
-                      3PL Pick, Pack & Bin Fee
+                      3PL Pick, Pack & Bin Fee ({feePercent}%)
                     </span>
                     <span className="text-[11px] text-slate-400">
                       Warehouse storage & 4x6 slip execution (4.5%)
