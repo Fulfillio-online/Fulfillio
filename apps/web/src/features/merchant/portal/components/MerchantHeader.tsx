@@ -60,13 +60,13 @@ export function MerchantHeader({
     if (activeTab) {
       switch (activeTab) {
         case 'overview':
-          return { title: 'Store Overview', subtitle: 'Live Metrics & Performance', icon: LayoutDashboard };
+          return { title: 'Overview', subtitle: 'Live Metrics & Performance', icon: LayoutDashboard };
         case 'products':
-          return { title: 'Product Catalog', subtitle: 'Stock & Bin Slotting', icon: Package };
+          return { title: 'Products', subtitle: 'Stock & Bin Slotting', icon: Package };
         case 'orders':
-          return { title: 'Store Orders', subtitle: 'Live Lifecycle & Attribution', icon: ShoppingCart };
+          return { title: 'Orders', subtitle: 'Live Lifecycle & Attribution', icon: ShoppingCart };
         case 'memo-designer':
-          return { title: 'Memo Designer', subtitle: '4x6" Thermal Templates', icon: Layers };
+          return { title: 'Memos', subtitle: '4x6" Thermal Templates', icon: Layers };
         case 'inbound':
         case 'tracking':
           return { title: 'Inbound ASNs', subtitle: 'Dock Receiving & Manifests', icon: Truck };
@@ -79,13 +79,13 @@ export function MerchantHeader({
       }
     }
     if (pathname.includes('/products')) {
-      return { title: 'Product Catalog', subtitle: 'Stock & Bin Slotting', icon: Package };
+      return { title: 'Products', subtitle: 'Stock & Bin Slotting', icon: Package };
     }
     if (pathname.includes('/orders')) {
-      return { title: 'Store Orders', subtitle: 'Live Lifecycle & Attribution', icon: ShoppingCart };
+      return { title: 'Orders', subtitle: 'Live Lifecycle & Attribution', icon: ShoppingCart };
     }
     if (pathname.includes('/memos')) {
-      return { title: 'Memo Designer', subtitle: '4x6" Thermal Templates', icon: Layers };
+      return { title: 'Memos', subtitle: '4x6" Thermal Templates', icon: Layers };
     }
     if (pathname.includes('/inbound')) {
       return { title: 'Inbound ASNs', subtitle: 'Dock Receiving & Manifests', icon: Truck };
@@ -99,7 +99,7 @@ export function MerchantHeader({
     if (pathname.includes('/profile')) {
       return { title: 'My Store Profile', subtitle: 'Account & Business Settings', icon: User };
     }
-    return { title: 'Store Overview', subtitle: 'Live Metrics & Performance', icon: LayoutDashboard };
+    return { title: 'Overview', subtitle: 'Live Metrics & Performance', icon: LayoutDashboard };
   };
 
   const headerInfo = getHeaderInfo();

@@ -38,31 +38,31 @@ export function MerchantSidebar({
   const navItems = [
     {
       id: 'overview' as MerchantTab,
-      label: 'Store Overview',
+      label: 'Overview',
       href: '/merchant',
       icon: LayoutDashboard,
     },
     {
       id: 'products' as MerchantTab,
-      label: 'Products Catalog',
+      label: 'Products',
       href: '/merchant/products',
       icon: Package,
     },
     {
       id: 'orders' as MerchantTab,
-      label: 'Customer Orders',
+      label: 'Orders',
       href: '/merchant/orders',
       icon: ShoppingCart,
     },
     {
       id: 'memo-designer' as MerchantTab,
-      label: 'Memo / Invoice Slip',
+      label: 'Memos',
       href: '/merchant/memos',
       icon: Layers,
     },
     {
       id: 'inbound' as MerchantTab,
-      label: 'Inbound ASNs & Dock',
+      label: 'Inbound ASNs & Warehouse',
       href: '/merchant/inbound',
       icon: Truck,
     },
