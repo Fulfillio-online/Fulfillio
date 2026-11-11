@@ -100,7 +100,7 @@ export function MerchantMemoDesignerTab({
     <div className="space-y-6">
       <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-100 flex items-center gap-2">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-navy-900 dark:text-white flex items-center gap-2">
             <Layers className="h-6 w-6 text-indigo-400 shrink-0" />
             <span>Reseller Memo Designer (4x6 Thermal Focus)</span>
           </h1>
@@ -120,13 +120,13 @@ export function MerchantMemoDesignerTab({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
         {/* Form Editor */}
         <div className="lg:col-span-6 space-y-4">
-          <form onSubmit={handleSubmit} className="p-4 sm:p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4 shadow-sm">
-            <h3 className="font-bold text-base text-slate-200 border-b border-slate-800 pb-3 flex items-center gap-2">
+          <form onSubmit={handleSubmit} className="p-4 sm:p-6 rounded-2xl bg-white dark:bg-navy-900 border border-slate-200/80 dark:border-white/10 shadow-xs space-y-4 shadow-sm">
+            <h3 className="font-bold text-base text-navy-900 dark:text-white border-b border-slate-200 dark:border-white/10 pb-3 flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-indigo-400" />
               <span>Reseller Slip Configuration</span>
             </h3>
 
-            <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 flex items-center justify-between text-xs">
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-navy-950/70 border border-slate-200 dark:border-white/10 flex items-center justify-between text-xs">
               <div className="flex items-center gap-2 text-slate-300">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 <span className="font-medium">Memo Code:</span>
@@ -148,7 +148,7 @@ export function MerchantMemoDesignerTab({
                   onChange={(e) => setDesignerName(e.target.value)}
                   placeholder="e.g. Festive Season Branded Slip"
                   required
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-sm text-navy-900 dark:text-white focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
@@ -162,7 +162,7 @@ export function MerchantMemoDesignerTab({
                   onChange={(e) => setResellerStoreName(e.target.value)}
                   placeholder="e.g. URBAN THREADS OFFICIAL"
                   required
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-sm text-navy-900 dark:text-white focus:outline-none focus:border-indigo-500"
                 />
               </div>
             </div>
@@ -178,7 +178,7 @@ export function MerchantMemoDesignerTab({
                   onChange={(e) => setResellerPhone(e.target.value)}
                   placeholder="+880 1711-234567"
                   required
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-sm text-navy-900 dark:text-white focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
@@ -189,7 +189,7 @@ export function MerchantMemoDesignerTab({
                 <select
                   value={paperSize}
                   onChange={(e) => setPaperSize(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-sm text-navy-900 dark:text-white focus:outline-none focus:border-indigo-500"
                 >
                   <option value="THERMAL_4X6">4x6 Inch Thermal Sticker</option>
                   <option value="POS_80MM">80mm POS Slip</option>
@@ -207,7 +207,7 @@ export function MerchantMemoDesignerTab({
                 onChange={(e) => setResellerAddress(e.target.value)}
                 placeholder="e.g. Banani, Dhaka"
                 required
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-sm text-navy-900 dark:text-white focus:outline-none focus:border-indigo-500"
               />
             </div>
 
@@ -221,7 +221,7 @@ export function MerchantMemoDesignerTab({
                 onChange={(e) => setResellerNote(e.target.value)}
                 placeholder="e.g. Thank you for shopping! Return within 7 days with invoice."
                 required
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-sm text-navy-900 dark:text-white focus:outline-none focus:border-indigo-500"
               />
             </div>
 
@@ -268,7 +268,7 @@ export function MerchantMemoDesignerTab({
                     <button
                       type="button"
                       onClick={() => logoInputRef.current?.click()}
-                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium flex items-center gap-1.5 border border-slate-700 transition-colors"
+                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-navy-900 dark:text-white text-xs font-medium flex items-center gap-1.5 border border-slate-700 transition-colors"
                     >
                       <Upload className="h-3.5 w-3.5 text-indigo-400" />
                       <span>{resellerLogo ? 'Change Logo' : 'Upload Logo'}</span>
@@ -304,10 +304,10 @@ export function MerchantMemoDesignerTab({
 
         {/* Live 4x6 Thermal Slip Preview matching Screenshot_35.png */}
         <div className="lg:col-span-6 space-y-4">
-          <div className="p-4 sm:p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+          <div className="p-4 sm:p-6 rounded-2xl bg-white dark:bg-navy-900 border border-slate-200/80 dark:border-white/10 shadow-xs space-y-4 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-white/10 pb-3">
               <div>
-                <h3 className="font-bold text-base text-slate-200">
+                <h3 className="font-bold text-base text-navy-900 dark:text-white">
                   Thermal 4x6 Slip Real Preview
                 </h3>
                 <p className="text-xs text-slate-400">
@@ -408,7 +408,7 @@ export function MerchantMemoDesignerTab({
       {/* Active Reseller Memo Templates Grid */}
       <div className="space-y-4 pt-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-          <h3 className="font-bold text-lg text-slate-100 flex items-center gap-2">
+          <h3 className="font-bold text-lg text-navy-900 dark:text-white flex items-center gap-2">
             <Layers className="h-5 w-5 text-indigo-400 shrink-0" />
             <span>Active Reseller Memo Templates ({memoList.length})</span>
           </h3>
@@ -421,7 +421,7 @@ export function MerchantMemoDesignerTab({
           {memoList.map((memo) => (
             <div
               key={memo.id}
-              className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4 relative group hover:border-slate-700 transition-colors shadow-sm flex flex-col justify-between"
+              className="p-5 rounded-2xl bg-white dark:bg-navy-900 border border-slate-200/80 dark:border-white/10 shadow-xs space-y-4 relative group hover:border-slate-700 transition-colors shadow-sm flex flex-col justify-between"
             >
               {/* Card Header */}
               <div className="flex items-start justify-between gap-2">
@@ -436,7 +436,7 @@ export function MerchantMemoDesignerTab({
                       </span>
                     )}
                   </div>
-                  <h4 className="font-bold text-sm text-slate-100 mt-1.5">{memo.resellerName}</h4>
+                  <h4 className="font-bold text-sm text-navy-900 dark:text-white mt-1.5">{memo.resellerName}</h4>
                   <span className="text-xs text-slate-400 block">{memo.name}</span>
                 </div>
 
@@ -530,7 +530,7 @@ export function MerchantMemoDesignerTab({
                   <button
                     type="button"
                     onClick={() => handleCopyCode(memo.code)}
-                    className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1 transition-colors border border-slate-700"
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-navy-900 dark:text-white text-xs font-semibold flex items-center gap-1 transition-colors border border-slate-700"
                   >
                     {copiedCode === memo.code ? (
                       <>

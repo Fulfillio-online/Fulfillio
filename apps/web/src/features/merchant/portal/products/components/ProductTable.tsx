@@ -36,13 +36,13 @@ export function ProductTable({
   const isAllSelected = products.length > 0 && selectedIds.length === products.length;
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden shadow-sm">
+    <div className="rounded-xl border border-slate-200/80 dark:border-white/10 bg-white dark:bg-navy-900 overflow-hidden shadow-xs">
       {/* ============================================================== */}
       {/* 1. MOBILE RESPONSIVE CARDS VIEW (Visible on screens < 768px)  */}
       {/* ============================================================== */}
       <div className="block md:hidden">
         {/* Mobile "Select All" Bar */}
-        <div className="p-3 bg-slate-950/70 border-b border-slate-800 flex items-center justify-between text-xs">
+        <div className="p-3 bg-slate-50 dark:bg-navy-950/70 border-b border-slate-200 dark:border-white/10 flex items-center justify-between text-xs">
           <button
             type="button"
             onClick={onToggleSelectAll}
@@ -110,7 +110,7 @@ export function ProductTable({
                   <div className="flex items-center gap-2 min-w-0">
                     <ProductThumbnail src={p.imageUrl} alt={p.title} size="md" />
                     <div className="min-w-0 flex-1">
-                      <span className="font-mono text-[10px] text-emerald-400 font-bold bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
+                      <span className="font-mono text-[10px] text-emerald-400 font-bold bg-slate-100 dark:bg-navy-950 px-1.5 py-0.5 rounded border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400">
                         {p.sku}
                       </span>
                       {p.category && (
@@ -217,7 +217,7 @@ export function ProductTable({
       {/* ============================================================== */}
       <div className="hidden md:block overflow-x-auto">
         <table className="w-full min-w-[760px] text-left text-sm">
-          <thead className="bg-slate-950/60 text-slate-400 text-xs uppercase tracking-wider font-semibold border-b border-slate-800">
+          <thead className="bg-slate-50/80 dark:bg-navy-950/60 text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider font-semibold border-b border-slate-200 dark:border-white/10">
             <tr>
               <th className="p-4 w-12 text-center">
                 <input
@@ -234,7 +234,7 @@ export function ProductTable({
               <th className="p-4 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800/80">
+          <tbody className="divide-y divide-slate-200/80 dark:divide-white/5">
             {products.map((p) => {
               const isSelected = selectedIds.includes(p.id);
               const isPublished = p.status === 'PUBLISHED' || (!p.status && p.stock > 0);
@@ -247,7 +247,7 @@ export function ProductTable({
               return (
                 <tr
                   key={p.id}
-                  className={`transition-colors hover:bg-slate-800/40 ${
+                  className={`transition-colors hover:bg-slate-50/80 dark:hover:bg-navy-800/40 ${
                     isSelected ? 'bg-emerald-950/10' : ''
                   }`}
                 >
@@ -277,7 +277,7 @@ export function ProductTable({
                       <div className="min-w-0">
                         <Link
                           href={`/merchant/products/${p.id}`}
-                          className="font-semibold text-slate-200 hover:text-emerald-400 transition-colors text-sm text-left truncate block max-w-xs sm:max-w-sm cursor-pointer"
+                          className="font-semibold text-navy-900 dark:text-white hover:text-orange-500 transition-colors transition-colors text-sm text-left truncate block max-w-xs sm:max-w-sm cursor-pointer"
                         >
                           {p.title}
                         </Link>
@@ -287,7 +287,7 @@ export function ProductTable({
                               {p.category}
                             </span>
                           )}
-                          <span className="font-mono text-[11px] text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
+                          <span className="font-mono text-[11px] text-slate-400 bg-slate-100 dark:bg-navy-950 px-1.5 py-0.5 rounded border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400">
                             {p.sku}
                           </span>
                         </div>
@@ -297,7 +297,7 @@ export function ProductTable({
 
                   {/* Declared Value */}
                   <td className="p-4">
-                    <div className="font-bold text-slate-100 text-sm">
+                    <div className="font-bold text-navy-900 dark:text-white text-sm">
                       ৳{p.price.toLocaleString()}
                     </div>
                     <div className="text-[11px] text-slate-500 mt-0.5">

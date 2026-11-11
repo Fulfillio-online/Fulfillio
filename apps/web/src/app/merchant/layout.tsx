@@ -15,7 +15,7 @@ function MerchantLayoutInner({ children }: { children: React.ReactNode }) {
   } = useMerchant();
 
   return (
-    <div className="flex min-h-screen bg-slate-950 text-slate-100 w-full overflow-x-hidden">
+    <div className="flex min-h-screen bg-slate-50 dark:bg-navy-950 text-navy-900 dark:text-white w-full overflow-x-hidden transition-colors duration-200">
       <MerchantSidebar
         profile={profile}
         isMobileOpen={isMobileSidebarOpen}

@@ -50,7 +50,7 @@ export function ProductStatusTabs({
   ];
 
   return (
-    <div className="flex items-center gap-1 sm:gap-2 border-b border-slate-800 overflow-x-auto no-scrollbar">
+    <div className="flex items-center gap-1 sm:gap-2 border-b border-slate-200 dark:border-white/10 overflow-x-auto no-scrollbar">
       {tabs.map((tab) => {
         const isActive = activeTab === tab.id;
         return (
@@ -60,8 +60,8 @@ export function ProductStatusTabs({
             onClick={() => onTabChange(tab.id)}
             className={`flex items-center gap-2 py-3 px-3 sm:px-4 text-xs font-semibold whitespace-nowrap transition-colors relative cursor-pointer ${
               isActive
-                ? 'text-emerald-400 font-bold border-b-2 border-emerald-500'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'text-orange-600 dark:text-orange-400 font-bold border-b-2 border-orange-500'
+                : 'text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white'
             }`}
           >
             {tab.icon === 'clock' && <Clock className="h-3.5 w-3.5 text-amber-400" />}
@@ -73,7 +73,7 @@ export function ProductStatusTabs({
                   ? 'bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30'
                   : tab.isSpecial && tab.count > 0
                   ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold'
-                  : 'bg-slate-800 text-slate-400'
+                  : 'bg-slate-100 dark:bg-navy-800 text-slate-600 dark:text-slate-400 border border-slate-200/60 dark:border-white/10'
               }`}
             >
               {tab.count}

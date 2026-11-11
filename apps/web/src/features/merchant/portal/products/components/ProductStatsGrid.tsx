@@ -46,7 +46,7 @@ export function ProductStatsGrid({ stats }: ProductStatsGridProps) {
       {statItems.map((item) => (
         <div
           key={item.label}
-          className="rounded-xl border border-slate-800 bg-slate-900/90 p-3 sm:p-5 shadow-sm transition-all hover:border-slate-700/80 flex flex-col justify-between"
+          className="rounded-xl border border-slate-200/80 dark:border-white/10 bg-white dark:bg-navy-900 p-3 sm:p-5 shadow-sm transition-all hover:border-orange-500/30 flex flex-col justify-between"
         >
           <div className="flex items-center justify-between gap-1">
             <span className="text-[11px] sm:text-xs font-semibold tracking-wide text-slate-400 truncate">
@@ -57,10 +57,10 @@ export function ProductStatsGrid({ stats }: ProductStatsGridProps) {
             </div>
           </div>
           <div className="mt-2 sm:mt-3">
-            <span className={`text-xl sm:text-3xl font-extrabold tracking-tight ${item.valueColor || 'text-slate-100'}`}>
+            <span className={`text-xl sm:text-3xl font-extrabold tracking-tight ${item.valueColor || 'text-navy-900 dark:text-white'}`}>
               {item.value}
             </span>
-            <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5 sm:mt-1 line-clamp-1 sm:line-clamp-none">
+            <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5 sm:mt-1 line-clamp-1 sm:line-clamp-none">
               {item.subtitle}
             </p>
           </div>

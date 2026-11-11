@@ -25,7 +25,7 @@ export function ProductToolbar({
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search products, SKU..."
-          className="w-full pl-9 pr-4 py-2 bg-slate-900/90 border border-slate-800 rounded-lg text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
+          className="w-full pl-9 pr-4 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-navy-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 transition-colors"
         />
       </div>
 
@@ -36,7 +36,7 @@ export function ProductToolbar({
           <select
             value={selectedCategory}
             onChange={(e) => onCategoryChange(e.target.value)}
-            className="w-full appearance-none pl-3 pr-8 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs font-medium text-slate-300 focus:outline-none focus:border-emerald-500 cursor-pointer"
+            className="w-full appearance-none pl-3 pr-8 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-medium text-navy-900 dark:text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
           >
             <option value="ALL">All Category</option>
             {categories.map((cat) => (
@@ -53,7 +53,7 @@ export function ProductToolbar({
           <select
             value={sortOption}
             onChange={(e) => onSortChange(e.target.value as ProductSortOption)}
-            className="w-full appearance-none pl-3 pr-8 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs font-medium text-slate-300 focus:outline-none focus:border-emerald-500 cursor-pointer"
+            className="w-full appearance-none pl-3 pr-8 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-medium text-navy-900 dark:text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
           >
             <option value="NEWEST">Newest</option>
             <option value="PRICE_ASC">Price: Low to High</option>
@@ -65,14 +65,14 @@ export function ProductToolbar({
         </div>
 
         {/* Grid vs List View Mode Toggle */}
-        <div className="flex items-center border border-slate-800 rounded-lg bg-slate-900 p-0.5 shrink-0">
+        <div className="flex items-center border border-slate-200 dark:border-white/10 rounded-xl bg-slate-100 dark:bg-navy-900 p-0.5 shrink-0">
           <button
             type="button"
             onClick={() => onViewModeChange('LIST')}
             className={`p-1.5 rounded-md transition-colors ${
               viewMode === 'LIST'
-                ? 'bg-slate-800 text-emerald-400 font-bold'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-white dark:bg-navy-800 text-orange-600 dark:text-orange-400 shadow-xs font-bold'
+                : 'text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white'
             }`}
             title="List View"
             aria-label="List View"
@@ -84,8 +84,8 @@ export function ProductToolbar({
             onClick={() => onViewModeChange('GRID')}
             className={`p-1.5 rounded-md transition-colors ${
               viewMode === 'GRID'
-                ? 'bg-slate-800 text-emerald-400 font-bold'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-white dark:bg-navy-800 text-orange-600 dark:text-orange-400 shadow-xs font-bold'
+                : 'text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white'
             }`}
             title="Grid View"
             aria-label="Grid View"

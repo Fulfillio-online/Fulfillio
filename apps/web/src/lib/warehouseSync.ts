@@ -261,7 +261,7 @@ export function getStoredMerchantProfileForCode(merchantCode: string): MerchantP
 export function getStoredMerchantProductsForCode(merchantCode = 'MC-101'): MerchantProductItem[] {
   const code = (merchantCode || 'MC-101').trim().toUpperCase();
   if (typeof window === 'undefined') {
-    return code === 'MC-101' ? INITIAL_MERCHANT_PRODUCTS : [];
+    return INITIAL_MERCHANT_PRODUCTS;
   }
   try {
     const raw = localStorage.getItem(getMerchantProductsKey(code));
@@ -272,13 +272,13 @@ export function getStoredMerchantProductsForCode(merchantCode = 'MC-101'): Merch
   } catch {
     // ignore
   }
-  return code === 'MC-101' ? INITIAL_MERCHANT_PRODUCTS : [];
+  return INITIAL_MERCHANT_PRODUCTS;
 }
 
 export function getStoredMerchantOrdersForCode(merchantCode = 'MC-101'): MerchantOrderItem[] {
   const code = (merchantCode || 'MC-101').trim().toUpperCase();
   if (typeof window === 'undefined') {
-    return code === 'MC-101' ? INITIAL_MERCHANT_ORDERS : [];
+    return INITIAL_MERCHANT_ORDERS;
   }
   try {
     const raw = localStorage.getItem(getMerchantOrdersKey(code));
@@ -289,7 +289,7 @@ export function getStoredMerchantOrdersForCode(merchantCode = 'MC-101'): Merchan
   } catch {
     // ignore
   }
-  return code === 'MC-101' ? INITIAL_MERCHANT_ORDERS : [];
+  return INITIAL_MERCHANT_ORDERS;
 }
 
 export function getStoredMerchantMemosForCode(

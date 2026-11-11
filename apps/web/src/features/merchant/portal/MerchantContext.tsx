@@ -10,7 +10,7 @@ import {
 } from './types';
 import { StockRequestItem } from './products/types';
 import {
-  INITIAL_MERCHANT_PROFILE,
+  INITIAL_MERCHANT_PROFILE, INITIAL_MERCHANT_PRODUCTS, INITIAL_MERCHANT_ORDERS,
 } from './mockData';
 import { merchantApi } from './api';
 import {
@@ -91,8 +91,10 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       const code = session.merchantCode || 'MC-101';
       const prof = getStoredMerchantProfileForCode(code);
       setProfile(prof);
-      setProducts(getStoredMerchantProductsForCode(code));
-      setOrders(getStoredMerchantOrdersForCode(code));
+      const prods = getStoredMerchantProductsForCode(code);
+      setProducts(prods && prods.length > 0 ? prods : INITIAL_MERCHANT_PRODUCTS);
+      const ords = getStoredMerchantOrdersForCode(code);
+      setOrders(ords && ords.length > 0 ? ords : INITIAL_MERCHANT_ORDERS);
       setMemoList(getStoredMerchantMemosForCode(code, prof));
       setAsns(getStoredMerchantAsnsForCode(code));
       setStockRequests(getStoredMerchantStockRequestsForCode(code));

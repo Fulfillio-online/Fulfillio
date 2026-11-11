@@ -56,12 +56,10 @@ export function ProductGrid({
         return (
           <div
             key={p.id}
-            className={`rounded-xl border bg-slate-900 overflow-hidden shadow-sm transition-all hover:border-slate-700 flex flex-col justify-between ${
-              isSelected ? 'border-emerald-500 bg-emerald-950/10' : 'border-slate-800'
-            }`}
+            className={`rounded-xl border bg-white dark:bg-navy-900 overflow-hidden shadow-xs transition-all hover:border-orange-500/30 flex flex-col justify-between ${isSelected ? 'border-orange-500 bg-orange-500/5' : 'border-slate-200/80 dark:border-white/10'}`}
           >
             {/* Image Header with badges */}
-            <div className="relative aspect-video w-full bg-slate-950 border-b border-slate-800/80 overflow-hidden">
+            <div className="relative aspect-video w-full bg-slate-100 dark:bg-navy-950 border-b border-slate-200 dark:border-white/10 overflow-hidden">
               <Link
                 href={`/merchant/products/${p.id}`}
                 className="w-full h-full relative cursor-pointer block"
@@ -132,7 +130,7 @@ export function ProductGrid({
               <div>
                 <Link
                   href={`/merchant/products/${p.id}`}
-                  className="font-semibold text-slate-200 hover:text-emerald-400 text-sm line-clamp-1 text-left transition-colors cursor-pointer block"
+                  className="font-semibold text-navy-900 dark:text-white hover:text-emerald-400 text-sm line-clamp-1 text-left transition-colors cursor-pointer block"
                   title={p.title}
                 >
                   {p.title}
@@ -155,7 +153,7 @@ export function ProductGrid({
                     <span className="text-slate-500 block text-[10px] uppercase font-semibold">
                       Declared Value
                     </span>
-                    <span className="font-bold text-slate-100 text-sm">
+                    <span className="font-bold text-navy-900 dark:text-white text-sm">
                       ৳{p.price.toLocaleString()}
                     </span>
                   </div>
@@ -173,13 +171,13 @@ export function ProductGrid({
                     ) : isLowStock ? (
                       <span className="text-xs font-bold text-amber-400">{p.stock} left</span>
                     ) : (
-                      <span className="text-xs text-slate-200 font-semibold font-mono">{p.stock} in stock</span>
+                      <span className="text-xs text-navy-900 dark:text-white font-semibold font-mono">{p.stock} in stock</span>
                     )}
                   </div>
                   <button
                     type="button"
                     onClick={() => onManageStock(p)}
-                    className="px-2 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1 border border-slate-700 cursor-pointer transition-colors"
+                    className="px-2 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-navy-900 dark:text-white text-xs font-semibold flex items-center gap-1 border border-slate-700 cursor-pointer transition-colors"
                   >
                     <Layers className="h-3 w-3 text-emerald-400" />
                     <span>+ Stock</span>
@@ -194,7 +192,7 @@ export function ProductGrid({
                   onClick={() => onToggleStatus(p.id)}
                   className={`text-xs font-semibold px-2 py-1.5 rounded-lg border transition-all flex items-center gap-1 cursor-pointer flex-1 justify-center ${
                     isPublished
-                      ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                      ? 'bg-slate-800 hover:bg-slate-700 text-navy-900 dark:text-white border-slate-700'
                       : isPendingApproval
                       ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/30'
                       : 'bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border-emerald-500/40'

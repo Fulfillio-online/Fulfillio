@@ -252,15 +252,15 @@ export function MerchantProductsTab({
             <span className="text-slate-300 font-medium">My Store Products</span>
           </div>
 
-          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-800 text-[11px] font-semibold text-slate-300 border border-slate-700/80 mb-2">
+          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 dark:bg-navy-900 text-[11px] font-semibold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10 mb-2">
             <Store className="h-3 w-3 text-emerald-400" />
             <span>Your Store ({storeName})</span>
           </div>
 
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-100">
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-navy-900 dark:text-white">
             My Store Products
           </h1>
-          <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-2xl">
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-2xl">
             Manage the products you sell, update prices, monitor stock, and keep your storefront ready for customers.
           </p>
         </div>
@@ -269,7 +269,7 @@ export function MerchantProductsTab({
         <div className="w-full sm:w-auto shrink-0">
           <Link
             href="/merchant/products/new"
-            className="w-full sm:w-auto px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/30 transition-all cursor-pointer"
+            className="w-full sm:w-auto px-4 py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-md shadow-orange-500/20 transition-all cursor-pointer"
           >
             <Plus className="h-4 w-4" />
             <span>Add Products</span>
@@ -281,7 +281,7 @@ export function MerchantProductsTab({
       <ProductStatsGrid stats={stats} />
 
       {/* Main Content Card Container */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 sm:p-5 space-y-4">
+      <div className="rounded-2xl border border-slate-200/80 dark:border-white/10 bg-white dark:bg-navy-900/60 shadow-xs p-4 sm:p-5 space-y-4">
         {/* Status Filter Tabs (Published, Drafts, Out of Stock, Stock Requests, All) */}
         <ProductStatusTabs
           activeTab={activeTab}
@@ -316,9 +316,9 @@ export function MerchantProductsTab({
 
             {/* Products View (List vs Grid) */}
             {filteredProducts.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-800 p-12 text-center">
+              <div className="rounded-xl border border-dashed border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-navy-950/40 p-12 text-center">
                 <PackageOpen className="h-10 w-10 text-slate-600 mx-auto mb-3" />
-                <h3 className="text-sm font-semibold text-slate-200">No products found</h3>
+                <h3 className="text-sm font-semibold text-navy-900 dark:text-white">No products found</h3>
                 <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
                   {searchQuery || selectedCategory !== 'ALL'
                     ? 'Try adjusting your search query or category filters.'
