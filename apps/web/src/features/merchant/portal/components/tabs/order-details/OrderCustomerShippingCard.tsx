@@ -80,7 +80,7 @@ export function OrderCustomerShippingCard({
             <Phone className="h-3.5 w-3.5 text-slate-500 shrink-0" />
             <a
               href={`tel:${order.phone}`}
-              className="font-mono text-slate-700 dark:text-slate-300 hover:text-emerald-400 transition-colors"
+              className="font-mono text-slate-700 dark:text-slate-300 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
             >
               {order.phone}
             </a>
@@ -128,7 +128,7 @@ export function OrderCustomerShippingCard({
               <button
                 type="button"
                 onClick={handleCopyTracking}
-                className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-100 dark:bg-navy-800 transition-colors cursor-pointer"
                 title="Copy Tracking ID"
               >
                 {copiedTracking ? (
@@ -153,7 +153,7 @@ export function OrderCustomerShippingCard({
         <div className="pt-2 border-t border-slate-200/80 dark:border-white/10/80">
           <Link
             href={`/tracking?trackingCode=${encodeURIComponent(trackingCode)}`}
-            className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-navy-900 dark:text-slate-200 hover:text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+            className="w-full py-2 bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-navy-900 dark:text-slate-200 hover:text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-sm"
           >
             <span>Track Live Shipment</span>
             <ExternalLink className="h-3 w-3 text-emerald-400" />

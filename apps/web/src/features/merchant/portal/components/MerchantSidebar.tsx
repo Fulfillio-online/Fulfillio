@@ -159,7 +159,7 @@ export function MerchantSidebar({
                   className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                     isActive
                       ? 'bg-orange-600 text-white shadow-sm font-bold'
-                      : 'text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-slate-100 hover:bg-slate-100/60 dark:hover:bg-navy-800/60'
+                      : 'text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-navy-900 dark:text-white hover:bg-slate-100/60 dark:hover:bg-navy-800/60'
                   }`}
                 >
                   <Icon className="h-4 w-4 shrink-0" />

@@ -152,7 +152,7 @@ export function RequestPayoutModal({
                   setError(null);
                 }}
                 required
-                className="w-full pl-8 pr-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200/80 dark:border-white/10 text-sm font-bold text-navy-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                className="w-full pl-8 pr-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200/80 dark:border-white/10 text-sm font-bold text-navy-900 dark:text-white focus:outline-none focus:border-orange-500"
               />
             </div>
 
@@ -168,7 +168,7 @@ export function RequestPayoutModal({
                   key={p.val}
                   type="button"
                   onClick={() => handlePercentage(p.val)}
-                  className="flex-1 py-1 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold transition-colors border border-slate-200 dark:border-white/10/60"
+                  className="flex-1 py-1 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-300 text-xs font-semibold transition-colors border border-slate-200 dark:border-white/10/60"
                 >
                   {p.label}
                 </button>
@@ -235,7 +235,7 @@ export function RequestPayoutModal({
                 onChange={(e) => setAccountNumber(e.target.value)}
                 placeholder={method === 'BANK_TRANSFER' ? '150120489...' : '017xx-xxxxxx'}
                 required
-                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200/80 dark:border-white/10 text-xs font-mono text-navy-900 dark:text-slate-200 focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200/80 dark:border-white/10 text-xs font-mono text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
               />
             </div>
 
@@ -248,7 +248,7 @@ export function RequestPayoutModal({
                 value={accountHolder}
                 onChange={(e) => setAccountHolder(e.target.value)}
                 placeholder="e.g. Tariqul Rahman"
-                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200/80 dark:border-white/10 text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200/80 dark:border-white/10 text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
               />
             </div>
           </div>
@@ -263,7 +263,7 @@ export function RequestPayoutModal({
               value={remarks}
               onChange={(e) => setRemarks(e.target.value)}
               placeholder="e.g. Urgent weekly clearance"
-              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200/80 dark:border-white/10 text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-emerald-500"
+              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200/80 dark:border-white/10 text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
             />
           </div>
 
@@ -290,7 +290,7 @@ export function RequestPayoutModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs transition-colors"
+              className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-300 font-semibold text-xs transition-colors"
             >
               Cancel
             </button>

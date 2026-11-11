@@ -37,7 +37,7 @@ export function ProductStatsGrid({ stats }: ProductStatsGridProps) {
       subtitle: 'Products that need attention',
       icon: <AlertTriangle className="h-4 w-4 text-amber-400" />,
       accentBg: stats.lowStock > 0 ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400',
-      valueColor: stats.lowStock > 0 ? 'text-amber-400' : 'text-slate-100',
+      valueColor: stats.lowStock > 0 ? 'text-amber-400' : 'text-navy-900 dark:text-white',
     },
   ];
 

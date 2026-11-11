@@ -48,13 +48,13 @@ export function OrderItemsCard({
           </div>
         </div>
 
-        <span className="text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold border border-slate-700">
+        <span className="text-xs px-2.5 py-1 rounded-full bg-slate-100 dark:bg-navy-800 text-slate-700 dark:text-slate-300 font-semibold border border-slate-200 dark:border-white/10">
           {order.qty || lineItems.reduce((acc, it) => acc + it.quantity, 0)} items
         </span>
       </div>
 
       {/* Items List */}
-      <div className="p-4 sm:p-5 divide-y divide-slate-800/80">
+      <div className="p-4 sm:p-5 divide-y divide-slate-100 dark:divide-white/5">
         {lineItems.map((item) => (
           <div
             key={item.id}
@@ -68,7 +68,7 @@ export function OrderItemsCard({
                   'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=150&q=80'
                 }
                 alt={item.title}
-                className="h-12 w-12 sm:h-14 sm:w-14 rounded-xl object-cover bg-slate-800 border border-slate-700/80 shrink-0"
+                className="h-12 w-12 sm:h-14 sm:w-14 rounded-xl object-cover bg-slate-100 dark:bg-navy-800 border border-slate-200/80 dark:border-white/10 shrink-0"
               />
               <div className="min-w-0">
                 <h4 className="text-xs sm:text-sm font-semibold text-navy-900 dark:text-white truncate">

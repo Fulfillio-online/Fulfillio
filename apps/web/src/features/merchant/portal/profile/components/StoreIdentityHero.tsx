@@ -104,7 +104,7 @@ export function StoreIdentityHero({ profile, onEdit }: StoreIdentityHeroProps) {
                 {copiedId ? (
                   <CheckCircle2 className="h-3 w-3 text-emerald-400" />
                 ) : (
-                  <Copy className="h-3 w-3 text-slate-500 group-hover:text-emerald-400 transition-colors" />
+                  <Copy className="h-3 w-3 text-slate-500 group-hover:text-orange-600 dark:hover:text-orange-400 transition-colors" />
                 )}
               </button>
             </div>

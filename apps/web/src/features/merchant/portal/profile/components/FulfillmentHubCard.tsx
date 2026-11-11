@@ -67,7 +67,7 @@ export function FulfillmentHubCard() {
 
         <Link
           href="/merchant/memos"
-          className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold inline-flex items-center gap-1 shrink-0 transition-colors"
+          className="text-xs text-orange-600 dark:text-orange-400 hover:text-emerald-300 font-semibold inline-flex items-center gap-1 shrink-0 transition-colors"
         >
           <span>Designer</span>
           <ChevronRight className="h-3.5 w-3.5" />

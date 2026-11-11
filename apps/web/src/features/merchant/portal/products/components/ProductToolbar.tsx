@@ -25,7 +25,7 @@ export function ProductToolbar({
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search products, SKU..."
-          className="w-full pl-9 pr-4 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-navy-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 transition-colors"
+          className="w-full pl-9 pr-4 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-navy-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-orange-500 transition-colors"
         />
       </div>
 
@@ -36,7 +36,7 @@ export function ProductToolbar({
           <select
             value={selectedCategory}
             onChange={(e) => onCategoryChange(e.target.value)}
-            className="w-full appearance-none pl-3 pr-8 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-medium text-navy-900 dark:text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+            className="w-full appearance-none pl-3 pr-8 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-medium text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer"
           >
             <option value="ALL">All Category</option>
             {categories.map((cat) => (
@@ -53,7 +53,7 @@ export function ProductToolbar({
           <select
             value={sortOption}
             onChange={(e) => onSortChange(e.target.value as ProductSortOption)}
-            className="w-full appearance-none pl-3 pr-8 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-medium text-navy-900 dark:text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+            className="w-full appearance-none pl-3 pr-8 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-medium text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer"
           >
             <option value="NEWEST">Newest</option>
             <option value="PRICE_ASC">Price: Low to High</option>

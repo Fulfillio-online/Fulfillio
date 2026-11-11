@@ -62,7 +62,7 @@ export function MerchantInboundAsnTab({
 
         <button
           onClick={() => setIsCreateOpen(true)}
-          className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors shadow-sm shrink-0"
+          className="w-full sm:w-auto px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors shadow-sm shrink-0"
         >
           <Plus className="h-4 w-4" />
           <span>Create Inbound ASN</span>
@@ -114,7 +114,7 @@ export function MerchantInboundAsnTab({
             placeholder="Search ASN code, carrier, or chalan #..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 bg-white dark:bg-navy-900 border border-slate-200/80 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            className="w-full pl-9 pr-3 py-1.5 bg-white dark:bg-navy-900 border border-slate-200/80 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
           />
         </div>
 
@@ -126,7 +126,7 @@ export function MerchantInboundAsnTab({
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
                 statusFilter === filter
                   ? 'bg-orange-600 text-white font-bold shadow-xs'
-                  : 'text-slate-400 hover:text-navy-900 dark:text-slate-200 hover:bg-slate-800/60'
+                  : 'text-slate-400 hover:text-navy-900 dark:text-slate-200 hover:bg-slate-100 dark:bg-navy-800/60'
               }`}
             >
               {filter === 'ALL'
@@ -162,7 +162,7 @@ export function MerchantInboundAsnTab({
                 const totalDamaged = asn.items.reduce((s, it) => s + it.receivedDamagedQty, 0);
 
                 return (
-                  <tr key={asn.id} className="hover:bg-slate-800/40 transition-colors">
+                  <tr key={asn.id} className="hover:bg-slate-100 dark:bg-navy-800/40 transition-colors">
                     <td className="p-4">
                       <span className="font-mono text-xs font-bold text-navy-900 dark:text-slate-200 block">
                         {asn.asnCode}
@@ -182,7 +182,7 @@ export function MerchantInboundAsnTab({
                         <div key={idx} className="text-xs text-slate-700 dark:text-slate-300">
                           <span className="font-mono text-[11px] text-slate-400 mr-1.5">{it.sku}</span>
                           {it.binCode && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-indigo-300 border border-slate-700 font-mono">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-navy-800 text-indigo-300 border border-slate-200 dark:border-white/10 font-mono">
                               {it.binCode}
                             </span>
                           )}

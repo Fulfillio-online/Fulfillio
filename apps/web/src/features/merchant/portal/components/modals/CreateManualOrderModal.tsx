@@ -568,9 +568,9 @@ export function CreateManualOrderModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[92vh] overflow-y-auto p-4 sm:p-7 space-y-6 shadow-2xl animate-in zoom-in-95 duration-200 text-slate-100">
+      <div className="bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl w-full max-w-4xl max-h-[92vh] overflow-y-auto p-4 sm:p-7 space-y-6 shadow-2xl animate-in zoom-in-95 duration-200 text-navy-900 dark:text-white">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+        <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-4">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
               <Package className="h-5 w-5" />
@@ -585,7 +585,7 @@ export function CreateManualOrderModal({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-100 dark:bg-navy-800 transition-colors"
           >
             <X className="h-5 w-5" />
           </button>
@@ -593,8 +593,8 @@ export function CreateManualOrderModal({
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Section 1: Customer Details */}
-          <div className="p-4 sm:p-5 rounded-xl bg-slate-950/70 border border-slate-800 space-y-4">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-200 uppercase tracking-wider">
+          <div className="p-4 sm:p-5 rounded-xl bg-slate-50 dark:bg-navy-950/70 border border-slate-200 dark:border-white/10 space-y-4">
+            <div className="flex items-center gap-2 text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider">
               <User className="h-4 w-4 text-emerald-400" />
               <span>Customer & Delivery Details</span>
             </div>
@@ -610,7 +610,7 @@ export function CreateManualOrderModal({
                   value={orderCustomer}
                   onChange={(e) => setOrderCustomer(e.target.value)}
                   placeholder="e.g. Tanvir Hasan"
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
                 />
               </div>
 
@@ -626,7 +626,7 @@ export function CreateManualOrderModal({
                     value={orderPhone}
                     onChange={(e) => setOrderPhone(e.target.value)}
                     placeholder="01712345678"
-                    className="w-full pl-10 pr-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs font-mono text-slate-200 focus:outline-none focus:border-emerald-500"
+                    className="w-full pl-10 pr-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-mono text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
                   />
                 </div>
               </div>
@@ -640,7 +640,7 @@ export function CreateManualOrderModal({
                   value={orderCity}
                   onChange={(e) => setOrderCity(e.target.value)}
                   placeholder="Dhaka, Chittagong, Sylhet..."
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
                 />
               </div>
             </div>
@@ -656,7 +656,7 @@ export function CreateManualOrderModal({
                   value={orderAddress}
                   onChange={(e) => setOrderAddress(e.target.value)}
                   placeholder="House 12, Road 4, Sector 7, Uttara, Dhaka"
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
                 />
               </div>
 
@@ -667,7 +667,7 @@ export function CreateManualOrderModal({
                 <select
                   value={orderCourier}
                   onChange={(e) => setOrderCourier(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                  className="w-full px-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer"
                 >
                   <option value="Steadfast">Steadfast Courier</option>
                   <option value="Pathao">Pathao Logistics</option>
@@ -679,9 +679,9 @@ export function CreateManualOrderModal({
           </div>
 
           {/* Section 2: Multiple Products List */}
-          <div className="p-4 sm:p-5 rounded-xl bg-slate-950/70 border border-slate-800 space-y-4">
+          <div className="p-4 sm:p-5 rounded-xl bg-slate-50 dark:bg-navy-950/70 border border-slate-200 dark:border-white/10 space-y-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-200 uppercase tracking-wider">
+              <div className="flex items-center gap-2 text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider">
                 <Layers className="h-4 w-4 text-emerald-400" />
                 <span>Order Products & Stock Allocation ({items.length} items)</span>
               </div>
@@ -708,8 +708,8 @@ export function CreateManualOrderModal({
                 return (
                   <div
                     key={item.rowId}
-                    className={`p-3 sm:p-4 rounded-xl bg-slate-900 border transition-all space-y-3 ${
-                      isOutOfStock ? 'border-rose-500/60 bg-rose-950/10' : 'border-slate-800'
+                    className={`p-3 sm:p-4 rounded-xl bg-white dark:bg-navy-900 border transition-all space-y-3 ${
+                      isOutOfStock ? 'border-rose-500/60 bg-rose-950/10' : 'border-slate-200 dark:border-white/10'
                     }`}
                   >
                     {/* Top Row: Full-width Product Selector & Delete button */}
@@ -723,7 +723,7 @@ export function CreateManualOrderModal({
                           <select
                             value={item.productId}
                             onChange={(e) => handleProductChange(item.rowId, e.target.value)}
-                            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer"
                           >
                             {products.map((prod) => (
                               <option key={prod.id} value={prod.id}>
@@ -739,7 +739,7 @@ export function CreateManualOrderModal({
                           <button
                             type="button"
                             onClick={() => handleRemoveItem(item.rowId)}
-                            className="p-2 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition-colors cursor-pointer"
+                            className="p-2 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-slate-100 dark:bg-navy-800 transition-colors cursor-pointer"
                             title="Remove this product"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -750,7 +750,7 @@ export function CreateManualOrderModal({
 
                     {/* Middle Row: Responsive Grid for Color Dropdown, Size/Spec Dropdown, Unit Price, and Quantity */}
                     <div
-                      className={`grid gap-3 pt-3 border-t border-slate-800/80 items-end ${
+                      className={`grid gap-3 pt-3 border-t border-slate-200/80 dark:border-white/10 items-end ${
                         hasColors && hasSizes
                           ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4'
                           : hasColors || hasSizes
@@ -780,7 +780,7 @@ export function CreateManualOrderModal({
                           <select
                             value={item.selectedColor || ''}
                             onChange={(e) => handleColorChange(item.rowId, e.target.value)}
-                            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer"
                           >
                             {p.colors!.map((c) => (
                               <option key={c.id || c.name} value={c.name}>
@@ -800,7 +800,7 @@ export function CreateManualOrderModal({
                           <select
                             value={item.selectedSize || ''}
                             onChange={(e) => handleSizeChange(item.rowId, e.target.value)}
-                            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer"
                           >
                             {availableSizes.map((sizeName) => {
                               const stockForOption = getOptionStock(p, item.selectedColor, sizeName);
@@ -827,7 +827,7 @@ export function CreateManualOrderModal({
                           onChange={(e) =>
                             handleUnitPriceChange(item.rowId, Number(e.target.value) || 0)
                           }
-                          className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs font-bold text-slate-200 text-right focus:outline-none focus:border-emerald-500"
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-bold text-navy-900 dark:text-slate-200 text-right focus:outline-none focus:border-orange-500"
                         />
                       </div>
 
@@ -841,7 +841,7 @@ export function CreateManualOrderModal({
                             type="button"
                             disabled={item.qty <= 1 || item.maxStock <= 0}
                             onClick={() => handleQtyChange(item.rowId, item.qty - 1)}
-                            className="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-300 rounded-l-lg text-xs font-bold border border-slate-700 cursor-pointer"
+                            className="px-2.5 py-2 bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-300 rounded-l-lg text-xs font-bold border border-slate-200 dark:border-white/10 cursor-pointer"
                           >
                             -
                           </button>
@@ -854,13 +854,13 @@ export function CreateManualOrderModal({
                             onChange={(e) =>
                               handleQtyChange(item.rowId, Number(e.target.value) || 0)
                             }
-                            className="w-full py-2 bg-slate-950 border-y border-slate-800 text-xs font-bold text-center text-slate-200 focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="w-full py-2 bg-slate-50 dark:bg-navy-950 border-y border-slate-200 dark:border-white/10 text-xs font-bold text-center text-navy-900 dark:text-slate-200 focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
                           />
                           <button
                             type="button"
                             disabled={item.qty >= item.maxStock || item.maxStock <= 0}
                             onClick={() => handleQtyChange(item.rowId, item.qty + 1)}
-                            className="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-300 rounded-r-lg text-xs font-bold border border-slate-700 cursor-pointer"
+                            className="px-2.5 py-2 bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-300 rounded-r-lg text-xs font-bold border border-slate-200 dark:border-white/10 cursor-pointer"
                           >
                             +
                           </button>
@@ -869,13 +869,13 @@ export function CreateManualOrderModal({
                     </div>
 
                     {/* Bottom Row: Variant Pill, SKU, Stock Status & Line Total */}
-                    <div className="pt-2.5 border-t border-slate-800/60 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+                    <div className="pt-2.5 border-t border-slate-200/60 dark:border-white/10 flex flex-wrap items-center justify-between gap-2.5 text-xs">
                       <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                        <span className="px-2 py-0.5 rounded bg-slate-950 text-slate-300 font-mono border border-slate-800">
+                        <span className="px-2 py-0.5 rounded bg-slate-50 dark:bg-navy-950 text-slate-300 font-mono border border-slate-200 dark:border-white/10">
                           SKU: <strong className="text-white">{item.sku}</strong>
                         </span>
-                        <span className="px-2 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800">
-                          Variant: <strong className="text-slate-200">{item.variantLabel}</strong>
+                        <span className="px-2 py-0.5 rounded bg-slate-50 dark:bg-navy-950 text-slate-400 border border-slate-200 dark:border-white/10">
+                          Variant: <strong className="text-navy-900 dark:text-slate-200">{item.variantLabel}</strong>
                         </span>
                         <span
                           className={`px-2 py-0.5 rounded font-mono border font-semibold ${
@@ -916,9 +916,9 @@ export function CreateManualOrderModal({
           </div>
 
           {/* Section 3: Pricing Engine (Delivery, Discount, Advance Payment & COD) */}
-          <div className="p-4 sm:p-5 rounded-xl bg-slate-950/70 border border-slate-800 space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-200 uppercase tracking-wider">
+          <div className="p-4 sm:p-5 rounded-xl bg-slate-50 dark:bg-navy-950/70 border border-slate-200 dark:border-white/10 space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-3">
+              <div className="flex items-center gap-2 text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider">
                 <DollarSign className="h-4 w-4 text-emerald-400" />
                 <span>Pricing Calculation & Payment Collection Engine</span>
               </div>
@@ -931,9 +931,9 @@ export function CreateManualOrderModal({
               {/* Left Column (Inputs for Delivery, Discount, Advance) */}
               <div className="lg:col-span-7 space-y-4">
                 {/* 1. Delivery Charge with Presets & Custom Input */}
-                <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2.5">
+                <div className="p-3.5 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 space-y-2.5">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                    <label className="text-xs font-bold text-navy-900 dark:text-slate-200 flex items-center gap-1.5">
                       <Truck className="h-3.5 w-3.5 text-blue-400" />
                       <span>Delivery Charge</span>
                     </label>
@@ -948,7 +948,7 @@ export function CreateManualOrderModal({
                       className={`px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-all ${
                         deliveryFee === 60
                           ? 'bg-blue-600/20 text-blue-300 border-blue-500/50 shadow-sm'
-                          : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
+                          : 'bg-slate-50 dark:bg-navy-950 text-slate-400 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:bg-navy-800'
                       }`}
                     >
                       Inside Dhaka ৳60
@@ -959,7 +959,7 @@ export function CreateManualOrderModal({
                       className={`px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-all ${
                         deliveryFee === 100
                           ? 'bg-blue-600/20 text-blue-300 border-blue-500/50 shadow-sm'
-                          : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
+                          : 'bg-slate-50 dark:bg-navy-950 text-slate-400 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:bg-navy-800'
                       }`}
                     >
                       Sub-Dhaka ৳100
@@ -970,7 +970,7 @@ export function CreateManualOrderModal({
                       className={`px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-all ${
                         deliveryFee === 120
                           ? 'bg-blue-600/20 text-blue-300 border-blue-500/50 shadow-sm'
-                          : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
+                          : 'bg-slate-50 dark:bg-navy-950 text-slate-400 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:bg-navy-800'
                       }`}
                     >
                       Outside Dhaka ৳120
@@ -981,7 +981,7 @@ export function CreateManualOrderModal({
                       className={`px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-all ${
                         deliveryFee === 0
                           ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/50 shadow-sm'
-                          : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
+                          : 'bg-slate-50 dark:bg-navy-950 text-slate-400 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:bg-navy-800'
                       }`}
                     >
                       Free Delivery ৳0
@@ -1001,7 +1001,7 @@ export function CreateManualOrderModal({
                           setDeliveryArea('CUSTOM');
                           setDeliveryFee(Number(e.target.value) || 0);
                         }}
-                        className="w-full pl-7 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs font-bold text-slate-200 focus:outline-none focus:border-blue-500"
+                        className="w-full pl-7 pr-3 py-1.5 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-bold text-navy-900 dark:text-slate-200 focus:outline-none focus:border-blue-500"
                         placeholder="e.g. 150 for heavy parcel"
                       />
                     </div>
@@ -1009,9 +1009,9 @@ export function CreateManualOrderModal({
                 </div>
 
                 {/* 2. Discount */}
-                <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
+                <div className="p-3.5 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 space-y-2">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                    <label className="text-xs font-bold text-navy-900 dark:text-slate-200 flex items-center gap-1.5">
                       <Tag className="h-3.5 w-3.5 text-amber-400" />
                       <span>Special Discount</span>
                     </label>
@@ -1026,15 +1026,15 @@ export function CreateManualOrderModal({
                       value={discount}
                       onChange={(e) => setDiscount(Math.max(0, Number(e.target.value) || 0))}
                       placeholder="0"
-                      className="w-full pl-7 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs font-bold text-slate-200 focus:outline-none focus:border-amber-500"
+                      className="w-full pl-7 pr-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-bold text-navy-900 dark:text-slate-200 focus:outline-none focus:border-amber-500"
                     />
                   </div>
                 </div>
 
                 {/* 3. Advance Payment */}
-                <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2.5">
+                <div className="p-3.5 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 space-y-2.5">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                    <label className="text-xs font-bold text-navy-900 dark:text-slate-200 flex items-center gap-1.5">
                       <CreditCard className="h-3.5 w-3.5 text-emerald-400" />
                       <span>Advance Received</span>
                     </label>
@@ -1051,7 +1051,7 @@ export function CreateManualOrderModal({
                       className={`px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-all ${
                         advancePayment === 0
                           ? 'bg-amber-600/20 text-amber-300 border-amber-500/50'
-                          : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
+                          : 'bg-slate-50 dark:bg-navy-950 text-slate-400 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:bg-navy-800'
                       }`}
                     >
                       No Advance (Full COD)
@@ -1062,7 +1062,7 @@ export function CreateManualOrderModal({
                       className={`px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-all ${
                         advancePayment === deliveryFee && deliveryFee > 0
                           ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/50'
-                          : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
+                          : 'bg-slate-50 dark:bg-navy-950 text-slate-400 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:bg-navy-800'
                       }`}
                     >
                       Delivery Only (৳{deliveryFee})
@@ -1073,7 +1073,7 @@ export function CreateManualOrderModal({
                       className={`px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-all ${
                         advancePayment >= orderTotal && orderTotal > 0
                           ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/50'
-                          : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
+                          : 'bg-slate-50 dark:bg-navy-950 text-slate-400 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:bg-navy-800'
                       }`}
                     >
                       Full Paid (৳{orderTotal.toLocaleString()})
@@ -1093,7 +1093,7 @@ export function CreateManualOrderModal({
                           setAdvancePayment(Math.max(0, Number(e.target.value) || 0))
                         }
                         placeholder="Advance Amount"
-                        className="w-full pl-7 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs font-bold text-emerald-400 focus:outline-none focus:border-emerald-500"
+                        className="w-full pl-7 pr-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-bold text-emerald-400 focus:outline-none focus:border-orange-500"
                       />
                     </div>
 
@@ -1101,7 +1101,7 @@ export function CreateManualOrderModal({
                       value={advanceMethod}
                       onChange={(e) => setAdvanceMethod(e.target.value)}
                       disabled={advancePayment <= 0}
-                      className="px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                      className="px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500 disabled:opacity-50"
                     >
                       <option value="bKash">bKash</option>
                       <option value="Nagad">Nagad</option>
@@ -1118,7 +1118,7 @@ export function CreateManualOrderModal({
                         value={advanceTrxId}
                         onChange={(e) => setAdvanceTrxId(e.target.value)}
                         placeholder="Advance Trx ID / Transaction Note (Optional, e.g. 9J83KA2)"
-                        className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-300 placeholder:text-slate-600 focus:outline-none focus:border-emerald-500"
+                        className="w-full px-3 py-1.5 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-mono text-slate-300 placeholder:text-slate-600 focus:outline-none focus:border-orange-500"
                       />
                     </div>
                   )}
@@ -1126,16 +1126,16 @@ export function CreateManualOrderModal({
               </div>
 
               {/* Right Column: Live Order Summary Card */}
-              <div className="lg:col-span-5 flex flex-col justify-between p-4 sm:p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-4">
+              <div className="lg:col-span-5 flex flex-col justify-between p-4 sm:p-5 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 space-y-4">
                 <div>
-                  <span className="text-xs font-bold text-slate-200 uppercase tracking-wider block mb-3">
+                  <span className="text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider block mb-3">
                     Order Price Summary
                   </span>
 
                   <div className="space-y-2.5 text-xs">
                     <div className="flex justify-between text-slate-400">
                       <span>Products Subtotal ({totalQty} pcs)</span>
-                      <span className="font-semibold text-slate-200 font-mono">
+                      <span className="font-semibold text-navy-900 dark:text-slate-200 font-mono">
                         ৳{subtotal.toLocaleString()}
                       </span>
                     </div>
@@ -1156,7 +1156,7 @@ export function CreateManualOrderModal({
                       </div>
                     )}
 
-                    <div className="pt-2 border-t border-slate-800 flex justify-between items-center text-xs font-bold text-slate-300">
+                    <div className="pt-2 border-t border-slate-200 dark:border-white/10 flex justify-between items-center text-xs font-bold text-slate-300">
                       <span>Total Invoice Value:</span>
                       <span className="text-sm font-extrabold text-white font-mono">
                         ৳{orderTotal.toLocaleString()}
@@ -1209,14 +1209,14 @@ export function CreateManualOrderModal({
                 </div>
 
                 {/* Thermal Memo Template Selector */}
-                <div className="pt-2 border-t border-slate-800">
+                <div className="pt-2 border-t border-slate-200 dark:border-white/10">
                   <label className="block text-[11px] font-semibold text-slate-400 mb-1">
                     Assign Reseller Memo (4x6 Thermal Slip)
                   </label>
                   <select
                     value={orderMemoCode}
                     onChange={(e) => setOrderMemoCode(e.target.value)}
-                    className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-indigo-300 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                    className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-mono text-indigo-300 focus:outline-none focus:border-indigo-500 cursor-pointer"
                   >
                     {memoList.map((m) => (
                       <option key={m.id} value={m.code}>
@@ -1230,17 +1230,17 @@ export function CreateManualOrderModal({
           </div>
 
           {/* Bottom Actions */}
-          <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-3">
+          <div className="pt-4 border-t border-slate-200 dark:border-white/10 flex items-center justify-end gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
+              className="px-4 py-2 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-6 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-lg shadow-emerald-950/40 flex items-center gap-2 cursor-pointer"
+              className="px-6 py-2.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold transition-all shadow-lg shadow-emerald-950/40 flex items-center gap-2 cursor-pointer"
             >
               <Sparkles className="h-4 w-4" />
               <span>Confirm & Reserve Stock ({totalQty} Items)</span>

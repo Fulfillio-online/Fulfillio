@@ -27,9 +27,9 @@ export function StockRequestsTable({
 }: StockRequestsTableProps) {
   if (requests.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-slate-800 p-12 text-center">
+      <div className="rounded-xl border border-dashed border-slate-200 dark:border-white/10 p-12 text-center">
         <Package className="h-10 w-10 text-slate-600 mx-auto mb-3" />
-        <h3 className="text-sm font-semibold text-slate-200">No Stock Requests</h3>
+        <h3 className="text-sm font-semibold text-navy-900 dark:text-slate-200">No Stock Requests</h3>
         <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
           You haven&apos;t submitted any restock requests yet. Go to your products list and click &ldquo;Manage Stock&rdquo; on any product to request inbound restock.
         </p>
@@ -38,10 +38,10 @@ export function StockRequestsTable({
   }
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden shadow-sm">
+    <div className="rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-navy-900 overflow-hidden shadow-sm">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[700px] text-left text-sm">
-          <thead className="bg-slate-950/60 text-slate-400 text-xs uppercase tracking-wider font-semibold border-b border-slate-800">
+          <thead className="bg-slate-50 dark:bg-navy-950/60 text-slate-400 text-xs uppercase tracking-wider font-semibold border-b border-slate-200 dark:border-white/10">
             <tr>
               <th className="p-4">Product & SKU</th>
               <th className="p-4">Current Stock</th>
@@ -51,18 +51,18 @@ export function StockRequestsTable({
               <th className="p-4 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800/80">
+          <tbody className="divide-y divide-slate-100 dark:divide-white/5">
             {requests.map((r) => {
               const isPending = r.status === 'PENDING_APPROVAL';
               const isApproved = r.status === 'APPROVED';
 
               return (
-                <tr key={r.id} className="hover:bg-slate-800/30 transition-colors">
+                <tr key={r.id} className="hover:bg-slate-100 dark:bg-navy-800/30 transition-colors">
                   <td className="p-4">
                     <div className="flex items-center gap-3">
                       <ProductThumbnail src={r.imageUrl} alt={r.productTitle} size="md" />
                       <div className="min-w-0">
-                        <span className="font-semibold text-slate-200 text-sm block truncate max-w-xs">
+                        <span className="font-semibold text-navy-900 dark:text-slate-200 text-sm block truncate max-w-xs">
                           {r.productTitle}
                         </span>
                         <span className="font-mono text-[11px] text-slate-400 block mt-0.5">

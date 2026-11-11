@@ -136,7 +136,7 @@ export function EarningsOrdersTable({ orders, onTriggerToast }: EarningsOrdersTa
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search order or transaction..."
-            className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200/80 dark:border-white/10 text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-emerald-500"
+            className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200/80 dark:border-white/10 text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
           />
         </div>
       </div>
@@ -151,7 +151,7 @@ export function EarningsOrdersTable({ orders, onTriggerToast }: EarningsOrdersTa
                   type="checkbox"
                   checked={selectedIds.length === filteredOrders.length && filteredOrders.length > 0}
                   onChange={toggleSelectAll}
-                  className="rounded border-slate-200 dark:border-white/10 bg-white dark:bg-navy-900 text-emerald-500 focus:ring-emerald-500"
+                  className="rounded border-slate-200 dark:border-white/10 bg-white dark:bg-navy-900 text-orange-600 focus:ring-orange-500"
                 />
               </th>
               <th className="p-3">Date / Transaction</th>
@@ -163,7 +163,7 @@ export function EarningsOrdersTable({ orders, onTriggerToast }: EarningsOrdersTa
               <th className="p-3 text-right">Action</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800/80">
+          <tbody className="divide-y divide-slate-100 dark:divide-white/5">
             {filteredOrders.length === 0 ? (
               <tr>
                 <td colSpan={8} className="p-8 text-center text-slate-500 text-xs">
@@ -185,7 +185,7 @@ export function EarningsOrdersTable({ orders, onTriggerToast }: EarningsOrdersTa
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => toggleSelectOne(order.id)}
-                        className="rounded border-slate-200 dark:border-white/10 bg-white dark:bg-navy-900 text-emerald-500 focus:ring-emerald-500"
+                        className="rounded border-slate-200 dark:border-white/10 bg-white dark:bg-navy-900 text-orange-600 focus:ring-orange-500"
                       />
                     </td>
                     <td className="p-3">
@@ -218,7 +218,7 @@ export function EarningsOrdersTable({ orders, onTriggerToast }: EarningsOrdersTa
                         onClick={() =>
                           onTriggerToast(`Viewing order transaction ${order.transactionRef}`)
                         }
-                        className="p-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:text-slate-200 transition-colors"
+                        className="p-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:text-slate-200 transition-colors"
                         title="View Order Details"
                       >
                         <Eye className="h-3.5 w-3.5" />

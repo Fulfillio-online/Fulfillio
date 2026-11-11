@@ -58,7 +58,7 @@ export function SocialChannelModal({
             value={platform}
             onChange={(e) => setPlatform(e.target.value as SocialChannel['platform'])}
             aria-label="Social Media Platform"
-            className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+            className="w-full px-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
           >
             <option value="Facebook">Facebook</option>
             <option value="Instagram">Instagram</option>
@@ -82,21 +82,21 @@ export function SocialChannelModal({
                 ? '+880 1712-345678'
                 : `https://${platform.toLowerCase()}.com/yourstore`
             }
-            className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-mono"
+            className="w-full px-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 placeholder-slate-500 focus:outline-none focus:border-orange-500 font-mono"
           />
         </div>
 
-        <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
+        <div className="pt-3 border-t border-slate-200 dark:border-white/10 flex justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
-            className="px-3.5 py-1.5 text-xs text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+            className="px-3.5 py-1.5 text-xs text-slate-400 hover:text-white rounded-lg hover:bg-slate-100 dark:bg-navy-800 transition-colors"
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition-colors shadow-sm"
+            className="px-4 py-1.5 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-xs font-semibold transition-colors shadow-sm"
           >
             Save Channel
           </button>

@@ -132,7 +132,7 @@ export function EarningsWalletBanner({
         <button
           type="button"
           onClick={onManageAccount}
-          className="mt-4 pt-3 border-t border-slate-200/80 dark:border-white/10 text-xs font-semibold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 transition-colors group cursor-pointer"
+          className="mt-4 pt-3 border-t border-slate-200/80 dark:border-white/10 text-xs font-semibold text-orange-600 dark:text-orange-400 hover:text-emerald-300 flex items-center gap-1 transition-colors group cursor-pointer"
         >
           <span>Manage payout account</span>
           <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />

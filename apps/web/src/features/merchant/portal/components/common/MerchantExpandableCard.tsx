@@ -34,7 +34,7 @@ export function MerchantExpandableCard({
     <div
       className={`rounded-xl border transition-all shadow-sm overflow-hidden select-none ${
         isSelected
-          ? 'border-emerald-500/50 bg-emerald-950/20'
+          ? 'border-orange-500/50 bg-orange-500/10'
           : 'border-slate-200/80 dark:border-white/10 bg-white dark:bg-navy-900 hover:bg-slate-50 dark:hover:bg-navy-850/60'
       } ${className}`}
     >
@@ -54,7 +54,7 @@ export function MerchantExpandableCard({
                 onClick={(e) => e.stopPropagation()}
                 onChange={onToggleSelect}
                 aria-label="Select item"
-                className="rounded border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-0 cursor-pointer h-4 w-4 shrink-0"
+                className="rounded border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-orange-600 focus:ring-orange-500/20 focus:ring-offset-0 cursor-pointer h-4 w-4 shrink-0"
               />
             )}
             <div className="flex items-center gap-1.5 min-w-0 flex-1">
@@ -99,7 +99,7 @@ export function MerchantExpandableCard({
           {/* Direct Quick Action Buttons */}
           {actions && (
             <div
-              className="pt-2.5 border-t border-slate-800/80 flex items-center gap-2 flex-wrap"
+              className="pt-2.5 border-t border-slate-200/80 dark:border-white/10 flex items-center gap-2 flex-wrap"
               onClick={(e) => e.stopPropagation()}
             >
               {actions}

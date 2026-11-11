@@ -72,7 +72,7 @@ export function SocialChannelsCard({
             <button
               type="button"
               onClick={onAddChannel}
-              className="mt-2 text-xs font-semibold text-emerald-400 hover:text-emerald-300 transition-colors"
+              className="mt-2 text-xs font-semibold text-orange-600 dark:text-orange-400 hover:text-emerald-300 transition-colors"
             >
               + Add first store channel
             </button>
@@ -100,7 +100,7 @@ export function SocialChannelsCard({
                     }
                     target="_blank"
                     rel="noreferrer"
-                    className="text-xs text-slate-700 dark:text-slate-300 hover:text-emerald-400 font-medium truncate block transition-colors"
+                    className="text-xs text-slate-700 dark:text-slate-300 hover:text-orange-600 dark:hover:text-orange-400 font-medium truncate block transition-colors"
                     title={ch.url}
                   >
                     {ch.url}

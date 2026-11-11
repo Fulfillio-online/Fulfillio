@@ -40,7 +40,7 @@ export function ProductThumbnail({
 
   return (
     <div
-      className={`relative rounded-lg bg-slate-950 border border-slate-800 overflow-hidden shrink-0 flex items-center justify-center ${sizeStyles} ${className}`}
+      className={`relative rounded-lg bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 overflow-hidden shrink-0 flex items-center justify-center ${sizeStyles} ${className}`}
     >
       {src && !hasError ? (
         isDataUrl ? (

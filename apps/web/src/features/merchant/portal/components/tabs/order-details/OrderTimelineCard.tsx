@@ -41,7 +41,7 @@ export function OrderTimelineCard({ timelineEvents }: OrderTimelineCardProps) {
         <button
           type="button"
           onClick={() => setIsMobileExpanded(!isMobileExpanded)}
-          className="lg:hidden inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
+          className="lg:hidden inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
         >
           <span>{isMobileExpanded ? 'Collapse' : 'View Full History'}</span>
           {isMobileExpanded ? (
@@ -81,7 +81,7 @@ export function OrderTimelineCard({ timelineEvents }: OrderTimelineCardProps) {
       <div
         className={`${
           isMobileExpanded ? 'block' : 'hidden lg:block'
-        } relative pl-6 space-y-6 pt-2 before:absolute before:left-2.5 before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-800`}
+        } relative pl-6 space-y-6 pt-2 before:absolute before:left-2.5 before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-100 dark:bg-navy-800`}
       >
         {timelineEvents.map((evt, idx) => (
           <div key={idx} className="relative group">
@@ -89,7 +89,7 @@ export function OrderTimelineCard({ timelineEvents }: OrderTimelineCardProps) {
               className={`absolute -left-6 top-0.5 h-5 w-5 rounded-full flex items-center justify-center ${
                 evt.isCompleted
                   ? 'bg-emerald-500 text-slate-950 ring-4 ring-slate-900'
-                  : 'bg-slate-800 text-slate-500 ring-4 ring-slate-900'
+                  : 'bg-slate-100 dark:bg-navy-800 text-slate-500 ring-4 ring-slate-900'
               }`}
             >
               <CheckCircle2 className="h-3.5 w-3.5" />

@@ -96,7 +96,7 @@ export function ProductGrid({
                   checked={isSelected}
                   onChange={() => onToggleSelect(p.id)}
                   aria-label={`Select ${p.title}`}
-                  className="rounded border-slate-700 bg-slate-900/90 text-emerald-500 focus:ring-emerald-500/20 h-4 w-4 cursor-pointer"
+                  className="rounded border-slate-200 dark:border-white/10 bg-white dark:bg-navy-900 text-orange-600 focus:ring-orange-500/20 h-4 w-4 cursor-pointer"
                 />
               </div>
 
@@ -108,7 +108,7 @@ export function ProductGrid({
                       ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
                       : isPendingApproval
                       ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                      : 'bg-slate-800/80 text-slate-300 border-slate-700'
+                      : 'bg-slate-100 dark:bg-navy-800/80 text-slate-300 border-slate-200 dark:border-white/10'
                   }`}
                 >
                   {isPublished ? 'Published' : isPendingApproval ? 'Pending Approval' : 'Draft'}
@@ -118,7 +118,7 @@ export function ProductGrid({
               {/* Category Pill */}
               {p.category && (
                 <div className="absolute bottom-2 left-2 z-10">
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-900/90 text-slate-300 border border-slate-700/80 backdrop-blur">
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-white dark:bg-navy-900 text-slate-300 border border-slate-200/80 dark:border-white/10 backdrop-blur">
                     {p.category}
                   </span>
                 </div>
@@ -130,14 +130,14 @@ export function ProductGrid({
               <div>
                 <Link
                   href={`/merchant/products/${p.id}`}
-                  className="font-semibold text-navy-900 dark:text-white hover:text-emerald-400 text-sm line-clamp-1 text-left transition-colors cursor-pointer block"
+                  className="font-semibold text-navy-900 dark:text-white hover:text-orange-600 dark:hover:text-orange-400 text-sm line-clamp-1 text-left transition-colors cursor-pointer block"
                   title={p.title}
                 >
                   {p.title}
                 </Link>
 
                 <div className="flex items-center gap-2 mt-1">
-                  <span className="font-mono text-[11px] text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
+                  <span className="font-mono text-[11px] text-slate-400 bg-slate-50 dark:bg-navy-950 px-1.5 py-0.5 rounded border border-slate-200 dark:border-white/10">
                     {p.sku}
                   </span>
                   {p.bin && p.bin !== 'Assigned on intake' && (
@@ -148,7 +148,7 @@ export function ProductGrid({
                 </div>
 
                 {/* Declared Value Card */}
-                <div className="mt-3 p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80 flex items-center justify-between text-xs">
+                <div className="mt-3 p-2.5 rounded-lg bg-slate-50 dark:bg-navy-950/60 border border-slate-200/80 dark:border-white/10 flex items-center justify-between text-xs">
                   <div>
                     <span className="text-slate-500 block text-[10px] uppercase font-semibold">
                       Declared Value
@@ -177,7 +177,7 @@ export function ProductGrid({
                   <button
                     type="button"
                     onClick={() => onManageStock(p)}
-                    className="px-2 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-navy-900 dark:text-white text-xs font-semibold flex items-center gap-1 border border-slate-700 cursor-pointer transition-colors"
+                    className="px-2 py-1 rounded-md bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-navy-900 dark:text-white text-xs font-semibold flex items-center gap-1 border border-slate-200 dark:border-white/10 cursor-pointer transition-colors"
                   >
                     <Layers className="h-3 w-3 text-emerald-400" />
                     <span>+ Stock</span>
@@ -186,13 +186,13 @@ export function ProductGrid({
               </div>
 
               {/* Bottom Actions */}
-              <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between gap-1.5">
+              <div className="mt-4 pt-3 border-t border-slate-200 dark:border-white/10 flex items-center justify-between gap-1.5">
                 <button
                   type="button"
                   onClick={() => onToggleStatus(p.id)}
                   className={`text-xs font-semibold px-2 py-1.5 rounded-lg border transition-all flex items-center gap-1 cursor-pointer flex-1 justify-center ${
                     isPublished
-                      ? 'bg-slate-800 hover:bg-slate-700 text-navy-900 dark:text-white border-slate-700'
+                      ? 'bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-navy-900 dark:text-white border-slate-200 dark:border-white/10'
                       : isPendingApproval
                       ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/30'
                       : 'bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border-emerald-500/40'
@@ -227,7 +227,7 @@ export function ProductGrid({
 
                 <Link
                   href={`/merchant/products/${p.id}/edit`}
-                  className="p-1.5 rounded-lg border border-slate-800 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
+                  className="p-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-300 transition-colors cursor-pointer"
                   title="Edit Product"
                 >
                   <Edit2 className="h-4 w-4" />

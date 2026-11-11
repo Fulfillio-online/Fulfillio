@@ -205,7 +205,7 @@ export function MerchantOrdersTab({
         <div className="flex items-center gap-2.5 w-full sm:w-auto">
           <button
             onClick={handleExportCsv}
-            className="flex-1 sm:flex-initial px-3.5 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-navy-900 dark:text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors shadow-sm cursor-pointer"
+            className="flex-1 sm:flex-initial px-3.5 py-2 bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 border border-slate-200 dark:border-white/10 text-navy-900 dark:text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors shadow-sm cursor-pointer"
           >
             <Download className="h-4 w-4 text-slate-400" />
             <span>Export</span>
@@ -302,7 +302,7 @@ export function MerchantOrdersTab({
                   setSearchQuery(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="w-full pl-9 pr-3.5 py-1.5 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
+                className="w-full pl-9 pr-3.5 py-1.5 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 transition-colors"
               />
             </div>
 
@@ -329,7 +329,7 @@ export function MerchantOrdersTab({
             }}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
               activeTab === 'ALL'
-                ? 'bg-slate-800 text-navy-900 dark:text-white border border-slate-700'
+                ? 'bg-slate-100 dark:bg-navy-800 text-navy-900 dark:text-white border border-slate-200 dark:border-white/10'
                 : 'text-slate-400 hover:text-navy-900 dark:text-white hover:bg-slate-50/80 dark:hover:bg-navy-800/40'
             }`}
           >
@@ -342,7 +342,7 @@ export function MerchantOrdersTab({
             }}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
               activeTab === 'PENDING'
-                ? 'bg-slate-800 text-navy-900 dark:text-white border border-slate-700'
+                ? 'bg-slate-100 dark:bg-navy-800 text-navy-900 dark:text-white border border-slate-200 dark:border-white/10'
                 : 'text-slate-400 hover:text-navy-900 dark:text-white hover:bg-slate-50/80 dark:hover:bg-navy-800/40'
             }`}
           >
@@ -355,7 +355,7 @@ export function MerchantOrdersTab({
             }}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
               activeTab === 'PROCESSING'
-                ? 'bg-slate-800 text-navy-900 dark:text-white border border-slate-700'
+                ? 'bg-slate-100 dark:bg-navy-800 text-navy-900 dark:text-white border border-slate-200 dark:border-white/10'
                 : 'text-slate-400 hover:text-navy-900 dark:text-white hover:bg-slate-50/80 dark:hover:bg-navy-800/40'
             }`}
           >
@@ -368,7 +368,7 @@ export function MerchantOrdersTab({
             }}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
               activeTab === 'COURIER_BOOKED'
-                ? 'bg-slate-800 text-navy-900 dark:text-white border border-slate-700'
+                ? 'bg-slate-100 dark:bg-navy-800 text-navy-900 dark:text-white border border-slate-200 dark:border-white/10'
                 : 'text-slate-400 hover:text-navy-900 dark:text-white hover:bg-slate-50/80 dark:hover:bg-navy-800/40'
             }`}
           >
@@ -381,7 +381,7 @@ export function MerchantOrdersTab({
             }}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
               activeTab === 'HANDOVER'
-                ? 'bg-slate-800 text-navy-900 dark:text-white border border-slate-700'
+                ? 'bg-slate-100 dark:bg-navy-800 text-navy-900 dark:text-white border border-slate-200 dark:border-white/10'
                 : 'text-slate-400 hover:text-navy-900 dark:text-white hover:bg-slate-50/80 dark:hover:bg-navy-800/40'
             }`}
           >
@@ -403,7 +403,7 @@ export function MerchantOrdersTab({
                 statusBadge={getStatusBadge(o.status)}
                 row1={
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <div className="p-1 bg-slate-800 rounded text-emerald-400 shrink-0">
+                    <div className="p-1 bg-slate-100 dark:bg-navy-800 rounded text-emerald-400 shrink-0">
                       <Package className="h-3 w-3" />
                     </div>
                     <span className="font-mono font-bold text-navy-900 dark:text-white text-xs">
@@ -459,7 +459,7 @@ export function MerchantOrdersTab({
                         <a
                           href={`tel:${o.phone}`}
                           onClick={(e) => e.stopPropagation()}
-                          className="text-emerald-400 hover:text-emerald-300 font-mono font-bold text-xs inline-flex items-center gap-1"
+                          className="text-orange-600 dark:text-orange-400 hover:text-emerald-300 font-mono font-bold text-xs inline-flex items-center gap-1"
                         >
                           <span>📞 {o.phone}</span>
                         </a>
@@ -495,7 +495,7 @@ export function MerchantOrdersTab({
                   <>
                     <Link
                       href={`/merchant/orders/${o.id}`}
-                      className="flex-1 min-w-[120px] py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-navy-900 dark:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-slate-700/80 cursor-pointer"
+                      className="flex-1 min-w-[120px] py-2 px-3 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-navy-900 dark:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-slate-200/80 dark:border-white/10 cursor-pointer"
                     >
                       <span>View Full Details</span>
                     </Link>
@@ -547,11 +547,11 @@ export function MerchantOrdersTab({
                     {/* ORDER ID & Items */}
                     <td className="py-3.5 px-4">
                       <div className="flex items-center gap-2.5">
-                        <div className="p-1.5 bg-slate-100 dark:bg-navy-800 rounded text-slate-500 dark:text-slate-400 group-hover:text-emerald-400 group-hover:bg-slate-700/80 transition-colors">
+                        <div className="p-1.5 bg-slate-100 dark:bg-navy-800 rounded text-slate-500 dark:text-slate-400 group-hover:text-orange-600 dark:hover:text-orange-400 group-hover:bg-slate-200 dark:hover:bg-navy-700/80 transition-colors">
                           <Package className="h-3.5 w-3.5" />
                         </div>
                         <div>
-                          <span className="font-mono font-bold text-navy-900 dark:text-white group-hover:text-emerald-400 transition-colors block">
+                          <span className="font-mono font-bold text-navy-900 dark:text-white group-hover:text-orange-600 dark:hover:text-orange-400 transition-colors block">
                             {o.orderNumber || `#${o.id}`}
                           </span>
                           <span className="text-[11px] text-slate-500 font-medium">
@@ -643,7 +643,7 @@ export function MerchantOrdersTab({
             <button
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage === 1}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-medium transition-colors cursor-pointer"
+              className="px-3 py-1.5 bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 disabled:opacity-40 disabled:hover:bg-slate-100 dark:bg-navy-800 text-slate-700 dark:text-slate-300 rounded-lg font-medium transition-colors cursor-pointer"
             >
               &lt; Previous
             </button>
@@ -662,7 +662,7 @@ export function MerchantOrdersTab({
                   className={`h-7 w-7 rounded-lg font-semibold flex items-center justify-center transition-colors cursor-pointer ${
                     currentPage === page
                       ? 'bg-slate-100 text-slate-950 font-bold'
-                      : 'bg-slate-800 hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                      : 'bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-300'
                   }`}
                 >
                   {page}
@@ -673,7 +673,7 @@ export function MerchantOrdersTab({
             <button
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-medium transition-colors cursor-pointer"
+              className="px-3 py-1.5 bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 disabled:opacity-40 disabled:hover:bg-slate-100 dark:bg-navy-800 text-slate-700 dark:text-slate-300 rounded-lg font-medium transition-colors cursor-pointer"
             >
               Next &gt;
             </button>
@@ -691,7 +691,7 @@ export function MerchantOrdersTab({
         </div>
         <Link
           href="/merchant/billing"
-          className="text-emerald-400 hover:text-emerald-300 font-semibold inline-flex items-center gap-1 shrink-0 transition-colors"
+          className="text-orange-600 dark:text-orange-400 hover:text-emerald-300 font-semibold inline-flex items-center gap-1 shrink-0 transition-colors"
         >
           <span>View earnings</span>
           <span>&rarr;</span>

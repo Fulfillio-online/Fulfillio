@@ -91,7 +91,7 @@ export function ProductTable({
                         ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
                         : isPendingApproval
                         ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-                        : 'bg-slate-800 text-slate-400 border-slate-700'
+                        : 'bg-slate-100 dark:bg-navy-800 text-slate-400 border-slate-200 dark:border-white/10'
                     }`}
                     title={
                       isPendingApproval
@@ -125,14 +125,14 @@ export function ProductTable({
                   <Link
                     href={`/merchant/products/${p.id}`}
                     onClick={(e) => e.stopPropagation()}
-                    className="font-bold text-xs text-slate-100 hover:text-emerald-400 transition-colors line-clamp-1 block cursor-pointer"
+                    className="font-bold text-xs text-navy-900 dark:text-white hover:text-orange-600 dark:hover:text-orange-400 transition-colors line-clamp-1 block cursor-pointer"
                   >
                     {p.title}
                   </Link>
                 }
                 row3={
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-mono text-xs font-extrabold text-slate-100">
+                    <span className="font-mono text-xs font-extrabold text-navy-900 dark:text-white">
                       ৳{p.price.toLocaleString()}
                     </span>
                     <span className="text-slate-600 text-[10px]">•</span>
@@ -155,12 +155,12 @@ export function ProductTable({
                   <div className="space-y-2.5">
                     {/* Barcode & Stock breakdown */}
                     <div className="grid grid-cols-2 gap-2 text-[11px]">
-                      <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                      <div className="p-2 rounded-lg bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10">
                         <span className="text-slate-500 text-[10px] uppercase font-semibold block">Barcode</span>
-                        <span className="font-mono font-bold text-slate-200 block mt-0.5 truncate">{p.barcode}</span>
+                        <span className="font-mono font-bold text-navy-900 dark:text-slate-200 block mt-0.5 truncate">{p.barcode}</span>
                         <span className="text-slate-500 text-[10px]">Bin: {p.bin || 'Intake bin'}</span>
                       </div>
-                      <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                      <div className="p-2 rounded-lg bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10">
                         <span className="text-slate-500 text-[10px] uppercase font-semibold block">Warehouse Stock</span>
                         <span className="font-mono font-bold text-emerald-400 block mt-0.5">{p.stock} units</span>
                         <span className="text-slate-400 text-[10px]">{p.reserved} reserved</span>
@@ -173,7 +173,7 @@ export function ProductTable({
                     <button
                       type="button"
                       onClick={() => onManageStock(p)}
-                      className="flex-1 min-w-[100px] py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-slate-700/80 cursor-pointer"
+                      className="flex-1 min-w-[100px] py-2 px-3 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-navy-900 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-slate-200/80 dark:border-white/10 cursor-pointer"
                     >
                       <Layers className="h-3.5 w-3.5 text-emerald-400" />
                       <span>Manage Stock</span>
@@ -182,7 +182,7 @@ export function ProductTable({
                     <button
                       type="button"
                       onClick={() => onPrintBarcode(p)}
-                      className="flex-1 min-w-[90px] py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-slate-700/80 cursor-pointer"
+                      className="flex-1 min-w-[90px] py-2 px-3 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-navy-900 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-slate-200/80 dark:border-white/10 cursor-pointer"
                     >
                       <Printer className="h-3.5 w-3.5 text-indigo-400" />
                       <span>Barcode</span>
@@ -190,7 +190,7 @@ export function ProductTable({
 
                     <Link
                       href={`/merchant/products/${p.id}/edit`}
-                      className="py-2 px-3.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-slate-700/80 cursor-pointer shrink-0"
+                      className="py-2 px-3.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-navy-900 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-slate-200/80 dark:border-white/10 cursor-pointer shrink-0"
                     >
                       <Edit2 className="h-3.5 w-3.5 text-slate-300" />
                       <span>Edit</span>
@@ -225,7 +225,7 @@ export function ProductTable({
                   checked={isAllSelected}
                   onChange={onToggleSelectAll}
                   aria-label="Select all products"
-                  className="rounded border-slate-700 bg-slate-800 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-0 cursor-pointer h-4 w-4"
+                  className="rounded border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-navy-800 text-orange-600 focus:ring-orange-500/20 focus:ring-offset-0 cursor-pointer h-4 w-4"
                 />
               </th>
               <th className="p-4">Product</th>
@@ -258,7 +258,7 @@ export function ProductTable({
                       checked={isSelected}
                       onChange={() => onToggleSelect(p.id)}
                       aria-label={`Select ${p.title}`}
-                      className="rounded border-slate-700 bg-slate-800 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-0 cursor-pointer h-4 w-4"
+                      className="rounded border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-navy-800 text-orange-600 focus:ring-orange-500/20 focus:ring-offset-0 cursor-pointer h-4 w-4"
                     />
                   </td>
 
@@ -317,7 +317,7 @@ export function ProductTable({
                           {p.stock} left
                         </span>
                       ) : (
-                        <span className="text-xs text-slate-200 font-semibold font-mono">
+                        <span className="text-xs text-navy-900 dark:text-slate-200 font-semibold font-mono">
                           {p.stock} in stock
                         </span>
                       )}
@@ -341,7 +341,7 @@ export function ProductTable({
                             ? 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border-emerald-500/30'
                             : isPendingApproval
                             ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/30'
-                            : 'bg-slate-800/90 hover:bg-slate-700 text-slate-300 border-slate-700'
+                            : 'bg-slate-100 dark:bg-navy-800/90 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-300 border-slate-200 dark:border-white/10'
                         }`}
                         title={
                           isPendingApproval
@@ -376,7 +376,7 @@ export function ProductTable({
                           onClick={() =>
                             setActiveMenuId(activeMenuId === p.id ? null : p.id)
                           }
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors cursor-pointer"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-navy-900 dark:text-slate-200 hover:bg-slate-100 dark:bg-navy-800 transition-colors cursor-pointer"
                           aria-label="More actions"
                         >
                           <MoreVertical className="h-4 w-4" />
@@ -388,11 +388,11 @@ export function ProductTable({
                               className="fixed inset-0 z-20"
                               onClick={() => setActiveMenuId(null)}
                             />
-                            <div className="absolute right-0 mt-1 w-48 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl py-1 z-30 animate-in fade-in zoom-in-95 text-left">
+                            <div className="absolute right-0 mt-1 w-48 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-2xl py-1 z-30 animate-in fade-in zoom-in-95 text-left">
                               <Link
                                 href={`/merchant/products/${p.id}`}
                                 onClick={() => setActiveMenuId(null)}
-                                className="w-full px-3 py-2 text-xs text-slate-300 hover:bg-slate-800 flex items-center gap-2 cursor-pointer"
+                                className="w-full px-3 py-2 text-xs text-slate-300 hover:bg-slate-100 dark:bg-navy-800 flex items-center gap-2 cursor-pointer"
                               >
                                 <Eye className="h-3.5 w-3.5 text-sky-400" />
                                 <span>View Product Details</span>
@@ -403,7 +403,7 @@ export function ProductTable({
                                   setActiveMenuId(null);
                                   onManageStock(p);
                                 }}
-                                className="w-full px-3 py-2 text-xs text-slate-300 hover:bg-slate-800 flex items-center gap-2 cursor-pointer"
+                                className="w-full px-3 py-2 text-xs text-slate-300 hover:bg-slate-100 dark:bg-navy-800 flex items-center gap-2 cursor-pointer"
                               >
                                 <Layers className="h-3.5 w-3.5 text-emerald-400" />
                                 <span>Manage Stock</span>
@@ -414,7 +414,7 @@ export function ProductTable({
                                   setActiveMenuId(null);
                                   onPrintBarcode(p);
                                 }}
-                                className="w-full px-3 py-2 text-xs text-slate-300 hover:bg-slate-800 flex items-center gap-2 cursor-pointer"
+                                className="w-full px-3 py-2 text-xs text-slate-300 hover:bg-slate-100 dark:bg-navy-800 flex items-center gap-2 cursor-pointer"
                               >
                                 <Printer className="h-3.5 w-3.5 text-indigo-400" />
                                 <span>Print Thermal Sticker</span>
@@ -422,12 +422,12 @@ export function ProductTable({
                               <Link
                                 href={`/merchant/products/${p.id}/edit`}
                                 onClick={() => setActiveMenuId(null)}
-                                className="w-full px-3 py-2 text-xs text-slate-300 hover:bg-slate-800 flex items-center gap-2 cursor-pointer"
+                                className="w-full px-3 py-2 text-xs text-slate-300 hover:bg-slate-100 dark:bg-navy-800 flex items-center gap-2 cursor-pointer"
                               >
                                 <Edit2 className="h-3.5 w-3.5 text-slate-400" />
                                 <span>Edit Product & Valuation</span>
                               </Link>
-                              <div className="border-t border-slate-800 my-1" />
+                              <div className="border-t border-slate-200 dark:border-white/10 my-1" />
                               <button
                                 type="button"
                                 onClick={() => {

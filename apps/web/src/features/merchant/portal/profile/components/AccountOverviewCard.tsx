@@ -24,7 +24,7 @@ export function AccountOverviewCard({ profile }: AccountOverviewCardProps) {
         </p>
       </div>
 
-      <div className="divide-y divide-slate-800/80 text-xs">
+      <div className="divide-y divide-slate-100 dark:divide-white/5 text-xs">
         <div className="py-2.5 flex items-center justify-between">
           <span className="text-slate-500 dark:text-slate-400 font-medium">Account Status</span>
           <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">

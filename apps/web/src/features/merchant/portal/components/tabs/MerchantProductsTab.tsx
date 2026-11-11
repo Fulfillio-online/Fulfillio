@@ -56,7 +56,7 @@ export function MerchantProductsTab({
       {/* Tab Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-100 flex items-center gap-2">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-navy-900 dark:text-white flex items-center gap-2">
             <Package className="h-6 w-6 text-emerald-400 shrink-0" />
             <span>Products & 2-Part SKU Inventory</span>
           </h1>
@@ -75,7 +75,7 @@ export function MerchantProductsTab({
           </Link>
           <button
             onClick={() => setIsAddProductOpen(true)}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors shadow-sm shrink-0 flex-1 sm:flex-initial"
+            className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors shadow-sm shrink-0 flex-1 sm:flex-initial"
           >
             <Plus className="h-4 w-4 shrink-0" />
             <span>Add Single Product</span>
@@ -85,7 +85,7 @@ export function MerchantProductsTab({
 
 
       {/* Filters & Search Toolbar */}
-      <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex flex-col sm:flex-row gap-3 items-center justify-between shadow-sm">
+      <div className="p-4 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 flex flex-col sm:flex-row gap-3 items-center justify-between shadow-sm">
         <div className="relative w-full sm:w-96">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
           <input
@@ -93,7 +93,7 @@ export function MerchantProductsTab({
             value={productSearch}
             onChange={(e) => setProductSearch(e.target.value)}
             placeholder="Search product name, 2-part SKU, or barcode..."
-            className="w-full pl-9 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+            className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 placeholder-slate-500 focus:outline-none focus:border-orange-500"
           />
         </div>
 
@@ -102,7 +102,7 @@ export function MerchantProductsTab({
           <select
             value={stockFilter}
             onChange={(e) => setStockFilter(e.target.value as any)}
-            className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-300 focus:outline-none focus:border-emerald-500"
+            className="px-3 py-1.5 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-slate-300 focus:outline-none focus:border-orange-500"
           >
             <option value="ALL">All Items ({products.length})</option>
             <option value="IN_STOCK">In Stock (&gt; 20)</option>
@@ -112,10 +112,10 @@ export function MerchantProductsTab({
       </div>
 
       {/* Products Table */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden shadow-sm">
+      <div className="rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-navy-900 overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[680px] text-left text-sm">
-            <thead className="bg-slate-800/80 text-slate-400 text-xs uppercase tracking-wider font-semibold border-b border-slate-800">
+            <thead className="bg-slate-100 dark:bg-navy-800/80 text-slate-400 text-xs uppercase tracking-wider font-semibold border-b border-slate-200 dark:border-white/10">
               <tr>
                 <th className="p-4">Product Name & Variant</th>
                 <th className="p-4">2-Part SKU Code</th>
@@ -126,19 +126,19 @@ export function MerchantProductsTab({
                 <th className="p-4 text-center">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800">
+            <tbody className="divide-y divide-slate-100 dark:divide-white/5">
               {filteredProducts.map((p) => (
-                <tr key={p.id} className="hover:bg-slate-800/40 transition-colors">
+                <tr key={p.id} className="hover:bg-slate-100 dark:bg-navy-800/40 transition-colors">
                   <td className="p-4">
-                    <div className="font-semibold text-slate-200">{p.title}</div>
+                    <div className="font-semibold text-navy-900 dark:text-slate-200">{p.title}</div>
                     <div className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
-                      <span className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-slate-300 border border-slate-700">
+                      <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-navy-800 text-[10px] text-slate-300 border border-slate-200 dark:border-white/10">
                         {p.variantLabel}
                       </span>
                     </div>
                   </td>
                   <td className="p-4">
-                    <span className="font-mono text-xs font-bold text-emerald-400 bg-slate-950 px-2 py-1 rounded border border-slate-800">
+                    <span className="font-mono text-xs font-bold text-emerald-400 bg-slate-50 dark:bg-navy-950 px-2 py-1 rounded border border-slate-200 dark:border-white/10">
                       {p.sku}
                     </span>
                   </td>
@@ -157,17 +157,17 @@ export function MerchantProductsTab({
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => onAdjustStock(p.id, -1)}
-                        className="h-6 w-6 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-xs font-bold transition-colors"
+                        className="h-6 w-6 rounded bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-300 flex items-center justify-center text-xs font-bold transition-colors"
                         title="Decrease Stock"
                       >
                         <Minus className="h-3 w-3" />
                       </button>
-                      <span className="font-bold text-sm text-slate-100 min-w-7 text-center">
+                      <span className="font-bold text-sm text-navy-900 dark:text-white min-w-7 text-center">
                         {p.stock}
                       </span>
                       <button
                         onClick={() => onAdjustStock(p.id, 1)}
-                        className="h-6 w-6 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-xs font-bold transition-colors"
+                        className="h-6 w-6 rounded bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-300 flex items-center justify-center text-xs font-bold transition-colors"
                         title="Increase Stock"
                       >
                         <Plus className="h-3 w-3" />
@@ -179,7 +179,7 @@ export function MerchantProductsTab({
                       )}
                     </div>
                   </td>
-                  <td className="p-4 text-right font-bold text-slate-100">
+                  <td className="p-4 text-right font-bold text-navy-900 dark:text-white">
                     ৳ {p.price.toLocaleString()}
                   </td>
                   <td className="p-4 text-center">

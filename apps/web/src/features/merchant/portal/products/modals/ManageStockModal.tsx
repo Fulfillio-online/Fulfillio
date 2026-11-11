@@ -38,17 +38,17 @@ export function ManageStockModal({
       onClick={onClose}
     >
       <div
-        className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-5 sm:p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-200 cursor-default"
+        className="bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl w-full max-w-lg p-5 sm:p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-200 cursor-default"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-3">
           <div className="flex items-center gap-2.5">
             <div className="h-9 w-9 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
               <Layers className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="font-bold text-base text-slate-100">
+              <h3 className="font-bold text-base text-navy-900 dark:text-white">
                 Manage Stock & Inbound Request
               </h3>
               <p className="text-xs text-slate-400">
@@ -59,15 +59,15 @@ export function ManageStockModal({
           <button
             type="button"
             onClick={onClose}
-            className="text-slate-500 hover:text-slate-300 p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+            className="text-slate-500 hover:text-slate-300 p-1 rounded-lg hover:bg-slate-100 dark:bg-navy-800 transition-colors cursor-pointer"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
         {/* Product summary card */}
-        <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-950 border border-slate-800">
-          <div className="relative h-12 w-12 rounded-lg bg-slate-800 border border-slate-700 overflow-hidden shrink-0 flex items-center justify-center">
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10">
+          <div className="relative h-12 w-12 rounded-lg bg-slate-100 dark:bg-navy-800 border border-slate-200 dark:border-white/10 overflow-hidden shrink-0 flex items-center justify-center">
             {product.imageUrl ? (
               product.imageUrl.startsWith('data:') ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -91,7 +91,7 @@ export function ManageStockModal({
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <h4 className="font-semibold text-slate-200 text-xs sm:text-sm truncate">
+            <h4 className="font-semibold text-navy-900 dark:text-slate-200 text-xs sm:text-sm truncate">
               {product.title}
             </h4>
             <div className="flex items-center gap-2 mt-0.5 text-xs">
@@ -119,7 +119,7 @@ export function ManageStockModal({
                 required
                 value={requestedQty}
                 onChange={(e) => setRequestedQty(Math.max(1, Number(e.target.value) || 1))}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm font-bold text-slate-100 focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-sm font-bold text-navy-900 dark:text-white focus:outline-none focus:border-orange-500"
                 placeholder="50"
               />
               <span className="absolute right-3 top-2 text-xs text-slate-500">
@@ -132,7 +132,7 @@ export function ManageStockModal({
                   key={preset}
                   type="button"
                   onClick={() => setRequestedQty(preset)}
-                  className="px-2.5 py-1 text-xs rounded bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors cursor-pointer font-mono"
+                  className="px-2.5 py-1 text-xs rounded bg-slate-100 dark:bg-navy-800 text-slate-300 hover:bg-slate-200 dark:hover:bg-navy-700 hover:text-white transition-colors cursor-pointer font-mono"
                 >
                   +{preset}
                 </button>
@@ -149,7 +149,7 @@ export function ManageStockModal({
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder="e.g. Winter batch #402 from Gazipur supplier"
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 placeholder-slate-500 focus:outline-none focus:border-orange-500"
             />
           </div>
 
@@ -165,17 +165,17 @@ export function ManageStockModal({
           </div>
 
           {/* Actions */}
-          <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-slate-800">
+          <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-slate-200 dark:border-white/10">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
+              className="px-4 py-2 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors cursor-pointer shadow-md flex items-center gap-1.5"
+              className="px-5 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold transition-colors cursor-pointer shadow-md flex items-center gap-1.5"
             >
               <ArrowUpRight className="h-3.5 w-3.5" />
               <span>Submit for Admin Approval</span>

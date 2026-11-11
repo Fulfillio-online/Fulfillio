@@ -399,7 +399,7 @@ function MerchantPortalInner() {
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-950 text-slate-100">
+    <div className="flex min-h-screen bg-slate-50 dark:bg-navy-950 text-navy-900 dark:text-white">
       <MerchantSidebar
         activeTab={activeTab}
         onSelectTab={setActiveTab}
@@ -513,7 +513,7 @@ export function MerchantPortalManager() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400 text-sm">
+        <div className="min-h-screen bg-slate-50 dark:bg-navy-950 flex items-center justify-center text-slate-400 text-sm">
           Loading Merchant Portal...
         </div>
       }

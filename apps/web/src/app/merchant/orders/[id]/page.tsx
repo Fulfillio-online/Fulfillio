@@ -27,17 +27,17 @@ export default function MerchantOrderDetailsPage() {
   if (!targetOrder) {
     return (
       <div className="max-w-2xl mx-auto py-16 text-center space-y-4">
-        <div className="h-16 w-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto text-slate-500">
+        <div className="h-16 w-16 bg-slate-100 dark:bg-navy-800 rounded-full flex items-center justify-center mx-auto text-slate-500">
           <PackageX className="h-8 w-8" />
         </div>
-        <h2 className="text-xl font-bold text-slate-100">Order Not Found</h2>
+        <h2 className="text-xl font-bold text-navy-900 dark:text-white">Order Not Found</h2>
         <p className="text-sm text-slate-400">
           We could not find an order matching <span className="font-mono text-emerald-400 font-semibold">#{orderId}</span>.
         </p>
         <div>
           <button
             onClick={() => router.push('/merchant/orders')}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-navy-900 dark:text-slate-200 rounded-lg text-xs font-semibold transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
             <span>Back to Orders List</span>
