@@ -536,7 +536,7 @@ syncAdminProductsToMerchant(next);
     }
   };
 
-const handleRejectReplenishment = (
+  const handleRejectReplenishment = (
     replenishment: InboundStockReplenishment,
     reason?: string
   ) => {
@@ -547,18 +547,6 @@ const handleRejectReplenishment = (
       try {
         localStorage.setItem(STORAGE_KEY_STOCK_REQUESTS, JSON.stringify(next));
       } catch {}
-
-const handleBulkReject = (productIds: string[]) => {
-    const idSet = new Set(productIds);
-    setProducts((prev) => {
-      const removed = prev.filter((p) => idSet.has(p.id));
-      const next = prev.filter((p) => !idSet.has(p.id));
-      try {
-        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
-        syncAdminProductsToMerchant(next, removed);
-      } catch {
-        // ignore
-      }
       return next;
     });
 
