@@ -213,7 +213,7 @@ export function MerchantOrdersTab({
 
           <button
             onClick={() => setIsCreateOrderOpen(true)}
-            className="flex-1 sm:flex-initial px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-navy-900 dark:text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors shadow-sm shrink-0 cursor-pointer"
+            className="flex-1 sm:flex-initial px-4 py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-bold shadow-md shadow-orange-500/20 flex items-center justify-center gap-2 transition-colors shadow-sm shrink-0 cursor-pointer"
           >
             <Plus className="h-4 w-4" />
             <span>Create Manual Order</span>

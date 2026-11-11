@@ -17,6 +17,7 @@ import { OrdersPickTab } from './components/tabs/OrdersPickTab';
 import { OrdersPackTab } from './components/tabs/OrdersPackTab';
 import { OrdersDispatchTab } from './components/tabs/OrdersDispatchTab';
 import { ActionConfirmModal } from './components/modals/ActionConfirmModal';
+import { CreateOrderModal } from './components/modals/CreateOrderModal';
 import { MemoPreviewModal } from './components/modals/MemoPreviewModal';
 import { IsolatedPrintPortal } from './components/print/IsolatedPrintPortal';
 import {
@@ -68,6 +69,7 @@ export function OrdersPipelineManager({
   const [printMode, setPrintMode] = useState<'MEMOS' | 'PICK_SHEET' | 'MANIFEST' | null>(null);
   const [printingOrders, setPrintingOrders] = useState<WarehousePipelineOrder[]>([]);
   const [pendingAction, setPendingAction] = useState<PendingConfirmationAction | null>(null);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   // Hydrate orders from localStorage on mount & reconcile with Merchant orders
   useEffect(() => {
@@ -708,6 +710,15 @@ const loadOrders = () => {
 
 
       {/* Modals */}
+      <CreateOrderModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        ordersCount={orders.length}
+        onCreateOrder={(newOrder) => {
+          updateOrdersAndPersist((prev) => [newOrder, ...prev]);
+          showToast(`Order ${newOrder.id} created & sent to 1. Pick List!`);
+        }}
+      />
       <ActionConfirmModal
         isOpen={Boolean(pendingAction)}
         onClose={() => setPendingAction(null)}
