@@ -47,6 +47,11 @@ export interface WarehousePipelineOrder {
   resellerAddress: string;
   resellerLogo?: string;
   codAmount: number;
+  subtotal?: number;
+  deliveryFee?: number;
+  discount?: number;
+  advancePayment?: number;
+  paymentStatus?: 'Paid' | 'Partial' | 'Unpaid';
   courier: CourierPartner;
   trackingCode?: string;
   stage: OrderStage;

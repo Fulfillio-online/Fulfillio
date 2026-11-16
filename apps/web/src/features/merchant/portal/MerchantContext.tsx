@@ -7,6 +7,8 @@ import {
   MerchantProductItem,
   MerchantProfileData,
   ResellerMemo,
+  MerchantCategoryItem,
+  MerchantSubcategoryItem,
 } from './types';
 import { StockRequestItem } from './products/types';
 import {
@@ -35,6 +37,9 @@ import {
   syncMerchantMemoToAdmin,
   syncMerchantMemoDeletedToAdmin,
   syncMerchantStockRequestToAdmin,
+  getStoredMerchantCategoriesForCode,
+  saveMerchantCategoriesForCode,
+  getMerchantCategoriesKey,
 } from '@/lib/warehouseSync';
 
 interface MerchantContextType {
@@ -72,6 +77,13 @@ interface MerchantContextType {
   saveMemo: (newMemo: ResellerMemo) => void;
   setDefaultMemo: (id: string) => void;
   deleteMemo: (id: string) => void;
+  categories: MerchantCategoryItem[];
+  addCategory: (item: { name: string; description?: string; subcategories?: string[] }) => void;
+  updateCategory: (id: string, updated: Partial<MerchantCategoryItem>) => void;
+  deleteCategory: (id: string) => void;
+  addSubcategory: (categoryId: string, subcategory: { name: string; description?: string }) => void;
+  updateSubcategory: (categoryId: string, subcategoryId: string, updated: Partial<MerchantSubcategoryItem>) => void;
+  deleteSubcategory: (categoryId: string, subcategoryId: string) => void;
 }
 
 const MerchantContext = createContext<MerchantContextType | undefined>(undefined);
@@ -83,6 +95,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
   const [memoList, setMemoList] = useState<ResellerMemo[]>([]);
   const [asns, setAsns] = useState<MerchantAsnRecord[]>([]);
   const [stockRequests, setStockRequests] = useState<StockRequestItem[]>([]);
+  const [categories, setCategories] = useState<MerchantCategoryItem[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
@@ -100,6 +113,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       setMemoList(getStoredMerchantMemosForCode(code, prof));
       setAsns(getStoredMerchantAsnsForCode(code));
       setStockRequests(getStoredMerchantStockRequestsForCode(code));
+      setCategories(getStoredMerchantCategoriesForCode(code));
     };
 
     loadActiveMerchantWorkspace();
@@ -574,6 +588,103 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     });
     showToast('Memo design deleted.');
   };
+  const addCategory = (item: { name: string; description?: string; subcategories?: string[] }) => {
+    const slug = item.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    const newCat: MerchantCategoryItem = {
+      id: `cat-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      name: item.name.trim(),
+      slug: slug || `cat-${Date.now()}`,
+      description: item.description?.trim(),
+      createdAt: new Date().toISOString(),
+      subcategories: (item.subcategories || []).map((subName) => ({
+        id: `sub-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        name: subName.trim(),
+        slug: subName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+        createdAt: new Date().toISOString(),
+      })),
+    };
+    setCategories((prev) => {
+      const next = [newCat, ...prev];
+      saveMerchantCategoriesForCode(profile.merchantCode, next);
+      return next;
+    });
+    showToast(`Category "${newCat.name}" added successfully.`);
+  };
+
+  const updateCategory = (id: string, updated: Partial<MerchantCategoryItem>) => {
+    setCategories((prev) => {
+      const next = prev.map((c) => (c.id === id ? { ...c, ...updated } : c));
+      saveMerchantCategoriesForCode(profile.merchantCode, next);
+      return next;
+    });
+    showToast('Category updated.');
+  };
+
+  const deleteCategory = (id: string) => {
+    setCategories((prev) => {
+      const target = prev.find((c) => c.id === id);
+      const next = prev.filter((c) => c.id !== id);
+      saveMerchantCategoriesForCode(profile.merchantCode, next);
+      if (target) {
+        showToast(`Category "${target.name}" removed.`);
+      }
+      return next;
+    });
+  };
+
+  const addSubcategory = (categoryId: string, subcategory: { name: string; description?: string }) => {
+    const slug = subcategory.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    const newSub: MerchantSubcategoryItem = {
+      id: `sub-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      name: subcategory.name.trim(),
+      slug: slug || `sub-${Date.now()}`,
+      description: subcategory.description?.trim(),
+      createdAt: new Date().toISOString(),
+    };
+    setCategories((prev) => {
+      const next = prev.map((c) => {
+        if (c.id !== categoryId) return c;
+        return {
+          ...c,
+          subcategories: [...c.subcategories, newSub],
+        };
+      });
+      saveMerchantCategoriesForCode(profile.merchantCode, next);
+      return next;
+    });
+    showToast(`Sub-category "${newSub.name}" added.`);
+  };
+
+  const updateSubcategory = (categoryId: string, subcategoryId: string, updated: Partial<MerchantSubcategoryItem>) => {
+    setCategories((prev) => {
+      const next = prev.map((c) => {
+        if (c.id !== categoryId) return c;
+        return {
+          ...c,
+          subcategories: c.subcategories.map((s: MerchantSubcategoryItem) => (s.id === subcategoryId ? { ...s, ...updated } : s)),
+        };
+      });
+      saveMerchantCategoriesForCode(profile.merchantCode, next);
+      return next;
+    });
+    showToast('Sub-category updated.');
+  };
+
+  const deleteSubcategory = (categoryId: string, subcategoryId: string) => {
+    setCategories((prev) => {
+      const next = prev.map((c) => {
+        if (c.id !== categoryId) return c;
+        return {
+          ...c,
+          subcategories: c.subcategories.filter((s: MerchantSubcategoryItem) => s.id !== subcategoryId),
+        };
+      });
+      saveMerchantCategoriesForCode(profile.merchantCode, next);
+      return next;
+    });
+    showToast('Sub-category removed.');
+  };
+
 
   return (
     <MerchantContext.Provider
@@ -608,6 +719,13 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
         saveMemo,
         setDefaultMemo,
         deleteMemo,
+        categories,
+        addCategory,
+        updateCategory,
+        deleteCategory,
+        addSubcategory,
+        updateSubcategory,
+        deleteSubcategory,
       }}
     >
       {children}

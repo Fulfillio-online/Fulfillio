@@ -19,6 +19,7 @@ import {
   Sparkle,
   Apple,
   Box,
+  ExternalLink,
 } from 'lucide-react';
 import { MerchantProductItem } from '../../types';
 import {
@@ -27,6 +28,9 @@ import {
   ProductVariantConfig,
 } from '../types';
 import { compressImage } from '../utils/imageCompressor';
+import { ColorPickerInput } from './ColorPickerInput';
+import { useMerchant } from '@/features/merchant/portal/MerchantContext';
+import { MerchantCategoryItem, MerchantSubcategoryItem } from '../../types';
 
 interface ProductFormProps {
   initialProduct?: MerchantProductItem | null;
@@ -41,6 +45,7 @@ export function ProductForm({
 }: ProductFormProps) {
   const router = useRouter();
   const isEdit = Boolean(initialProduct);
+  const { categories } = useMerchant();
 
   const mainImageInputRef = useRef<HTMLInputElement>(null);
   const colorFileInputRef = useRef<HTMLInputElement>(null);
@@ -54,6 +59,19 @@ export function ProductForm({
   const [category, setCategory] = useState(initialProduct?.category || 'Fashion');
   const [subcategory, setSubcategory] = useState(initialProduct?.subcategory || 'Hoodie');
   const [description, setDescription] = useState(initialProduct?.description || '');
+
+
+  const currentCategoryObj = useMemo(() => {
+    return (
+      categories.find((c: MerchantCategoryItem) => c.name.toLowerCase() === category.toLowerCase()) ||
+      categories.find((c: MerchantCategoryItem) => c.slug.toLowerCase() === category.toLowerCase()) ||
+      null
+    );
+  }, [categories, category]);
+
+  const subcategoryList = useMemo(() => {
+    return currentCategoryObj?.subcategories || [];
+  }, [currentCategoryObj]);
 
   // 2. Declared Value
   const [declaredValue, setDeclaredValue] = useState(
@@ -531,29 +549,72 @@ export function ProductForm({
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                CATEGORY
-              </label>
-              <input
-                type="text"
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  CATEGORY
+                </label>
+                <Link
+                  href="/merchant/categories"
+                  target="_blank"
+                  className="text-[11px] font-bold text-orange-600 dark:text-orange-400 hover:underline flex items-center gap-1"
+                  title="Create or manage product categories"
+                >
+                  <span>+ Manage Categories</span>
+                  <ExternalLink className="h-2.5 w-2.5" />
+                </Link>
+              </div>
+              <select
                 value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                placeholder="Fashion"
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
-              />
+                onChange={(e) => {
+                  const newCat = e.target.value;
+                  setCategory(newCat);
+                  const catObj = categories.find((c: any) => c.name.toLowerCase() === newCat.toLowerCase());
+                  if (catObj && catObj.subcategories.length > 0) {
+                    setSubcategory(catObj.subcategories[0].name);
+                  } else {
+                    setSubcategory('');
+                  }
+                }}
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-medium text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer"
+              >
+                {categories.map((cat: any) => (
+                  <option key={cat.id} value={cat.name}>
+                    {cat.name} ({cat.subcategories.length} sub-categories)
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                SUBCATEGORY
-              </label>
-              <input
-                type="text"
-                value={subcategory}
-                onChange={(e) => setSubcategory(e.target.value)}
-                placeholder="Hoodie"
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
-              />
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  SUBCATEGORY
+                </label>
+                {subcategoryList.length === 0 && (
+                  <span className="text-[10px] text-slate-400">Custom input</span>
+                )}
+              </div>
+              {subcategoryList.length > 0 ? (
+                <select
+                  value={subcategory}
+                  onChange={(e) => setSubcategory(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-medium text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer"
+                >
+                  {subcategoryList.map((sub: any) => (
+                    <option key={sub.id} value={sub.name}>
+                      {sub.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={subcategory}
+                  onChange={(e) => setSubcategory(e.target.value)}
+                  placeholder="e.g. Standard item"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
+                />
+              )}
             </div>
           </div>
 
@@ -777,15 +838,27 @@ export function ProductForm({
                         <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3">
                           {/* Row 1 on mobile: Color picker & Color name */}
                           <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                            <input
-                              type="color"
-                              value={c.hex}
-                              onChange={(e) => {
-                                const hex = e.target.value;
-                                setColors(colors.map((item) => (item.id === c.id ? { ...item, hex } : item)));
+                            <ColorPickerInput
+                              colorHex={c.hex}
+                              colorName={c.name}
+                              onChange={(hex: string, suggestedName?: string) => {
+                                setColors(
+                                  colors.map((item) =>
+                                    item.id === c.id
+                                      ? {
+                                          ...item,
+                                          hex,
+                                          name:
+                                            !item.name ||
+                                            item.name === 'New Color' ||
+                                            item.name === 'Color'
+                                              ? (suggestedName || item.name)
+                                              : item.name,
+                                        }
+                                      : item
+                                  )
+                                );
                               }}
-                              className="h-8 w-8 rounded-lg cursor-pointer bg-transparent border-0 shrink-0"
-                              title="Choose color"
                             />
                             <input
                               type="text"

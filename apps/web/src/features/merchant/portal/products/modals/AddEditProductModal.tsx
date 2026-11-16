@@ -15,6 +15,10 @@ import {
 } from 'lucide-react';
 import { MerchantProductItem } from '../../types';
 import { compressImage } from '../utils/imageCompressor';
+import { ColorPickerInput } from '../components/ColorPickerInput';
+import { useMerchant } from '@/features/merchant/portal/MerchantContext';
+import Link from 'next/link';
+import { ExternalLink } from 'lucide-react';
 
 interface ColorSwatch {
   id: string;
@@ -40,6 +44,7 @@ export function AddEditProductModal({
   onSave,
 }: AddEditProductModalProps) {
   const isEdit = Boolean(initialProduct);
+  const { categories } = useMerchant();
   const colorFileInputRef = useRef<HTMLInputElement>(null);
   const [activeColorUploadId, setActiveColorUploadId] = useState<string | null>(null);
 
@@ -49,6 +54,18 @@ export function AddEditProductModal({
   const [category, setCategory] = useState('Fashion');
   const [subcategory, setSubcategory] = useState('Hoodie');
   const [description, setDescription] = useState('');
+
+  const currentCategoryObj = React.useMemo(() => {
+    return (
+      categories.find((c: any) => c.name.toLowerCase() === category.toLowerCase()) ||
+      categories.find((c: any) => c.slug.toLowerCase() === category.toLowerCase()) ||
+      null
+    );
+  }, [categories, category]);
+
+  const subcategoryList = React.useMemo(() => {
+    return currentCategoryObj?.subcategories || [];
+  }, [currentCategoryObj]);
 
   // Declared Product Value (For damage/loss liability)
   const [declaredValue, setDeclaredValue] = useState('850');
@@ -348,19 +365,39 @@ export function AddEditProductModal({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  CATEGORY
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-300">
+                    CATEGORY
+                  </label>
+                  <Link
+                    href="/merchant/categories"
+                    target="_blank"
+                    className="text-[11px] font-bold text-orange-400 hover:underline flex items-center gap-1"
+                    title="Manage product categories"
+                  >
+                    <span>+ Manage</span>
+                    <ExternalLink className="h-2.5 w-2.5" />
+                  </Link>
+                </div>
                 <select
                   value={category}
-                  onChange={(e) => setCategory(e.target.value)}
+                  onChange={(e) => {
+                    const newCat = e.target.value;
+                    setCategory(newCat);
+                    const catObj = categories.find((c: any) => c.name.toLowerCase() === newCat.toLowerCase());
+                    if (catObj && catObj.subcategories.length > 0) {
+                      setSubcategory(catObj.subcategories[0].name);
+                    } else {
+                      setSubcategory('');
+                    }
+                  }}
                   className="w-full px-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer"
                 >
-                  <option value="Fashion">Fashion</option>
-                  <option value="Apparel">Apparel</option>
-                  <option value="Electronics">Electronics</option>
-                  <option value="Footwear">Footwear</option>
-                  <option value="Accessories">Accessories</option>
+                  {categories.map((cat: any) => (
+                    <option key={cat.id} value={cat.name}>
+                      {cat.name} ({cat.subcategories.length} sub-categories)
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -368,13 +405,27 @@ export function AddEditProductModal({
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
                   SUBCATEGORY
                 </label>
-                <input
-                  type="text"
-                  value={subcategory}
-                  onChange={(e) => setSubcategory(e.target.value)}
-                  placeholder="e.g. hoodie"
-                  className="w-full px-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
-                />
+                {subcategoryList.length > 0 ? (
+                  <select
+                    value={subcategory}
+                    onChange={(e) => setSubcategory(e.target.value)}
+                    className="w-full px-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer"
+                  >
+                    {subcategoryList.map((sub: any) => (
+                      <option key={sub.id} value={sub.name}>
+                        {sub.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={subcategory}
+                    onChange={(e) => setSubcategory(e.target.value)}
+                    placeholder="e.g. hoodie"
+                    className="w-full px-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
+                  />
+                )}
               </div>
             </div>
 
@@ -461,15 +512,25 @@ export function AddEditProductModal({
                     {/* Responsive Color Row */}
                     <div className="space-y-2.5">
                       <div className="flex items-center gap-2.5">
-                        <input
-                          type="color"
-                          value={c.hex}
-                          onChange={(e) => {
-                            const hex = e.target.value;
-                            setColors(colors.map((item) => (item.id === c.id ? { ...item, hex } : item)));
+                        <ColorPickerInput
+                          colorHex={c.hex}
+                          colorName={c.name}
+                          onChange={(hex: string, suggestedName?: string) => {
+                            setColors(
+                              colors.map((item) =>
+                                item.id === c.id
+                                  ? {
+                                      ...item,
+                                      hex,
+                                      name:
+                                        !item.name || item.name === 'New Color'
+                                          ? (suggestedName || item.name)
+                                          : item.name,
+                                    }
+                                  : item
+                              )
+                            );
                           }}
-                          className="h-8 w-8 rounded-lg cursor-pointer bg-transparent border-0 shrink-0"
-                          title="Choose color"
                         />
                         <input
                           type="text"

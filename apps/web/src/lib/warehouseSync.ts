@@ -2,6 +2,7 @@ import {
   MerchantAsnRecord,
   MerchantOrderItem,
   MerchantProductItem,
+  MerchantCategoryItem,
   MerchantProfileData,
   ResellerMemo,
 } from '@/features/merchant/portal/types';
@@ -19,6 +20,8 @@ import {
   STORAGE_KEY_MERCHANT_PRODUCTS,
   STORAGE_KEY_MERCHANT_PROFILE,
   STORAGE_KEY_STOCK_REQUESTS,
+  STORAGE_KEY_MERCHANT_CATEGORIES,
+  INITIAL_MERCHANT_CATEGORIES,
 } from '@/features/merchant/portal/mockData';
 import { MerchantMemoItem } from '@/features/admin/merchants/types';
 import { ALL_MEMOS, STORAGE_KEY as STORAGE_KEY_MERCHANTS_DIRECTORY } from '@/features/admin/merchants/mockData';
@@ -37,7 +40,7 @@ import {
   cleanBinCode,
   generateDigitalProofHash,
 } from '@/features/admin/products/mockData';
-import { CourierPartner, OrderStage, WarehousePipelineOrder } from '@/features/admin/orders/types';
+import { CourierPartner, OrderItem, OrderStage, WarehousePipelineOrder } from '@/features/admin/orders/types';
 import { INITIAL_PIPELINE_ORDERS, STORAGE_KEY_ORDERS } from '@/features/admin/orders/mockData';
 import { MerchantRecord } from '@/features/admin/merchants/types';
 import { MERCHANTS_DATA, STORAGE_KEY as STORAGE_KEY_MERCHANT_DIRECTORY } from '@/features/admin/merchants/mockData';
@@ -135,6 +138,13 @@ export function getMerchantStockRequestsKey(merchantCode = 'MC-101'): string {
   return code === 'MC-101'
     ? STORAGE_KEY_STOCK_REQUESTS
     : `${STORAGE_KEY_STOCK_REQUESTS}_${code}`;
+}
+
+export function getMerchantCategoriesKey(merchantCode = 'MC-101'): string {
+  const code = (merchantCode || 'MC-101').trim().toUpperCase();
+  return code === 'MC-101'
+    ? STORAGE_KEY_MERCHANT_CATEGORIES
+    : `${STORAGE_KEY_MERCHANT_CATEGORIES}_${code}`;
 }
 
 export function getStoredMerchantDirectory(): MerchantRecord[] {
@@ -369,6 +379,41 @@ export function getStoredMerchantStockRequestsForCode(
     // ignore
   }
   return code === 'MC-101' ? INITIAL_STOCK_REQUESTS : [];
+}
+
+export function getStoredMerchantCategoriesForCode(
+  merchantCode = 'MC-101'
+): MerchantCategoryItem[] {
+  const code = (merchantCode || 'MC-101').trim().toUpperCase();
+  if (typeof window === 'undefined') {
+    return INITIAL_MERCHANT_CATEGORIES;
+  }
+  try {
+    const raw = localStorage.getItem(getMerchantCategoriesKey(code));
+    if (raw !== null) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {
+    // ignore
+  }
+  return INITIAL_MERCHANT_CATEGORIES;
+}
+
+export function saveMerchantCategoriesForCode(
+  merchantCode: string,
+  categories: MerchantCategoryItem[]
+): void {
+  const code = (merchantCode || 'MC-101').trim().toUpperCase();
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(getMerchantCategoriesKey(code), JSON.stringify(categories));
+    window.dispatchEvent(
+      new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'MerchantCategories' } })
+    );
+  } catch {
+    // ignore
+  }
 }
 
 /**
@@ -1208,14 +1253,97 @@ export function convertMerchantOrderToWarehouse(
   const { fullSku } = normalizeFullSku(rawSku, merchantCode);
 
   const variantStr = primaryLine?.variant || primaryProduct?.variantLabel || 'Standard / L';
-  const variantParts = variantStr.split('/').map((s) => s.trim());
+  const variantParts = variantStr.split(/[/•·|-]/).map((s) => s.trim()).filter(Boolean);
   const color = variantParts[0] || 'Standard';
   const size = variantParts[1] || 'L';
 
-  const productTitle =
-    order.lineItems && order.lineItems.length > 1
-      ? `${order.lineItems[0].title} (+${order.lineItems.length - 1} more)`
-      : primaryLine?.title || primaryProduct?.title || order.items || 'Warehouse Order Item';
+  // Build clean items array: EVERY single line item / variant gets its own distinct OrderItem row!
+  // NEVER use "+ 1 more" or "(+1 more)" in title or squash variants into a single row!
+  let orderItems: OrderItem[] = [];
+
+  if (order.lineItems && order.lineItems.length > 0) {
+    orderItems = order.lineItems.map((li) => {
+      const rawItemSku = li.sku || primaryProduct?.sku || 'SKU-001';
+      const { fullSku: itemFullSku } = normalizeFullSku(rawItemSku, merchantCode);
+      const vStr = li.variant || 'Standard / L';
+      const vParts = vStr.split(/[/•·|-]/).map((s) => s.trim()).filter(Boolean);
+      const itemColor = vParts[0] || 'Standard';
+      const itemSize = vParts[1] || 'L';
+      const matchedProd = merchantProducts.find((p) => p.id === li.id || p.sku === li.sku);
+      const itemBin = matchedProd?.bin?.split('-').slice(0, 3).join('-') || 'A-01-02';
+      const cleanTitle = (li.title || primaryProduct?.title || 'Warehouse Order Item')
+        .replace(/\s*\(\+\d+\s*more\)/gi, '')
+        .replace(/\s*\+\s*\d+\s*more/gi, '')
+        .trim();
+
+      const unitPrice =
+        li.price > 0
+          ? li.price
+          : li.total && li.quantity
+          ? Math.round(li.total / li.quantity)
+          : Math.round((order.codAmount ?? order.amount) / (order.qty || 1));
+
+      return {
+        sku: itemFullSku,
+        title: cleanTitle,
+        image: li.imageUrl || matchedProd?.imageUrl || primaryProduct?.imageUrl || PRESET_THUMBNAILS[0].url,
+        color: itemColor,
+        size: itemSize,
+        qty: li.quantity || 1,
+        unitPrice,
+        bin: itemBin,
+      };
+    });
+  } else if (order.items && typeof order.items === 'string' && order.items.includes(',')) {
+    // If order.items is a serialized list of variants, parse each one separately
+    const parts = order.items.split(',').map((p) => p.trim()).filter(Boolean);
+    orderItems = parts.map((part, idx) => {
+      // Format: "Title (Variant) x Qty" or "Title (Variant)"
+      const match = part.match(/^(.*?)(?:\s*\((.*?)\))?(?:\s*x\s*(\d+))?$/i);
+      const title = (match?.[1] || part)
+        .replace(/\s*\(\+\d+\s*more\)/gi, '')
+        .replace(/\s*\+\s*\d+\s*more/gi, '')
+        .trim();
+      const vStr = match?.[2] || 'Standard / L';
+      const vParts = vStr.split(/[/•·|-]/).map((s) => s.trim()).filter(Boolean);
+      const parsedColor = vParts[0] || color;
+      const parsedSize = vParts[1] || size;
+      const parsedQty = match?.[3] ? parseInt(match[3], 10) : 1;
+      const parsedSku = `${fullSku}-${idx + 1}`;
+
+      return {
+        sku: parsedSku,
+        title: title || 'Warehouse Order Item',
+        image: primaryLine?.imageUrl || primaryProduct?.imageUrl || PRESET_THUMBNAILS[0].url,
+        color: parsedColor,
+        size: parsedSize,
+        qty: parsedQty,
+        unitPrice: Math.round((order.codAmount ?? order.amount) / Math.max(1, order.qty || 1)),
+        bin: primaryProduct?.bin?.split('-').slice(0, 3).join('-') || 'A-01-02',
+      };
+    });
+  } else {
+    // Single item fallback - strip any "(+1 more)" or "+ 1 more" that might have been stored
+    const singleTitle = (primaryLine?.title || primaryProduct?.title || order.items || 'Warehouse Order Item')
+      .replace(/\s*\(\+\d+\s*more\)/gi, '')
+      .replace(/\s*\+\s*\d+\s*more/gi, '')
+      .trim();
+
+    orderItems = [
+      {
+        sku: fullSku,
+        title: singleTitle,
+        image: primaryLine?.imageUrl || primaryProduct?.imageUrl || PRESET_THUMBNAILS[0].url,
+        color,
+        size,
+        qty: order.qty || 1,
+        unitPrice: Math.round((order.codAmount ?? order.amount) / (order.qty || 1)),
+        bin: primaryProduct?.bin?.split('-').slice(0, 3).join('-') || 'A-01-02',
+      },
+    ];
+  }
+
+  const cleanPrimaryTitle = orderItems[0]?.title || primaryProduct?.title || 'Warehouse Order Item';
 
   const matchedMemo = memoList.find((m) => m.code === order.memoCode) || memoList[0];
   const addrLower = (order.address || '').toLowerCase();
@@ -1242,6 +1370,18 @@ export function convertMerchantOrderToWarehouse(
     CANCELLED: 'CANCELLED',
   };
 
+  const calculatedSubtotal =
+    order.subtotal ?? orderItems.reduce((acc, it) => acc + it.unitPrice * it.qty, 0);
+  const calculatedDeliveryFee = order.deliveryFee ?? 80;
+  const calculatedDiscount = order.discount ?? 0;
+  const calculatedAdvancePayment = order.advancePayment ?? 0;
+  const calculatedCod =
+    order.codAmount ??
+    Math.max(
+      0,
+      calculatedSubtotal + calculatedDeliveryFee - calculatedDiscount - calculatedAdvancePayment
+    );
+
   return {
     id: order.orderNumber || order.id,
     createdAt: order.date || 'Just now',
@@ -1251,21 +1391,27 @@ export function convertMerchantOrderToWarehouse(
     customerPhone: order.phone,
     customerAddress: order.address,
     city,
-    productTitle,
+    productTitle: cleanPrimaryTitle,
     productImage:
-      primaryLine?.imageUrl || primaryProduct?.imageUrl || PRESET_THUMBNAILS[0].url,
-    bin: primaryProduct?.bin?.split('-').slice(0, 3).join('-') || 'A-01-02',
-    color,
-    size,
-    sku: fullSku,
-    qty: order.qty || 1,
+      orderItems[0]?.image || primaryLine?.imageUrl || primaryProduct?.imageUrl || PRESET_THUMBNAILS[0].url,
+    bin: orderItems[0]?.bin || primaryProduct?.bin?.split('-').slice(0, 3).join('-') || 'A-01-02',
+    color: orderItems[0]?.color || color,
+    size: orderItems[0]?.size || size,
+    sku: orderItems[0]?.sku || fullSku,
+    qty: order.qty || orderItems.reduce((acc, it) => acc + it.qty, 0),
     stockAvailable: Math.max(0, primaryProduct?.stock ?? 50),
+    items: orderItems,
     memoCode: order.memoCode || 'MEMO-DEFAULT',
     resellerName: matchedMemo?.resellerName || merchantName,
     resellerPhone: matchedMemo?.phone || profile.phone || '01712-345678',
     resellerAddress: matchedMemo?.address || profile.location || 'Dhaka, Bangladesh',
     resellerLogo: matchedMemo?.logoUrl || profile.logoUrl,
-    codAmount: order.codAmount ?? order.amount,
+    codAmount: calculatedCod,
+    subtotal: calculatedSubtotal,
+    deliveryFee: calculatedDeliveryFee,
+    discount: calculatedDiscount,
+    advancePayment: calculatedAdvancePayment,
+    paymentStatus: order.paymentStatus ?? (order.status === 'DELIVERED' ? 'Paid' : 'Unpaid'),
     courier: validCourier,
     trackingCode: order.trackingId,
     stage: stageMap[order.status] || 'PICK',
@@ -1287,17 +1433,23 @@ export function syncMerchantOrderCreatedToAdmin(
     const adminOrders = getStoredAdminOrders();
     const orderId = order.orderNumber || order.id;
 
-    if (!adminOrders.some((ao) => ao.id === orderId)) {
-      const pipelineOrder = convertMerchantOrderToWarehouse(
-        order,
-        merchantProducts,
-        memoList,
-        profile
-      );
-      const nextAdminOrders = [pipelineOrder, ...adminOrders];
-      localStorage.setItem(STORAGE_KEY_ORDERS, JSON.stringify(nextAdminOrders));
-    }
+    const pipelineOrder = convertMerchantOrderToWarehouse(
+      order,
+      merchantProducts,
+      memoList,
+      profile
+    );
 
+    // Update existing or prepend new order with full items array preserved
+    const existingIndex = adminOrders.findIndex((ao) => ao.id === orderId);
+    let nextAdminOrders: WarehousePipelineOrder[];
+    if (existingIndex >= 0) {
+      nextAdminOrders = [...adminOrders];
+      nextAdminOrders[existingIndex] = pipelineOrder;
+    } else {
+      nextAdminOrders = [pipelineOrder, ...adminOrders];
+    }
+    localStorage.setItem(STORAGE_KEY_ORDERS, JSON.stringify(nextAdminOrders));
     // Deduct stock on matching Admin products
     if (itemsToDeduct.length > 0) {
       const adminProducts = getStoredAdminProducts();

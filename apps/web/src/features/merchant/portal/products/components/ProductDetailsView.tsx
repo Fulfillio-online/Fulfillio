@@ -13,13 +13,21 @@ import {
   Layers,
   Printer,
 } from 'lucide-react';
-import { MerchantProductItem } from '../../types';
+import { MerchantProductItem, ResellerMemo, MerchantOrderItem } from '../../types';
+import { ProductOrderListSection } from './ProductOrderListSection';
 import { ManageStockModal } from '../modals/ManageStockModal';
 import { PrintBarcodeModal } from '../../components/modals/PrintBarcodeModal';
 
 interface ProductDetailsViewProps {
   product: MerchantProductItem;
   storeName: string;
+  merchantCode?: string;
+  memos?: ResellerMemo[];
+  onCreateOrder?: (
+    order: MerchantOrderItem,
+    productIdOrItems?: string | { productId: string; qty: number; variantSku?: string }[],
+    qty?: number
+  ) => void;
   onRequestStockAdd: (productId: string, qty: number, note?: string) => void;
   onTriggerToast: (msg: string) => void;
 }
@@ -27,9 +35,13 @@ interface ProductDetailsViewProps {
 export function ProductDetailsView({
   product,
   storeName,
+  merchantCode,
+  memos,
+  onCreateOrder,
   onRequestStockAdd,
   onTriggerToast,
 }: ProductDetailsViewProps) {
+
   const [isStockModalOpen, setIsStockModalOpen] = useState(false);
   const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
 
@@ -75,7 +87,7 @@ export function ProductDetailsView({
           <button
             type="button"
             onClick={() => setIsBarcodeModalOpen(true)}
-            className="px-3 py-1.5 rounded-lg bg-indigo-600/15 hover:bg-indigo-600/25 text-indigo-300 border border-indigo-500/30 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-600/20 dark:hover:bg-indigo-600/30 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
           >
             <Printer className="h-3.5 w-3.5" />
             <span>Print Thermal Sticker</span>
@@ -217,6 +229,16 @@ export function ProductDetailsView({
           </span>
         </div>
       </div>
+
+      {/* Quick Add to Order List & Persistent Order Cart Table */}
+      <ProductOrderListSection
+        product={product}
+        storeName={storeName}
+        merchantCode={merchantCode || 'MC-101'}
+        memos={memos || []}
+        onCreateOrder={onCreateOrder}
+        onTriggerToast={onTriggerToast}
+      />
 
       {/* Main Grid: Left Specs & Right Variants */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

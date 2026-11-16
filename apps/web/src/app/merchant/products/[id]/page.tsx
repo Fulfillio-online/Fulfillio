@@ -12,7 +12,7 @@ interface ProductDetailsPageProps {
 
 export default function ProductDetailsPage({ params }: ProductDetailsPageProps) {
   const { id } = use(params);
-  const { products, profile, requestStockAdd, showToast } = useMerchant();
+  const { products, profile, requestStockAdd, showToast, createOrder, memoList } = useMerchant();
 
   const product = products.find((p) => p.id === id);
 
@@ -40,6 +40,9 @@ export default function ProductDetailsPage({ params }: ProductDetailsPageProps) 
       <ProductDetailsView
         product={product}
         storeName={profile.storeName}
+        merchantCode={profile.merchantCode}
+        memos={memoList}
+        onCreateOrder={createOrder}
         onRequestStockAdd={requestStockAdd}
         onTriggerToast={showToast}
       />

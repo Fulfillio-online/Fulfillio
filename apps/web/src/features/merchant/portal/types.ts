@@ -1,6 +1,7 @@
 export type MerchantTab =
   | 'overview'
   | 'products'
+  | 'categories'
   | 'orders'
   | 'memo-designer'
   | 'inbound'
@@ -10,6 +11,23 @@ export type MerchantTab =
   | 'profile';
 
 export type VerificationStatus = 'VERIFIED' | 'PENDING_REVIEW' | 'REJECTED' | 'UNVERIFIED';
+
+export interface MerchantSubcategoryItem {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  createdAt?: string;
+}
+
+export interface MerchantCategoryItem {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  subcategories: MerchantSubcategoryItem[];
+  createdAt?: string;
+}
 
 export interface PayoutAccount {
   provider: string;

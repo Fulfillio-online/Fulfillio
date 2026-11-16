@@ -3,8 +3,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Store, Plus, ChevronRight, ChevronLeft, PackageOpen, ArrowUpRight } from 'lucide-react';
+import { Store, Plus, ChevronRight, ChevronLeft, PackageOpen, ArrowUpRight, FolderTree, ShoppingCart } from 'lucide-react';
 import { MerchantOrderItem, MerchantProductItem } from '../types';
+import { useMerchant } from '../MerchantContext';
 import {
   ProductFilterTab,
   ProductSortOption,
@@ -108,14 +109,19 @@ export function MerchantProductsTab({
   const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
   const [barcodeProduct, setBarcodeProduct] = useState<MerchantProductItem | null>(null);
 
+  const { categories: storeCategories = [] } = useMerchant();
+
   // Category options extraction
   const categories = useMemo(() => {
     const set = new Set<string>();
+    storeCategories.forEach((c) => {
+      if (c.name) set.add(c.name);
+    });
     products.forEach((p) => {
       if (p.category) set.add(p.category);
     });
     return Array.from(set);
-  }, [products]);
+  }, [storeCategories, products]);
 
   // Dynamic Statistics
   const stats: ProductStats = useMemo(() => {
@@ -310,6 +316,15 @@ export function MerchantProductsTab({
             <ArrowUpRight className="h-4 w-4 text-emerald-500" />
             <span>Request Restock / Return</span>
           </button>
+
+          <Link
+            href="/merchant/orders"
+            className="px-4 py-2.5 bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-navy-900 dark:text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 border border-slate-200/80 dark:border-white/10 transition-all cursor-pointer shadow-xs active:scale-95"
+            title="Go to Orders"
+          >
+            <ShoppingCart className="h-4 w-4 text-orange-600 dark:text-orange-500" />
+            <span>Orders</span>
+          </Link>
 
           <Link
             href="/merchant/products/new"
