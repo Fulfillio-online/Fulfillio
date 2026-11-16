@@ -324,7 +324,7 @@ export function MerchantOrdersTab({
                 setActiveTab('ALL');
                 setCurrentPage(1);
               }}
-              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-navy-800 dark:hover:bg-navy-700 text-slate-700 dark:text-navy-900 dark:text-white border border-slate-200 dark:border-white/10 rounded-lg text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer"
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-navy-800 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer"
             >
               <SlidersHorizontal className="h-3.5 w-3.5 text-slate-400" />
               <span>Filters</span>
@@ -342,7 +342,7 @@ export function MerchantOrdersTab({
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
               activeTab === 'ALL'
                 ? 'bg-slate-100 dark:bg-navy-800 text-navy-900 dark:text-white border border-slate-200 dark:border-white/10'
-                : 'text-slate-400 hover:text-navy-900 dark:text-white hover:bg-slate-50/80 dark:hover:bg-navy-800/40'
+                : 'text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-navy-800/60'
             }`}
           >
             All Orders ({stats.total})
@@ -355,7 +355,7 @@ export function MerchantOrdersTab({
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
               activeTab === 'PENDING'
                 ? 'bg-slate-100 dark:bg-navy-800 text-navy-900 dark:text-white border border-slate-200 dark:border-white/10'
-                : 'text-slate-400 hover:text-navy-900 dark:text-white hover:bg-slate-50/80 dark:hover:bg-navy-800/40'
+                : 'text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-navy-800/60'
             }`}
           >
             Pending ({stats.pending})
@@ -368,7 +368,7 @@ export function MerchantOrdersTab({
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
               activeTab === 'PROCESSING'
                 ? 'bg-slate-100 dark:bg-navy-800 text-navy-900 dark:text-white border border-slate-200 dark:border-white/10'
-                : 'text-slate-400 hover:text-navy-900 dark:text-white hover:bg-slate-50/80 dark:hover:bg-navy-800/40'
+                : 'text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-navy-800/60'
             }`}
           >
             Processing ({stats.processing})
@@ -381,7 +381,7 @@ export function MerchantOrdersTab({
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
               activeTab === 'COURIER_BOOKED'
                 ? 'bg-slate-100 dark:bg-navy-800 text-navy-900 dark:text-white border border-slate-200 dark:border-white/10'
-                : 'text-slate-400 hover:text-navy-900 dark:text-white hover:bg-slate-50/80 dark:hover:bg-navy-800/40'
+                : 'text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-navy-800/60'
             }`}
           >
             Courier Booked ({stats.courierBooked})
@@ -394,7 +394,7 @@ export function MerchantOrdersTab({
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
               activeTab === 'HANDOVER'
                 ? 'bg-slate-100 dark:bg-navy-800 text-navy-900 dark:text-white border border-slate-200 dark:border-white/10'
-                : 'text-slate-400 hover:text-navy-900 dark:text-white hover:bg-slate-50/80 dark:hover:bg-navy-800/40'
+                : 'text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-navy-800/60'
             }`}
           >
             Handover ({stats.handover})

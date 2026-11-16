@@ -667,7 +667,7 @@ export function MerchantOverviewTab({ memoCount, onSelectTab }: MerchantOverview
                       fill="#10b981"
                       stroke="currentColor"
                       strokeWidth="2.5"
-                      className={`text-white dark:text-navy-900 transition-all duration-300 cursor-pointer ${
+                      className={`text-navy-900 dark:text-white transition-all duration-300 cursor-pointer ${
                         hoveredSlice === 'net' ? 'opacity-100 scale-105 origin-center' : 'opacity-95 hover:opacity-100'
                       }`}
                       onMouseEnter={() => setHoveredSlice('net')}
@@ -682,7 +682,7 @@ export function MerchantOverviewTab({ memoCount, onSelectTab }: MerchantOverview
                       fill="#f59e0b"
                       stroke="currentColor"
                       strokeWidth="2.5"
-                      className={`text-white dark:text-navy-900 transition-all duration-300 cursor-pointer ${
+                      className={`text-navy-900 dark:text-white transition-all duration-300 cursor-pointer ${
                         hoveredSlice === 'courier' ? 'opacity-100 scale-105 origin-center' : 'opacity-95 hover:opacity-100'
                       }`}
                       onMouseEnter={() => setHoveredSlice('courier')}
@@ -697,7 +697,7 @@ export function MerchantOverviewTab({ memoCount, onSelectTab }: MerchantOverview
                       fill="#f43f5e"
                       stroke="currentColor"
                       strokeWidth="2.5"
-                      className={`text-white dark:text-navy-900 transition-all duration-300 cursor-pointer ${
+                      className={`text-navy-900 dark:text-white transition-all duration-300 cursor-pointer ${
                         hoveredSlice === 'fee' ? 'opacity-100 scale-105 origin-center' : 'opacity-95 hover:opacity-100'
                       }`}
                       onMouseEnter={() => setHoveredSlice('fee')}
@@ -715,7 +715,7 @@ export function MerchantOverviewTab({ memoCount, onSelectTab }: MerchantOverview
                       fillOpacity="0.3"
                       stroke="currentColor"
                       strokeWidth="2"
-                      className="text-white dark:text-navy-900"
+                      className="text-navy-900 dark:text-white"
                     />
                     <path
                       d={getPieSectorPath(pieCx, pieCy, pieR, 297, 342)}
@@ -723,7 +723,7 @@ export function MerchantOverviewTab({ memoCount, onSelectTab }: MerchantOverview
                       fillOpacity="0.3"
                       stroke="currentColor"
                       strokeWidth="2"
-                      className="text-white dark:text-navy-900"
+                      className="text-navy-900 dark:text-white"
                     />
                     <path
                       d={getPieSectorPath(pieCx, pieCy, pieR, 342, 360)}
@@ -731,7 +731,7 @@ export function MerchantOverviewTab({ memoCount, onSelectTab }: MerchantOverview
                       fillOpacity="0.3"
                       stroke="currentColor"
                       strokeWidth="2"
-                      className="text-white dark:text-navy-900"
+                      className="text-navy-900 dark:text-white"
                     />
                   </>
                 )}

@@ -164,7 +164,7 @@ export function MerchantOrderDetailsTab({
           <div className="flex items-center gap-3 flex-wrap">
             <button
               onClick={() => router.push('/merchant/orders')}
-              className="p-1.5 hover:bg-slate-100 dark:bg-navy-800 rounded-lg text-slate-400 hover:text-navy-900 dark:text-white transition-colors cursor-pointer"
+              className="p-1.5 hover:bg-slate-100 dark:bg-navy-800 rounded-lg text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white transition-colors cursor-pointer"
               title="Back to Orders"
             >
               <ArrowLeft className="h-5 w-5" />
