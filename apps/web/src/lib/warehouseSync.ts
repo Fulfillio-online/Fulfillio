@@ -24,11 +24,18 @@ import { MerchantMemoItem } from '@/features/admin/merchants/types';
 import { ALL_MEMOS, STORAGE_KEY as STORAGE_KEY_MERCHANTS_DIRECTORY } from '@/features/admin/merchants/mockData';
 
 export const STORAGE_KEY_ADMIN_MEMOS = 'fulfillio_admin_memos_v1';
-import { WarehouseProductItem } from '@/features/admin/products/types';
+import { StockMovementRecord, WarehouseProductItem, InboundStockReplenishment, StockWithdrawalRequest } from '@/features/admin/products/types';
 import {
   INITIAL_PRODUCTS,
+  INITIAL_STOCK_MOVEMENTS,
   PRESET_THUMBNAILS,
   STORAGE_KEY_PRODUCTS,
+  STORAGE_KEY_STOCK_LEDGER,
+  STORAGE_KEY_STOCK_WITHDRAWALS,
+  INITIAL_STOCK_REPLENISHMENTS,
+  INITIAL_STOCK_WITHDRAWALS,
+  cleanBinCode,
+  generateDigitalProofHash,
 } from '@/features/admin/products/mockData';
 import { CourierPartner, OrderStage, WarehousePipelineOrder } from '@/features/admin/orders/types';
 import { INITIAL_PIPELINE_ORDERS, STORAGE_KEY_ORDERS } from '@/features/admin/orders/mockData';
@@ -1079,10 +1086,15 @@ export function syncAdminProductsToMerchant(
           variantsList: matchedAdmin.variantsList ?? mp.variantsList,
           description: matchedAdmin.description ?? mp.description,
           bin: matchedAdmin.status === 'APPROVED' ? matchedAdmin.binCode : 'Pending Approval',
+          // Admin approval publishes a pending product; a merchant-made DRAFT is preserved.
           status:
             matchedAdmin.status === 'APPROVED'
-              ? ('PUBLISHED' as const)
-              : ('PENDING_APPROVAL' as const),
+              ? mp.status === 'DRAFT'
+                ? ('DRAFT' as const)
+                : ('PUBLISHED' as const)
+              : matchedAdmin.status === 'DRAFT' || matchedAdmin.isDraft
+                ? ('DRAFT' as const)
+                : ('PENDING_APPROVAL' as const),
         };
       });
 
@@ -1514,19 +1526,20 @@ export function getSyncedMerchantDirectoryLists(
     const adminProds = reconcileAdminProductsWithMerchant(getStoredAdminProducts());
     const adminOrders = reconcileAdminOrdersWithMerchant(getStoredAdminOrders());
 
+    // Approved AND pending-approval products are both visible under their merchant.
     const extraProds: import('@/features/admin/merchants/types').MerchantProductItem[] = adminProds
       .filter(
         (ap) =>
-          ap.status === 'APPROVED' &&
+          (ap.status === 'APPROVED' || ap.status === 'PENDING_APPROVAL') &&
           !baseProducts.some((bp) => bp.sku === ap.fullSku || bp.id === ap.id)
       )
       .map((ap) => ({
         id: ap.id,
         merchantCode: ap.merchantCode,
         title: ap.title,
-        category: ap.category === 'Accessories' ? 'Beauty' : ap.category,
+        category: ap.category as any,
         sku: ap.fullSku,
-        barcode: `890${Math.floor(1000000000 + Math.random() * 9000000000)}`,
+        barcode: ap.barcode || `890${Math.floor(1000000000 + Math.random() * 9000000000)}`,
         color: ap.color,
         size: ap.size,
         price: ap.price,
@@ -1534,8 +1547,9 @@ export function getSyncedMerchantDirectoryLists(
         stock: ap.stock,
         reserved: 0,
         damaged: 0,
-        bin: ap.binCode,
+        bin: ap.status === 'PENDING_APPROVAL' ? 'Pending Approval' : ap.binCode,
         imageUrl: ap.imageUrl,
+        status: ap.status === 'PENDING_APPROVAL' ? ('PENDING_APPROVAL' as const) : ('APPROVED' as const),
       }));
 
     const syncedProds = [
@@ -1807,5 +1821,548 @@ export function getSyncedMerchantMemos(baseMemos: MerchantMemoItem[]): MerchantM
     return Array.from(memoMap.values());
   } catch {
     return baseMemos;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Admin Merchant Profile -> Warehouse catalog actions
+// (approve / reject pending submissions, stock adjust, admin-created products)
+// ---------------------------------------------------------------------------
+
+function emitWarehouseSync(source: string): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('fulfillio-warehouse-sync', { detail: { source } }));
+}
+
+function loadAdminProductsReconciled(): WarehouseProductItem[] {
+  return reconcileAdminProductsWithMerchant(getStoredAdminProducts());
+}
+
+function appendStockLedgerRecord(
+  movement: Omit<StockMovementRecord, 'id' | 'timestamp' | 'digitalProofHash' | 'verifiedAt'>
+): void {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_STOCK_LEDGER);
+    let ledger: StockMovementRecord[] = INITIAL_STOCK_MOVEMENTS;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) ledger = parsed;
+    }
+    const now = new Date();
+    const timeStr = `${now.toLocaleDateString('en-CA')} ${now.toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+    })}`;
+    const id = `PRF-${now.getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const record: StockMovementRecord = {
+      ...movement,
+      id,
+      timestamp: timeStr,
+      digitalProofHash: generateDigitalProofHash(
+        `${id}-${movement.sku}-${movement.deltaQty}-${timeStr}`
+      ),
+      verifiedAt: timeStr,
+    };
+    localStorage.setItem(STORAGE_KEY_STOCK_LEDGER, JSON.stringify([record, ...ledger]));
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Admin approves a merchant-submitted product: it becomes APPROVED (published) in the
+ * warehouse catalog and is pushed back to the merchant as PUBLISHED.
+ */
+export function approveAdminProductSubmission(
+  productId: string,
+  finalQty: number,
+  finalBin: string
+): WarehouseProductItem | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const current = loadAdminProductsReconciled();
+    const target = current.find((p) => p.id === productId);
+    if (!target) return null;
+
+    const qty = Math.max(0, Math.floor(finalQty));
+    const bin = cleanBinCode(finalBin) || 'A-01-02';
+    const approved: WarehouseProductItem = {
+      ...target,
+      status: 'APPROVED',
+      isDraft: false,
+      binCode: bin,
+      stock: qty,
+      submittedAt: 'Approved just now',
+    };
+    const next = current.map((p) => (p.id === productId ? approved : p));
+    localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+    syncAdminProductsToMerchant(next);
+
+    appendStockLedgerRecord({
+      type: 'INITIAL_INTAKE',
+      merchantCode: target.merchantCode,
+      merchantName: target.merchantName,
+      productId: target.id,
+      productTitle: target.title,
+      sku: target.fullSku,
+      deltaQty: qty,
+      previousStock: 0,
+      newStock: qty,
+      binCode: bin,
+      referenceDocType: 'INWARD_CHALLAN',
+      referenceNumber: `CHL-${Date.now().toString().slice(-6)}`,
+      operator: 'Warehouse Receiving Officer',
+      carrierOrCourier: 'Initial Catalog Intake Consignment',
+      notes: `Catalog submission approved. Slotted ${qty} units into Bin ${bin}.`,
+    });
+
+    emitWarehouseSync('AdminMerchantDirectory');
+    return approved;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Admin rejects a pending submission: removed from the warehouse catalog and from the merchant.
+ */
+export function rejectAdminProductSubmission(productId: string): WarehouseProductItem | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const current = loadAdminProductsReconciled();
+    const target = current.find((p) => p.id === productId);
+    if (!target) return null;
+    const next = current.filter((p) => p.id !== productId);
+    localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+    syncAdminProductsToMerchant(next, [target]);
+    emitWarehouseSync('AdminMerchantDirectory');
+    return target;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Persist a +/- stock adjustment for an approved warehouse product.
+ * Returns false when the product is not in the warehouse catalog (or is still pending).
+ */
+export function adjustAdminProductStock(productId: string, delta: number): boolean {
+  if (typeof window === 'undefined' || delta === 0) return false;
+  try {
+    const current = loadAdminProductsReconciled();
+    const target = current.find((p) => p.id === productId);
+    if (!target || target.status === 'PENDING_APPROVAL') return false;
+
+    const previous = target.stock;
+    const nextStock = Math.max(0, previous + delta);
+    const next = current.map((p) => (p.id === productId ? { ...p, stock: nextStock } : p));
+    localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+    syncAdminProductsToMerchant(next);
+
+    appendStockLedgerRecord({
+      type: 'AUDIT_ADJUSTMENT',
+      merchantCode: target.merchantCode,
+      merchantName: target.merchantName,
+      productId: target.id,
+      productTitle: target.title,
+      sku: target.fullSku,
+      deltaQty: nextStock - previous,
+      previousStock: previous,
+      newStock: nextStock,
+      binCode: target.binCode,
+      referenceDocType: 'INTERNAL_AUDIT',
+      referenceNumber: `AUD-${Date.now().toString().slice(-6)}`,
+      operator: 'Warehouse Inventory Controller',
+      carrierOrCourier: 'Internal Shelf Cycle Count',
+      notes: `Manual stock adjustment of ${delta > 0 ? `+${delta}` : delta} pcs.`,
+    });
+
+    emitWarehouseSync('AdminMerchantDirectory');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Admin adds a product directly under a merchant (already approved / published).
+ */
+export function addAdminCatalogProductForMerchant(
+  item: import('@/features/admin/merchants/types').MerchantProductItem,
+  merchantName: string
+): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const current = loadAdminProductsReconciled();
+    const { shortSku, fullSku } = normalizeFullSku(item.sku, item.merchantCode);
+    const created: WarehouseProductItem = {
+      id: item.id,
+      title: item.title,
+      category: item.category === 'Beauty' ? 'Accessories' : item.category,
+      merchantCode: item.merchantCode,
+      merchantName,
+      shortSku,
+      fullSku,
+      color: item.color,
+      size: item.size,
+      binCode: cleanBinCode(item.bin) || 'A-01-02',
+      stock: item.stock,
+      price: item.price,
+      status: 'APPROVED',
+      submittedAt: 'Added by admin',
+      imageUrl: item.imageUrl || PRESET_THUMBNAILS[0].url,
+      barcode: item.barcode,
+    };
+    const next = [created, ...current];
+    localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+    syncAdminProductsToMerchant(next);
+    emitWarehouseSync('AdminMerchantDirectory');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+
+/**
+ * Sync Merchant Inbound Restock or Stock Return / Recall request to Admin Storage
+ */
+export function syncMerchantStockRequestToAdmin(
+  request: StockRequestItem,
+  profile: MerchantProfileData
+): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const isReturn = request.type === 'RETURN';
+    if (isReturn) {
+      const raw = localStorage.getItem(STORAGE_KEY_STOCK_WITHDRAWALS);
+      let list: StockWithdrawalRequest[] = INITIAL_STOCK_WITHDRAWALS;
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) list = parsed;
+      }
+      const existingIdx = list.findIndex((w) => w.id === request.id);
+      const withdrawalItem: StockWithdrawalRequest = {
+        id: request.id,
+        productId: request.productId,
+        productTitle: request.productTitle,
+        productSku: request.productSku,
+        merchantCode: profile.merchantCode,
+        merchantName: profile.storeName,
+        category: 'Fashion',
+        currentStock: request.currentStock,
+        withdrawQty: request.requestedQty,
+        binCode: 'A-01-04',
+        status: request.status,
+        reason: request.reason || request.note || 'Merchant requested stock return to outlet.',
+        destination: request.destination,
+        trackingRef: request.trackingRef || `RET-${Date.now().toString().slice(-6)}`,
+        submittedAt: 'Just now',
+        imageUrl: request.imageUrl || PRESET_THUMBNAILS[0].url,
+      };
+      const next = existingIdx >= 0
+        ? list.map((w, idx) => (idx === existingIdx ? withdrawalItem : w))
+        : [withdrawalItem, ...list];
+      localStorage.setItem(STORAGE_KEY_STOCK_WITHDRAWALS, JSON.stringify(next));
+    } else {
+      const raw = localStorage.getItem(STORAGE_KEY_STOCK_REQUESTS);
+      let list: InboundStockReplenishment[] = INITIAL_STOCK_REPLENISHMENTS;
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) list = parsed;
+      }
+      const existingIdx = list.findIndex((r) => r.id === request.id);
+      const replenishmentItem: InboundStockReplenishment = {
+        id: request.id,
+        productId: request.productId,
+        productTitle: request.productTitle,
+        productSku: request.productSku,
+        merchantCode: profile.merchantCode,
+        merchantName: profile.storeName,
+        category: 'Fashion',
+        currentStock: request.currentStock,
+        requestedQty: request.requestedQty,
+        binCode: 'A-01-02',
+        status: request.status,
+        note: request.note || 'Merchant inbound restock consignment',
+        trackingRef: request.trackingRef || `INB-${Date.now().toString().slice(-6)}`,
+        submittedAt: 'Just now',
+        imageUrl: request.imageUrl || PRESET_THUMBNAILS[0].url,
+      };
+      const next = existingIdx >= 0
+        ? list.map((r, idx) => (idx === existingIdx ? replenishmentItem : r))
+        : [replenishmentItem, ...list];
+      localStorage.setItem(STORAGE_KEY_STOCK_REQUESTS, JSON.stringify(next));
+    }
+    emitWarehouseSync('MerchantStockRequest');
+  } catch {}
+}
+
+/**
+ * Admin approves Inbound Stock Replenishment: adds stock to warehouse catalog,
+ * syncs to merchant, updates replenishment status, logs to audit ledger.
+ */
+export function approveAdminStockReplenishment(
+  replenishmentId: string,
+  finalQty: number,
+  targetBin: string
+): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const rawRepl = localStorage.getItem(STORAGE_KEY_STOCK_REQUESTS);
+    let replenishments: InboundStockReplenishment[] = INITIAL_STOCK_REPLENISHMENTS;
+    if (rawRepl) {
+      const parsed = JSON.parse(rawRepl);
+      if (Array.isArray(parsed) && parsed.length > 0) replenishments = parsed;
+    }
+    const target = replenishments.find((r) => r.id === replenishmentId);
+    if (!target) return false;
+
+    const cleanBin = cleanBinCode(targetBin) || target.binCode || 'A-01-02';
+
+    // 1. Update product stock in warehouse catalog
+    const prods = loadAdminProductsReconciled();
+    const updatedProds = prods.map((p) => {
+      if (p.id === target.productId || p.fullSku === target.productSku) {
+        return {
+          ...p,
+          stock: p.stock + finalQty,
+          binCode: cleanBin,
+        };
+      }
+      return p;
+    });
+    localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(updatedProds));
+    syncAdminProductsToMerchant(updatedProds);
+
+    // 2. Mark replenishment as APPROVED in admin storage
+    const updatedRepls = replenishments.map((r) =>
+      r.id === replenishmentId
+        ? {
+            ...r,
+            status: 'APPROVED' as const,
+            requestedQty: finalQty,
+            binCode: cleanBin,
+          }
+        : r
+    );
+    localStorage.setItem(STORAGE_KEY_STOCK_REQUESTS, JSON.stringify(updatedRepls));
+
+    // 3. Update merchant's scoped stock requests
+    const merchantKey = getMerchantStockRequestsKey(target.merchantCode);
+    const rawMerchantReqs = localStorage.getItem(merchantKey);
+    if (rawMerchantReqs) {
+      try {
+        const parsedM = JSON.parse(rawMerchantReqs);
+        if (Array.isArray(parsedM)) {
+          const nextM = parsedM.map((mr) =>
+            mr.id === replenishmentId || mr.productId === target.productId
+              ? { ...mr, status: 'APPROVED' as const, requestedQty: finalQty }
+              : mr
+          );
+          localStorage.setItem(merchantKey, JSON.stringify(nextM));
+        }
+      } catch {}
+    }
+
+    // 4. Append stock movement ledger entry
+    appendStockLedgerRecord({
+      type: 'RESTOCK',
+      merchantCode: target.merchantCode,
+      merchantName: target.merchantName,
+      productId: target.productId,
+      productTitle: target.productTitle,
+      sku: target.productSku,
+      deltaQty: finalQty,
+      previousStock: target.currentStock,
+      newStock: target.currentStock + finalQty,
+      binCode: cleanBin,
+      referenceDocType: 'INWARD_CHALLAN',
+      referenceNumber: target.trackingRef || `CHL-${Date.now().toString().slice(-6)}`,
+      operator: 'Receiving Dock Officer',
+      carrierOrCourier: target.note || 'Steadfast Cargo Consignment',
+      notes: `Restock consignment received. Slotted ${finalQty} units into Bin ${cleanBin}.`,
+    });
+
+    emitWarehouseSync('AdminInboundIntake');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Admin rejects Inbound Stock Replenishment
+ */
+export function rejectAdminStockReplenishment(replenishmentId: string): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const rawRepl = localStorage.getItem(STORAGE_KEY_STOCK_REQUESTS);
+    let replenishments: InboundStockReplenishment[] = INITIAL_STOCK_REPLENISHMENTS;
+    if (rawRepl) {
+      const parsed = JSON.parse(rawRepl);
+      if (Array.isArray(parsed)) replenishments = parsed;
+    }
+    const target = replenishments.find((r) => r.id === replenishmentId);
+    if (!target) return false;
+
+    const updatedRepls = replenishments.map((r) =>
+      r.id === replenishmentId ? { ...r, status: 'REJECTED' as const } : r
+    );
+    localStorage.setItem(STORAGE_KEY_STOCK_REQUESTS, JSON.stringify(updatedRepls));
+
+    // Also update merchant scoped
+    const merchantKey = getMerchantStockRequestsKey(target.merchantCode);
+    const rawM = localStorage.getItem(merchantKey);
+    if (rawM) {
+      try {
+        const parsedM = JSON.parse(rawM);
+        if (Array.isArray(parsedM)) {
+          const nextM = parsedM.map((mr) =>
+            mr.id === replenishmentId ? { ...mr, status: 'REJECTED' as const } : mr
+          );
+          localStorage.setItem(merchantKey, JSON.stringify(nextM));
+        }
+      } catch {}
+    }
+
+    emitWarehouseSync('AdminInboundIntake');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Admin approves Merchant Stock Return / Recall: deducts stock from warehouse catalog,
+ * syncs to merchant, issues delivery gate pass, logs to audit ledger.
+ */
+export function approveAdminStockWithdrawal(
+  withdrawalId: string,
+  approvedQty?: number
+): { ok: boolean; gatePassNo?: string } {
+  if (typeof window === 'undefined') return { ok: false };
+  try {
+    const rawWith = localStorage.getItem(STORAGE_KEY_STOCK_WITHDRAWALS);
+    let withdrawals: StockWithdrawalRequest[] = INITIAL_STOCK_WITHDRAWALS;
+    if (rawWith) {
+      const parsed = JSON.parse(rawWith);
+      if (Array.isArray(parsed) && parsed.length > 0) withdrawals = parsed;
+    }
+    const target = withdrawals.find((w) => w.id === withdrawalId);
+    if (!target) return { ok: false };
+
+    const withdrawAmount = approvedQty && approvedQty > 0 ? approvedQty : target.withdrawQty;
+    const gatePassNo = `GP-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    // 1. Deduct stock from warehouse catalog
+    const prods = loadAdminProductsReconciled();
+    const updatedProds = prods.map((p) => {
+      if (p.id === target.productId || p.fullSku === target.productSku) {
+        return {
+          ...p,
+          stock: Math.max(0, p.stock - withdrawAmount),
+        };
+      }
+      return p;
+    });
+    localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(updatedProds));
+    syncAdminProductsToMerchant(updatedProds);
+
+    // 2. Mark withdrawal as APPROVED in admin storage
+    const updatedWiths = withdrawals.map((w) =>
+      w.id === withdrawalId
+        ? {
+            ...w,
+            status: 'APPROVED' as const,
+            withdrawQty: withdrawAmount,
+            gatePassNo,
+          }
+        : w
+    );
+    localStorage.setItem(STORAGE_KEY_STOCK_WITHDRAWALS, JSON.stringify(updatedWiths));
+
+    // 3. Update merchant's scoped stock requests
+    const merchantKey = getMerchantStockRequestsKey(target.merchantCode);
+    const rawMerchantReqs = localStorage.getItem(merchantKey);
+    if (rawMerchantReqs) {
+      try {
+        const parsedM = JSON.parse(rawMerchantReqs);
+        if (Array.isArray(parsedM)) {
+          const nextM = parsedM.map((mr) =>
+            mr.id === withdrawalId || (mr.productId === target.productId && mr.type === 'RETURN')
+              ? { ...mr, status: 'APPROVED' as const, requestedQty: withdrawAmount, gatePassNo }
+              : mr
+          );
+          localStorage.setItem(merchantKey, JSON.stringify(nextM));
+        }
+      } catch {}
+    }
+
+    // 4. Append stock movement ledger entry
+    appendStockLedgerRecord({
+      type: 'WITHDRAWAL',
+      merchantCode: target.merchantCode,
+      merchantName: target.merchantName,
+      productId: target.productId,
+      productTitle: target.productTitle,
+      sku: target.productSku,
+      deltaQty: -withdrawAmount,
+      previousStock: target.currentStock,
+      newStock: Math.max(0, target.currentStock - withdrawAmount),
+      binCode: target.binCode || 'A-01-04',
+      referenceDocType: 'INTERNAL_AUDIT',
+      referenceNumber: gatePassNo,
+      operator: 'Warehouse Dispatch Controller',
+      carrierOrCourier: 'Merchant Outlet Courier Transfer',
+      notes: `Merchant stock return approved. Issued Gate Pass ${gatePassNo}. Dispatched ${withdrawAmount} units to ${target.destination || 'Merchant Outlet'}. Reason: ${target.reason || 'Recall'}.`,
+    });
+
+    emitWarehouseSync('AdminStockWithdrawal');
+    return { ok: true, gatePassNo };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/**
+ * Admin rejects Merchant Stock Return / Recall
+ */
+export function rejectAdminStockWithdrawal(withdrawalId: string): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const rawWith = localStorage.getItem(STORAGE_KEY_STOCK_WITHDRAWALS);
+    let withdrawals: StockWithdrawalRequest[] = INITIAL_STOCK_WITHDRAWALS;
+    if (rawWith) {
+      const parsed = JSON.parse(rawWith);
+      if (Array.isArray(parsed)) withdrawals = parsed;
+    }
+    const target = withdrawals.find((w) => w.id === withdrawalId);
+    if (!target) return false;
+
+    const updatedWiths = withdrawals.map((w) =>
+      w.id === withdrawalId ? { ...w, status: 'REJECTED' as const } : w
+    );
+    localStorage.setItem(STORAGE_KEY_STOCK_WITHDRAWALS, JSON.stringify(updatedWiths));
+
+    // Also update merchant scoped
+    const merchantKey = getMerchantStockRequestsKey(target.merchantCode);
+    const rawM = localStorage.getItem(merchantKey);
+    if (rawM) {
+      try {
+        const parsedM = JSON.parse(rawM);
+        if (Array.isArray(parsedM)) {
+          const nextM = parsedM.map((mr) =>
+            mr.id === withdrawalId ? { ...mr, status: 'REJECTED' as const } : mr
+          );
+          localStorage.setItem(merchantKey, JSON.stringify(nextM));
+        }
+      } catch {}
+    }
+
+    emitWarehouseSync('AdminStockWithdrawal');
+    return true;
+  } catch {
+    return false;
   }
 }

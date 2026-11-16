@@ -205,14 +205,24 @@ export function MerchantOrdersTab({
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
           <button
+            type="button"
             onClick={handleExportCsv}
-            className="flex-1 sm:flex-initial px-4 py-2 bg-white dark:bg-navy-900 hover:bg-slate-50 dark:hover:bg-navy-800 border border-slate-200 dark:border-white/10 text-navy-900 dark:text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors shadow-xs cursor-pointer hover:border-orange-500/30"
+            className="flex-1 sm:flex-initial px-4 py-2.5 bg-white dark:bg-navy-900 hover:bg-slate-50 dark:hover:bg-navy-800 border border-slate-200 dark:border-white/10 text-navy-900 dark:text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors shadow-xs cursor-pointer hover:border-orange-500/30"
             title="Export orders to Excel (.csv)"
           >
             <Download className="h-4 w-4 text-orange-600 dark:text-orange-400" />
             <span>Export to Excel</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsCreateOrderOpen(true)}
+            className="flex-1 sm:flex-initial px-4 py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-md shadow-orange-500/20 transition-all cursor-pointer active:scale-95"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Create Order</span>
           </button>
         </div>
       </div>
@@ -699,7 +709,15 @@ export function MerchantOrdersTab({
         </Link>
       </div>
 
-
+      {/* Create Manual Order Modal */}
+      <CreateManualOrderModal
+        isOpen={isCreateOrderOpen}
+        onClose={() => setIsCreateOrderOpen(false)}
+        products={products}
+        memoList={memoList}
+        onCreateOrder={onCreateOrder}
+        onTriggerToast={onTriggerToast}
+      />
     </div>
   );
 }

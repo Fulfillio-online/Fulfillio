@@ -50,15 +50,23 @@ export interface ProductStats {
   pendingRequests?: number;
 }
 
+export type StockRequestType = 'RESTOCK' | 'RETURN';
+
 export interface StockRequestItem {
   id: string;
   productId: string;
   productTitle: string;
   productSku: string;
+  type?: StockRequestType;
   requestedQty: number;
   currentStock: number;
   status: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
   note?: string;
+  reason?: string;
+  destination?: string;
+  carrier?: string;
+  trackingRef?: string;
+  gatePassNo?: string;
   createdAt: string;
   imageUrl?: string;
 }
@@ -70,7 +78,7 @@ export interface ProductTableProps {
   onToggleSelect: (id: string) => void;
   onToggleSelectAll: () => void;
   onToggleStatus: (id: string) => void;
-  onManageStock: (product: MerchantProductItem) => void;
+  onManageStock: (product: MerchantProductItem, initialMode?: StockRequestType) => void;
   onViewDetails: (product: MerchantProductItem) => void;
   onEditProduct: (product: MerchantProductItem) => void;
   onPrintBarcode: (product: MerchantProductItem) => void;

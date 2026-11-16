@@ -1,4 +1,4 @@
-export type WarehouseProductSubTab = 'all' | 'approval' | 'bins' | 'ledger';
+export type WarehouseProductSubTab = 'all' | 'approval' | 'bins' | 'ledger' | 'public' | 'out_of_stock' | 'draft' | 'ALL' | 'APPROVAL' | 'PUBLIC' | 'OUT_OF_STOCK' | 'DRAFT' | string;
 
 export type InboundApprovalType = 'NEW_PRODUCT' | 'RESTOCK' | 'WITHDRAWAL';
 
@@ -44,7 +44,7 @@ export interface MerchantInfo {
 export interface WarehouseProductItem {
   id: string;
   title: string;
-  category: 'Apparel' | 'Footwear' | 'Electronics' | 'Accessories';
+  category: 'Fashion' | 'Apparel' | 'Footwear' | 'Electronics' | 'Accessories' | string;
   merchantCode: string;
   merchantName: string;
   shortSku: string;
@@ -80,7 +80,7 @@ export interface InboundStockReplenishment {
   productSku: string;
   merchantCode: string;
   merchantName: string;
-  category: 'Apparel' | 'Footwear' | 'Electronics' | 'Accessories';
+  category: 'Fashion' | 'Apparel' | 'Footwear' | 'Electronics' | 'Accessories' | string;
   currentStock: number;
   requestedQty: number;
   binCode: string;
@@ -98,12 +98,14 @@ export interface StockWithdrawalRequest {
   productSku: string;
   merchantCode: string;
   merchantName: string;
-  category: 'Apparel' | 'Footwear' | 'Electronics' | 'Accessories';
+  category: 'Fashion' | 'Apparel' | 'Footwear' | 'Electronics' | 'Accessories' | string;
   currentStock: number;
   withdrawQty: number;
   binCode: string;
   status: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
   reason?: string;
+  destination?: string;
+  gatePassNo?: string;
   trackingRef?: string;
   submittedAt: string;
   imageUrl: string;
@@ -114,7 +116,7 @@ export interface UnifiedApprovalItem {
   approvalType: InboundApprovalType;
   productId?: string;
   title: string;
-  category: 'Apparel' | 'Footwear' | 'Electronics' | 'Accessories';
+  category: 'Fashion' | 'Apparel' | 'Footwear' | 'Electronics' | 'Accessories' | string;
   merchantCode: string;
   merchantName: string;
   sku: string;

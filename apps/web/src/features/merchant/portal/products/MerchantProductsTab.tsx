@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Store, Plus, ChevronRight, ChevronLeft, PackageOpen } from 'lucide-react';
+import { Store, Plus, ChevronRight, ChevronLeft, PackageOpen, ArrowUpRight } from 'lucide-react';
 import { MerchantOrderItem, MerchantProductItem } from '../types';
 import {
   ProductFilterTab,
@@ -11,7 +11,9 @@ import {
   ProductViewMode,
   ProductStats,
   StockRequestItem,
+  StockRequestType,
 } from './types';
+import { SubmitStockRequestPayload } from './modals/ManageStockModal';
 import { ProductStatsGrid } from './components/ProductStatsGrid';
 import { ProductStatusTabs } from './components/ProductStatusTabs';
 import { ProductToolbar } from './components/ProductToolbar';
@@ -42,6 +44,7 @@ export interface MerchantProductsTabProps {
   onBulkUpdateStatus: (ids: string[], status: 'PUBLISHED' | 'DRAFT') => void;
   onBulkDelete: (ids: string[]) => void;
   onRequestStockAdd?: (productId: string, qty: number, note?: string) => void;
+  onRequestStockOperation?: (payload: SubmitStockRequestPayload) => void;
   onApproveStockRequest?: (requestId: string) => void;
   onCancelStockRequest?: (requestId: string) => void;
   onTriggerToast: (msg: string) => void;
@@ -60,6 +63,7 @@ export function MerchantProductsTab({
   onBulkUpdateStatus,
   onBulkDelete,
   onRequestStockAdd,
+  onRequestStockOperation,
   onApproveStockRequest,
   onCancelStockRequest,
   onTriggerToast,
@@ -95,6 +99,7 @@ export function MerchantProductsTab({
 
   // Modals state for stock adjustment, delete confirmation & thermal barcode
   const [stockModalProduct, setStockModalProduct] = useState<MerchantProductItem | null>(null);
+  const [stockModalInitialMode, setStockModalInitialMode] = useState<StockRequestType>('RESTOCK');
   const [isStockModalOpen, setIsStockModalOpen] = useState(false);
 
   const [deleteProductTarget, setDeleteProductTarget] = useState<MerchantProductItem | null>(null);
@@ -245,8 +250,9 @@ export function MerchantProductsTab({
   };
 
   // Manage Stock Handler
-  const handleOpenManageStock = (p: MerchantProductItem) => {
+  const handleOpenManageStock = (p: MerchantProductItem, mode: StockRequestType = 'RESTOCK') => {
     setStockModalProduct(p);
+    setStockModalInitialMode(mode);
     setIsStockModalOpen(true);
   };
 
@@ -288,11 +294,26 @@ export function MerchantProductsTab({
           </p>
         </div>
 
-        {/* Top Action Button: Add Products */}
-        <div className="flex items-center gap-2.5 w-full sm:w-auto shrink-0">
+        {/* Top Action Buttons: Request Restock/Return + Add Products */}
+        <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              if (products.length > 0) {
+                handleOpenManageStock(products[0], 'RESTOCK');
+              } else {
+                onTriggerToast('Please add products first before requesting restock or returns.');
+              }
+            }}
+            className="px-4 py-2.5 bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-navy-900 dark:text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 border border-slate-200/80 dark:border-white/10 transition-all cursor-pointer shadow-xs active:scale-95"
+          >
+            <ArrowUpRight className="h-4 w-4 text-emerald-500" />
+            <span>Request Restock / Return</span>
+          </button>
+
           <Link
             href="/merchant/products/new"
-            className="w-full sm:w-auto px-4 py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-md shadow-orange-500/20 transition-all cursor-pointer active:scale-95"
+            className="px-4 py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-md shadow-orange-500/20 transition-all cursor-pointer active:scale-95"
           >
             <Plus className="h-4 w-4" />
             <span>Add Products</span>
@@ -500,13 +521,19 @@ export function MerchantProductsTab({
         }}
       />
 
-      {/* Manage Stock / Inbound Restock Request Modal */}
+      {/* Manage Stock / Inbound Restock & Return Request Modal */}
       <ManageStockModal
         isOpen={isStockModalOpen}
         product={stockModalProduct}
+        products={products}
+        initialMode={stockModalInitialMode}
         onClose={() => setIsStockModalOpen(false)}
-        onSubmitRequest={(productId, qty, note) => {
-          onRequestStockAdd?.(productId, qty, note);
+        onSubmitRequest={(payload) => {
+          if (onRequestStockOperation) {
+            onRequestStockOperation(payload);
+          } else {
+            onRequestStockAdd?.(payload.productId, payload.requestedQty, payload.note);
+          }
         }}
       />
 

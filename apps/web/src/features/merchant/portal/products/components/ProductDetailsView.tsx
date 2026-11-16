@@ -361,8 +361,8 @@ export function ProductDetailsView({
         isOpen={isStockModalOpen}
         product={product}
         onClose={() => setIsStockModalOpen(false)}
-        onSubmitRequest={(productId, qty, note) => {
-          onRequestStockAdd(productId, qty, note);
+        onSubmitRequest={(payload) => {
+          onRequestStockAdd(payload.productId, payload.requestedQty, payload.note);
         }}
       />
 

@@ -31,8 +31,8 @@ export function generateDigitalProofHash(seed: string): string {
 }
 
 export const MERCHANTS: MerchantInfo[] = [
-  { code: 'MC-101', name: "Sabbir's Store", categoryFocus: 'Apparel & Bags' },
-  { code: 'MC-102', name: 'Urban Threads BD', categoryFocus: 'Streetwear Apparel' },
+  { code: 'MC-101', name: "Sabbir's Store", categoryFocus: 'Fashion & Bags' },
+  { code: 'MC-102', name: 'Urban Threads BD', categoryFocus: 'Streetwear Fashion' },
   { code: 'MC-103', name: 'Apex Footwear Hub', categoryFocus: 'Footwear & Leather' },
   { code: 'MC-104', name: 'Gadget Freak Online', categoryFocus: 'Consumer Electronics' },
 ];
@@ -109,19 +109,19 @@ export const PRESET_THUMBNAILS: ProductPresetThumbnail[] = [
   {
     id: 'hoodie',
     name: 'Oversized Fleece Hoodie',
-    category: 'Apparel',
+    category: 'Fashion',
     url: createProductSvgDataUri('#064e3b', '#0f172a', '#10b981', 'HOODIE', 'hoodie'),
   },
   {
     id: 'polo',
     name: 'Pique Cotton Polo',
-    category: 'Apparel',
+    category: 'Fashion',
     url: createProductSvgDataUri('#1e3a8a', '#0f172a', '#3b82f6', 'POLO', 'polo'),
   },
   {
     id: 'jacket',
     name: 'Windbreaker Utility Jacket',
-    category: 'Apparel',
+    category: 'Fashion',
     url: createProductSvgDataUri('#312e81', '#0f172a', '#818cf8', 'JACKET', 'jacket'),
   },
   {
@@ -133,13 +133,13 @@ export const PRESET_THUMBNAILS: ProductPresetThumbnail[] = [
   {
     id: 'tee',
     name: 'Oversized Graphic Tee',
-    category: 'Apparel',
+    category: 'Fashion',
     url: createProductSvgDataUri('#4c1d95', '#0f172a', '#c084fc', 'TEE', 'tee'),
   },
   {
     id: 'cargo',
     name: 'Tactical Cargo Pants',
-    category: 'Apparel',
+    category: 'Fashion',
     url: createProductSvgDataUri('#14532d', '#0f172a', '#4ade80', 'CARGO', 'cargo'),
   },
   {
@@ -245,7 +245,7 @@ export const INITIAL_PRODUCTS: WarehouseProductItem[] = [
   {
     id: 'PRD-1001',
     title: 'Drop-Shoulder Heavyweight Fleece Hoodie',
-    category: 'Apparel',
+    category: 'Fashion',
     merchantCode: 'MC-101',
     merchantName: "Sabbir's Store",
     shortSku: 'HEAVY-HOOD-BLK-L',
@@ -262,7 +262,7 @@ export const INITIAL_PRODUCTS: WarehouseProductItem[] = [
   {
     id: 'PRD-1002',
     title: 'Drop-Shoulder Heavyweight Fleece Hoodie',
-    category: 'Apparel',
+    category: 'Fashion',
     merchantCode: 'MC-101',
     merchantName: "Sabbir's Store",
     shortSku: 'HEAVY-HOOD-BLK-M',
@@ -279,7 +279,7 @@ export const INITIAL_PRODUCTS: WarehouseProductItem[] = [
   {
     id: 'PRD-1003',
     title: 'Breathable Honeycomb Pique Polo Shirt',
-    category: 'Apparel',
+    category: 'Fashion',
     merchantCode: 'MC-101',
     merchantName: "Sabbir's Store",
     shortSku: 'PIQUE-POLO-NVY-XL',
@@ -296,7 +296,7 @@ export const INITIAL_PRODUCTS: WarehouseProductItem[] = [
   {
     id: 'PRD-1004',
     title: 'Urban Explorer Waterproof Windbreaker',
-    category: 'Apparel',
+    category: 'Fashion',
     merchantCode: 'MC-102',
     merchantName: 'Urban Threads BD',
     shortSku: 'URBAN-WIND-OLV-L',
@@ -313,7 +313,7 @@ export const INITIAL_PRODUCTS: WarehouseProductItem[] = [
   {
     id: 'PRD-1005',
     title: 'Raw Hem Vintage Acid Wash Tee',
-    category: 'Apparel',
+    category: 'Fashion',
     merchantCode: 'MC-102',
     merchantName: 'Urban Threads BD',
     shortSku: 'ACID-TEE-WSH-M',
@@ -330,7 +330,7 @@ export const INITIAL_PRODUCTS: WarehouseProductItem[] = [
   {
     id: 'PRD-1006',
     title: 'Tactical Multi-Pocket Ripstop Cargo Pants',
-    category: 'Apparel',
+    category: 'Fashion',
     merchantCode: 'MC-102',
     merchantName: 'Urban Threads BD',
     shortSku: 'TACT-CARGO-BLK-32',
@@ -432,7 +432,7 @@ export const INITIAL_PRODUCTS: WarehouseProductItem[] = [
   {
     id: 'PRD-1012',
     title: 'Ultra-Lightweight Packable Down Vest',
-    category: 'Apparel',
+    category: 'Fashion',
     merchantCode: 'MC-102',
     merchantName: 'Urban Threads BD',
     shortSku: 'DOWN-VEST-OLV-M',
@@ -468,7 +468,7 @@ export const INITIAL_PRODUCTS: WarehouseProductItem[] = [
   {
     id: 'PRD-2001',
     title: 'Waterproof Oversized Windbreaker (Batch 2)',
-    category: 'Apparel',
+    category: 'Fashion',
     merchantCode: 'MC-101',
     merchantName: "Sabbir's Store",
     shortSku: 'WIND-PRO-XL',
@@ -485,7 +485,7 @@ export const INITIAL_PRODUCTS: WarehouseProductItem[] = [
   {
     id: 'PRD-2002',
     title: 'Vintage Acid Wash Heavy Hoodie',
-    category: 'Apparel',
+    category: 'Fashion',
     merchantCode: 'MC-102',
     merchantName: 'Urban Threads BD',
     shortSku: 'ACID-HOOD-L',
@@ -543,7 +543,7 @@ export const INITIAL_STOCK_REPLENISHMENTS: InboundStockReplenishment[] = [
     productSku: 'MC-102-DOWN-VEST-OLV-M',
     merchantCode: 'MC-102',
     merchantName: 'Urban Threads BD',
-    category: 'Apparel',
+    category: 'Fashion',
     currentStock: 0,
     requestedQty: 50,
     binCode: 'A-02-01',
@@ -560,7 +560,7 @@ export const INITIAL_STOCK_REPLENISHMENTS: InboundStockReplenishment[] = [
     productSku: 'MC-101-HEAVY-HOOD-BLK-M',
     merchantCode: 'MC-101',
     merchantName: "Sabbir's Store",
-    category: 'Apparel',
+    category: 'Fashion',
     currentStock: 88,
     requestedQty: 30,
     binCode: 'A-01-02',
@@ -574,13 +574,31 @@ export const INITIAL_STOCK_REPLENISHMENTS: InboundStockReplenishment[] = [
 
 export const INITIAL_STOCK_WITHDRAWALS: StockWithdrawalRequest[] = [
   {
+    id: 'SW-4003',
+    productId: 'PRD-1003',
+    productTitle: 'Breathable Honeycomb Pique Polo Shirt',
+    productSku: 'MC-101-PIQUE-POLO-NVY-XL',
+    merchantCode: 'MC-101',
+    merchantName: "Sabbir's Store",
+    category: 'Fashion',
+    currentStock: 210,
+    withdrawQty: 10,
+    binCode: 'A-01-04',
+    status: 'PENDING_APPROVAL',
+    reason: 'Store recall: Merchant recalling 10 units from warehouse stock to outlet.',
+    trackingRef: 'RET-109281',
+    submittedAt: '10 mins ago',
+    imageUrl: PRESET_THUMBNAILS[1].url,
+  },
+
+  {
     id: 'SW-4001',
     productId: 'PRD-1001',
     productTitle: 'Drop-Shoulder Heavyweight Fleece Hoodie',
     productSku: 'MC-101-HEAVY-HOOD-BLK-L',
     merchantCode: 'MC-101',
     merchantName: "Sabbir's Store",
-    category: 'Apparel',
+    category: 'Fashion',
     currentStock: 142,
     withdrawQty: 50,
     binCode: 'A-01-02',
@@ -597,7 +615,7 @@ export const INITIAL_STOCK_WITHDRAWALS: StockWithdrawalRequest[] = [
     productSku: 'MC-102-ACID-TEE-WSH-M',
     merchantCode: 'MC-102',
     merchantName: 'Urban Threads BD',
-    category: 'Apparel',
+    category: 'Fashion',
     currentStock: 195,
     withdrawQty: 40,
     binCode: 'B-01-03',

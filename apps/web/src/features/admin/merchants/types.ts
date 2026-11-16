@@ -26,7 +26,7 @@ export interface MerchantProductItem {
   id: string;
   merchantCode: string;
   title: string;
-  category: 'Apparel' | 'Footwear' | 'Electronics' | 'Beauty';
+  category: 'Fashion' | 'Apparel' | 'Footwear' | 'Electronics' | 'Beauty' | 'Accessories' | string;
   sku: string;
   barcode: string;
   color: string;
@@ -38,6 +38,8 @@ export interface MerchantProductItem {
   damaged: number;
   bin: string;
   imageUrl?: string;
+  /** Catalog lifecycle: absent/APPROVED = live (published); PENDING_APPROVAL = awaiting admin review. */
+  status?: 'APPROVED' | 'PENDING_APPROVAL';
 }
 
 export interface MerchantOrderItem {

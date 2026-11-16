@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, Plus } from 'lucide-react';
 import {
   CourierPartner,
   OrderStage,
@@ -500,13 +500,25 @@ const loadOrders = () => {
       )}
 
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-navy-900 dark:text-white">
-          Warehouse Orders Pipeline
-        </h1>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-          Active warehouse operations: Pick List (Bin Verified) → Pack &amp; 4x6&quot; Print → Courier Dispatch.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-navy-900 dark:text-white">
+            Warehouse Orders Pipeline
+          </h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Active warehouse operations: Pick List (Bin Verified) → Pack &amp; 4x6&quot; Print → Courier Dispatch.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsCreateModalOpen(true)}
+            className="px-4 py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-md shadow-orange-500/20 transition-all cursor-pointer active:scale-95"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Create Order</span>
+          </button>
+        </div>
       </div>
 
       {/* 4 Stage KPI Cards */}

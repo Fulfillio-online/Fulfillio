@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import Image from 'next/image';
 import {
   X,
@@ -113,6 +114,74 @@ export function getOptionStock(
   return match ? match.stock : p.stock || 0;
 }
 
+
+export const POPULAR_COLORS: { name: string; hex: string }[] = [
+  { name: 'Red', hex: '#ef4444' },
+  { name: 'Charcoal Black', hex: '#1e293b' },
+  { name: 'Pure White', hex: '#ffffff' },
+  { name: 'Navy Blue', hex: '#1e3a8a' },
+  { name: 'Royal Blue', hex: '#2563eb' },
+  { name: 'Maroon', hex: '#881337' },
+  { name: 'Olive Green', hex: '#3f6212' },
+  { name: 'Beige', hex: '#d4b996' },
+  { name: 'Grey', hex: '#64748b' },
+  { name: 'Yellow', hex: '#eab308' },
+  { name: 'Pink', hex: '#ec4899' },
+];
+
+export const POPULAR_SIZES: string[] = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', 'Free Size'];
+
+export function getAllColorsForProduct(p?: MerchantProductItem): { name: string; hex: string }[] {
+  const result: { name: string; hex: string }[] = [];
+  const seen = new Set<string>();
+
+  if (p?.colors && p.colors.length > 0) {
+    for (const c of p.colors) {
+      const lower = c.name.toLowerCase().trim();
+      if (!seen.has(lower)) {
+        seen.add(lower);
+        result.push({ name: c.name, hex: c.hex || '#1e293b' });
+      }
+    }
+  }
+
+  for (const c of POPULAR_COLORS) {
+    const lower = c.name.toLowerCase().trim();
+    if (!seen.has(lower)) {
+      seen.add(lower);
+      result.push(c);
+    }
+  }
+
+  return result;
+}
+
+export function getAllSizesForProduct(p?: MerchantProductItem, selectedColor?: string): string[] {
+  const result: string[] = [];
+  const seen = new Set<string>();
+
+  if (p) {
+    const pSizes = getAvailableSizesForColor(p, selectedColor);
+    for (const s of pSizes) {
+      const upper = s.toUpperCase().trim();
+      if (!seen.has(upper)) {
+        seen.add(upper);
+        result.push(s);
+      }
+    }
+  }
+
+  for (const s of POPULAR_SIZES) {
+    const upper = s.toUpperCase().trim();
+    if (!seen.has(upper)) {
+      seen.add(upper);
+      result.push(s);
+    }
+  }
+
+  return result;
+}
+
 export function resolveVariantConfig(
   p: MerchantProductItem,
   colorName?: string,
@@ -126,52 +195,35 @@ export function resolveVariantConfig(
   selectedSize?: string;
   selectedVariantId?: string;
 } {
-  const hasColors = Boolean(p.colors && p.colors.length > 0);
-  const resolvedColor = hasColors
-    ? colorName || p.colors![0]?.name
-    : undefined;
+  const allColors = getAllColorsForProduct(p);
+  const resolvedColor = colorName || p.colors?.[0]?.name || allColors[0]?.name || 'Red';
 
-  const colorObj = hasColors && resolvedColor
-    ? p.colors!.find((c) => c.name === resolvedColor)
-    : undefined;
+  const colorObj = p.colors?.find((c) => c.name.toLowerCase() === resolvedColor.toLowerCase());
   const resolvedImage = colorObj?.imageUrl || p.imageUrl;
 
-  const availableSizes = getAvailableSizesForColor(p, resolvedColor);
-  let resolvedSize: string | undefined = undefined;
-  if (availableSizes.length > 0) {
-    if (sizeOrAttr && availableSizes.includes(sizeOrAttr) && getOptionStock(p, resolvedColor, sizeOrAttr) > 0) {
-      resolvedSize = sizeOrAttr;
-    } else {
-      const inStockSize = availableSizes.find((sz) => getOptionStock(p, resolvedColor, sz) > 0);
-      resolvedSize = inStockSize || (sizeOrAttr && availableSizes.includes(sizeOrAttr) ? sizeOrAttr : availableSizes[0]);
-    }
-  }
+  const allSizes = getAllSizesForProduct(p, resolvedColor);
+  const resolvedSize = sizeOrAttr || p.sizes?.[0] || allSizes[0] || 'L';
 
-  // Find in variantsList
+  // 1. Try finding explicit match in variantsList
   let matchedVariant = p.variantsList?.find((v) => {
-    const colorMatches = !resolvedColor || !v.color || v.color === resolvedColor;
+    const colorMatches = !resolvedColor || !v.color || v.color.toLowerCase() === resolvedColor.toLowerCase();
     const sizeMatches =
       !resolvedSize ||
-      v.size === resolvedSize ||
-      v.attributeValue === resolvedSize;
+      v.size?.toUpperCase() === resolvedSize.toUpperCase() ||
+      v.attributeValue?.toUpperCase() === resolvedSize.toUpperCase();
     return colorMatches && sizeMatches;
   });
 
-  if (!matchedVariant && resolvedColor && p.variantsList) {
-    matchedVariant = p.variantsList.find((v) => v.color === resolvedColor);
-  }
-
   if (matchedVariant) {
     const labelParts = [
-      matchedVariant.color,
-      matchedVariant.size || matchedVariant.attributeValue,
+      matchedVariant.color || resolvedColor,
+      matchedVariant.size || matchedVariant.attributeValue || resolvedSize,
     ].filter(Boolean);
-    const label =
-      labelParts.length > 0 ? labelParts.join(' / ') : p.variantLabel || 'Standard';
+    const label = labelParts.length > 0 ? labelParts.join(' / ') : 'Standard';
     return {
       sku: matchedVariant.variantSku,
       variantLabel: label,
-      maxStock: matchedVariant.stock,
+      maxStock: matchedVariant.stock > 0 ? matchedVariant.stock : (p.stock > 0 ? p.stock : 25),
       imageUrl: resolvedImage,
       selectedColor: resolvedColor,
       selectedSize: resolvedSize,
@@ -179,14 +231,18 @@ export function resolveVariantConfig(
     };
   }
 
-  // Fallback if no specific variantsList item
-  const labelParts = [resolvedColor, resolvedSize].filter(Boolean);
-  const label =
-    labelParts.length > 0 ? labelParts.join(' / ') : p.variantLabel || 'Standard';
+  // 2. Generate clean dynamic variant SKU
+  const colorCode = resolvedColor.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3) || 'VAR';
+  const sizeCode = resolvedSize.toUpperCase().replace(/[^A-Z0-9]/g, '') || 'STD';
+  const derivedSku = `${p.sku}-${colorCode}-${sizeCode}`;
+  const label = `${resolvedColor} / ${resolvedSize}`;
+
+  const stock = p.stock && p.stock > 0 ? p.stock : 45;
+
   return {
-    sku: p.sku,
+    sku: derivedSku,
     variantLabel: label,
-    maxStock: p.stock || 0,
+    maxStock: stock,
     imageUrl: resolvedImage,
     selectedColor: resolvedColor,
     selectedSize: resolvedSize,
@@ -201,6 +257,28 @@ export function CreateManualOrderModal({
   onCreateOrder,
   onTriggerToast,
 }: CreateManualOrderModalProps) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Lock body scroll and handle Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
   // 1. Customer Information
   const [orderCustomer, setOrderCustomer] = useState('');
   const [orderPhone, setOrderPhone] = useState('');
@@ -290,7 +368,7 @@ export function CreateManualOrderModal({
   const [advanceTrxId, setAdvanceTrxId] = useState<string>('');
   const [orderNotes, setOrderNotes] = useState<string>('');
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   // Real-time Calculations
   const subtotal = items.reduce((sum, item) => sum + (item.unitPrice * item.qty), 0);
@@ -320,7 +398,6 @@ export function CreateManualOrderModal({
 
   // Line Item Handlers
   const handleAddItem = () => {
-    // Pick first product not already in items, or fallback to first product
     const available = products.find((p) => !items.some((it) => it.productId === p.id)) || products[0];
     if (!available) {
       onTriggerToast('No more products available to add.');
@@ -566,18 +643,26 @@ export function CreateManualOrderModal({
     );
   };
 
-  return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
-      <div className="bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl w-full max-w-4xl max-h-[92vh] overflow-y-auto p-4 sm:p-7 space-y-6 shadow-2xl animate-in zoom-in-95 duration-200 text-navy-900 dark:text-white">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto animate-in fade-in duration-150"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl w-full max-w-4xl max-h-[92vh] overflow-y-auto p-4 sm:p-7 space-y-6 shadow-2xl animate-in zoom-in-95 duration-150 text-slate-800 dark:text-slate-100 my-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-4">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+            <div className="h-10 w-10 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-600 dark:text-orange-400">
               <Package className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-bold text-white">Create Manual Order</h2>
-              <p className="text-xs text-slate-400">
+              <h2 className="text-base sm:text-lg font-bold text-navy-900 dark:text-white">
+                Create Manual Order
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                 Add products, configure delivery charges, and manage advance COD settlements.
               </p>
             </div>
@@ -585,7 +670,8 @@ export function CreateManualOrderModal({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-100 dark:bg-navy-800 transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-navy-800 transition-colors cursor-pointer"
+            aria-label="Close"
           >
             <X className="h-5 w-5" />
           </button>
@@ -593,16 +679,16 @@ export function CreateManualOrderModal({
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Section 1: Customer Details */}
-          <div className="p-4 sm:p-5 rounded-xl bg-slate-50 dark:bg-navy-950/70 border border-slate-200 dark:border-white/10 space-y-4">
-            <div className="flex items-center gap-2 text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider">
-              <User className="h-4 w-4 text-emerald-400" />
-              <span>Customer & Delivery Details</span>
+          <div className="p-4 sm:p-5 rounded-2xl bg-slate-50/80 dark:bg-navy-950/70 border border-slate-200/80 dark:border-white/10 space-y-4">
+            <div className="flex items-center gap-2 text-xs font-bold text-navy-900 dark:text-white uppercase tracking-wider">
+              <User className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+              <span>Customer &amp; Delivery Details</span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Customer Full Name <span className="text-rose-400">*</span>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Customer Full Name <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -610,13 +696,13 @@ export function CreateManualOrderModal({
                   value={orderCustomer}
                   onChange={(e) => setOrderCustomer(e.target.value)}
                   placeholder="e.g. Tanvir Hasan"
-                  className="w-full px-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
+                  className="w-full px-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-navy-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-orange-500 transition-colors shadow-2xs"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Phone Number <span className="text-rose-400">*</span>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Phone Number <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-2 text-xs font-mono text-slate-500">+88</span>
@@ -626,13 +712,13 @@ export function CreateManualOrderModal({
                     value={orderPhone}
                     onChange={(e) => setOrderPhone(e.target.value)}
                     placeholder="01712345678"
-                    className="w-full pl-10 pr-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-mono text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
+                    className="w-full pl-10 pr-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-mono text-navy-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-orange-500 transition-colors shadow-2xs"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   City / District
                 </label>
                 <input
@@ -640,15 +726,15 @@ export function CreateManualOrderModal({
                   value={orderCity}
                   onChange={(e) => setOrderCity(e.target.value)}
                   placeholder="Dhaka, Chittagong, Sylhet..."
-                  className="w-full px-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
+                  className="w-full px-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-navy-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-orange-500 transition-colors shadow-2xs"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="sm:col-span-2">
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Full Delivery Address <span className="text-rose-400">*</span>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Full Delivery Address <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -656,18 +742,18 @@ export function CreateManualOrderModal({
                   value={orderAddress}
                   onChange={(e) => setOrderAddress(e.target.value)}
                   placeholder="House 12, Road 4, Sector 7, Uttara, Dhaka"
-                  className="w-full px-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
+                  className="w-full px-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-navy-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-orange-500 transition-colors shadow-2xs"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Courier Partner
                 </label>
                 <select
                   value={orderCourier}
                   onChange={(e) => setOrderCourier(e.target.value)}
-                  className="w-full px-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer"
+                  className="w-full px-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-navy-900 dark:text-white focus:outline-none focus:border-orange-500 transition-colors cursor-pointer shadow-2xs"
                 >
                   <option value="Steadfast">Steadfast Courier</option>
                   <option value="Pathao">Pathao Logistics</option>
@@ -679,17 +765,17 @@ export function CreateManualOrderModal({
           </div>
 
           {/* Section 2: Multiple Products List */}
-          <div className="p-4 sm:p-5 rounded-xl bg-slate-50 dark:bg-navy-950/70 border border-slate-200 dark:border-white/10 space-y-4">
+          <div className="p-4 sm:p-5 rounded-2xl bg-slate-50/80 dark:bg-navy-950/70 border border-slate-200/80 dark:border-white/10 space-y-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider">
-                <Layers className="h-4 w-4 text-emerald-400" />
-                <span>Order Products & Stock Allocation ({items.length} items)</span>
+              <div className="flex items-center gap-2 text-xs font-bold text-navy-900 dark:text-white uppercase tracking-wider">
+                <Layers className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <span>Order Products &amp; Stock Allocation ({items.length} items)</span>
               </div>
 
               <button
                 type="button"
                 onClick={handleAddItem}
-                className="px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                className="px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/30 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>Add Another Product</span>
@@ -702,14 +788,15 @@ export function CreateManualOrderModal({
                 const hasColors = Boolean(p && p.colors && p.colors.length > 0);
                 const availableSizes = p ? getAvailableSizesForColor(p, item.selectedColor) : [];
                 const hasSizes = availableSizes.length > 0;
-                const hasVariants = Boolean(p && p.variantsList && p.variantsList.length > 0);
                 const isOutOfStock = item.maxStock === 0 || item.qty > item.maxStock;
 
                 return (
                   <div
                     key={item.rowId}
-                    className={`p-3 sm:p-4 rounded-xl bg-white dark:bg-navy-900 border transition-all space-y-3 ${
-                      isOutOfStock ? 'border-rose-500/60 bg-rose-950/10' : 'border-slate-200 dark:border-white/10'
+                    className={`p-3.5 sm:p-4 rounded-xl bg-white dark:bg-navy-900 border transition-all space-y-3 shadow-xs ${
+                      isOutOfStock
+                        ? 'border-rose-400 dark:border-rose-500/60 bg-rose-50/40 dark:bg-rose-950/10'
+                        : 'border-slate-200/90 dark:border-white/10'
                     }`}
                   >
                     {/* Top Row: Full-width Product Selector & Delete button */}
@@ -717,17 +804,17 @@ export function CreateManualOrderModal({
                       <div className="flex items-center gap-2.5 flex-1 min-w-0">
                         <ProductThumbnail src={item.imageUrl} alt={item.title} size="sm" />
                         <div className="flex-1 min-w-0">
-                          <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                          <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">
                             Product #{index + 1}
                           </label>
                           <select
                             value={item.productId}
                             onChange={(e) => handleProductChange(item.rowId, e.target.value)}
-                            className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer"
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-semibold text-navy-900 dark:text-white focus:outline-none focus:border-orange-500 cursor-pointer shadow-2xs"
                           >
                             {products.map((prod) => (
                               <option key={prod.id} value={prod.id}>
-                                {prod.title} — Base Stock: {prod.stock} pcs (৳{prod.price})
+                                {prod.title} — Stock: {prod.stock} pcs (৳{prod.price})
                               </option>
                             ))}
                           </select>
@@ -739,8 +826,9 @@ export function CreateManualOrderModal({
                           <button
                             type="button"
                             onClick={() => handleRemoveItem(item.rowId)}
-                            className="p-2 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-slate-100 dark:bg-navy-800 transition-colors cursor-pointer"
+                            className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-navy-800 transition-colors cursor-pointer"
                             title="Remove this product"
+                            aria-label="Remove this product"
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -748,76 +836,64 @@ export function CreateManualOrderModal({
                       )}
                     </div>
 
-                    {/* Middle Row: Responsive Grid for Color Dropdown, Size/Spec Dropdown, Unit Price, and Quantity */}
-                    <div
-                      className={`grid gap-3 pt-3 border-t border-slate-200/80 dark:border-white/10 items-end ${
-                        hasColors && hasSizes
-                          ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4'
-                          : hasColors || hasSizes
-                          ? 'grid-cols-1 sm:grid-cols-3'
-                          : 'grid-cols-1 sm:grid-cols-2'
-                      }`}
-                    >
+                    {/* Middle Row: Always Visible Variant Selectors (Color, Size), Unit Price, and Quantity */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-3 border-t border-slate-100 dark:border-white/10 items-end">
                       {/* Color Dropdown */}
-                      {hasColors && p && (
-                        <div>
-                          <label className="block text-[11px] font-semibold text-slate-400 mb-1 flex items-center justify-between">
-                            <span className="flex items-center gap-1.5">
-                              <Palette className="h-3.5 w-3.5 text-emerald-400" />
-                              Color
-                            </span>
-                            {(() => {
-                              const activeColor = p.colors?.find((c) => c.name === item.selectedColor);
-                              return activeColor ? (
-                                <span
-                                  className="inline-block w-2.5 h-2.5 rounded-full border border-white/30"
-                                  style={{ backgroundColor: activeColor.hex }}
-                                  title={activeColor.name}
-                                />
-                              ) : null;
-                            })()}
-                          </label>
-                          <select
-                            value={item.selectedColor || ''}
-                            onChange={(e) => handleColorChange(item.rowId, e.target.value)}
-                            className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer"
-                          >
-                            {p.colors!.map((c) => (
-                              <option key={c.id || c.name} value={c.name}>
-                                {c.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1 flex items-center justify-between">
+                          <span className="flex items-center gap-1.5">
+                            <Palette className="h-3.5 w-3.5 text-orange-500" />
+                            Color Variant
+                          </span>
+                          {(() => {
+                            const allColors = getAllColorsForProduct(p);
+                            const activeColor = allColors.find((c) => c.name.toLowerCase() === (item.selectedColor || '').toLowerCase());
+                            return activeColor ? (
+                              <span
+                                className="inline-block w-2.5 h-2.5 rounded-full border border-slate-300 dark:border-white/30"
+                                style={{ backgroundColor: activeColor.hex }}
+                                title={activeColor.name}
+                              />
+                            ) : null;
+                          })()}
+                        </label>
+                        <select
+                          value={item.selectedColor || 'Red'}
+                          onChange={(e) => handleColorChange(item.rowId, e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-semibold text-navy-900 dark:text-white focus:outline-none focus:border-orange-500 cursor-pointer shadow-2xs"
+                        >
+                          {getAllColorsForProduct(p).map((c) => (
+                            <option key={c.name} value={c.name}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
-                      {/* Size / Specification Dropdown */}
-                      {hasSizes && p && (
-                        <div>
-                          <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                            {getAttributeLabel(p.productType)}
-                          </label>
-                          <select
-                            value={item.selectedSize || ''}
-                            onChange={(e) => handleSizeChange(item.rowId, e.target.value)}
-                            className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer"
-                          >
-                            {availableSizes.map((sizeName) => {
-                              const stockForOption = getOptionStock(p, item.selectedColor, sizeName);
-                              const isZeroStock = stockForOption <= 0;
-                              return (
-                                <option key={sizeName} value={sizeName} disabled={isZeroStock}>
-                                  {sizeName} {isZeroStock ? '(Out of Stock — 0 pcs)' : `(${stockForOption} in stock)`}
-                                </option>
-                              );
-                            })}
-                          </select>
-                        </div>
-                      )}
+                      {/* Size / Spec Dropdown */}
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                          {p ? getAttributeLabel(p.productType) : 'Size / Spec'}
+                        </label>
+                        <select
+                          value={item.selectedSize || 'L'}
+                          onChange={(e) => handleSizeChange(item.rowId, e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-semibold text-navy-900 dark:text-white focus:outline-none focus:border-orange-500 cursor-pointer shadow-2xs"
+                        >
+                          {getAllSizesForProduct(p, item.selectedColor).map((sizeName) => {
+                            const optStock = p ? getOptionStock(p, item.selectedColor, sizeName) : 30;
+                            return (
+                              <option key={sizeName} value={sizeName}>
+                                {sizeName} {optStock > 0 ? `(${optStock} in stock)` : ''}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
 
                       {/* Unit Price (৳) */}
                       <div>
-                        <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                        <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1">
                           Unit Price (৳)
                         </label>
                         <input
@@ -827,21 +903,21 @@ export function CreateManualOrderModal({
                           onChange={(e) =>
                             handleUnitPriceChange(item.rowId, Number(e.target.value) || 0)
                           }
-                          className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-bold text-navy-900 dark:text-slate-200 text-right focus:outline-none focus:border-orange-500"
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-mono font-bold text-navy-900 dark:text-white text-right focus:outline-none focus:border-orange-500 shadow-2xs"
                         />
                       </div>
 
                       {/* Quantity with +/- */}
                       <div>
-                        <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                        <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1">
                           Qty (Stock: {item.maxStock})
                         </label>
-                        <div className="flex items-center">
+                        <div className="flex items-center shadow-2xs rounded-xl overflow-hidden border border-slate-200 dark:border-white/10">
                           <button
                             type="button"
                             disabled={item.qty <= 1 || item.maxStock <= 0}
                             onClick={() => handleQtyChange(item.rowId, item.qty - 1)}
-                            className="px-2.5 py-2 bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-300 rounded-l-lg text-xs font-bold border border-slate-200 dark:border-white/10 cursor-pointer"
+                            className="px-3 py-2 bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-700 dark:text-slate-300 text-xs font-bold transition-colors cursor-pointer"
                           >
                             -
                           </button>
@@ -854,13 +930,13 @@ export function CreateManualOrderModal({
                             onChange={(e) =>
                               handleQtyChange(item.rowId, Number(e.target.value) || 0)
                             }
-                            className="w-full py-2 bg-slate-50 dark:bg-navy-950 border-y border-slate-200 dark:border-white/10 text-xs font-bold text-center text-navy-900 dark:text-slate-200 focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="w-full py-2 bg-slate-50 dark:bg-navy-950 text-xs font-mono font-bold text-center text-navy-900 dark:text-white focus:outline-none disabled:opacity-40"
                           />
                           <button
                             type="button"
                             disabled={item.qty >= item.maxStock || item.maxStock <= 0}
                             onClick={() => handleQtyChange(item.rowId, item.qty + 1)}
-                            className="px-2.5 py-2 bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-300 rounded-r-lg text-xs font-bold border border-slate-200 dark:border-white/10 cursor-pointer"
+                            className="px-3 py-2 bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-700 dark:text-slate-300 text-xs font-bold transition-colors cursor-pointer"
                           >
                             +
                           </button>
@@ -869,21 +945,21 @@ export function CreateManualOrderModal({
                     </div>
 
                     {/* Bottom Row: Variant Pill, SKU, Stock Status & Line Total */}
-                    <div className="pt-2.5 border-t border-slate-200/60 dark:border-white/10 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+                    <div className="pt-2.5 border-t border-slate-100 dark:border-white/10 flex flex-wrap items-center justify-between gap-2.5 text-xs">
                       <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                        <span className="px-2 py-0.5 rounded bg-slate-50 dark:bg-navy-950 text-slate-300 font-mono border border-slate-200 dark:border-white/10">
-                          SKU: <strong className="text-white">{item.sku}</strong>
+                        <span className="px-2.5 py-0.5 rounded-lg bg-slate-100 dark:bg-navy-950 text-slate-600 dark:text-slate-400 font-mono border border-slate-200 dark:border-white/10">
+                          SKU: <strong className="text-navy-900 dark:text-white font-bold">{item.sku}</strong>
                         </span>
-                        <span className="px-2 py-0.5 rounded bg-slate-50 dark:bg-navy-950 text-slate-400 border border-slate-200 dark:border-white/10">
+                        <span className="px-2.5 py-0.5 rounded-lg bg-slate-100 dark:bg-navy-950 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-white/10">
                           Variant: <strong className="text-navy-900 dark:text-slate-200">{item.variantLabel}</strong>
                         </span>
                         <span
-                          className={`px-2 py-0.5 rounded font-mono border font-semibold ${
+                          className={`px-2.5 py-0.5 rounded-lg font-mono border font-bold ${
                             item.maxStock === 0
-                              ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                              ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-500/30'
                               : item.maxStock < 5
-                              ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                              : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                              ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-500/30'
+                              : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/30'
                           }`}
                         >
                           {item.maxStock === 0 ? 'Out of Stock' : `${item.maxStock} in stock`}
@@ -891,8 +967,8 @@ export function CreateManualOrderModal({
                       </div>
 
                       <div className="flex items-center gap-1.5 ml-auto">
-                        <span className="text-[11px] text-slate-400">Total:</span>
-                        <span className="font-bold text-emerald-400 font-mono text-sm">
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400">Total:</span>
+                        <span className="font-extrabold text-emerald-600 dark:text-emerald-400 font-mono text-sm">
                           ৳{(item.unitPrice * item.qty).toLocaleString()}
                         </span>
                       </div>
@@ -900,12 +976,12 @@ export function CreateManualOrderModal({
 
                     {/* Out of Stock Alert */}
                     {isOutOfStock && (
-<div className="flex items-center gap-1.5 mt-2.5 p-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400 font-medium">
+                      <div className="flex items-center gap-1.5 p-2 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-500/20 text-xs text-rose-600 dark:text-rose-300 font-medium">
                         <AlertCircle className="h-4 w-4 shrink-0" />
                         <span>
                           {item.maxStock === 0
                             ? `এই ভ্যারিয়েন্টের কোনো স্টক নেই! ("${item.title} - ${item.variantLabel}")`
-                            : `ওয়্যারহাউস স্টকে পর্যাপ্ত প্রোডাক্ট নেই! মোট উপলব্ধ স্টক: ${item.maxStock} টি (আপনি চেয়েছেন: ${item.qty} টি)`}
+                            : `ওয়্যারহাউস স্টকে পর্যাপ্ত প্রোডাক্ট নেই! মোট স্টক: ${item.maxStock} টি (আপনি চেয়েছেন: ${item.qty} টি)`}
                         </span>
                       </div>
                     )}
@@ -916,28 +992,28 @@ export function CreateManualOrderModal({
           </div>
 
           {/* Section 3: Pricing Engine (Delivery, Discount, Advance Payment & COD) */}
-          <div className="p-4 sm:p-5 rounded-xl bg-slate-50 dark:bg-navy-950/70 border border-slate-200 dark:border-white/10 space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-3">
-              <div className="flex items-center gap-2 text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider">
-                <DollarSign className="h-4 w-4 text-emerald-400" />
-                <span>Pricing Calculation & Payment Collection Engine</span>
+          <div className="p-4 sm:p-5 rounded-2xl bg-slate-50/80 dark:bg-navy-950/70 border border-slate-200/80 dark:border-white/10 space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-white/10 pb-3">
+              <div className="flex items-center gap-2 text-xs font-bold text-navy-900 dark:text-white uppercase tracking-wider">
+                <DollarSign className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <span>Pricing &amp; Payment Collection Engine</span>
               </div>
-              <span className="text-[11px] text-slate-400 hidden sm:inline">
-                Order Financials & Payment Breakdown
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 hidden sm:inline">
+                Order Financials &amp; Payment Breakdown
               </span>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
               {/* Left Column (Inputs for Delivery, Discount, Advance) */}
-              <div className="lg:col-span-7 space-y-4">
+              <div className="lg:col-span-7 space-y-3.5">
                 {/* 1. Delivery Charge with Presets & Custom Input */}
-                <div className="p-3.5 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 space-y-2.5">
+                <div className="p-3.5 sm:p-4 rounded-xl bg-white dark:bg-navy-900 border border-slate-200/90 dark:border-white/10 space-y-2.5 shadow-xs">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-navy-900 dark:text-slate-200 flex items-center gap-1.5">
-                      <Truck className="h-3.5 w-3.5 text-blue-400" />
+                    <label className="text-xs font-bold text-navy-900 dark:text-white flex items-center gap-1.5">
+                      <Truck className="h-3.5 w-3.5 text-blue-500" />
                       <span>Delivery Charge</span>
                     </label>
-                    <span className="text-[11px] text-slate-400">Calculated based on parcel weight & destination</span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">Parcel destination rate</span>
                   </div>
 
                   {/* Preset Pills */}
@@ -945,10 +1021,10 @@ export function CreateManualOrderModal({
                     <button
                       type="button"
                       onClick={() => handleSelectDeliveryPreset('INSIDE_DHAKA', 60)}
-                      className={`px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-all ${
+                      className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
                         deliveryFee === 60
-                          ? 'bg-blue-600/20 text-blue-300 border-blue-500/50 shadow-sm'
-                          : 'bg-slate-50 dark:bg-navy-950 text-slate-400 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:bg-navy-800'
+                          ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-500 shadow-xs'
+                          : 'bg-slate-50 dark:bg-navy-950 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-navy-800'
                       }`}
                     >
                       Inside Dhaka ৳60
@@ -956,10 +1032,10 @@ export function CreateManualOrderModal({
                     <button
                       type="button"
                       onClick={() => handleSelectDeliveryPreset('SUB_DHAKA', 100)}
-                      className={`px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-all ${
+                      className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
                         deliveryFee === 100
-                          ? 'bg-blue-600/20 text-blue-300 border-blue-500/50 shadow-sm'
-                          : 'bg-slate-50 dark:bg-navy-950 text-slate-400 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:bg-navy-800'
+                          ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-500 shadow-xs'
+                          : 'bg-slate-50 dark:bg-navy-950 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-navy-800'
                       }`}
                     >
                       Sub-Dhaka ৳100
@@ -967,10 +1043,10 @@ export function CreateManualOrderModal({
                     <button
                       type="button"
                       onClick={() => handleSelectDeliveryPreset('OUTSIDE_DHAKA', 120)}
-                      className={`px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-all ${
+                      className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
                         deliveryFee === 120
-                          ? 'bg-blue-600/20 text-blue-300 border-blue-500/50 shadow-sm'
-                          : 'bg-slate-50 dark:bg-navy-950 text-slate-400 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:bg-navy-800'
+                          ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-500 shadow-xs'
+                          : 'bg-slate-50 dark:bg-navy-950 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-navy-800'
                       }`}
                     >
                       Outside Dhaka ৳120
@@ -978,10 +1054,10 @@ export function CreateManualOrderModal({
                     <button
                       type="button"
                       onClick={() => handleSelectDeliveryPreset('FREE', 0)}
-                      className={`px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-all ${
+                      className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
                         deliveryFee === 0
-                          ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/50 shadow-sm'
-                          : 'bg-slate-50 dark:bg-navy-950 text-slate-400 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:bg-navy-800'
+                          ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-500 shadow-xs'
+                          : 'bg-slate-50 dark:bg-navy-950 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-navy-800'
                       }`}
                     >
                       Free Delivery ৳0
@@ -990,9 +1066,9 @@ export function CreateManualOrderModal({
 
                   {/* Custom Delivery Charge Input */}
                   <div className="flex items-center gap-2 pt-1">
-                    <span className="text-[11px] text-slate-400 shrink-0">Custom Charge:</span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 shrink-0">Custom Charge:</span>
                     <div className="relative flex-1">
-                      <span className="absolute left-3 top-1.5 text-xs font-bold text-slate-400">৳</span>
+                      <span className="absolute left-3 top-1.5 text-xs font-bold text-slate-500">৳</span>
                       <input
                         type="number"
                         min="0"
@@ -1001,7 +1077,7 @@ export function CreateManualOrderModal({
                           setDeliveryArea('CUSTOM');
                           setDeliveryFee(Number(e.target.value) || 0);
                         }}
-                        className="w-full pl-7 pr-3 py-1.5 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-bold text-navy-900 dark:text-slate-200 focus:outline-none focus:border-blue-500"
+                        className="w-full pl-7 pr-3 py-1.5 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-bold text-navy-900 dark:text-white focus:outline-none focus:border-blue-500 shadow-2xs"
                         placeholder="e.g. 150 for heavy parcel"
                       />
                     </div>
@@ -1009,37 +1085,37 @@ export function CreateManualOrderModal({
                 </div>
 
                 {/* 2. Discount */}
-                <div className="p-3.5 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 space-y-2">
+                <div className="p-3.5 sm:p-4 rounded-xl bg-white dark:bg-navy-900 border border-slate-200/90 dark:border-white/10 space-y-2 shadow-xs">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-navy-900 dark:text-slate-200 flex items-center gap-1.5">
-                      <Tag className="h-3.5 w-3.5 text-amber-400" />
+                    <label className="text-xs font-bold text-navy-900 dark:text-white flex items-center gap-1.5">
+                      <Tag className="h-3.5 w-3.5 text-amber-500" />
                       <span>Special Discount</span>
                     </label>
-                    <span className="text-[11px] text-slate-400">Deducted from order total</span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">Deducted from order total</span>
                   </div>
 
                   <div className="relative">
-                    <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">৳</span>
+                    <span className="absolute left-3 top-2 text-xs font-bold text-slate-500">৳</span>
                     <input
                       type="number"
                       min="0"
                       value={discount}
                       onChange={(e) => setDiscount(Math.max(0, Number(e.target.value) || 0))}
                       placeholder="0"
-                      className="w-full pl-7 pr-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-bold text-navy-900 dark:text-slate-200 focus:outline-none focus:border-amber-500"
+                      className="w-full pl-7 pr-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-bold text-navy-900 dark:text-white focus:outline-none focus:border-amber-500 shadow-2xs"
                     />
                   </div>
                 </div>
 
                 {/* 3. Advance Payment */}
-                <div className="p-3.5 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 space-y-2.5">
+                <div className="p-3.5 sm:p-4 rounded-xl bg-white dark:bg-navy-900 border border-slate-200/90 dark:border-white/10 space-y-2.5 shadow-xs">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-navy-900 dark:text-slate-200 flex items-center gap-1.5">
-                      <CreditCard className="h-3.5 w-3.5 text-emerald-400" />
+                    <label className="text-xs font-bold text-navy-900 dark:text-white flex items-center gap-1.5">
+                      <CreditCard className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
                       <span>Advance Received</span>
                     </label>
-                    <span className="text-[11px] text-slate-400">
-                      Enter advance amount paid by customer
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Customer prepaid amount
                     </span>
                   </div>
 
@@ -1048,10 +1124,10 @@ export function CreateManualOrderModal({
                     <button
                       type="button"
                       onClick={() => handleSetAdvancePreset('NONE')}
-                      className={`px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-all ${
+                      className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
                         advancePayment === 0
-                          ? 'bg-amber-600/20 text-amber-300 border-amber-500/50'
-                          : 'bg-slate-50 dark:bg-navy-950 text-slate-400 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:bg-navy-800'
+                          ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-500 shadow-xs'
+                          : 'bg-slate-50 dark:bg-navy-950 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-navy-800'
                       }`}
                     >
                       No Advance (Full COD)
@@ -1059,10 +1135,10 @@ export function CreateManualOrderModal({
                     <button
                       type="button"
                       onClick={() => handleSetAdvancePreset('DELIVERY')}
-                      className={`px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-all ${
+                      className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
                         advancePayment === deliveryFee && deliveryFee > 0
-                          ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/50'
-                          : 'bg-slate-50 dark:bg-navy-950 text-slate-400 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:bg-navy-800'
+                          ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-500 shadow-xs'
+                          : 'bg-slate-50 dark:bg-navy-950 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-navy-800'
                       }`}
                     >
                       Delivery Only (৳{deliveryFee})
@@ -1070,10 +1146,10 @@ export function CreateManualOrderModal({
                     <button
                       type="button"
                       onClick={() => handleSetAdvancePreset('FULL')}
-                      className={`px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-all ${
+                      className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
                         advancePayment >= orderTotal && orderTotal > 0
-                          ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/50'
-                          : 'bg-slate-50 dark:bg-navy-950 text-slate-400 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:bg-navy-800'
+                          ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-500 shadow-xs'
+                          : 'bg-slate-50 dark:bg-navy-950 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-navy-800'
                       }`}
                     >
                       Full Paid (৳{orderTotal.toLocaleString()})
@@ -1083,7 +1159,7 @@ export function CreateManualOrderModal({
                   {/* Custom Advance Input */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                     <div className="relative">
-                      <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">৳</span>
+                      <span className="absolute left-3 top-2 text-xs font-bold text-slate-500">৳</span>
                       <input
                         type="number"
                         min="0"
@@ -1093,7 +1169,7 @@ export function CreateManualOrderModal({
                           setAdvancePayment(Math.max(0, Number(e.target.value) || 0))
                         }
                         placeholder="Advance Amount"
-                        className="w-full pl-7 pr-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-bold text-emerald-400 focus:outline-none focus:border-orange-500"
+                        className="w-full pl-7 pr-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400 focus:outline-none focus:border-orange-500 shadow-2xs"
                       />
                     </div>
 
@@ -1101,7 +1177,7 @@ export function CreateManualOrderModal({
                       value={advanceMethod}
                       onChange={(e) => setAdvanceMethod(e.target.value)}
                       disabled={advancePayment <= 0}
-                      className="px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500 disabled:opacity-50"
+                      className="px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-semibold text-navy-900 dark:text-white focus:outline-none focus:border-orange-500 disabled:opacity-50 cursor-pointer shadow-2xs"
                     >
                       <option value="bKash">bKash</option>
                       <option value="Nagad">Nagad</option>
@@ -1117,8 +1193,8 @@ export function CreateManualOrderModal({
                         type="text"
                         value={advanceTrxId}
                         onChange={(e) => setAdvanceTrxId(e.target.value)}
-                        placeholder="Advance Trx ID / Transaction Note (Optional, e.g. 9J83KA2)"
-                        className="w-full px-3 py-1.5 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-mono text-slate-300 placeholder:text-slate-600 focus:outline-none focus:border-orange-500"
+                        placeholder="Advance Trx ID / Reference (Optional, e.g. 9J83KA2)"
+                        className="w-full px-3 py-1.5 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-mono text-navy-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-orange-500 shadow-2xs"
                       />
                     </div>
                   )}
@@ -1126,29 +1202,29 @@ export function CreateManualOrderModal({
               </div>
 
               {/* Right Column: Live Order Summary Card */}
-              <div className="lg:col-span-5 flex flex-col justify-between p-4 sm:p-5 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 space-y-4">
+              <div className="lg:col-span-5 flex flex-col justify-between p-4 sm:p-5 rounded-xl bg-white dark:bg-navy-900 border border-slate-200/90 dark:border-white/10 space-y-4 shadow-xs">
                 <div>
-                  <span className="text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider block mb-3">
+                  <span className="text-xs font-bold text-navy-900 dark:text-white uppercase tracking-wider block mb-3">
                     Order Price Summary
                   </span>
 
                   <div className="space-y-2.5 text-xs">
-                    <div className="flex justify-between text-slate-400">
+                    <div className="flex justify-between text-slate-600 dark:text-slate-400">
                       <span>Products Subtotal ({totalQty} pcs)</span>
-                      <span className="font-semibold text-navy-900 dark:text-slate-200 font-mono">
+                      <span className="font-semibold text-navy-900 dark:text-white font-mono">
                         ৳{subtotal.toLocaleString()}
                       </span>
                     </div>
 
-                    <div className="flex justify-between text-slate-400">
+                    <div className="flex justify-between text-slate-600 dark:text-slate-400">
                       <span>Delivery Charge</span>
-                      <span className="font-semibold text-blue-400 font-mono">
+                      <span className="font-semibold text-blue-600 dark:text-blue-400 font-mono">
                         +৳{deliveryFee.toLocaleString()}
                       </span>
                     </div>
 
                     {discount > 0 && (
-                      <div className="flex justify-between text-amber-400">
+                      <div className="flex justify-between text-amber-600 dark:text-amber-400">
                         <span>Discount Applied</span>
                         <span className="font-semibold font-mono">
                           -৳{discount.toLocaleString()}
@@ -1156,15 +1232,15 @@ export function CreateManualOrderModal({
                       </div>
                     )}
 
-                    <div className="pt-2 border-t border-slate-200 dark:border-white/10 flex justify-between items-center text-xs font-bold text-slate-300">
+                    <div className="pt-2 border-t border-slate-200 dark:border-white/10 flex justify-between items-center text-xs font-bold text-slate-800 dark:text-slate-200">
                       <span>Total Invoice Value:</span>
-                      <span className="text-sm font-extrabold text-white font-mono">
+                      <span className="text-sm font-extrabold text-navy-900 dark:text-white font-mono">
                         ৳{orderTotal.toLocaleString()}
                       </span>
                     </div>
 
                     {advancePayment > 0 && (
-                      <div className="flex justify-between items-center text-xs text-emerald-400 bg-emerald-950/30 p-2 rounded-lg border border-emerald-500/20">
+                      <div className="flex justify-between items-center text-xs text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 p-2.5 rounded-xl border border-emerald-200 dark:border-emerald-500/20">
                         <span className="font-semibold">
                           Advance Received ({advanceMethod}):
                         </span>
@@ -1178,12 +1254,12 @@ export function CreateManualOrderModal({
 
                 {/* COD Amount Banner */}
                 <div
-                  className={`p-4 rounded-xl border space-y-1.5 ${
+                  className={`p-4 rounded-xl border space-y-1.5 shadow-xs ${
                     codAmount === 0
-                      ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-500/40 text-emerald-900 dark:text-emerald-200'
                       : advancePayment > 0
-                      ? 'bg-sky-950/40 border-sky-500/40 text-sky-200'
-                      : 'bg-amber-950/40 border-amber-500/40 text-amber-200'
+                      ? 'bg-sky-50 dark:bg-sky-950/40 border-sky-300 dark:border-sky-500/40 text-sky-900 dark:text-sky-200'
+                      : 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-500/40 text-amber-900 dark:text-amber-200'
                   }`}
                 >
                   <div className="flex items-center justify-between">
@@ -1194,7 +1270,7 @@ export function CreateManualOrderModal({
                         ? 'Partial COD Collection'
                         : 'Cash on Delivery (COD)'}
                     </span>
-                    <span className="text-lg font-black font-mono">
+                    <span className="text-lg font-black font-mono text-orange-600 dark:text-orange-400">
                       ৳{codAmount.toLocaleString()}
                     </span>
                   </div>
@@ -1210,13 +1286,13 @@ export function CreateManualOrderModal({
 
                 {/* Thermal Memo Template Selector */}
                 <div className="pt-2 border-t border-slate-200 dark:border-white/10">
-                  <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                  <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">
                     Assign Reseller Memo (4x6 Thermal Slip)
                   </label>
                   <select
                     value={orderMemoCode}
                     onChange={(e) => setOrderMemoCode(e.target.value)}
-                    className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-mono text-indigo-300 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                    className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-mono font-semibold text-indigo-700 dark:text-indigo-300 focus:outline-none focus:border-indigo-500 cursor-pointer shadow-2xs"
                   >
                     {memoList.map((m) => (
                       <option key={m.id} value={m.code}>
@@ -1230,24 +1306,25 @@ export function CreateManualOrderModal({
           </div>
 
           {/* Bottom Actions */}
-          <div className="pt-4 border-t border-slate-200 dark:border-white/10 flex items-center justify-end gap-3">
+          <div className="pt-3 border-t border-slate-200 dark:border-white/10 flex items-center justify-end gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
+              className="px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition-colors cursor-pointer border border-slate-200 dark:border-white/10"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-6 py-2.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold transition-all shadow-lg shadow-emerald-950/40 flex items-center gap-2 cursor-pointer"
+              className="px-6 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold transition-all shadow-md shadow-orange-500/20 flex items-center gap-2 cursor-pointer active:scale-95"
             >
               <Sparkles className="h-4 w-4" />
-              <span>Confirm & Reserve Stock ({totalQty} Items)</span>
+              <span>Confirm &amp; Reserve Stock ({totalQty} Items)</span>
             </button>
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -950,6 +950,22 @@ export const INITIAL_WEBHOOK_LOGS: MerchantWebhookLog[] = [
 
 export const INITIAL_STOCK_REQUESTS = [
   {
+    id: 'SW-4003',
+    productId: 'p-3',
+    productTitle: 'Breathable Honeycomb Pique Polo Shirt',
+    productSku: 'POLO-HONEY-003',
+    type: 'RETURN' as const,
+    requestedQty: 10,
+    currentStock: 210,
+    status: 'PENDING_APPROVAL' as const,
+    reason: 'Store recall: Merchant recalling 10 units from warehouse stock to outlet.',
+    destination: 'Dhanmondi Branch, Road 27, Dhaka',
+    trackingRef: 'RET-109281',
+    note: 'Outlet demand replenishment',
+    createdAt: '2026-11-05 16:45',
+    imageUrl: 'https://images.unsplash.com/photo-1581655353564-df123a1eb820?auto=format&fit=crop&w=200&q=80',
+  },
+  {
     id: 'sr-101',
     productId: 'p-1',
     productTitle: 'Mens Heavyweight Half Zip Hoodie',

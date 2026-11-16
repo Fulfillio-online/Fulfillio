@@ -33,6 +33,8 @@ import { WarehouseBinsTab } from './components/tabs/WarehouseBinsTab';
 import { WarehouseStockLedgerTab } from './components/tabs/WarehouseStockLedgerTab';
 import { StockAdjustModal } from './components/modals/StockAdjustModal';
 import { ApprovalActionModal } from './components/modals/ApprovalActionModal';
+import { RestockIntakeModal } from './components/modals/RestockIntakeModal';
+import { BulkSlotAssignment } from './components/modals/BulkApprovalModal';
 import { AddProductModal } from './components/modals/AddProductModal';
 import { CreateBinModal } from './components/modals/CreateBinModal';
 import {
@@ -49,7 +51,217 @@ export function ProductsManager({
   activeTab = 'all',
   onTabChange,
 }: ProductsManagerProps) {
-  const [subTab, setSubTab] = useState<WarehouseProductSubTab>(activeTab);
+  const [subTab, setSubTab] = useState<WarehouseProductSubTab>(activeTab as any);
+  const [catalogTab, setCatalogTab] = useState<any>(() => {
+    const t = (activeTab || '').toUpperCase();
+    if (t === 'APPROVAL') return 'APPROVAL';
+    if (t === 'RESTOCK') return 'RESTOCK';
+    if (t === 'PUBLIC') return 'PUBLIC';
+    if (t === 'OUT_OF_STOCK') return 'OUT_OF_STOCK';
+    if (t === 'DRAFT') return 'DRAFT';
+    return 'ALL';
+  });
+
+  useEffect(() => {
+    const t = (activeTab || '').toUpperCase();
+    if (t === 'APPROVAL') setCatalogTab('APPROVAL');
+    else if (t === 'RESTOCK') setCatalogTab('RESTOCK');
+    else if (t === 'PUBLIC') setCatalogTab('PUBLIC');
+    else if (t === 'OUT_OF_STOCK') setCatalogTab('OUT_OF_STOCK');
+    else if (t === 'DRAFT') setCatalogTab('DRAFT');
+    else if (t === 'ALL') setCatalogTab('ALL');
+  }, [activeTab]);
+
+  const handleCatalogTabChange = (tab: any) => {
+    setCatalogTab(tab);
+    onTabChange?.(tab.toLowerCase());
+  };
+
+  const handleBulkApproveProducts = (productIds: string[]) => {
+    const idSet = new Set(productIds);
+    setProducts((prev) => {
+      const next = prev.map((p) => {
+        if (!idSet.has(p.id)) return p;
+        const validBin = p.binCode && p.binCode !== 'Pending Approval' ? p.binCode : bins[0]?.code || 'A-01-02';
+        return {
+          ...p,
+          status: 'APPROVED' as const,
+          isDraft: false,
+          binCode: validBin,
+          submittedAt: 'Approved just now',
+        };
+      });
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
+      } catch {}
+      return next;
+    });
+    triggerToast(`Approved & published ${productIds.length} product(s).`);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
+      );
+    }
+  };
+
+  const handleBulkApproveWithSlots = (assignments: BulkSlotAssignment[]) => {
+    const slotMap = new Map<string, BulkSlotAssignment>();
+    assignments.forEach((a) => slotMap.set(a.productId, a));
+
+    setProducts((prev) => {
+      const next = prev.map((p) => {
+        const slot = slotMap.get(p.id);
+        if (!slot) return p;
+        return {
+          ...p,
+          status: 'APPROVED' as const,
+          isDraft: false,
+          binCode: slot.binCode,
+          stock: slot.qty,
+          submittedAt: 'Approved just now',
+        };
+      });
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
+      } catch {}
+      return next;
+    });
+
+    assignments.forEach((a) => {
+      const prod = products.find((p) => p.id === a.productId);
+      if (prod) {
+        appendStockMovement({
+          type: 'INITIAL_INTAKE',
+          merchantCode: prod.merchantCode,
+          merchantName: prod.merchantName,
+          productId: prod.id,
+          productTitle: prod.title,
+          sku: prod.fullSku,
+          deltaQty: a.qty,
+          previousStock: 0,
+          newStock: a.qty,
+          binCode: a.binCode,
+          referenceDocType: 'INWARD_CHALLAN',
+          referenceNumber: `CHL-${Date.now().toString().slice(-6)}`,
+          operator: 'Warehouse Receiving Officer',
+          carrierOrCourier: 'Initial Catalog Intake Consignment',
+          notes: `Bulk approved and slotted ${a.qty} units into Bin ${a.binCode}.`,
+        });
+      }
+    });
+
+    triggerToast(`Approved & slotted ${assignments.length} product(s) into warehouse bins.`);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
+      );
+    }
+  };
+
+  const handleBulkApproveRequests = (requestIds: string[]) => {
+    const idSet = new Set(requestIds);
+    setStockReplenishments((prev) => {
+      const next = prev.map((r) =>
+        idSet.has(r.id) || idSet.has(r.productId) ? { ...r, status: 'APPROVED' as const } : r
+      );
+      try {
+        localStorage.setItem(STORAGE_KEY_STOCK_REQUESTS, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    setStockWithdrawals((prev) => {
+      const next = prev.map((w) =>
+        idSet.has(w.id) || idSet.has(w.productId) ? { ...w, status: 'APPROVED' as const } : w
+      );
+      try {
+        localStorage.setItem(STORAGE_KEY_STOCK_WITHDRAWALS, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    setProducts((prev) => {
+      const next = prev.map((p) => {
+        let currentStock = p.stock;
+        const matchingRepl = stockReplenishments.find(
+          (r) => (idSet.has(r.id) || idSet.has(r.productId)) && (r.productId === p.id || r.productSku === p.fullSku)
+        );
+        if (matchingRepl) {
+          currentStock += matchingRepl.requestedQty;
+        }
+        const matchingWith = stockWithdrawals.find(
+          (w) => (idSet.has(w.id) || idSet.has(w.productId)) && (w.productId === p.id || w.productSku === p.fullSku)
+        );
+        if (matchingWith) {
+          currentStock = Math.max(0, currentStock - matchingWith.withdrawQty);
+        }
+        return { ...p, stock: currentStock };
+      });
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
+      } catch {}
+      return next;
+    });
+
+    triggerToast(`Approved ${requestIds.length} inventory request(s).`);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
+      );
+    }
+  };
+
+  const handleBulkRejectRequests = (requestIds: string[]) => {
+    const idSet = new Set(requestIds);
+    setStockReplenishments((prev) => {
+      const next = prev.map((r) =>
+        idSet.has(r.id) || idSet.has(r.productId) ? { ...r, status: 'REJECTED' as const } : r
+      );
+      try {
+        localStorage.setItem(STORAGE_KEY_STOCK_REQUESTS, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    setStockWithdrawals((prev) => {
+      const next = prev.map((w) =>
+        idSet.has(w.id) || idSet.has(w.productId) ? { ...w, status: 'REJECTED' as const } : w
+      );
+      try {
+        localStorage.setItem(STORAGE_KEY_STOCK_WITHDRAWALS, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    triggerToast(`Declined ${requestIds.length} inventory request(s).`);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
+      );
+    }
+  };
+
+  const handleBulkRejectProducts = (productIds: string[]) => {
+    const idSet = new Set(productIds);
+    const rejectedProducts = products.filter((p) => idSet.has(p.id));
+    setProducts((prev) => {
+      const next = prev.filter((p) => !idSet.has(p.id));
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next, rejectedProducts);
+      } catch {}
+      return next;
+    });
+    triggerToast(`Rejected ${productIds.length} product submission(s).`);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
+      );
+    }
+  };
   const [products, setProducts] = useState<WarehouseProductItem[]>(INITIAL_PRODUCTS);
   const [bins, setBins] = useState<WarehouseBin[]>(INITIAL_BINS);
   const [stockReplenishments, setStockReplenishments] = useState<InboundStockReplenishment[]>(
@@ -79,6 +291,7 @@ export function ProductsManager({
     product: WarehouseProductItem;
     selectedBin: string;
   } | null>(null);
+  const [restockModalData, setRestockModalData] = useState<InboundStockReplenishment | null>(null);
   const [addProductModalOpen, setAddProductModalOpen] = useState(false);
   const [newBinModalOpen, setNewBinModalOpen] = useState(false);
 
@@ -1113,7 +1326,7 @@ syncAdminProductsToMerchant(next);
 
   return (
     <div className="space-y-6 text-navy-800 dark:text-navy-800 dark:text-white">
-      {/* Top Header & Sub-Tab Navigation */}
+      {/* Top Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 bg-white/90 dark:bg-navy-900/90 border border-slate-200 dark:border-white/10 rounded-2xl p-5 shadow-xl">
         <div className="flex items-center gap-2.5">
           <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
@@ -1121,10 +1334,10 @@ syncAdminProductsToMerchant(next);
           </div>
           <div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-navy-900 dark:text-white tracking-tight">
-              Warehouse Master Product &amp; Bin Registry
+              Warehouse Master Products Catalog
             </h1>
             <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300">
-              Multi-merchant 2-part SKU catalog, inbound product approvals, and physical bin slotting
+              Multi-merchant catalog, physical stock levels, and product approval workflow
             </p>
           </div>
         </div>
@@ -1141,92 +1354,17 @@ syncAdminProductsToMerchant(next);
         </div>
       </div>
 
-      {/* Primary Sub-Tab Switcher Bar */}
-      <div className="flex flex-wrap items-center gap-2 p-1.5 rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-sm">
-        <button
-          type="button"
-          onClick={() => handleSelectTab('all')}
-          className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer flex items-center gap-2 ${
-            subTab === 'all'
-              ? 'bg-orange-600 text-white shadow-md shadow-orange-500/25'
-              : 'text-slate-600 dark:text-slate-300 hover:text-navy-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-navy-800'
-          }`}
-        >
-          <Package className="w-4 h-4" />
-          <span>All Products</span>
-          <span className={`px-2 py-0.5 rounded-full text-xs tabular-nums ${
-            subTab === 'all' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-white/10 text-slate-700 dark:text-slate-200'
-          }`}>
-            {products.filter((p) => p.status === 'APPROVED').length}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => handleSelectTab('approval')}
-          className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer flex items-center gap-2 ${
-            subTab === 'approval'
-              ? 'bg-orange-600 text-white shadow-md shadow-orange-500/25'
-              : 'text-slate-600 dark:text-slate-300 hover:text-navy-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-navy-800'
-          }`}
-        >
-          <CheckCircle2 className="w-4 h-4" />
-          <span>Product Approvals</span>
-          {totalPendingQueue > 0 && (
-            <span className="px-2 py-0.5 rounded-full text-xs bg-amber-500 text-slate-900 font-bold tabular-nums">
-              {totalPendingQueue}
-            </span>
-          )}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => handleSelectTab('bins')}
-          className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer flex items-center gap-2 ${
-            subTab === 'bins'
-              ? 'bg-orange-600 text-white shadow-md shadow-orange-500/25'
-              : 'text-slate-600 dark:text-slate-300 hover:text-navy-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-navy-800'
-          }`}
-        >
-          <MapPin className="w-4 h-4" />
-          <span>Warehouse Bins</span>
-          <span className={`px-2 py-0.5 rounded-full text-xs tabular-nums ${
-            subTab === 'bins' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-white/10 text-slate-700 dark:text-slate-200'
-          }`}>
-            {bins.length}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => handleSelectTab('ledger')}
-          className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer flex items-center gap-2 ${
-            subTab === 'ledger'
-              ? 'bg-orange-600 text-white shadow-md shadow-orange-500/25'
-              : 'text-slate-600 dark:text-slate-300 hover:text-navy-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-navy-800'
-          }`}
-        >
-          <ShieldCheck className="w-4 h-4" />
-          <span>Stock Movement Ledger</span>
-          <span className={`px-2 py-0.5 rounded-full text-xs tabular-nums font-bold ${
-            subTab === 'ledger' ? 'bg-white/20 text-white' : 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
-          }`}>
-            {stockMovements.length}
-          </span>
-        </button>
-      </div>
-
       {/* Feedback Toast Banner */}
       {bannerMessage && (
-        <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-700 dark:text-emerald-300 text-sm">
+        <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/90 border border-emerald-300 dark:border-emerald-500/40 text-emerald-950 dark:text-emerald-100 text-xs sm:text-sm font-semibold shadow-md shadow-emerald-950/5">
           <div className="flex items-center gap-2.5">
-            <CheckCircle2 className="w-4 h-4 text-orange-600 dark:text-orange-400 shrink-0" />
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <span>{bannerMessage}</span>
           </div>
           <button
             type="button"
             onClick={() => setBannerMessage(null)}
-            className="text-xs text-orange-600 dark:text-orange-400 hover:text-orange-800 dark:hover:text-orange-200 cursor-pointer"
+            className="text-xs font-bold text-emerald-800 dark:text-emerald-300 hover:text-emerald-950 dark:hover:text-white px-2.5 py-1 rounded-lg bg-emerald-100/80 dark:bg-emerald-900/50 hover:bg-emerald-200 dark:hover:bg-emerald-800 transition-colors cursor-pointer shrink-0"
           >
             Dismiss
           </button>
@@ -1243,62 +1381,31 @@ syncAdminProductsToMerchant(next);
         }
       />
 
-      {/* Active Tab View */}
-      {subTab === 'all' && (
-        <ProductsCatalogTab
-          products={products}
-          bins={bins}
-          onAdjustStock={handleAdjustStock}
-          onOpenStockAdjustModal={(prod) => setStockAdjustProduct(prod)}
-          onChangeProductBin={handleChangeProductBin}
-          onOpenAddProduct={() => setAddProductModalOpen(true)}
-          onMoveToDraft={handleMoveToDraft}
-          onRestoreProduct={handleRestoreProduct}
-          onPermanentDelete={handleDeleteProduct}
-          onBulkMoveToDraft={handleBulkMoveToDraft}
-          onBulkRestore={handleBulkRestore}
-          onBulkPermanentDelete={handleDeleteProducts}
-          onDeleteProduct={handleDeleteProduct}
-          onDeleteProducts={handleDeleteProducts}
-        />
-      )}
-
-      {subTab === 'approval' && (
-        <ProductsApprovalTab
-          products={products}
-          bins={bins}
-          stockReplenishments={stockReplenishments}
-          stockWithdrawals={stockWithdrawals}
-          onOpenApprovalModal={(mode, product, selectedBin) =>
-            setApprovalModalData({ mode, product, selectedBin })
-          }
-          onApproveReplenishment={handleApproveReplenishment}
-          onRejectReplenishment={handleRejectReplenishment}
-          onApproveWithdrawal={handleApproveWithdrawal}
-          onRejectWithdrawal={handleRejectWithdrawal}
-          onBulkApproveUnified={handleBulkApproveUnified}
-          onBulkRejectUnified={handleBulkRejectUnified}
-          onSendRestockNotice={handleSendRestockNotice}
-          onRecordManualRestock={handleRecordManualRestock}
-          onRecordManualWithdrawal={handleRecordManualWithdrawal}
-          onSwitchToAllTab={() => handleSelectTab('all')}
-        />
-      )}
-
-      {subTab === 'bins' && (
-        <WarehouseBinsTab
-          bins={bins}
-          products={products}
-          onOpenCreateBinModal={() => setNewBinModalOpen(true)}
-        />
-      )}
-
-      {subTab === 'ledger' && (
-        <WarehouseStockLedgerTab
-          stockMovements={stockMovements}
-          products={products}
-        />
-      )}
+      {/* The Single Master Table with All Products & Approvals */}
+      <ProductsCatalogTab
+        products={products}
+        bins={bins}
+        initialFilterTab={catalogTab}
+        onFilterTabChange={handleCatalogTabChange}
+        onAdjustStock={handleAdjustStock}
+        onOpenStockAdjustModal={(prod) => setStockAdjustProduct(prod)}
+        onChangeProductBin={handleChangeProductBin}
+        onOpenAddProduct={() => setAddProductModalOpen(true)}
+        onOpenApprovalModal={(mode, product, selectedBin) =>
+          setApprovalModalData({ mode, product, selectedBin })
+        }
+        onBulkApproveProductsWithSlots={handleBulkApproveWithSlots}
+        onBulkApproveProducts={handleBulkApproveProducts}
+        onBulkRejectProducts={handleBulkRejectProducts}
+        onMoveToDraft={handleMoveToDraft}
+        onRestoreProduct={handleRestoreProduct}
+        onPermanentDelete={handleDeleteProduct}
+        onBulkMoveToDraft={handleBulkMoveToDraft}
+        onBulkRestore={handleBulkRestore}
+        onBulkPermanentDelete={handleDeleteProducts}
+        onDeleteProduct={handleDeleteProduct}
+        onDeleteProducts={handleDeleteProducts}
+      />
 
       {/* Modals */}
       <StockAdjustModal
@@ -1315,6 +1422,14 @@ syncAdminProductsToMerchant(next);
         approvalData={approvalModalData}
         bins={bins}
         onConfirm={handleConfirmApproval}
+      />
+
+      <RestockIntakeModal
+        isOpen={Boolean(restockModalData)}
+        onClose={() => setRestockModalData(null)}
+        replenishment={restockModalData}
+        bins={bins}
+        onConfirm={handleApproveReplenishment}
       />
 
       <AddProductModal

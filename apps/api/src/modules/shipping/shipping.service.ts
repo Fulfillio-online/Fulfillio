@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ShippingRepository } from './shipping.repository';
 import { CourierProvider } from '@fulfillio/contracts';
-import { OrderStatus } from '@prisma/client';
+import { OrderStatus } from '@fulfillio/contracts';
 
 @Injectable()
 export class ShippingService {

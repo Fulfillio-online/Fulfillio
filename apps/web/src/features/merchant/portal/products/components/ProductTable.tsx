@@ -15,6 +15,8 @@ import {
   Square,
   CheckCircle2,
   Clock,
+  ArrowUpRight,
+  RotateCcw,
 } from 'lucide-react';
 import { ProductTableProps } from '../types';
 import { MerchantExpandableCard } from '../../components/common/MerchantExpandableCard';
@@ -489,18 +491,32 @@ export function ProductTable({
               </button>
             )}
 
-            {/* Manage Stock / Restock */}
+            {/* Inbound Restock Request */}
             <button
               type="button"
               onClick={() => {
                 setActiveMenuId(null);
                 setMenuCoords(null);
-                onManageStock(activeProduct);
+                onManageStock(activeProduct, 'RESTOCK');
               }}
               className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors"
             >
-              <Layers className="h-3.5 w-3.5 text-emerald-500" />
-              <span>Manage Stock / Inbound</span>
+              <ArrowUpRight className="h-3.5 w-3.5 text-emerald-500" />
+              <span>Request Inbound Restock (+Stock)</span>
+            </button>
+
+            {/* Product Return / Recall Request */}
+            <button
+              type="button"
+              onClick={() => {
+                setActiveMenuId(null);
+                setMenuCoords(null);
+                onManageStock(activeProduct, 'RETURN');
+              }}
+              className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors"
+            >
+              <RotateCcw className="h-3.5 w-3.5 text-orange-500" />
+              <span>Request Product Return / Recall (-Stock)</span>
             </button>
 
             {/* Thermal Barcode Sticker */}

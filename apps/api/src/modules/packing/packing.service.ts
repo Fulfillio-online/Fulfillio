@@ -2,7 +2,7 @@ import { Injectable, BadRequestException, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../../prisma/prisma.service';
 import { MemoEngineService } from '../memo-engine/memo-engine.service';
 import { QueueService } from '../queue/queue.service';
-import { OrderStatus } from '@prisma/client';
+import { OrderStatus } from '@fulfillio/contracts';
 
 @Injectable()
 export class PackingService {

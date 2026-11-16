@@ -1,21 +1,26 @@
 'use client';
 
-import React, { Suspense } from 'react';
+import React, { Suspense, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import {
-  ProductsManager,
-  WarehouseProductSubTab,
-} from '@/features/admin/products';
+import { ProductsManager } from '@/features/admin/products';
 
 function ProductsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  const tabParam = searchParams.get('tab') as WarehouseProductSubTab | null;
-  const activeTab: WarehouseProductSubTab =
-    tabParam === 'approval' || tabParam === 'bins' || tabParam === 'ledger' ? tabParam : 'all';
+  const tabParam = searchParams.get('tab');
 
-  const handleTabChange = (newTab: WarehouseProductSubTab) => {
+  useEffect(() => {
+    if (tabParam === 'bins') {
+      router.replace('/admin/bins');
+    } else if (tabParam === 'ledger') {
+      router.replace('/admin/stock');
+    }
+  }, [tabParam, router]);
+
+  const activeTab = tabParam || 'all';
+
+  const handleTabChange = (newTab: string) => {
     router.replace(`/admin/products?tab=${newTab}`, { scroll: false });
   };
 

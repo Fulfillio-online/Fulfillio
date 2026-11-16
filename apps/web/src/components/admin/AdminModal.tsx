@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ModalProps } from '@/components/ui/Modal';
@@ -12,31 +13,47 @@ const sizeClasses: Record<NonNullable<ModalProps['size']>, string> = {
   xl: 'max-w-4xl',
 };
 
-/** Admin-themed dialog (light + dark). Same API as the shared Modal. */
+/** Admin-themed dialog (light + dark) with portal, scroll lock, and backdrop dismissal. */
 export function Modal({ isOpen, onClose, title, subtitle, size = 'md', children, footer }: ModalProps) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Lock body scroll and listen for Escape key
   useEffect(() => {
     if (!isOpen) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
-  return (
+  return createPortal(
     <div
-      className="admin-font fixed inset-0 z-50 flex items-center justify-center bg-navy-950/60 backdrop-blur-sm p-2.5 sm:p-4 animate-in fade-in duration-150"
+      className="admin-font fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-2.5 sm:p-4 animate-in fade-in duration-150"
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-title"
+      onClick={onClose}
     >
       <div
         className={cn(
-          'w-full rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-navy-900 text-navy-800 dark:text-slate-100 shadow-2xl shadow-navy-950/30 overflow-hidden flex flex-col max-h-[92vh]',
+          'w-full rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-navy-900 text-navy-800 dark:text-slate-100 shadow-2xl shadow-navy-950/40 overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-150 my-auto',
           sizeClasses[size],
         )}
+        onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 sm:px-7 py-4 border-b border-slate-100 dark:border-white/10 gap-3">
           <div className="min-w-0">
@@ -48,7 +65,7 @@ export function Modal({ isOpen, onClose, title, subtitle, size = 'md', children,
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-navy-800 dark:hover:text-white transition-colors shrink-0"
+            className="rounded-full p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-navy-800 dark:hover:text-white transition-colors shrink-0 cursor-pointer"
             aria-label="Close modal"
           >
             <X className="w-5 h-5" />
@@ -63,6 +80,7 @@ export function Modal({ isOpen, onClose, title, subtitle, size = 'md', children,
           </div>
         ) : null}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

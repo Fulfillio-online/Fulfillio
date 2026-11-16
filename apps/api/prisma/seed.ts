@@ -1,4 +1,5 @@
-import { PrismaClient, UserRole, MerchantStatus, OrderStatus, CourierProvider, StockMovementReason } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
+import { UserRole, MerchantStatus, OrderStatus, CourierProvider, StockMovementReason } from '@fulfillio/contracts';
 import { PackagingType } from '@fulfillio/contracts';
 import * as bcrypt from 'bcrypt';
 

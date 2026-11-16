@@ -34,6 +34,7 @@ import {
   syncMerchantProductUpdatedToAdmin,
   syncMerchantMemoToAdmin,
   syncMerchantMemoDeletedToAdmin,
+  syncMerchantStockRequestToAdmin,
 } from '@/lib/warehouseSync';
 
 interface MerchantContextType {
@@ -57,6 +58,7 @@ interface MerchantContextType {
   bulkUpdateStatus: (ids: string[], status: 'PUBLISHED' | 'DRAFT') => void;
   bulkDeleteProducts: (ids: string[]) => void;
   requestStockAdd: (productId: string, requestedQty: number, note?: string) => void;
+  requestStockOperation: (payload: import("./products/modals/ManageStockModal").SubmitStockRequestPayload) => void;
   approveStockRequest: (requestId: string) => void;
   cancelStockRequest: (requestId: string) => void;
   createOrder: (
@@ -298,19 +300,27 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     showToast(`Removed ${ids.length} products.`);
   };
 
-  const requestStockAdd = (productId: string, requestedQty: number, note?: string) => {
-    const product = products.find((p) => p.id === productId);
-    if (!product || requestedQty <= 0) return;
+  const requestStockOperation = (payload: import("./products/modals/ManageStockModal").SubmitStockRequestPayload) => {
+    const product = products.find((p) => p.id === payload.productId);
+    if (!product || payload.requestedQty <= 0) return;
 
+    const isReturn = payload.type === 'RETURN';
     const newReq: StockRequestItem = {
-      id: `sr-${Date.now()}`,
-      productId,
+      id: isReturn ? `SW-${Date.now().toString().slice(-4)}` : `SR-${Date.now().toString().slice(-4)}`,
+      productId: payload.productId,
       productTitle: product.title,
       productSku: product.sku,
-      requestedQty,
+      type: payload.type,
+      requestedQty: payload.requestedQty,
       currentStock: product.stock,
       status: 'PENDING_APPROVAL',
-      note: note || 'Merchant requested restock',
+      note: payload.note,
+      reason: payload.reason,
+      destination: payload.destination,
+      carrier: payload.carrier,
+      trackingRef:
+        payload.trackingRef ||
+        (isReturn ? `RET-${Date.now().toString().slice(-6)}` : `INB-${Date.now().toString().slice(-6)}`),
       createdAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
       imageUrl: product.imageUrl,
     };
@@ -323,19 +333,37 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       return next;
     });
 
-    showToast(`Stock request (+${requestedQty} units) submitted for Admin Approval.`);
+    syncMerchantStockRequestToAdmin(newReq, profile);
+
+    if (isReturn) {
+      showToast(`Return request (${payload.requestedQty} units) submitted for Admin Approval.`);
+    } else {
+      showToast(`Inbound restock request (+${payload.requestedQty} units) submitted for Admin Approval.`);
+    }
+  };
+
+  const requestStockAdd = (productId: string, requestedQty: number, note?: string) => {
+    requestStockOperation({
+      productId,
+      type: 'RESTOCK',
+      requestedQty,
+      note,
+    });
   };
 
   const approveStockRequest = (requestId: string) => {
     const req = stockRequests.find((r) => r.id === requestId);
     if (!req || req.status === 'APPROVED') return;
 
-    // Credit stock to product
+    const isReturn = req.type === 'RETURN';
+    const delta = isReturn ? -req.requestedQty : req.requestedQty;
+
+    // Adjust stock to product
     setProducts((prev) => {
       let updatedTarget: MerchantProductItem | null = null;
       const next = prev.map((p) => {
         if (p.id !== req.productId) return p;
-        updatedTarget = { ...p, stock: p.stock + req.requestedQty };
+        updatedTarget = { ...p, stock: Math.max(0, p.stock + delta) };
         return updatedTarget;
       });
       if (typeof window !== 'undefined') {
@@ -358,7 +386,11 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       return next;
     });
 
-    showToast(`Admin approved: +${req.requestedQty} units added to ${req.productSku}.`);
+    showToast(
+      isReturn
+        ? `Admin approved return: -${req.requestedQty} units withdrawn from ${req.productSku}.`
+        : `Admin approved restock: +${req.requestedQty} units added to ${req.productSku}.`
+    );
   };
 
   const cancelStockRequest = (requestId: string) => {
@@ -566,6 +598,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
         bulkUpdateStatus,
         bulkDeleteProducts,
         requestStockAdd,
+        requestStockOperation,
         approveStockRequest,
         cancelStockRequest,
         createOrder,

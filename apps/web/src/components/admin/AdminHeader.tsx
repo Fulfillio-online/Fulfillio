@@ -14,6 +14,7 @@ import {
   Store,
   FileText,
   Package,
+  MapPin,
   Truck,
   RotateCcw,
   CreditCard,
@@ -75,6 +76,20 @@ export function AdminHeader({ onOpenMobileSidebar }: AdminHeaderProps) {
         title: 'Product Details',
         icon: Package,
         subtitle: 'Performance, Stock & Recent Orders',
+      };
+    }
+    if (pathname === '/admin/bins' || pathname.startsWith('/admin/bins')) {
+      return {
+        title: 'Warehouse Bins',
+        icon: MapPin,
+        subtitle: 'Physical Shelf Slotting & Bin Registry',
+      };
+    }
+    if (pathname === '/admin/inbound' || pathname.startsWith('/admin/inbound')) {
+      return {
+        title: 'Inbound Restock',
+        icon: Truck,
+        subtitle: 'Dock Receiving, Consignments & Slotting',
       };
     }
     if (pathname === '/admin/orders') {
