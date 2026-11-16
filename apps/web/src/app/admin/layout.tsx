@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { AdminSidebar } from '@/components/admin/AdminSidebar';
 import { AdminHeader } from '@/components/admin/AdminHeader';
 
@@ -10,6 +11,12 @@ interface AdminLayoutProps {
 
 export default function AdminLayout({ children }: AdminLayoutProps) {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const pathname = usePathname();
+
+  // If on admin login page, render full-bleed standalone layout without admin sidebar/header
+  if (pathname === '/admin/login' || pathname?.startsWith('/admin/login')) {
+    return <>{children}</>;
+  }
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-slate-50 dark:bg-navy-950 text-navy-900 dark:text-white">
