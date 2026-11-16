@@ -91,16 +91,24 @@ export function ProductsManager({
         if (savedProds) {
           const parsed = JSON.parse(savedProds);
           if (Array.isArray(parsed) && parsed.length > 0) {
-const healed = parsed.map((p: any) => {
+            const healed = parsed.map((p: any) => {
               const init = INITIAL_PRODUCTS.find((ip) => ip.id === p.id || ip.fullSku === p.fullSku);
-              const cleanedBin = cleanBinCode(p.binCode) || (init ? cleanBinCode(init.binCode) : 'A-01-02');
+              const isPending = p.status === 'PENDING_APPROVAL';
+              const isRejected = p.status === 'REJECTED';
+              const cleanedBin = isPending
+                ? p.binCode || 'Pending Approval'
+                : cleanBinCode(p.binCode) || (init ? cleanBinCode(init.binCode) : 'A-01-02');
               const safeStock = typeof p.stock === 'number' && !isNaN(p.stock) ? p.stock : (init?.stock ?? 100);
-              const safeStatus = p.status ? String(p.status).toUpperCase() : (init?.status || 'APPROVED');
+              const safeStatus = isPending
+                ? ('PENDING_APPROVAL' as const)
+                : isRejected
+                ? ('REJECTED' as const)
+                : ('APPROVED' as const);
               return {
                 ...p,
                 binCode: cleanedBin,
                 stock: safeStock,
-                status: safeStatus === 'REJECTED' ? 'REJECTED' : 'APPROVED',
+                status: safeStatus,
               };
             });
             baseProds = healed;
@@ -678,7 +686,7 @@ syncAdminProductsToMerchant(next);
         let updated = { ...p };
         if (approvedProductIds.has(p.id)) {
           updated.status = 'APPROVED';
-          updated.binCode = p.binCode || bins[0]?.code || 'A-01-02';
+          updated.binCode = p.binCode && p.binCode !== 'Pending Approval' ? p.binCode : bins[0]?.code || 'A-01-02';
         }
         if (restockQtyMap.has(p.id)) {
           updated.stock += restockQtyMap.get(p.id)!;
@@ -690,6 +698,7 @@ syncAdminProductsToMerchant(next);
       });
       try {
         localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
       } catch {}
       return next;
     });

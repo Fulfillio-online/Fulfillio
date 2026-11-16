@@ -87,4 +87,11 @@ export interface ProductToolbarProps {
   onSortChange: (opt: ProductSortOption) => void;
   viewMode: ProductViewMode;
   onViewModeChange: (mode: ProductViewMode) => void;
+  // Admin-style Bulk Actions props
+  selectedCount?: number;
+  activeTab?: ProductFilterTab;
+  onBulkPublish?: () => void;
+  onBulkDraft?: () => void;
+  onBulkDelete?: () => void;
+  onClearSelection?: () => void;
 }

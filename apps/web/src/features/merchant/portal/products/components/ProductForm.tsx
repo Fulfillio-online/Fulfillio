@@ -421,7 +421,8 @@ export function ProductForm({
       isEdit &&
       initialProduct?.bin &&
       initialProduct.bin !== 'Pending Approval' &&
-      initialProduct.bin !== 'Assigned on intake';
+      initialProduct.bin !== 'Assigned on intake' &&
+      initialProduct.status !== 'PENDING_APPROVAL';
 
     const productPayload: MerchantProductItem = {
       id: initialProduct?.id || `p-${Date.now()}`,
@@ -438,7 +439,7 @@ export function ProductForm({
       costPrice: numValue,
       stock: computedTotalStock,
       reserved: initialProduct?.reserved || 0,
-      status: isApprovedByAdmin ? status : 'DRAFT',
+      status: isApprovedByAdmin ? status : 'PENDING_APPROVAL',
       imageUrl: finalImageUrl.trim() || undefined,
       keyFeatures: features,
       colors,
@@ -501,7 +502,7 @@ export function ProductForm({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
+            <label className="block text-xs font-semibold text-navy-900 dark:text-slate-200 mb-1">
               PRODUCT NAME <span className="text-rose-400">*</span>
             </label>
             <input
@@ -1312,7 +1313,7 @@ export function ProductForm({
           !initialProduct?.bin ||
           initialProduct.bin === 'Pending Approval' ||
           initialProduct.bin === 'Assigned on intake' ? (
-            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-medium flex items-center gap-2">
+            <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs font-medium flex items-center gap-2">
               <ShieldAlert className="h-4 w-4 text-amber-400 shrink-0" />
               <span>
                 নতুন প্রোডাক্ট আপলোড করার পর এটি <strong>Pending Admin Approval</strong> হিসেবে থাকবে। Admin Panel থেকে Bin অ্যাসাইন ও Approve করার পর স্বয়ংক্রিয়ভাবে <strong>Published</strong> হয়ে যাবে।

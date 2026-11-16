@@ -189,7 +189,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
   const addProducts = (newItems: MerchantProductItem[]) => {
     const pendingItems: MerchantProductItem[] = newItems.map((item) => ({
       ...item,
-      status: 'DRAFT',
+      status: 'PENDING_APPROVAL',
       bin: 'Pending Approval',
     }));
     setProducts((prev) => {
@@ -211,11 +211,14 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       const next = prev.map((p) => {
         if (p.id !== id) return p;
         const isPendingApproval =
-          !p.bin || p.bin === 'Pending Approval' || p.bin === 'Assigned on intake';
+          p.status === 'PENDING_APPROVAL' ||
+          !p.bin ||
+          p.bin === 'Pending Approval' ||
+          p.bin === 'Assigned on intake';
         updatedTarget = {
           ...p,
           ...updated,
-          status: isPendingApproval ? 'DRAFT' : updated.status ?? p.status,
+          status: isPendingApproval ? 'PENDING_APPROVAL' : updated.status ?? p.status,
         };
         return updatedTarget;
       });

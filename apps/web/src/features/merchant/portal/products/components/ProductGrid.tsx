@@ -10,7 +10,6 @@ import {
   Package,
   Layers,
   FileText,
-  Eye,
   CheckCircle2,
 } from 'lucide-react';
 import { MerchantProductItem } from '../../types';
@@ -42,10 +41,13 @@ export function ProductGrid({
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
       {products.map((p) => {
         const isSelected = selectedIds.includes(p.id);
-        const isPublished = p.status === 'PUBLISHED' || (!p.status && p.stock > 0);
         const isPendingApproval =
-          !isPublished &&
-          (!p.bin || p.bin === 'Pending Approval' || p.bin === 'Assigned on intake');
+          p.status === 'PENDING_APPROVAL' ||
+          !p.bin ||
+          p.bin === 'Pending Approval' ||
+          p.bin === 'Assigned on intake';
+        const isPublished =
+          !isPendingApproval && (p.status === 'PUBLISHED' || (!p.status && p.stock > 0));
         const isLowStock = p.stock <= 30 && p.stock > 0;
         const isOutOfStock = p.stock === 0;
 
@@ -100,18 +102,26 @@ export function ProductGrid({
                 />
               </div>
 
-              {/* Status Badge */}
+              {/* Status Badge: Non-clickable pure text badge */}
               <div className="absolute top-2 right-2 z-10">
                 <span
-                  className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border backdrop-blur shadow-xs ${
-                    isPublished
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/30'
-                      : isPendingApproval
+                  className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border backdrop-blur shadow-xs select-none ${
+                    isPendingApproval
                       ? 'bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/30'
-                      : 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-navy-800/80 dark:text-slate-300 dark:border-white/10'
+                      : !isPublished || p.status === 'DRAFT'
+                      ? 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-navy-800/80 dark:text-slate-300 dark:border-white/10'
+                      : isOutOfStock
+                      ? 'bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-500/30'
+                      : 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/30'
                   }`}
                 >
-                  {isPublished ? 'Published' : isPendingApproval ? 'Pending Approval' : 'Draft'}
+                  {isPendingApproval
+                    ? 'Pending Approval'
+                    : !isPublished || p.status === 'DRAFT'
+                    ? 'Draft'
+                    : isOutOfStock
+                    ? 'Out of Stock'
+                    : 'Published'}
                 </span>
               </div>
 
@@ -140,11 +150,15 @@ export function ProductGrid({
                   <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-navy-950 px-1.5 py-0.5 rounded border border-slate-200 dark:border-white/10">
                     {p.sku}
                   </span>
-                  {p.bin && p.bin !== 'Assigned on intake' && (
+                  {isPendingApproval ? (
                     <span className="text-[10px] font-mono text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-300 dark:border-amber-500/20">
+                      Pending Admin Review
+                    </span>
+                  ) : p.bin && p.bin !== 'Assigned on intake' && p.bin !== 'Pending Approval' ? (
+                    <span className="text-[10px] font-mono text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-navy-950 px-1.5 py-0.5 rounded border border-slate-200 dark:border-white/10">
                       {p.bin}
                     </span>
-                  )}
+                  ) : null}
                 </div>
 
                 {/* Declared Value Card */}
@@ -167,11 +181,11 @@ export function ProductGrid({
                   <div>
                     <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-medium">Warehouse Stock</span>
                     {isOutOfStock ? (
-                      <span className="text-xs font-bold text-rose-600 dark:text-rose-400">Out of stock</span>
+                      <span className="text-xs font-bold text-rose-600 dark:text-rose-400 font-mono">0</span>
                     ) : isLowStock ? (
-                      <span className="text-xs font-bold text-amber-600 dark:text-amber-400">{p.stock} left</span>
+                      <span className="text-xs font-bold text-amber-600 dark:text-amber-400 font-mono">{p.stock}</span>
                     ) : (
-                      <span className="text-xs text-navy-900 dark:text-white font-semibold font-mono">{p.stock} in stock</span>
+                      <span className="text-xs text-navy-900 dark:text-white font-semibold font-mono">{p.stock}</span>
                     )}
                   </div>
                   <button
@@ -188,41 +202,42 @@ export function ProductGrid({
               {/* Bottom Actions */}
               <div className="mt-4 pt-3 border-t border-slate-200/80 dark:border-white/10 flex items-center justify-between gap-1.5">
                 {/* Publish to Store or Move to Draft Button */}
-                <button
-                  type="button"
-                  onClick={() => onToggleStatus(p.id)}
-                  className={`text-xs font-bold px-2 py-1.5 rounded-lg border transition-all flex items-center gap-1.5 cursor-pointer flex-1 justify-center ${
-                    isPublished
-                      ? 'bg-slate-100 hover:bg-slate-200 dark:bg-navy-800 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-white/10'
-                      : isPendingApproval
-                      ? 'bg-amber-50 hover:bg-amber-100 dark:bg-amber-500/15 dark:hover:bg-amber-500/25 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-500/30'
-                      : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-600 shadow-xs'
-                  }`}
-                  title={
-                    isPublished
-                      ? 'Move product to drafts'
-                      : isPendingApproval
-                      ? 'Awaiting warehouse approval'
-                      : 'Publish product live to store'
-                  }
-                >
-                  {isPublished ? (
-                    <>
-                      <FileText className="h-3.5 w-3.5 text-slate-500" />
-                      <span>Draft</span>
-                    </>
-                  ) : isPendingApproval ? (
-                    <>
-                      <FileText className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-                      <span>Pending</span>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                      <span>Publish</span>
-                    </>
-                  )}
-                </button>
+                {isPendingApproval ? (
+                  <div
+                    className="text-xs font-bold px-2 py-1.5 rounded-lg border bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/30 flex items-center gap-1.5 flex-1 justify-center cursor-default select-none"
+                    title="Awaiting admin approval & bin allocation"
+                  >
+                    <FileText className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                    <span>Pending</span>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onToggleStatus(p.id)}
+                    className={`text-xs font-bold px-2 py-1.5 rounded-lg border transition-all flex items-center gap-1.5 cursor-pointer flex-1 justify-center ${
+                      isPublished
+                        ? 'bg-slate-100 hover:bg-slate-200 dark:bg-navy-800 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-white/10'
+                        : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-600 shadow-xs'
+                    }`}
+                    title={
+                      isPublished
+                        ? 'Move product to drafts'
+                        : 'Publish product live to your store'
+                    }
+                  >
+                    {isPublished ? (
+                      <>
+                        <FileText className="h-3.5 w-3.5 text-slate-500" />
+                        <span>Draft</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        <span>Publish to Store</span>
+                      </>
+                    )}
+                  </button>
+                )}
 
                 <button
                   type="button"

@@ -786,11 +786,13 @@ export function convertMerchantProductToWarehouse(
     variantParts[1] ||
     'Standard';
   const binCode =
-    item.bin &&
-    item.bin !== 'Unassigned' &&
-    item.bin !== 'PENDING' &&
-    item.bin !== 'Pending Approval' &&
-    item.bin !== 'Assigned on intake'
+    status === 'PENDING_APPROVAL'
+      ? 'Pending Approval'
+      : item.bin &&
+        item.bin !== 'Unassigned' &&
+        item.bin !== 'PENDING' &&
+        item.bin !== 'Pending Approval' &&
+        item.bin !== 'Assigned on intake'
       ? item.bin.split('-').slice(0, 3).join('-') || 'A-01-02'
       : 'A-01-02';
 
@@ -1080,7 +1082,7 @@ export function syncAdminProductsToMerchant(
           status:
             matchedAdmin.status === 'APPROVED'
               ? ('PUBLISHED' as const)
-              : ('DRAFT' as const),
+              : ('PENDING_APPROVAL' as const),
         };
       });
 
@@ -1155,7 +1157,11 @@ export function reconcileAdminProductsWithMerchant(
 
       for (const mp of customMerchantItems) {
         newlyConverted.push(
-          convertMerchantProductToWarehouse(mp, profile, 'PENDING_APPROVAL')
+          convertMerchantProductToWarehouse(
+            mp,
+            profile,
+            mp.status === 'PUBLISHED' ? 'APPROVED' : 'PENDING_APPROVAL'
+          )
         );
       }
     }

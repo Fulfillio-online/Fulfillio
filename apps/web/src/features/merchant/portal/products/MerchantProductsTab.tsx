@@ -24,11 +24,9 @@ import { DeleteConfirmModal } from './modals/DeleteConfirmModal';
 import { PrintBarcodeModal } from '../components/modals/PrintBarcodeModal';
 
 const isPendingApprovalProduct = (p: MerchantProductItem): boolean => {
-  const isPublished = p.status === 'PUBLISHED' || (!p.status && p.stock > 0);
-  return (
-    !isPublished &&
-    (!p.bin || p.bin === 'Pending Approval' || p.bin === 'Assigned on intake')
-  );
+  if (p.status === 'PENDING_APPROVAL') return true;
+  if (!p.bin || p.bin === 'Pending Approval' || p.bin === 'Assigned on intake') return true;
+  return false;
 };
 
 export interface MerchantProductsTabProps {
@@ -326,7 +324,7 @@ export function MerchantProductsTab({
           />
         ) : (
           <>
-            {/* Toolbar: Search, Category, Sort, Grid/List view */}
+            {/* Toolbar with Admin-style Bulk Actions: Search, Category, Sort, Grid/List view */}
             <ProductToolbar
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
@@ -337,6 +335,21 @@ export function MerchantProductsTab({
               onSortChange={setSortOption}
               viewMode={viewMode}
               onViewModeChange={setViewMode}
+              selectedCount={selectedIds.length}
+              activeTab={activeTab}
+              onBulkPublish={() => {
+                onBulkUpdateStatus(selectedIds, 'PUBLISHED');
+                setSelectedIds([]);
+              }}
+              onBulkDraft={() => {
+                onBulkUpdateStatus(selectedIds, 'DRAFT');
+                setSelectedIds([]);
+              }}
+              onBulkDelete={() => {
+                onBulkDelete(selectedIds);
+                setSelectedIds([]);
+              }}
+              onClearSelection={() => setSelectedIds([])}
             />
 
             {/* Products View (List vs Grid) */}
@@ -404,7 +417,7 @@ export function MerchantProductsTab({
                       className="rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-navy-950 px-2.5 py-1 text-xs font-semibold text-navy-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-orange-500 cursor-pointer"
                     >
                       <option value={10}>10</option>
-                      <option value={20}>20</option>
+                      <option value={25}>25</option>
                       <option value={50}>50</option>
                       <option value={100}>100</option>
                     </select>
@@ -497,7 +510,7 @@ export function MerchantProductsTab({
         }}
       />
 
-      {/* Delete Confirmation Popup Modal */}
+      {/* Delete Confirmation Popup Modal with Restore to Store button */}
       <DeleteConfirmModal
         isOpen={isDeleteModalOpen}
         product={deleteProductTarget}
@@ -507,6 +520,11 @@ export function MerchantProductsTab({
         }}
         onConfirmDelete={(id) => {
           onDeleteProduct(id);
+          setIsDeleteModalOpen(false);
+          setDeleteProductTarget(null);
+        }}
+        onRestore={(id) => {
+          onToggleStatus(id);
           setIsDeleteModalOpen(false);
           setDeleteProductTarget(null);
         }}

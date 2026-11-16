@@ -162,7 +162,7 @@ export interface MerchantProductItem {
     stock: number;
   }[];
   imageUrl?: string;
-  status?: 'PUBLISHED' | 'DRAFT' | 'ARCHIVED';
+  status?: 'PUBLISHED' | 'DRAFT' | 'ARCHIVED' | 'PENDING_APPROVAL';
   totalOrders?: number;
 }
 

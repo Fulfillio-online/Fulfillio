@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Image from 'next/image';
-import { AlertTriangle, Trash2, X, Package, FileText, ArrowRight } from 'lucide-react';
+import { Trash2, X, Package, FileText, CheckCircle2 } from 'lucide-react';
 import { MerchantProductItem } from '../../types';
 
 interface DeleteConfirmModalProps {
@@ -10,6 +10,7 @@ interface DeleteConfirmModalProps {
   product: MerchantProductItem | null;
   onClose: () => void;
   onConfirmDelete: (id: string) => void;
+  onRestore?: (id: string) => void;
 }
 
 export function DeleteConfirmModal({
@@ -17,6 +18,7 @@ export function DeleteConfirmModal({
   product,
   onClose,
   onConfirmDelete,
+  onRestore,
 }: DeleteConfirmModalProps) {
   if (!isOpen || !product) return null;
 
@@ -105,13 +107,27 @@ export function DeleteConfirmModal({
 
         <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
           {isDraft ? (
-            'এই প্রোডাক্টটি বর্তমানে Drafts-এ রয়েছে। স্থায়ীভাবে মুছে ফেললে এর বারকোড, ইনভেন্টরি ম্যাপিং ও ক্যাটালগ তথ্য সম্পূর্ণ ডিলিট হয়ে যাবে।'
+            'এই প্রোডাক্টটি বর্তমানে Drafts-এ রয়েছে। আপনি চাইলে একে সরাসরি স্টোরে পুনরায় Publish করতে পারেন অথবা স্থায়ীভাবে মুছে ফেলতে পারেন।'
           ) : (
             'প্রোডাক্টটি সরাসরি ডিলিট না হয়ে প্রথমে Drafts-এ যাবে যাতে আপনার কাস্টমাররা এটি আর দেখতে না পায়। পরবর্তীতে স্থায়ীভাবে মুছে ফেলতে চাইলে Drafts ট্যাব থেকে ডিলিট করতে পারবেন।'
           )}
         </p>
 
-        <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-slate-100 dark:border-white/10">
+        <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-slate-100 dark:border-white/10 flex-wrap">
+          {isDraft && onRestore && (
+            <button
+              type="button"
+              onClick={() => {
+                onRestore(product.id);
+                onClose();
+              }}
+              className="mr-auto px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all cursor-pointer shadow-xs flex items-center gap-1.5 active:scale-95"
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              <span>Publish to Store</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={onClose}
