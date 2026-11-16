@@ -115,6 +115,40 @@ export default function LoginPage() {
                 <span className="text-xs font-bold">Warehouse Staff</span>
               </button>
             </div>
+
+            {selectedRole === 'MERCHANT' && (
+              <div className="flex items-center gap-2 pt-2.5">
+                <span className="text-[11px] text-slate-500 font-medium">Quick fill:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail('azad@gmail.com');
+                    setPassword('Azad?1');
+                  }}
+                  className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                    email === 'azad@gmail.com'
+                      ? 'bg-orange-500/20 border-orange-500/50 text-orange-400 shadow-xs'
+                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                  }`}
+                >
+                  Azad&apos;s Store
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail('sabbir@example.com');
+                    setPassword('password123');
+                  }}
+                  className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                    email === 'sabbir@example.com'
+                      ? 'bg-orange-500/20 border-orange-500/50 text-orange-400 shadow-xs'
+                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                  }`}
+                >
+                  Sabbir&apos;s Store
+                </button>
+              </div>
+            )}
           </div>
 
           {error && (

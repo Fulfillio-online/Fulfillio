@@ -1060,3 +1060,5 @@ export const INITIAL_STOCK_REQUESTS = [
     imageUrl: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=200&q=80',
   },
 ];
+
+export { INITIAL_AZAD_PRODUCTS } from './azadProducts';
