@@ -10,7 +10,8 @@
     "test": "turbo run test",
     "db:push": "pnpm --filter=@fulfillio/api exec prisma db push",
     "db:generate": "pnpm --filter=@fulfillio/api exec prisma generate",
-    "db:seed": "pnpm --filter=@fulfillio/api exec prisma db seed"
+    "db:seed": "pnpm --filter=@fulfillio/api exec prisma db seed",
+    "setup:env": "node -e \"const fs = require('fs'); fs.copyFileSync('.env.example', '.env'); fs.copyFileSync('.env.example', 'apps/api/.env'); fs.copyFileSync('.env.example', 'apps/worker/.env'); fs.writeFileSync('apps/web/.env.local', 'PORT=3000\\nNEXT_PUBLIC_API_URL=http://localhost:4000/api\\nNEXT_PUBLIC_APP_DOMAIN=localhost:3000\\n'); console.log('All .env files updated successfully for localhost!');\""
   },
   "devDependencies": {
     "turbo": "^2.11.10",

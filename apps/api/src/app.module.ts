@@ -26,7 +26,11 @@ import { QueueModule } from './modules/queue/queue.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, load: [configuration] }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      load: [configuration],
+      envFilePath: ['.env', 'apps/api/.env', '../../.env', '../.env'],
+    }),
     PrismaModule,
 
     // Auth & Identity
