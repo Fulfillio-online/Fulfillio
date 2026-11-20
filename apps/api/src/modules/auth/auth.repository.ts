@@ -71,6 +71,7 @@ export class AuthRepository {
         data: {
           merchantCode,
           businessName: data.businessName,
+          ownerName: data.ownerName || data.businessName,
           email: data.email,
           phone: data.phone,
           status: 'PENDING',

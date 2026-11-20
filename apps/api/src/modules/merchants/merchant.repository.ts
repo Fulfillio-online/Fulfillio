@@ -169,21 +169,42 @@ export class MerchantRepository {
     }
   }
 
-  async update(id: string, data: any) {
+  async update(idOrCode: string, data: any) {
     if (this.prisma.isOffline()) {
-      const m = this.prisma.fallbackStore.findMerchantById(id);
+      const m = this.prisma.fallbackStore.findMerchantById(idOrCode);
       if (m) Object.assign(m, data);
       return m as any;
     }
     try {
+      const clean = (idOrCode || '').trim();
+      const codeCandidate = clean.toUpperCase();
+      const codeFromLocalId = clean.toLowerCase().startsWith('m-')
+        ? `MC-${clean.slice(2)}`.toUpperCase()
+        : codeCandidate;
+
+      const existing = await this.prisma.merchant.findFirst({
+        where: {
+          OR: [
+            { id: clean },
+            { merchantCode: codeCandidate },
+            { merchantCode: codeFromLocalId },
+            { email: clean.toLowerCase() },
+          ],
+        },
+      });
+
+      if (!existing) {
+        throw new Error(`Merchant '${idOrCode}' not found to update.`);
+      }
+
       return await this.prisma.merchant.update({
-        where: { id },
+        where: { id: existing.id },
         data,
       });
     } catch (err: any) {
       if (this.isConnectionError(err)) {
         this.prisma.isConnected = false;
-        const m = this.prisma.fallbackStore.findMerchantById(id);
+        const m = this.prisma.fallbackStore.findMerchantById(idOrCode);
         if (m) Object.assign(m, data);
         return m as any;
       }

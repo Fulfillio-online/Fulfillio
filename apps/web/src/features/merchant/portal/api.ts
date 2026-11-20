@@ -1,4 +1,10 @@
-import { getActiveMerchantSession, getMerchantProductsKey, getMerchantOrdersKey } from '@/lib/warehouseSync';
+import {
+  getActiveMerchantSession,
+  getMerchantProductsKey,
+  getMerchantOrdersKey,
+  getMerchantProfileKey,
+  getStoredMerchantProfileForCode,
+} from '@/lib/warehouseSync';
 import {
   MerchantAsnRecord,
   MerchantOrderItem,
@@ -56,24 +62,38 @@ async function safeFetch<T>(endpoint: string, options: RequestInit = {}): Promis
 
 export const merchantApi = {
   async getProfile(): Promise<MerchantProfileData> {
+    const session = typeof window !== 'undefined' ? getActiveMerchantSession() : null;
+    const code = session?.merchantCode || 'MC-101';
     const remote = await safeFetch<MerchantProfileData>('/merchants/profile');
-    if (remote) return remote;
+    if (remote && remote.storeName && remote.merchantCode) return remote;
     if (typeof window !== 'undefined') {
-      const local = localStorage.getItem(STORAGE_KEY_MERCHANT_PROFILE);
+      const local = localStorage.getItem(getMerchantProfileKey(code));
       if (local) {
         try {
-          return JSON.parse(local);
+          const parsed = JSON.parse(local);
+          if (parsed && typeof parsed === 'object') return parsed;
         } catch {}
       }
+      return getStoredMerchantProfileForCode(code);
     }
     return INITIAL_MERCHANT_PROFILE;
   },
 
   async updateProfile(updates: Partial<MerchantProfileData>): Promise<MerchantProfileData> {
+    const session = typeof window !== 'undefined' ? getActiveMerchantSession() : null;
+    const code = session?.merchantCode || 'MC-101';
     const remote = await safeFetch<MerchantProfileData>('/merchants/profile', {
       method: 'PATCH',
       body: JSON.stringify(updates),
     });
+    if (typeof window !== 'undefined') {
+      const key = getMerchantProfileKey(code);
+      const prev = getStoredMerchantProfileForCode(code);
+      const next = { ...prev, ...updates };
+      try {
+        localStorage.setItem(key, JSON.stringify(next));
+      } catch {}
+    }
     if (remote) return remote;
     return updates as MerchantProfileData;
   },

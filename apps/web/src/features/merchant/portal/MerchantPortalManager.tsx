@@ -24,7 +24,11 @@ import {
   STORAGE_KEY_MERCHANT_PROFILE,
 } from './mockData';
 import { merchantApi } from './api';
-import { syncMerchantMemoToAdmin, syncMerchantMemoDeletedToAdmin } from '@/lib/warehouseSync';
+import {
+  syncMerchantMemoToAdmin,
+  syncMerchantMemoDeletedToAdmin,
+  getMerchantProfileKey,
+} from '@/lib/warehouseSync';
 import { MerchantSidebar } from './components/MerchantSidebar';
 import { MerchantHeader } from './components/MerchantHeader';
 import { MerchantOverviewTab } from './components/tabs/MerchantOverviewTab';
@@ -105,7 +109,20 @@ function MerchantPortalInner() {
           merchantApi.getInboundAsns(),
         ]);
         if (isMounted) {
-          if (profData) setProfile(profData);
+          if (profData) {
+            setProfile((prev) => {
+              // If active merchant is not MC-101, never allow default MC-101 demo preset to overwrite it
+              if (
+                prev.merchantCode &&
+                prev.merchantCode !== 'MC-101' &&
+                profData.merchantCode === 'MC-101' &&
+                profData.storeName === "Sabbir's Store"
+              ) {
+                return prev;
+              }
+              return { ...prev, ...profData };
+            });
+          }
           if (prodsData && prodsData.length > 0) setProducts(prodsData);
           if (ordsData && ordsData.length > 0) setOrders(ordsData);
           if (memosData && memosData.length > 0) setMemoList(memosData);
@@ -133,7 +150,8 @@ function MerchantPortalInner() {
     setProfile((prev) => {
       const next = { ...prev, ...updated };
       if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY_MERCHANT_PROFILE, JSON.stringify(next));
+        const key = getMerchantProfileKey(next.merchantCode);
+        localStorage.setItem(key, JSON.stringify(next));
       }
       return next;
     });

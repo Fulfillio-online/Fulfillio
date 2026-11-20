@@ -952,8 +952,8 @@ export function convertMerchantProductToWarehouse(
   profile: MerchantProfileData = INITIAL_MERCHANT_PROFILE,
   status: WarehouseProductItem['status'] = 'PENDING_APPROVAL'
 ): WarehouseProductItem {
-  const merchantCode = profile.merchantCode || 'MC-101';
-  const merchantName = profile.storeName || "Sabbir's Store";
+  const merchantCode = (item as any).merchantCode || profile.merchantCode || 'MC-101';
+  const merchantName = (item as any).storeName || profile.storeName || "Sabbir's Store";
   const { shortSku, fullSku } = normalizeFullSku(item.sku, merchantCode);
 
   const variantParts = (item.variantLabel || '').split('/').map((s) => s.trim());

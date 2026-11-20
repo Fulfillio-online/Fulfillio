@@ -87,7 +87,37 @@ export function useMerchantDirectory() {
             }));
 
             setMerchants((prev) => {
-              const merged = [...dbList];
+              const merged = dbList.map((dbItem) => {
+                const existing = prev.find(
+                  (p) =>
+                    p.merchantCode === dbItem.merchantCode ||
+                    p.email?.toLowerCase() === dbItem.email?.toLowerCase() ||
+                    p.id === dbItem.id
+                );
+                if (!existing) return dbItem;
+                return {
+                  ...existing,
+                  ...dbItem,
+                  id: existing.id || dbItem.id,
+                  storeName: existing.storeName || dbItem.storeName,
+                  ownerName:
+                    existing.ownerName && existing.ownerName !== 'Store Owner'
+                      ? existing.ownerName
+                      : dbItem.ownerName || existing.ownerName,
+                  phone:
+                    existing.phone && existing.phone !== '01700-000000'
+                      ? existing.phone
+                      : dbItem.phone || existing.phone,
+                  location: existing.location || dbItem.location,
+                  avatarUrl: existing.avatarUrl || dbItem.avatarUrl,
+                  avatarBg: existing.avatarBg || dbItem.avatarBg,
+                  avatarInitials: existing.avatarInitials || dbItem.avatarInitials,
+                  payoutAccount: existing.payoutAccount || dbItem.payoutAccount,
+                  status: dbItem.status || existing.status,
+                  verified: dbItem.verified !== undefined ? dbItem.verified : existing.verified,
+                };
+              });
+
               for (const existing of prev) {
                 if (!merged.some((m) => m.merchantCode === existing.merchantCode || m.email === existing.email)) {
                   merged.push(existing);
@@ -106,6 +136,66 @@ export function useMerchantDirectory() {
       setProductsList(products);
       setOrdersList(orders);
       setMemosList(getSyncedMerchantMemos(ALL_MEMOS));
+
+      // Fetch products from backend PostgreSQL database to guarantee all merchant uploads appear
+      fetch(`${API_BASE}/inventory/products`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((backendProds) => {
+          if (backendProds && Array.isArray(backendProds) && backendProds.length > 0) {
+            const mappedBackend: MerchantProductItem[] = backendProds.map((p: any) => {
+              const variants = p.variants || [];
+              const totalStock = variants.reduce(
+                (sum: number, v: any) => sum + (v.inventoryItems?.[0]?.quantityAvailable ?? 0),
+                0
+              );
+              const mCode = p.merchant?.merchantCode || p.merchantCode || 'MC-101';
+              const firstVariant = variants[0];
+              const isApproved = variants.some(
+                (v: any) =>
+                  v.defaultBinCode &&
+                  v.defaultBinCode !== 'Pending Approval' &&
+                  v.defaultBinCode !== 'Assigned on intake'
+              );
+
+              const variantParts = (firstVariant?.title || '').split(/[/•·|-]/).map((s: string) => s.trim());
+              const color = firstVariant?.attributes?.color || variantParts[0] || 'Standard';
+              const size = firstVariant?.attributes?.size || variantParts[1] || 'Standard';
+
+              return {
+                id: p.id,
+                merchantCode: mCode,
+                title: p.title,
+                category: (firstVariant?.attributes as any)?.category || 'Fashion',
+                sku: firstVariant?.sku || `${mCode}-${p.baseSku}-STD`,
+                barcode: firstVariant?.barcode || '',
+                color,
+                size,
+                price: Number(firstVariant?.price) || 0,
+                wholesalePrice: Number(firstVariant?.wholesalePrice) || Math.round((Number(firstVariant?.price) || 0) * 0.75),
+                stock: totalStock,
+                reserved: 0,
+                damaged: 0,
+                bin: isApproved ? (firstVariant?.defaultBinCode || 'A-01-02') : 'Pending Approval',
+                status: isApproved ? ('APPROVED' as const) : ('PENDING_APPROVAL' as const),
+                imageUrl: p.imageUrl || '',
+              };
+            });
+
+            setProductsList((prev) => {
+              const combined = [...prev];
+              for (const bp of mappedBackend) {
+                const idx = combined.findIndex((cp) => cp.id === bp.id || cp.sku === bp.sku);
+                if (idx >= 0) {
+                  combined[idx] = { ...combined[idx], ...bp };
+                } else {
+                  combined.unshift(bp);
+                }
+              }
+              return combined;
+            });
+          }
+        })
+        .catch(() => {});
     } catch (err) {
       console.warn('Could not read from localStorage', err);
     }
@@ -131,12 +221,16 @@ export function useMerchantDirectory() {
 
   const handleToggleStatus = (merchantId: string, currentStatus: string) => {
     const nextStatus: MerchantRecord['status'] = currentStatus === 'Active' ? 'Suspended' : 'Active';
+    const target = merchants.find((m) => m.id === merchantId || m.merchantCode === merchantId);
     const updated = merchants.map((m) =>
-      m.id === merchantId ? { ...m, status: nextStatus, verified: nextStatus === 'Active' } : m,
+      m.id === merchantId || m.merchantCode === merchantId
+        ? { ...m, status: nextStatus, verified: nextStatus === 'Active' }
+        : m,
     );
     setMerchants(updated);
     syncMerchantDirectoryToProfiles(updated);
-    fetch(`${API_BASE}/merchants/${merchantId}/status`, {
+    const targetIdentifier = target?.merchantCode || target?.id || merchantId;
+    fetch(`${API_BASE}/merchants/${encodeURIComponent(targetIdentifier)}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: nextStatus === 'Active' ? 'APPROVED' : 'SUSPENDED' }),
@@ -146,7 +240,7 @@ export function useMerchantDirectory() {
 
   const handleBulkUpdateStatus = (merchantIds: string[], nextStatus: 'Active' | 'Suspended') => {
     const updated = merchants.map((m) =>
-      merchantIds.includes(m.id)
+      merchantIds.includes(m.id) || (m.merchantCode && merchantIds.includes(m.merchantCode))
         ? { ...m, status: nextStatus, verified: nextStatus === 'Active' }
         : m,
     );
@@ -160,7 +254,11 @@ export function useMerchantDirectory() {
   };
 
   const handleUpdateMerchant = (updatedMerchant: MerchantRecord) => {
-    const updated = merchants.map((m) => (m.id === updatedMerchant.id ? updatedMerchant : m));
+    const updated = merchants.map((m) =>
+      m.id === updatedMerchant.id || m.merchantCode === updatedMerchant.merchantCode
+        ? { ...m, ...updatedMerchant }
+        : m
+    );
     setMerchants(updated);
     syncMerchantDirectoryToProfiles(updated);
 
@@ -173,7 +271,8 @@ export function useMerchantDirectory() {
     }
 
     // Sync with backend API
-    fetch(`${API_BASE}/merchants/${updatedMerchant.id}/status`, {
+    const targetIdentifier = updatedMerchant.merchantCode || updatedMerchant.id;
+    fetch(`${API_BASE}/merchants/${encodeURIComponent(targetIdentifier)}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

@@ -30,7 +30,15 @@ export function MerchantProfilePage({ merchantId }: MerchantProfilePageProps) {
     handleRejectProduct,
   } = useMerchantDirectory();
 
-  const merchant = merchants.find((m) => m.id === merchantId) || null;
+  const cleanId = (merchantId || '').trim().toLowerCase();
+  const merchant =
+    merchants.find(
+      (m) =>
+        m.id.toLowerCase() === cleanId ||
+        m.merchantCode.toLowerCase() === cleanId ||
+        m.merchantCode.toLowerCase().replace('mc-', 'm-') === cleanId ||
+        (cleanId.startsWith('m-') && m.merchantCode.toLowerCase() === `mc-${cleanId.slice(2)}`)
+    ) || null;
 
   if (!hydrated) {
     return (

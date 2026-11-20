@@ -1,5 +1,7 @@
 'use client';
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Package, CheckCircle2, Plus, MapPin, ShieldCheck } from 'lucide-react';
@@ -331,6 +333,86 @@ export function ProductsManager({
         }
         const reconciled = reconcileAdminProductsWithMerchant(baseProds);
         setProducts(reconciled);
+
+        // Fetch products directly from PostgreSQL backend to ensure all merchant uploads are present
+        fetch(`${API_BASE}/inventory/products`)
+          .then((res) => (res.ok ? res.json() : null))
+          .then((backendProds) => {
+            if (backendProds && Array.isArray(backendProds) && backendProds.length > 0) {
+              const mappedBackend: WarehouseProductItem[] = backendProds.map((p: any) => {
+                const variants = p.variants || [];
+                const totalStock = variants.reduce(
+                  (sum: number, v: any) => sum + (v.inventoryItems?.[0]?.quantityAvailable ?? 0),
+                  0
+                );
+                const mCode = p.merchant?.merchantCode || p.merchantCode || 'MC-101';
+                const mName = p.merchant?.businessName || `Merchant (${mCode})`;
+                const firstVariant = variants[0];
+                const isApproved = variants.some(
+                  (v: any) =>
+                    v.defaultBinCode &&
+                    v.defaultBinCode !== 'Pending Approval' &&
+                    v.defaultBinCode !== 'Assigned on intake'
+                );
+
+                const variantParts = (firstVariant?.title || '').split(/[/•·|-]/).map((s: string) => s.trim());
+                const color = firstVariant?.attributes?.color || variantParts[0] || 'Standard';
+                const size = firstVariant?.attributes?.size || variantParts[1] || 'Standard';
+
+                return {
+                  id: p.id,
+                  title: p.title,
+                  category: (firstVariant?.attributes as any)?.category || 'Fashion',
+                  merchantCode: mCode,
+                  merchantName: mName,
+                  shortSku: p.baseSku,
+                  fullSku: firstVariant?.sku || `${mCode}-${p.baseSku}-STD`,
+                  color,
+                  size,
+                  binCode: isApproved ? (firstVariant?.defaultBinCode || 'A-01-02') : 'Pending Approval',
+                  stock: totalStock,
+                  price: Number(firstVariant?.price) || 0,
+                  status: isApproved ? ('APPROVED' as const) : ('PENDING_APPROVAL' as const),
+                  submittedAt: new Date(p.createdAt || Date.now()).toLocaleDateString('en-GB', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                  }),
+                  imageUrl: p.imageUrl || '',
+                  images: p.images || [],
+                  barcode: firstVariant?.barcode || '',
+                  description: p.description,
+                  colors: (firstVariant?.attributes as any)?.allColors || [],
+                  sizes: (firstVariant?.attributes as any)?.sizes || [],
+                  variantsList: variants.map((v: any) => ({
+                    id: v.id,
+                    sku: v.sku,
+                    color: v.attributes?.color || v.title?.split('/')[0]?.trim() || '',
+                    size: v.attributes?.size || v.title?.split('/')[1]?.trim() || '',
+                    stock: v.inventoryItems?.[0]?.quantityAvailable ?? 0,
+                    imageUrl: v.imageUrl || p.imageUrl || '',
+                  })),
+                };
+              });
+
+              setProducts((prev) => {
+                const combined = [...prev];
+                for (const bp of mappedBackend) {
+                  const idx = combined.findIndex((cp) => cp.id === bp.id || cp.fullSku === bp.fullSku);
+                  if (idx >= 0) {
+                    combined[idx] = { ...combined[idx], ...bp };
+                  } else {
+                    combined.unshift(bp);
+                  }
+                }
+                try {
+                  localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(combined));
+                } catch {}
+                return combined;
+              });
+            }
+          })
+          .catch(() => {});
 
         const savedBins = localStorage.getItem(STORAGE_KEY_BINS);
         if (savedBins) {
