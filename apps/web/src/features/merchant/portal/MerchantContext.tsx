@@ -155,9 +155,21 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
           const reconciled = serverProds.map((sp) => {
             const localMatch = localProds.find((lp) => lp.id === sp.id || lp.sku === sp.sku);
             if (localMatch) {
+              const isApproved =
+                (localMatch.status === 'PUBLISHED' || sp.status === 'PUBLISHED') &&
+                localMatch.bin !== 'Pending Approval' &&
+                localMatch.bin !== 'Assigned on intake' &&
+                sp.bin !== 'Pending Approval' &&
+                sp.bin !== 'Assigned on intake';
+
+              const finalStatus = isApproved ? ('PUBLISHED' as const) : ('PENDING_APPROVAL' as const);
+              const finalBin = isApproved ? (localMatch.bin || sp.bin) : 'Pending Approval';
+
               return {
-                ...localMatch,
                 ...sp,
+                ...localMatch,
+                status: finalStatus,
+                bin: finalBin,
                 imageUrl: (sp.imageUrl && sp.imageUrl.trim()) ? sp.imageUrl : localMatch.imageUrl,
                 images: (sp.images && sp.images.length > 0) ? sp.images : (localMatch.images || []),
                 colors: (sp.colors && sp.colors.some((c) => c.imageUrl)) ? sp.colors : (localMatch.colors || sp.colors),
@@ -280,47 +292,68 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
   const addProducts = async (newItems: MerchantProductItem[]): Promise<{ ok: boolean; error?: string }> => {
     const pendingItems: MerchantProductItem[] = newItems.map((item) => ({
       ...item,
-      status: 'PENDING_APPROVAL',
+      status: 'PENDING_APPROVAL' as const,
       bin: 'Pending Approval',
     }));
+
+    let savedToDatabase = true;
+
     // 1. Send directly to PostgreSQL backend
-    for (const it of newItems) {
-      const res = await merchantApi.createProduct(it);
-      if (!res.ok) {
-        showToast(`ডাটাবেজে সেভ হতে সমস্যা হয়েছে: ${res.error}`);
-        return { ok: false, error: res.error };
+    for (const it of pendingItems) {
+      try {
+        const res = await merchantApi.createProduct(it);
+        if (!res.ok) {
+          savedToDatabase = false;
+          console.warn('[MerchantContext] createProduct server failed:', res.error);
+        }
+      } catch (err: any) {
+        savedToDatabase = false;
+        console.warn('[MerchantContext] createProduct network exception:', err);
       }
     }
 
-    // 2. Refresh products from PostgreSQL
-    try {
-      const serverProds = await merchantApi.getProducts();
-      if (serverProds && serverProds.length > 0) {
-        const reconciled = serverProds.map((sp) => {
-          const matchPending = pendingItems.find(
-            (pi) => pi.sku === sp.sku || pi.id === sp.id || pi.title === sp.title
-          );
-          if (matchPending) {
-            return {
-              ...sp,
-              status: 'PENDING_APPROVAL' as const,
-              bin: 'Pending Approval',
-              colors: (sp.colors && sp.colors.some((c) => c.imageUrl))
-                ? sp.colors
-                : (matchPending.colors || sp.colors),
-              imageUrl: sp.imageUrl || matchPending.imageUrl,
-            };
+    // 2. Refresh from server if online, or save locally with offline resilience
+    if (savedToDatabase) {
+      try {
+        const serverProds = await merchantApi.getProducts();
+        if (serverProds && serverProds.length > 0) {
+          const reconciled = serverProds.map((sp) => {
+            const matchPending = pendingItems.find(
+              (pi) => pi.sku === sp.sku || pi.id === sp.id || pi.title === sp.title
+            );
+            if (matchPending) {
+              return {
+                ...sp,
+                status: 'PENDING_APPROVAL' as const,
+                bin: 'Pending Approval',
+                colors: (sp.colors && sp.colors.some((c) => c.imageUrl))
+                  ? sp.colors
+                  : (matchPending.colors || sp.colors),
+                imageUrl: sp.imageUrl || matchPending.imageUrl,
+              };
+            }
+            return sp;
+          });
+          setProducts(reconciled);
+          if (typeof window !== 'undefined') {
+            safeSetLocalStorage(getMerchantProductsKey(profile.merchantCode), JSON.stringify(reconciled));
+            syncMerchantProductsAddedToAdmin(pendingItems, profile);
           }
-          return sp;
-        });
-        setProducts(reconciled);
-        if (typeof window !== 'undefined') {
-          safeSetLocalStorage(getMerchantProductsKey(profile.merchantCode), JSON.stringify(reconciled));
-          syncMerchantProductsAddedToAdmin(pendingItems, profile);
+        } else {
+          setProducts((prev) => {
+            const filtered = prev.filter((p) => !pendingItems.some((pi) => pi.sku === p.sku || pi.id === p.id));
+            const next = [...pendingItems, ...filtered];
+            if (typeof window !== 'undefined') {
+              safeSetLocalStorage(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
+              syncMerchantProductsAddedToAdmin(pendingItems, profile);
+            }
+            return next;
+          });
         }
-      } else {
+      } catch {
         setProducts((prev) => {
-          const next = [...pendingItems, ...prev];
+          const filtered = prev.filter((p) => !pendingItems.some((pi) => pi.sku === p.sku || pi.id === p.id));
+          const next = [...pendingItems, ...filtered];
           if (typeof window !== 'undefined') {
             safeSetLocalStorage(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
             syncMerchantProductsAddedToAdmin(pendingItems, profile);
@@ -328,20 +361,21 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
           return next;
         });
       }
-    } catch {
+      showToast('প্রোডাক্ট সফলভাবে PostgreSQL ডাটাবেজে সেভ হয়েছে (Pending Admin Approval)!');
+    } else {
+      // Offline fallback: persist locally and to Admin queue
       setProducts((prev) => {
-        const next = [...pendingItems, ...prev];
+        const filtered = prev.filter((p) => !pendingItems.some((pi) => pi.sku === p.sku || pi.id === p.id));
+        const next = [...pendingItems, ...filtered];
         if (typeof window !== 'undefined') {
           safeSetLocalStorage(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
           syncMerchantProductsAddedToAdmin(pendingItems, profile);
         }
         return next;
       });
+      showToast('ডাটাবেজ বর্তমানে অফলাইনে থাকায় প্রোডাক্টটি লোকালি Pending Approval হিসেবে সেভ করা হয়েছে।');
     }
 
-    showToast(
-      `প্রোডাক্ট সফলভাবে PostgreSQL ডাটাবেজে সেভ হয়েছে (Pending Approval)!`
-    );
     return { ok: true };
   };
 

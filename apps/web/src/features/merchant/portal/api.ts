@@ -162,25 +162,36 @@ export const merchantApi = {
         const profit = price - costPrice;
         const profitMargin = price > 0 ? Math.round((profit / price) * 100) : 0;
 
+        const rawBin = (variants[0]?.attributes as any)?.bin || (firstVariant?.attributes as any)?.bin || firstVariant?.defaultBinCode;
+        const rawStatus = (variants[0]?.attributes as any)?.status || (firstVariant?.attributes as any)?.status;
+        const isPending =
+          rawStatus === 'PENDING_APPROVAL' ||
+          !rawBin ||
+          rawBin === 'Pending Approval' ||
+          rawBin === 'Assigned on intake';
+
+        const resolvedBin = isPending ? 'Pending Approval' : (rawBin || 'Pending Approval');
+        const resolvedStatus = isPending ? ('PENDING_APPROVAL' as const) : (rawStatus === 'DRAFT' ? ('DRAFT' as const) : ('PUBLISHED' as const));
+
         return {
           id: p.id,
-          title: p.title,
-          variantLabel: variants.length > 1 ? `${variants.length} Variants` : (firstVariant?.title || 'Standard'),
-          sku: p.baseSku,
-          barcode: firstVariant?.barcode || '',
-          stock: totalStock,
-          reserved: totalReserved,
-          price,
-          costPrice,
-          profit,
-          profitMargin,
-          minPrice,
-          maxPrice,
-          bin: (variants[0]?.attributes as any)?.bin || (firstVariant?.defaultBinCode === 'Pending Approval' ? 'Pending Approval' : (firstVariant?.defaultBinCode || 'A-01-01')),
-          status: (variants[0]?.attributes as any)?.status === 'PENDING_APPROVAL' || firstVariant?.defaultBinCode === 'Pending Approval' ? ('PENDING_APPROVAL' as const) : ('PUBLISHED' as const),
-          imageUrl: p.imageUrl,
-          images: p.images && p.images.length > 0 ? p.images : (p.imageUrl ? [p.imageUrl] : []),
-          description: p.description,
+            title: p.title,
+            variantLabel: variants.length > 1 ? `${variants.length} Variants` : (firstVariant?.title || 'Standard'),
+            sku: p.baseSku,
+            barcode: firstVariant?.barcode || '',
+            stock: totalStock,
+            reserved: totalReserved,
+            price,
+            costPrice,
+            profit,
+            profitMargin,
+            minPrice,
+            maxPrice,
+            bin: resolvedBin,
+            status: resolvedStatus,
+            imageUrl: p.imageUrl,
+            images: p.images && p.images.length > 0 ? p.images : (p.imageUrl ? [p.imageUrl] : []),
+            description: p.description,
           category: variants[0]?.attributes?.category || p.attributes?.category || 'Fashion',
           subcategory: variants[0]?.attributes?.subcategory || p.attributes?.subcategory || 'Apparel',
           productType: (variants[0]?.attributes?.productType || p.attributes?.productType as any) || 'FASHION',
