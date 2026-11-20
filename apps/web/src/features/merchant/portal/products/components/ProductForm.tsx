@@ -22,7 +22,11 @@ import {
   ExternalLink,
   AlertCircle,
   X,
+  Star,
+  Link as LinkIcon,
+  Image as ImageIcon,
 } from 'lucide-react';
+import { SAMPLE_PRODUCT_PRESETS } from '../utils/imageCompressor';
 import { MerchantProductItem } from '../../types';
 import {
   ColorSwatch,
@@ -156,8 +160,51 @@ export function ProductForm({
     String(initialProduct?.stock || 30)
   );
 
-  // 5. Main Image
+  // 5. Main Image & Gallery
   const [imageUrl, setImageUrl] = useState(initialProduct?.imageUrl || '');
+  const [galleryImages, setGalleryImages] = useState<string[]>(() => {
+    if (initialProduct?.images && initialProduct.images.length > 0) {
+      const main = initialProduct.imageUrl || '';
+      return initialProduct.images.filter((img) => img !== main);
+    }
+    return [];
+  });
+  const [imageInputMode, setImageInputMode] = useState<'UPLOAD' | 'URL' | 'PRESET'>('UPLOAD');
+  const [urlInput, setUrlInput] = useState('');
+  const [urlError, setUrlError] = useState<string | null>(null);
+  const galleryFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Synchronize state whenever initialProduct changes (e.g. on edit reload)
+  useEffect(() => {
+    if (!initialProduct) return;
+    setTitle(initialProduct.title || '');
+    setMasterSku(initialProduct.sku || '');
+    setCategory(initialProduct.category || 'Fashion');
+    setSubcategory(initialProduct.subcategory || 'Hoodie');
+    setDescription(initialProduct.description || '');
+    setDeclaredValue(String(initialProduct.price || 850));
+    setProductType(initialProduct.productType || 'FASHION');
+    setImageUrl(initialProduct.imageUrl || '');
+    if (initialProduct.images && initialProduct.images.length > 0) {
+      const main = initialProduct.imageUrl || '';
+      setGalleryImages(initialProduct.images.filter((img) => img !== main));
+    } else {
+      setGalleryImages([]);
+    }
+    if (initialProduct.colors && initialProduct.colors.length > 0) {
+      setColors(initialProduct.colors);
+    }
+    if (initialProduct.sizes && initialProduct.sizes.length > 0) {
+      setAllSizes(initialProduct.sizes);
+    }
+    if (initialProduct.keyFeatures && initialProduct.keyFeatures.length > 0) {
+      setFeatures(initialProduct.keyFeatures);
+    }
+    if (initialProduct.stock !== undefined) {
+      setStandardStock(String(initialProduct.stock));
+    }
+    setStatus(initialProduct.status === 'PUBLISHED' ? 'PUBLISHED' : 'DRAFT');
+  }, [initialProduct]);
 
   // 6. Key Features
   const [features, setFeatures] = useState<string[]>(
@@ -330,8 +377,12 @@ export function ProductForm({
     if (!file) return;
 
     try {
-      const compressed = await compressImage(file, 800, 800, 0.8);
+      const compressed = await compressImage(file, 600, 600, 0.75);
       setImageUrl(compressed);
+      // Auto-assign to first color swatch if empty
+      setColors((prev) =>
+        prev.map((c, idx) => (idx === 0 && !c.imageUrl ? { ...c, imageUrl: compressed } : c))
+      );
     } catch (err) {
       console.error('Failed to compress image:', err);
     } finally {
@@ -341,12 +392,94 @@ export function ProductForm({
     }
   };
 
+  const handleGalleryFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    try {
+      for (const file of files) {
+        const compressed = await compressImage(file, 600, 600, 0.75);
+        if (!imageUrl) {
+          setImageUrl(compressed);
+        } else {
+          setGalleryImages((prev) => {
+            if (!prev.includes(compressed)) return [...prev, compressed];
+            return prev;
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to compress gallery image:', err);
+    } finally {
+      if (galleryFileInputRef.current) {
+        galleryFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleAddUrlImage = () => {
+    const trimmed = (urlInput || '').trim();
+    if (!trimmed) {
+      setUrlError('Please enter a valid image URL');
+      return;
+    }
+    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://') && !trimmed.startsWith('data:')) {
+      setUrlError('URL must start with http://, https://, or data:');
+      return;
+    }
+    setUrlError(null);
+    if (!imageUrl) {
+      setImageUrl(trimmed);
+      setColors((prev) =>
+        prev.map((c, idx) => (idx === 0 && !c.imageUrl ? { ...c, imageUrl: trimmed } : c))
+      );
+    } else {
+      setGalleryImages((prev) => (!prev.includes(trimmed) ? [...prev, trimmed] : prev));
+    }
+    setUrlInput('');
+  };
+
+  const handleApplyPreset = (presetUrl: string) => {
+    if (!imageUrl) {
+      setImageUrl(presetUrl);
+      setColors((prev) =>
+        prev.map((c, idx) => (idx === 0 && !c.imageUrl ? { ...c, imageUrl: presetUrl } : c))
+      );
+    } else {
+      setGalleryImages((prev) => (!prev.includes(presetUrl) ? [...prev, presetUrl] : prev));
+    }
+  };
+
+  const handleSetAsMainPhoto = (newMainUrl: string) => {
+    if (!newMainUrl || newMainUrl === imageUrl) return;
+    const oldMain = imageUrl;
+    setImageUrl(newMainUrl);
+    setGalleryImages((prev) => {
+      const filtered = prev.filter((u) => u !== newMainUrl);
+      return oldMain ? [oldMain, ...filtered] : filtered;
+    });
+  };
+
+  const handleRemovePhoto = (targetUrl: string) => {
+    if (targetUrl === imageUrl) {
+      if (galleryImages.length > 0) {
+        const nextMain = galleryImages[0];
+        setImageUrl(nextMain);
+        setGalleryImages((prev) => prev.slice(1));
+      } else {
+        setImageUrl('');
+      }
+    } else {
+      setGalleryImages((prev) => prev.filter((u) => u !== targetUrl));
+    }
+  };
+
   const handleColorFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !activeColorUploadId) return;
 
     try {
-      const compressed = await compressImage(file, 800, 800, 0.8);
+      const compressed = await compressImage(file, 600, 600, 0.75);
       setColors((prev) =>
         prev.map((c) => (c.id === activeColorUploadId ? { ...c, imageUrl: compressed } : c))
       );
@@ -462,7 +595,7 @@ export function ProductForm({
     const allActiveSizes = Array.from(
       new Set(colors.flatMap((c) => (c.sizes && c.sizes.length > 0 ? c.sizes : allSizes)))
     );
-    const finalImageUrl = imageUrl || colors.find((c) => Boolean(c.imageUrl))?.imageUrl || '';
+    const primaryImage = (imageUrl || galleryImages[0] || '').trim();
 
     const isApprovedByAdmin =
       isEdit &&
@@ -474,12 +607,22 @@ export function ProductForm({
     const allActiveImages = Array.from(
       new Set(
         [
-          finalImageUrl.trim(),
-          ...colors.map((c) => c.imageUrl),
-          ...generatedVariants.map((v) => v.imageUrl),
+          primaryImage,
+          ...galleryImages,
+          ...colors.map((c) => (c.imageUrl || '').trim()),
         ].filter((u): u is string => Boolean(u && u.trim()))
       )
     );
+
+    // Clean variants so they reference color or primary image without duplicating megabytes of base64
+    const cleanedVariants = generatedVariants.map((v) => {
+      const matchColor = colors.find((c) => (c.name || '').trim().toLowerCase() === (v.color || '').trim().toLowerCase());
+      const varImg = matchColor?.imageUrl || primaryImage;
+      return {
+        ...v,
+        imageUrl: varImg,
+      };
+    });
 
     const productPayload: MerchantProductItem = {
       id: initialProduct?.id || `p-${Date.now()}`,
@@ -497,12 +640,15 @@ export function ProductForm({
       stock: computedTotalStock,
       reserved: initialProduct?.reserved || 0,
       status: isApprovedByAdmin ? status : 'PENDING_APPROVAL',
-      imageUrl: finalImageUrl.trim() || allActiveImages[0] || undefined,
+      imageUrl: primaryImage, // Explicitly saved (empty string if removed, never undefined!)
       images: allActiveImages,
       keyFeatures: features,
-      colors,
+      colors: colors.map((c) => ({
+        ...c,
+        imageUrl: (c.imageUrl || '').trim(),
+      })),
       sizes: allActiveSizes.length > 0 ? allActiveSizes : allSizes,
-      variantsList: generatedVariants,
+      variantsList: cleanedVariants,
       totalOrders: initialProduct?.totalOrders || 0,
     };
 
@@ -702,69 +848,245 @@ export function ProductForm({
           </div>
         </div>
 
-        {/* Product Photo Upload Section */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-navy-900/80 border border-slate-200 dark:border-white/10 shadow-sm space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-            <div className="flex items-center gap-2 text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider">
-              <UploadCloud className="h-4 w-4 text-emerald-400" />
-              <span>Product Display Photo</span>
+        {/* Product Photos & Media Gallery Section */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-navy-900/80 border border-slate-200 dark:border-white/10 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-100 dark:border-white/5">
+            <div>
+              <div className="flex items-center gap-2 text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider">
+                <UploadCloud className="h-4 w-4 text-orange-500" />
+                <span>Product Photos & Media Gallery</span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Upload device photos, paste web links, or pick instant presets. The primary photo appears in catalog tables, invoices and shipping labels.
+              </p>
             </div>
-            <span className="text-[11px] text-slate-400">
-              Primary image shown across tables, orders & catalog
-            </span>
+
+            {/* Input Mode Selector Tabs */}
+            <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-navy-950 rounded-xl border border-slate-200 dark:border-white/5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setImageInputMode('UPLOAD')}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  imageInputMode === 'UPLOAD'
+                    ? 'bg-white dark:bg-navy-800 text-orange-600 dark:text-orange-400 shadow-xs'
+                    : 'text-slate-500 hover:text-navy-900 dark:hover:text-white'
+                }`}
+              >
+                <UploadCloud className="h-3.5 w-3.5" />
+                <span>Upload</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setImageInputMode('URL')}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  imageInputMode === 'URL'
+                    ? 'bg-white dark:bg-navy-800 text-orange-600 dark:text-orange-400 shadow-xs'
+                    : 'text-slate-500 hover:text-navy-900 dark:hover:text-white'
+                }`}
+              >
+                <LinkIcon className="h-3.5 w-3.5" />
+                <span>Image Link</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setImageInputMode('PRESET')}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  imageInputMode === 'PRESET'
+                    ? 'bg-white dark:bg-navy-800 text-orange-600 dark:text-orange-400 shadow-xs'
+                    : 'text-slate-500 hover:text-navy-900 dark:hover:text-white'
+                }`}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                <span>Sample Presets</span>
+              </button>
+            </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 pt-1">
-            {imageUrl ? (
-              <div className="relative group h-24 w-24 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 overflow-hidden shrink-0 flex items-center justify-center shadow-md">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={imageUrl}
-                  alt="Product Image"
-                  className="h-full w-full object-cover"
-                />
+          {/* Mode 1: URL Input Drawer */}
+          {imageInputMode === 'URL' && (
+            <div className="p-3.5 rounded-xl bg-orange-50/50 dark:bg-orange-950/20 border border-orange-200/60 dark:border-orange-500/20 space-y-2">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <div className="relative flex-1">
+                  <LinkIcon className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                  <input
+                    type="url"
+                    value={urlInput}
+                    onChange={(e) => {
+                      setUrlInput(e.target.value);
+                      setUrlError(null);
+                    }}
+                    placeholder="Paste direct image URL: https://images.unsplash.com/... or CDN link"
+                    className="w-full pl-9 pr-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
+                  />
+                </div>
                 <button
                   type="button"
-                  onClick={() => setImageUrl('')}
-                  className="absolute top-1 right-1 p-1 rounded-full bg-rose-600/90 text-white hover:bg-rose-500 shadow transition-colors cursor-pointer"
-                  title="Remove image"
+                  onClick={handleAddUrlImage}
+                  className="px-4 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold transition-colors cursor-pointer shrink-0 shadow-xs"
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
+                  Add Photo
                 </button>
               </div>
-            ) : (
-              <div
-                onClick={() => mainImageInputRef.current?.click()}
-                className="h-24 w-24 rounded-xl bg-slate-50 dark:bg-navy-950 border-2 border-dashed border-slate-200 dark:border-white/10 hover:border-emerald-500/50 flex flex-col items-center justify-center text-slate-500 hover:text-orange-600 dark:hover:text-orange-400 cursor-pointer transition-colors shrink-0"
-              >
-                <Package className="h-6 w-6 mb-1 opacity-60" />
-                <span className="text-[10px] font-semibold">Upload Photo</span>
-              </div>
-            )}
+              {urlError && <p className="text-[11px] text-rose-500 font-medium">{urlError}</p>}
+            </div>
+          )}
 
-            <div className="space-y-1.5 flex-1">
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => mainImageInputRef.current?.click()}
-                  className="px-3.5 py-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-navy-900 dark:text-slate-200 text-xs font-semibold flex items-center gap-1.5 border border-slate-200 dark:border-white/10 transition-colors cursor-pointer"
-                >
-                  <UploadCloud className="h-3.5 w-3.5 text-emerald-400" />
-                  <span>{imageUrl ? 'Change Photo' : 'Upload Product Photo'}</span>
-                </button>
-                {imageUrl && (
+          {/* Mode 2: Sample Presets Drawer */}
+          {imageInputMode === 'PRESET' && (
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 space-y-2">
+              <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                Click any sample photo to test instantly:
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+                {SAMPLE_PRODUCT_PRESETS.map((preset, pIdx) => (
+                  <button
+                    key={pIdx}
+                    type="button"
+                    onClick={() => handleApplyPreset(preset.url)}
+                    className="group flex flex-col items-center gap-1.5 p-2 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 hover:border-orange-500 transition-all text-left cursor-pointer"
+                  >
+                    <div className="h-14 w-full rounded-lg overflow-hidden bg-slate-100 dark:bg-navy-950 relative">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={preset.url} alt={preset.name} className="h-full w-full object-cover group-hover:scale-105 transition-transform" />
+                    </div>
+                    <span className="text-[10px] font-semibold text-navy-900 dark:text-slate-200 truncate w-full text-center">
+                      {preset.name}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Gallery View: Primary Photo + Additional Gallery Photos */}
+          <div className="space-y-3 pt-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {/* Card 1: Primary / Featured Photo */}
+              <div className="relative group rounded-2xl bg-slate-50 dark:bg-navy-950 border-2 border-orange-500/50 p-2.5 flex flex-col justify-between shadow-xs">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-orange-600 text-white text-[10px] font-bold tracking-wide">
+                    <Star className="h-2.5 w-2.5 fill-current" />
+                    Primary Display Photo
+                  </span>
+                  {imageUrl && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePhoto(imageUrl)}
+                      className="p-1 rounded-full bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white transition-colors cursor-pointer"
+                      title="Remove primary photo"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="h-36 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 overflow-hidden flex items-center justify-center relative">
+                  {imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={imageUrl} alt="Primary" className="h-full w-full object-cover" />
+                  ) : (
+                    <div
+                      onClick={() => mainImageInputRef.current?.click()}
+                      className="h-full w-full flex flex-col items-center justify-center text-slate-400 hover:text-orange-500 cursor-pointer transition-colors"
+                    >
+                      <Package className="h-8 w-8 mb-1 opacity-50" />
+                      <span className="text-[11px] font-semibold">No Primary Photo</span>
+                      <span className="text-[9px] text-slate-400">Click to upload or choose</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 mt-2.5">
                   <button
                     type="button"
-                    onClick={() => setImageUrl('')}
-                    className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold border border-rose-500/20 transition-colors cursor-pointer"
+                    onClick={() => mainImageInputRef.current?.click()}
+                    className="flex-1 py-1.5 px-2 rounded-lg bg-slate-200/80 dark:bg-navy-800 hover:bg-slate-300 dark:hover:bg-navy-700 text-navy-900 dark:text-slate-200 text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                   >
-                    Remove Photo
+                    <UploadCloud className="h-3 w-3 text-orange-500" />
+                    <span>{imageUrl ? 'Change' : 'Upload'}</span>
                   </button>
-                )}
+                  {imageUrl && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePhoto(imageUrl)}
+                      className="py-1.5 px-2.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-[11px] font-bold transition-colors cursor-pointer"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
               </div>
-              <p className="text-[11px] text-slate-400">
-                Supports PNG, JPG, or WebP. Auto-compressed for fast loading and zero broken images.
-              </p>
+
+              {/* Additional Gallery Photos */}
+              {galleryImages.map((gUrl, gIdx) => (
+                <div
+                  key={gIdx}
+                  className="relative group rounded-2xl bg-white dark:bg-navy-900/60 border border-slate-200 dark:border-white/10 p-2.5 flex flex-col justify-between hover:border-slate-300 dark:hover:border-white/20 transition-all shadow-xs"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Gallery #{gIdx + 1}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePhoto(gUrl)}
+                      className="p-1 rounded-full bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white transition-colors cursor-pointer"
+                      title="Remove from gallery"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+
+                  <div className="h-36 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 overflow-hidden flex items-center justify-center">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={gUrl} alt={`Gallery ${gIdx + 1}`} className="h-full w-full object-cover" />
+                  </div>
+
+                  <div className="flex items-center gap-2 mt-2.5">
+                    <button
+                      type="button"
+                      onClick={() => handleSetAsMainPhoto(gUrl)}
+                      className="flex-1 py-1.5 px-2 rounded-lg bg-orange-500/10 hover:bg-orange-500/20 text-orange-600 dark:text-orange-400 text-[11px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                      title="Set this photo as the primary product image"
+                    >
+                      <Star className="h-3 w-3" />
+                      <span>Set as Main</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePhoto(gUrl)}
+                      className="py-1.5 px-2 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-rose-500/10 text-slate-400 hover:text-rose-500 text-[11px] font-semibold transition-colors cursor-pointer"
+                      title="Delete photo"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {/* Add New Gallery Photo Dropzone Tile */}
+              {galleryImages.length < 8 && (
+                <div
+                  onClick={() => {
+                    if (imageInputMode === 'URL') {
+                      window.scrollTo({ top: 350, behavior: 'smooth' });
+                    } else {
+                      galleryFileInputRef.current?.click();
+                    }
+                  }}
+                  className="h-full min-h-[220px] rounded-2xl border-2 border-dashed border-slate-200 dark:border-white/10 hover:border-orange-500/50 bg-slate-50/50 dark:bg-navy-950/40 hover:bg-orange-50/20 flex flex-col items-center justify-center text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 cursor-pointer transition-all p-4 text-center group"
+                >
+                  <div className="h-10 w-10 rounded-full bg-slate-100 dark:bg-navy-900 group-hover:bg-orange-500/10 flex items-center justify-center mb-2 transition-colors">
+                    <Plus className="h-5 w-5 group-hover:text-orange-500" />
+                  </div>
+                  <span className="text-xs font-bold text-navy-900 dark:text-slate-200 group-hover:text-orange-600 dark:group-hover:text-orange-400">
+                    Add Gallery Photo
+                  </span>
+                  <span className="text-[10px] text-slate-400 mt-0.5">
+                    Click to add angle or detail shots
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -949,7 +1271,7 @@ export function ProductForm({
                             )}
                           </div>
 
-                          {/* Row 2 on mobile: Photo Preview & Upload Button */}
+                          {/* Row 2 on mobile: Photo Preview & Swatch Photo Actions */}
                           <div className="flex items-center gap-2 w-full sm:w-auto">
                             <div
                               onClick={() => {
@@ -957,26 +1279,15 @@ export function ProductForm({
                                 colorFileInputRef.current?.click();
                               }}
                               className="relative h-9 w-9 rounded-lg bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 overflow-hidden shrink-0 flex items-center justify-center cursor-pointer hover:border-orange-500 transition-colors group"
-                              title="Click to upload or change image"
+                              title="Click to upload or change image for this color"
                             >
-                              {c.imageUrl ? (
-                                c.imageUrl.startsWith('data:') ? (
-                                  // eslint-disable-next-line @next/next/no-img-element
-                                  <img
-                                    src={c.imageUrl}
-                                    alt={c.name}
-                                    className="h-full w-full object-cover group-hover:opacity-80 transition-opacity"
-                                  />
-                                ) : (
-                                  <Image
-                                    src={c.imageUrl}
-                                    alt={c.name}
-                                    fill
-                                    unoptimized={true}
-                                    sizes="36px"
-                                    className="object-cover group-hover:opacity-80 transition-opacity"
-                                  />
-                                )
+                              {(c.imageUrl || imageUrl) ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={c.imageUrl || imageUrl}
+                                  alt={c.name}
+                                  className="h-full w-full object-cover group-hover:opacity-80 transition-opacity"
+                                />
                               ) : (
                                 <Package className="h-4 w-4 text-slate-600 group-hover:text-orange-500 transition-colors" />
                               )}
@@ -990,9 +1301,23 @@ export function ProductForm({
                               }}
                               className="flex-1 sm:flex-initial justify-center px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-navy-900 dark:text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-200 dark:border-white/10"
                             >
-                              <UploadCloud className="h-3.5 w-3.5 text-emerald-400" />
-                              <span>{c.imageUrl ? 'Change Photo' : 'Upload Photo'}</span>
+                              <UploadCloud className="h-3.5 w-3.5 text-orange-500" />
+                              <span>{c.imageUrl ? 'Change' : 'Upload'}</span>
                             </button>
+
+                            {/* Quick use primary photo if swatch photo is empty */}
+                            {!c.imageUrl && imageUrl && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setColors(colors.map((item) => (item.id === c.id ? { ...item, imageUrl } : item)));
+                                }}
+                                className="px-2.5 py-1.5 rounded-lg bg-orange-500/10 hover:bg-orange-500/20 text-orange-600 dark:text-orange-400 text-[11px] font-semibold border border-orange-500/20 transition-colors cursor-pointer shrink-0"
+                                title="Use the product primary photo for this color"
+                              >
+                                Use Main
+                              </button>
+                            )}
 
                             {c.imageUrl && (
                               <button
@@ -1001,7 +1326,7 @@ export function ProductForm({
                                   setColors(colors.map((item) => (item.id === c.id ? { ...item, imageUrl: '' } : item)));
                                 }}
                                 className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-xs font-semibold border border-rose-500/20 transition-colors cursor-pointer shrink-0"
-                                title="Remove this color photo"
+                                title="Remove this color photo (will use main photo)"
                               >
                                 <X className="h-3.5 w-3.5" />
                               </button>
@@ -1543,6 +1868,16 @@ export function ProductForm({
         ref={colorFileInputRef}
         onChange={handleColorFileChange}
         accept="image/*"
+        className="hidden"
+      />
+
+      {/* Hidden file input for additional gallery photos */}
+      <input
+        type="file"
+        ref={galleryFileInputRef}
+        onChange={handleGalleryFileChange}
+        accept="image/*"
+        multiple
         className="hidden"
       />
     </div>

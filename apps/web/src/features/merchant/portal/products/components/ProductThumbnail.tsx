@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { Package } from 'lucide-react';
 
@@ -21,6 +21,11 @@ export function ProductThumbnail({
 }: ProductThumbnailProps) {
   const [hasError, setHasError] = useState(false);
 
+  // Automatically reset error state whenever src prop changes (e.g., after product edit/image replacement)
+  useEffect(() => {
+    setHasError(false);
+  }, [src]);
+
   // Size mapping
   const sizeStyles = {
     sm: 'h-8 w-8',
@@ -36,24 +41,26 @@ export function ProductThumbnail({
     xl: 'h-8 w-8',
   }[size];
 
-  const isDataUrl = src && src.startsWith('data:');
+  const cleanSrc = (src || '').trim();
+  const isDataUrl = cleanSrc.startsWith('data:');
+  const isValidUrl = cleanSrc.length > 0 && !hasError;
 
   return (
     <div
       className={`relative rounded-lg bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 overflow-hidden shrink-0 flex items-center justify-center ${sizeStyles} ${className}`}
     >
-      {src && !hasError ? (
+      {isValidUrl ? (
         isDataUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={src}
+            src={cleanSrc}
             alt={alt}
             className="h-full w-full object-cover"
             onError={() => setHasError(true)}
           />
         ) : (
           <Image
-            src={src}
+            src={cleanSrc}
             alt={alt}
             fill
             sizes="96px"

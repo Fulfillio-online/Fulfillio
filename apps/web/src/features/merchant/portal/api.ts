@@ -358,7 +358,7 @@ export const merchantApi = {
 
   async createProduct(product: MerchantProductItem): Promise<{ ok: boolean; data?: any; error?: string }> {
     const session = typeof window !== 'undefined' ? getActiveMerchantSession() : null;
-    const code = session?.merchantCode || 'MC-106';
+    const code = session?.merchantCode || 'MC-101';
     const rawSku = product.sku || 'SKU-001';
     const cleanBaseSku = rawSku.replace(/^MC-\d+-/i, '').replace(/[^a-zA-Z0-9_-]/g, '-');
     const allDistinctImages = Array.from(
@@ -454,7 +454,7 @@ export const merchantApi = {
 
   async updateProduct(productId: string, product: Partial<MerchantProductItem>): Promise<{ ok: boolean; data?: any; error?: string }> {
     const session = typeof window !== 'undefined' ? getActiveMerchantSession() : null;
-    const code = session?.merchantCode || 'MC-106';
+    const code = session?.merchantCode || 'MC-101';
     const rawSku = product.sku || '';
     const cleanBaseSku = rawSku ? rawSku.replace(/^MC-\d+-/i, '').replace(/[^a-zA-Z0-9_-]/g, '-') : undefined;
     const activeCurrentImages = Array.from(
@@ -473,8 +473,8 @@ export const merchantApi = {
       title: product.title,
       description: product.description,
       baseSku: cleanBaseSku,
-      imageUrl: product.imageUrl || allDistinctImages[0],
-      images: allDistinctImages,
+      imageUrl: product.imageUrl !== undefined ? product.imageUrl : allDistinctImages[0],
+      images: product.images !== undefined ? product.images : allDistinctImages,
     };
 
     if (product.variantsList && product.variantsList.length > 0) {

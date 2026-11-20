@@ -2,7 +2,7 @@
 
 import React, { use } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Package } from 'lucide-react';
+import { ArrowLeft, Package, Loader2 } from 'lucide-react';
 import { useMerchant } from '@/features/merchant/portal/MerchantContext';
 import { ProductForm } from '@/features/merchant/portal/products/components/ProductForm';
 
@@ -17,6 +17,16 @@ export default function EditProductPage({ params }: EditProductPageProps) {
   const product = products.find((p) => p.id === id || p.sku === id);
 
   if (!product) {
+    if (products.length === 0) {
+      return (
+        <div className="rounded-2xl border border-slate-200 dark:border-white/10 p-12 text-center max-w-lg mx-auto my-12 bg-white dark:bg-navy-900/40 flex flex-col items-center justify-center">
+          <Loader2 className="h-8 w-8 text-orange-500 animate-spin mb-3" />
+          <h2 className="text-sm font-bold text-navy-900 dark:text-white">Loading Product Details...</h2>
+          <p className="text-xs text-slate-400 mt-1">Please wait while we retrieve your product data.</p>
+        </div>
+      );
+    }
+
     return (
       <div className="rounded-2xl border border-dashed border-slate-200 dark:border-white/10 p-12 text-center max-w-lg mx-auto my-12 bg-white dark:bg-navy-900/40">
         <Package className="h-10 w-10 text-slate-600 mx-auto mb-3" />
@@ -38,6 +48,7 @@ export default function EditProductPage({ params }: EditProductPageProps) {
   return (
     <div className="py-2 sm:py-4">
       <ProductForm
+        key={product.id}
         initialProduct={product}
         merchantCode={profile.merchantCode}
         onSave={async (updated) => {

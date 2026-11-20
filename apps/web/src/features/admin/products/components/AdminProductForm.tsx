@@ -155,7 +155,7 @@ export function AdminProductForm() {
     if (!file) return;
 
     try {
-      const compressed = await compressImage(file, 800, 800, 0.8);
+      const compressed = await compressImage(file, 600, 600, 0.75);
       setImageUrl(compressed);
     } catch (err) {
       console.error('Failed to compress image:', err);
@@ -172,7 +172,7 @@ export function AdminProductForm() {
     if (!file || !activeColorUploadId) return;
 
     try {
-      const compressed = await compressImage(file, 800, 800, 0.8);
+      const compressed = await compressImage(file, 600, 600, 0.75);
       setColors((prev) =>
         prev.map((c) => (c.id === activeColorUploadId ? { ...c, imageUrl: compressed } : c))
       );

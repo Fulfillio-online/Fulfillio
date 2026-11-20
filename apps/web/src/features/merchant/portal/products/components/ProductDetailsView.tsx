@@ -142,7 +142,7 @@ export function ProductDetailsView({
         imgUrl = (matchV as any)?.imageUrl || (matchV as any)?.attributes?.imageUrl || '';
       }
 
-      if (!imgUrl && idx === 0 && product.imageUrl && product.imageUrl.trim()) {
+      if (!imgUrl && product.imageUrl && product.imageUrl.trim()) {
         imgUrl = product.imageUrl.trim();
       }
 
@@ -188,6 +188,18 @@ export function ProductDetailsView({
         colorHex: productColors[0]
           ? getColorHex(productColors[0].name, productColors[0].hex)
           : undefined,
+      });
+    }
+
+    if (product.images && Array.isArray(product.images)) {
+      product.images.forEach((gImg, gIdx) => {
+        const clean = (gImg || '').trim();
+        if (clean && !list.some((item) => item.url === clean)) {
+          list.push({
+            url: clean,
+            label: `Gallery Photo ${gIdx + 1}`,
+          });
+        }
       });
     }
 

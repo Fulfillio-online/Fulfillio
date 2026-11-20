@@ -11,6 +11,7 @@ import {
   MerchantSubcategoryItem,
 } from './types';
 import { StockRequestItem } from './products/types';
+import { safeSetLocalStorage } from './products/utils/imageCompressor';
 import {
   INITIAL_MERCHANT_PROFILE, INITIAL_MERCHANT_PRODUCTS, INITIAL_MERCHANT_ORDERS,
 } from './mockData';
@@ -89,9 +90,30 @@ interface MerchantContextType {
 const MerchantContext = createContext<MerchantContextType | undefined>(undefined);
 
 export function MerchantProvider({ children }: { children: ReactNode }) {
-  const [profile, setProfile] = useState<MerchantProfileData>(INITIAL_MERCHANT_PROFILE);
-  const [products, setProducts] = useState<MerchantProductItem[]>([]);
-  const [orders, setOrders] = useState<MerchantOrderItem[]>([]);
+  const [profile, setProfile] = useState<MerchantProfileData>(() => {
+    if (typeof window !== 'undefined') {
+      const session = getActiveMerchantSession();
+      const code = session?.merchantCode || 'MC-101';
+      return getStoredMerchantProfileForCode(code);
+    }
+    return INITIAL_MERCHANT_PROFILE;
+  });
+  const [products, setProducts] = useState<MerchantProductItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      const session = getActiveMerchantSession();
+      const code = session?.merchantCode || 'MC-101';
+      return getStoredMerchantProductsForCode(code);
+    }
+    return [];
+  });
+  const [orders, setOrders] = useState<MerchantOrderItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      const session = getActiveMerchantSession();
+      const code = session?.merchantCode || 'MC-101';
+      return getStoredMerchantOrdersForCode(code);
+    }
+    return [];
+  });
   const [memoList, setMemoList] = useState<ResellerMemo[]>([]);
   const [asns, setAsns] = useState<MerchantAsnRecord[]>([]);
   const [stockRequests, setStockRequests] = useState<StockRequestItem[]>([]);
@@ -113,9 +135,23 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
           merchantApi.getOrders(),
         ]);
         if (serverProds && serverProds.length > 0) {
-          setProducts(serverProds);
+          const localProds = getStoredMerchantProductsForCode(code);
+          const reconciled = serverProds.map((sp) => {
+            const localMatch = localProds.find((lp) => lp.id === sp.id || lp.sku === sp.sku);
+            if (localMatch) {
+              return {
+                ...localMatch,
+                ...sp,
+                imageUrl: (sp.imageUrl && sp.imageUrl.trim()) ? sp.imageUrl : localMatch.imageUrl,
+                images: (sp.images && sp.images.length > 0) ? sp.images : (localMatch.images || []),
+                colors: (sp.colors && sp.colors.some((c) => c.imageUrl)) ? sp.colors : (localMatch.colors || sp.colors),
+              };
+            }
+            return sp;
+          });
+          setProducts(reconciled);
           if (typeof window !== 'undefined') {
-            localStorage.setItem(getMerchantProductsKey(code), JSON.stringify(serverProds));
+            safeSetLocalStorage(getMerchantProductsKey(code), JSON.stringify(reconciled));
           }
         } else {
           setProducts(getStoredMerchantProductsForCode(code));
@@ -123,7 +159,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
         if (serverOrds && serverOrds.length > 0) {
           setOrders(serverOrds);
           if (typeof window !== 'undefined') {
-            localStorage.setItem(getMerchantOrdersKey(code), JSON.stringify(serverOrds));
+            safeSetLocalStorage(getMerchantOrdersKey(code), JSON.stringify(serverOrds));
           }
         } else {
           setOrders(getStoredMerchantOrdersForCode(code));
@@ -325,12 +361,14 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
         updatedTarget = {
           ...p,
           ...updated,
+          imageUrl: updated.imageUrl !== undefined ? updated.imageUrl : p.imageUrl,
+          images: updated.images !== undefined ? updated.images : (p.images || []),
           status: isPendingApproval ? 'PENDING_APPROVAL' : updated.status ?? p.status,
         };
         return updatedTarget;
       });
       if (typeof window !== 'undefined') {
-        localStorage.setItem(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
+        safeSetLocalStorage(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
         if (updatedTarget) {
           syncMerchantProductUpdatedToAdmin(updatedTarget, profile);
         }

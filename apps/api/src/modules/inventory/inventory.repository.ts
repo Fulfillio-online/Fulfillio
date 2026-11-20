@@ -129,12 +129,16 @@ export class InventoryRepository {
       }>;
     },
   ) {
+    const searchConditions: any[] = [
+      { id: productId },
+      { baseSku: productId },
+    ];
+    if (data.baseSku) {
+      searchConditions.push({ baseSku: data.baseSku });
+    }
     const existing = await this.prisma.product.findFirst({
       where: {
-        OR: [
-          { id: productId },
-          { baseSku: productId },
-        ],
+        OR: searchConditions,
       },
       include: {
         variants: {

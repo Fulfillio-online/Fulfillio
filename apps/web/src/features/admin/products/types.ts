@@ -58,6 +58,7 @@ export interface WarehouseProductItem {
   isDraft?: boolean;
   submittedAt: string;
   imageUrl: string;
+  images?: string[];
   barcode?: string;
   description?: string;
   colors?: { id: string; name: string; hex: string; imageUrl?: string; sizes?: string[] }[];
