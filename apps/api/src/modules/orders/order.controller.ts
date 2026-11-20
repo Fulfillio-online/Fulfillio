@@ -8,6 +8,7 @@ import {
   Body,
   UseGuards,
   Request,
+  BadRequestException,
 } from '@nestjs/common';
 import { OrderService } from './order.service';
 import { ApiKeyGuard } from '../auth/guards/api-key.guard';
@@ -113,14 +114,19 @@ export class OrderController {
    */
   @Post()
   async ingestOrder(@Request() req: any, @Body() body: any) {
-    const effectiveMerchant =
-      req.merchant?.id ||
-      req.user?.merchantId ||
-      body.merchantId ||
-      body.merchantCode ||
-      req.headers['x-merchant-code'] ||
-      'MC-101';
-    return this.orderService.createOrder(effectiveMerchant, body);
+    try {
+      const effectiveMerchant =
+        req.merchant?.id ||
+        req.user?.merchantId ||
+        body?.merchantId ||
+        body?.merchantCode ||
+        req.headers['x-merchant-code'] ||
+        'MC-101';
+      return await this.orderService.createOrder(effectiveMerchant, body);
+    } catch (err: any) {
+      console.error('[OrderController] Failed to ingest order:', err);
+      throw new BadRequestException(err?.message || 'Database error occurred while saving order');
+    }
   }
 
   /**

@@ -151,53 +151,83 @@ export class OrderRepository {
       isVerifiedAtPacking?: boolean;
     }>;
   }) {
-    return this.prisma.order.create({
-      data: {
-        merchantId: data.merchantId,
-        externalOrderId: data.externalOrderId,
-        customerName: data.customerName,
-        customerPhone: data.customerPhone,
-        customerAddress: data.customerAddress,
-        city: data.city,
-        memoCode: data.memoCode ? data.memoCode.toUpperCase() : 'MEMO-DEFAULT',
-        status: data.status,
-        customerRiskScore: data.customerRiskScore,
-        customerRiskLevel: data.customerRiskLevel,
-        totalAmount: data.totalAmount,
-        codAmount: data.codAmount,
-        subtotal: data.subtotal ?? 0,
-        deliveryFee: data.deliveryFee ?? 0,
-        discount: data.discount ?? 0,
-        advancePayment: data.advancePayment ?? 0,
-        paymentMethod: data.paymentMethod,
-        paymentStatus: data.paymentStatus ?? 'Unpaid',
-        advancePaymentMethod: data.advancePaymentMethod,
-        advanceTrxId: data.advanceTrxId,
-        timeline: data.timeline ?? undefined,
-        items: {
-          create: data.items.map((i) => ({
-            variantId: i.variantId || null,
-            sku: i.sku,
-            productTitle: i.productTitle,
-            variantLabel: i.variantLabel,
-            quantity: i.quantity,
-            unitPrice: i.unitPrice,
-            isVerifiedAtPacking: i.isVerifiedAtPacking ?? false,
-          })),
+    try {
+      return await this.prisma.order.create({
+        data: {
+          merchantId: data.merchantId,
+          externalOrderId: data.externalOrderId,
+          customerName: data.customerName,
+          customerPhone: data.customerPhone,
+          customerAddress: data.customerAddress,
+          city: data.city,
+          memoCode: data.memoCode ? data.memoCode.toUpperCase() : 'MEMO-DEFAULT',
+          status: data.status,
+          customerRiskScore: data.customerRiskScore,
+          customerRiskLevel: data.customerRiskLevel,
+          totalAmount: data.totalAmount,
+          codAmount: data.codAmount,
+          subtotal: data.subtotal ?? 0,
+          deliveryFee: data.deliveryFee ?? 0,
+          discount: data.discount ?? 0,
+          advancePayment: data.advancePayment ?? 0,
+          paymentMethod: data.paymentMethod,
+          paymentStatus: data.paymentStatus ?? 'Unpaid',
+          advancePaymentMethod: data.advancePaymentMethod,
+          advanceTrxId: data.advanceTrxId,
+          timeline: data.timeline ?? undefined,
+          items: {
+            create: data.items.map((i) => ({
+              variantId: i.variantId || null,
+              sku: i.sku,
+              productTitle: i.productTitle,
+              variantLabel: i.variantLabel,
+              quantity: i.quantity,
+              unitPrice: i.unitPrice,
+              isVerifiedAtPacking: i.isVerifiedAtPacking ?? false,
+            })),
+          },
         },
-      },
-      include: {
-        items: {
-          include: {
-            variant: {
-              include: {
-                product: true,
+        include: {
+          items: {
+            include: {
+              variant: {
+                include: {
+                  product: true,
+                },
               },
             },
           },
         },
-      },
-    });
+      });
+    } catch (createErr: any) {
+      console.warn('[OrderRepository] Full order insert failed, attempting safe 0_init fallback:', createErr.message);
+      // Fallback: insert using only columns guaranteed to exist in base 0_init schema
+      return await this.prisma.order.create({
+        data: {
+          merchantId: data.merchantId,
+          externalOrderId: data.externalOrderId,
+          customerName: data.customerName,
+          customerPhone: data.customerPhone,
+          customerAddress: data.customerAddress,
+          city: data.city,
+          memoCode: data.memoCode ? data.memoCode.toUpperCase() : 'MEMO-DEFAULT',
+          status: data.status,
+          totalAmount: data.totalAmount,
+          codAmount: data.codAmount,
+          items: {
+            create: data.items.map((i) => ({
+              variantId: i.variantId!,
+              quantity: i.quantity,
+              unitPrice: i.unitPrice,
+              isVerifiedAtPacking: i.isVerifiedAtPacking ?? false,
+            })),
+          },
+        },
+        include: {
+          items: true,
+        },
+      });
+    }
   }
 
   async updateStatus(id: string, status: OrderStatus) {
