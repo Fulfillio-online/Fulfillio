@@ -5,6 +5,7 @@ import { AuthController } from './auth.controller';
 import { AuthRepository } from './auth.repository';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { ApiKeyGuard } from './guards/api-key.guard';
+import { JwtOrApiKeyGuard } from './guards/jwt-or-api-key.guard';
 
 @Global()
 @Module({
@@ -12,7 +13,7 @@ import { ApiKeyGuard } from './guards/api-key.guard';
     JwtModule.register({}),
   ],
   controllers: [AuthController],
-  providers: [AuthService, AuthRepository, JwtAuthGuard, ApiKeyGuard],
-  exports: [AuthService, AuthRepository, JwtAuthGuard, ApiKeyGuard, JwtModule],
+  providers: [AuthService, AuthRepository, JwtAuthGuard, ApiKeyGuard, JwtOrApiKeyGuard],
+  exports: [AuthService, AuthRepository, JwtAuthGuard, ApiKeyGuard, JwtOrApiKeyGuard, JwtModule],
 })
 export class AuthModule {}

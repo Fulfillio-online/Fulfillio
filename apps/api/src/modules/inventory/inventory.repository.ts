@@ -8,11 +8,13 @@ export class InventoryRepository {
 
   async findMerchantById(merchantId: string) {
     if (!merchantId) return null;
+    const clean = merchantId.trim();
     return this.prisma.merchant.findFirst({
       where: {
         OR: [
-          { id: merchantId },
-          { merchantCode: merchantId },
+          { id: clean },
+          { merchantCode: clean.toUpperCase() },
+          { email: clean.toLowerCase() },
         ],
       },
     });
@@ -61,6 +63,7 @@ export class InventoryRepository {
     description?: string;
     baseSku: string;
     imageUrl?: string;
+    images?: string[];
     defaultLocationId: string;
     variants: Array<{
       sku: string;
@@ -69,6 +72,8 @@ export class InventoryRepository {
       price: number;
       wholesalePrice?: number;
       defaultBinCode?: string;
+      initialStock?: number;
+      imageUrl?: string;
       attributes?: Record<string, any>;
     }>;
   }) {
@@ -85,6 +90,7 @@ export class InventoryRepository {
           description: data.description,
           baseSku: data.baseSku,
           imageUrl: sanitizedImageUrl,
+          images: data.images || (sanitizedImageUrl ? [sanitizedImageUrl] : []),
         variants: {
           create: data.variants.map((v) => ({
             sku: v.sku,
@@ -93,11 +99,12 @@ export class InventoryRepository {
             price: v.price,
             wholesalePrice: v.wholesalePrice,
             defaultBinCode: v.defaultBinCode || 'A-01-01',
+            imageUrl: v.imageUrl,
             attributes: v.attributes || {},
             inventoryItems: {
               create: {
                 locationId: data.defaultLocationId,
-                quantityAvailable: 0,
+                quantityAvailable: Math.max(0, Number(v.initialStock) || 0),
                 quantityReserved: 0,
                 quantityDamaged: 0,
               },
@@ -117,9 +124,167 @@ export class InventoryRepository {
     }
   }
 
+  async updateProductWithVariants(
+    productId: string,
+    data: {
+      merchantId?: string;
+      title?: string;
+      description?: string;
+      baseSku?: string;
+      imageUrl?: string;
+      images?: string[];
+      defaultLocationId: string;
+      variants?: Array<{
+        id?: string;
+        sku?: string;
+        barcode?: string;
+        title: string;
+        price: number;
+        wholesalePrice?: number;
+        defaultBinCode?: string;
+        initialStock?: number;
+        imageUrl?: string;
+        attributes?: Record<string, any>;
+      }>;
+    },
+  ) {
+    const searchConditions: any[] = [
+      { id: productId },
+      { baseSku: productId },
+    ];
+    if (data.baseSku) {
+      searchConditions.push({ baseSku: data.baseSku });
+    }
+    const existing = await this.prisma.product.findFirst({
+      where: {
+        OR: searchConditions,
+      },
+      include: {
+        variants: {
+          include: {
+            inventoryItems: true,
+            orderItems: { select: { id: true } },
+            inboundItems: { select: { id: true } },
+          },
+        },
+      },
+    });
+
+    if (!existing) {
+      throw new BadRequestException(`Product with ID '${productId}' not found.`);
+    }
+
+    // Update Product scalar fields
+    await this.prisma.product.update({
+      where: { id: existing.id },
+      data: {
+        title: data.title ?? existing.title,
+        description: data.description !== undefined ? data.description : existing.description,
+        baseSku: data.baseSku ?? existing.baseSku,
+        imageUrl: data.imageUrl !== undefined ? data.imageUrl : existing.imageUrl,
+        images: data.images !== undefined ? data.images : existing.images,
+      },
+    });
+
+    // If variants were provided, synchronize them
+    if (data.variants && data.variants.length > 0) {
+      const incomingSkus = new Set(data.variants.map((v) => v.sku).filter(Boolean));
+      const incomingIds = new Set(data.variants.map((v) => v.id).filter(Boolean));
+
+      for (const v of data.variants) {
+        const matchingExisting = existing.variants.find(
+          (ev) =>
+            (v.id && ev.id === v.id) ||
+            (v.sku && ev.sku === v.sku) ||
+            (v.sku && (ev.sku.endsWith(v.sku) || v.sku.endsWith(ev.sku))) ||
+            ((ev.attributes as any)?.color && (v.attributes as any)?.color &&
+             (ev.attributes as any)?.color?.trim()?.toLowerCase() === (v.attributes as any)?.color?.trim()?.toLowerCase() &&
+             (ev.attributes as any)?.size?.trim()?.toLowerCase() === (v.attributes as any)?.size?.trim()?.toLowerCase())
+        );
+
+        if (matchingExisting) {
+          await this.prisma.productVariant.update({
+            where: { id: matchingExisting.id },
+            data: {
+              title: v.title,
+              price: v.price,
+              wholesalePrice: v.wholesalePrice,
+              imageUrl: v.imageUrl,
+              attributes: v.attributes || {},
+              defaultBinCode: v.defaultBinCode || matchingExisting.defaultBinCode,
+            },
+          });
+
+          if (v.initialStock !== undefined) {
+            const stockQty = Math.max(0, Number(v.initialStock) || 0);
+            const defaultItem = matchingExisting.inventoryItems[0];
+            if (defaultItem) {
+              await this.prisma.inventoryItem.update({
+                where: { id: defaultItem.id },
+                data: { quantityAvailable: stockQty },
+              });
+            } else {
+              await this.prisma.inventoryItem.create({
+                data: {
+                  variantId: matchingExisting.id,
+                  locationId: data.defaultLocationId,
+                  quantityAvailable: stockQty,
+                  quantityReserved: 0,
+                  quantityDamaged: 0,
+                },
+              });
+            }
+          }
+        } else {
+          // Create new variant
+          await this.prisma.productVariant.create({
+            data: {
+              productId: existing.id,
+              sku: v.sku || `SKU-${Date.now().toString().slice(-6)}`,
+              barcode: v.barcode || `894${Date.now().toString().slice(-9)}`,
+              title: v.title,
+              price: v.price,
+              wholesalePrice: v.wholesalePrice,
+              defaultBinCode: v.defaultBinCode || 'A-01-01',
+              imageUrl: v.imageUrl,
+              attributes: v.attributes || {},
+              inventoryItems: {
+                create: {
+                  locationId: data.defaultLocationId,
+                  quantityAvailable: Math.max(0, Number(v.initialStock) || 0),
+                  quantityReserved: 0,
+                  quantityDamaged: 0,
+                },
+              },
+            },
+          });
+        }
+      }
+
+      // If any existing variant was deleted from variant list, remove only if not tied to orders
+      for (const ev of existing.variants) {
+        const isStillPresent = incomingIds.has(ev.id) || incomingSkus.has(ev.sku);
+        if (!isStillPresent) {
+          if (ev.orderItems.length === 0 && ev.inboundItems.length === 0) {
+            await this.prisma.productVariant.delete({
+              where: { id: ev.id },
+            });
+          }
+        }
+      }
+    }
+
+    return this.findProductById(existing.id);
+  }
+
   async findProducts(merchantId?: string) {
     const where: any = {};
-    if (merchantId) where.merchantId = merchantId;
+    if (merchantId) {
+      where.OR = [
+        { merchantId },
+        { merchant: { merchantCode: merchantId.trim().toUpperCase() } },
+      ];
+    }
 
     return this.prisma.product.findMany({
       where,

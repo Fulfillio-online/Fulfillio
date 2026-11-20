@@ -248,18 +248,18 @@ export function MerchantBillingTab({ payoutAccount: initialAccount }: MerchantBi
       {/* Top Header matching Screenshot */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2 text-xs text-slate-400 font-semibold mb-1">
+          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 font-semibold mb-1">
             <span>Overview</span>
             <span>/</span>
             <span className="text-emerald-400">Earnings</span>
-            <span className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+            <span className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-navy-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10">
               Financial overview
             </span>
           </div>
-          <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-100">
+          <h1 className="text-xl sm:text-2xl font-black tracking-tight text-navy-900 dark:text-white">
             Earnings
           </h1>
-          <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
             Track your revenue, available balance, payouts and earnings from fulfilled orders.
           </p>
         </div>
@@ -267,7 +267,7 @@ export function MerchantBillingTab({ payoutAccount: initialAccount }: MerchantBi
         <button
           type="button"
           onClick={() => triggerToast('Statement exported as PDF & CSV!')}
-          className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 border border-slate-800 transition-colors shrink-0 shadow-sm"
+          className="px-4 py-2 rounded-xl bg-white dark:bg-navy-900 hover:bg-slate-100 dark:bg-navy-800 text-navy-900 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 border border-slate-200/80 dark:border-white/10 transition-colors shrink-0 shadow-sm"
         >
           <Download className="w-4 h-4 text-emerald-400" />
           <span>Export Statement</span>

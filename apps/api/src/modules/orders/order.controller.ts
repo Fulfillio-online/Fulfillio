@@ -12,6 +12,7 @@ import {
 import { OrderService } from './order.service';
 import { ApiKeyGuard } from '../auth/guards/api-key.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { PackagingType, OrderStatus, UserRole } from '@fulfillio/contracts';
 
@@ -97,9 +98,9 @@ export class OrderController {
    * Authenticated via X-Fulfillio-Api-Key
    */
   @Post()
-  @UseGuards(ApiKeyGuard)
+  @UseGuards(JwtOrApiKeyGuard)
   async ingestOrder(@Request() req: any, @Body() body: any) {
-    const merchantId = req.merchant.id;
+    const merchantId = req.merchant?.id || req.user?.merchantId;
     return this.orderService.createOrder(merchantId, body);
   }
 

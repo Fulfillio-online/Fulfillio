@@ -92,17 +92,17 @@ export function RequestPayoutModal({
   const remainingBalance = Math.max(0, availableBalance - amount);
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="w-full max-w-lg rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl p-5 sm:p-6 space-y-5">
+    <div className="fixed inset-0 z-50 bg-slate-50 dark:bg-navy-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div className="w-full max-w-lg rounded-2xl bg-white dark:bg-navy-900 border border-slate-200/80 dark:border-white/10 shadow-2xl p-5 sm:p-6 space-y-5">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-white/10 pb-3">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
               <Wallet className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-bold text-base text-slate-100">Request Payout</h3>
-              <p className="text-xs text-slate-400">
+              <h3 className="font-bold text-base text-navy-900 dark:text-white">Request Payout</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 Disburse your cleared earnings directly to your verified account.
               </p>
             </div>
@@ -110,7 +110,7 @@ export function RequestPayoutModal({
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+            className="p-1 rounded-lg text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:text-slate-200 hover:bg-slate-100 dark:bg-navy-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -125,8 +125,8 @@ export function RequestPayoutModal({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Available balance indicator */}
-          <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 flex items-center justify-between text-xs">
-            <span className="text-slate-400">Current Available Balance:</span>
+          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-navy-950/70 border border-slate-200/80 dark:border-white/10 flex items-center justify-between text-xs">
+            <span className="text-slate-500 dark:text-slate-400">Current Available Balance:</span>
             <span className="font-extrabold text-emerald-400 text-sm">
               ৳ {availableBalance.toLocaleString()}
             </span>
@@ -135,7 +135,7 @@ export function RequestPayoutModal({
           {/* Amount input */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-semibold text-slate-300">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                 Payout Amount (BDT)
               </label>
               <span className="text-[11px] text-slate-500 font-mono">Min ৳ 1,000</span>
@@ -152,7 +152,7 @@ export function RequestPayoutModal({
                   setError(null);
                 }}
                 required
-                className="w-full pl-8 pr-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm font-bold text-slate-100 focus:outline-none focus:border-emerald-500"
+                className="w-full pl-8 pr-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200/80 dark:border-white/10 text-sm font-bold text-navy-900 dark:text-white focus:outline-none focus:border-orange-500"
               />
             </div>
 
@@ -168,7 +168,7 @@ export function RequestPayoutModal({
                   key={p.val}
                   type="button"
                   onClick={() => handlePercentage(p.val)}
-                  className="flex-1 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors border border-slate-700/60"
+                  className="flex-1 py-1 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-300 text-xs font-semibold transition-colors border border-slate-200 dark:border-white/10/60"
                 >
                   {p.label}
                 </button>
@@ -178,7 +178,7 @@ export function RequestPayoutModal({
 
           {/* Payment Method Selector */}
           <div>
-            <label className="text-xs font-semibold text-slate-300 block mb-1.5">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1.5">
               Select Payout Channel
             </label>
             <div className="grid grid-cols-3 gap-2">
@@ -188,7 +188,7 @@ export function RequestPayoutModal({
                 className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition-all ${
                   method === 'BKASH'
                     ? 'border-emerald-500 bg-emerald-500/10 text-emerald-300'
-                    : 'border-slate-800 bg-slate-950/60 text-slate-400 hover:text-slate-200'
+                    : 'border-slate-200/80 dark:border-white/10 bg-slate-50 dark:bg-navy-950/60 text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:text-slate-200'
                 }`}
               >
                 <Smartphone className="w-4 h-4" />
@@ -201,7 +201,7 @@ export function RequestPayoutModal({
                 className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition-all ${
                   method === 'NAGAD'
                     ? 'border-emerald-500 bg-emerald-500/10 text-emerald-300'
-                    : 'border-slate-800 bg-slate-950/60 text-slate-400 hover:text-slate-200'
+                    : 'border-slate-200/80 dark:border-white/10 bg-slate-50 dark:bg-navy-950/60 text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:text-slate-200'
                 }`}
               >
                 <Smartphone className="w-4 h-4" />
@@ -214,7 +214,7 @@ export function RequestPayoutModal({
                 className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition-all ${
                   method === 'BANK_TRANSFER'
                     ? 'border-emerald-500 bg-emerald-500/10 text-emerald-300'
-                    : 'border-slate-800 bg-slate-950/60 text-slate-400 hover:text-slate-200'
+                    : 'border-slate-200/80 dark:border-white/10 bg-slate-50 dark:bg-navy-950/60 text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:text-slate-200'
                 }`}
               >
                 <Building2 className="w-4 h-4" />
@@ -226,7 +226,7 @@ export function RequestPayoutModal({
           {/* Account Number & Holder */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-semibold text-slate-400 block mb-1">
+              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-1">
                 {method === 'BANK_TRANSFER' ? 'Account Number' : 'Mobile Wallet Number'}
               </label>
               <input
@@ -235,12 +235,12 @@ export function RequestPayoutModal({
                 onChange={(e) => setAccountNumber(e.target.value)}
                 placeholder={method === 'BANK_TRANSFER' ? '150120489...' : '017xx-xxxxxx'}
                 required
-                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs font-mono text-slate-200 focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200/80 dark:border-white/10 text-xs font-mono text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
               />
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-slate-400 block mb-1">
+              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-1">
                 Account Holder Name
               </label>
               <input
@@ -248,14 +248,14 @@ export function RequestPayoutModal({
                 value={accountHolder}
                 onChange={(e) => setAccountHolder(e.target.value)}
                 placeholder="e.g. Tariqul Rahman"
-                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200/80 dark:border-white/10 text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
               />
             </div>
           </div>
 
           {/* Remarks */}
           <div>
-            <label className="text-xs font-semibold text-slate-400 block mb-1">
+            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-1">
               Remarks / Internal Note (Optional)
             </label>
             <input
@@ -263,21 +263,21 @@ export function RequestPayoutModal({
               value={remarks}
               onChange={(e) => setRemarks(e.target.value)}
               placeholder="e.g. Urgent weekly clearance"
-              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200/80 dark:border-white/10 text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
             />
           </div>
 
           {/* Settlement calculation breakdown */}
-          <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800/80 space-y-1.5 text-xs">
-            <div className="flex justify-between text-slate-400">
+          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200/80 dark:border-white/10/80 space-y-1.5 text-xs">
+            <div className="flex justify-between text-slate-500 dark:text-slate-400">
               <span>Requested Amount:</span>
-              <span className="font-bold text-slate-200">৳ {amount.toLocaleString()}</span>
+              <span className="font-bold text-navy-900 dark:text-slate-200">৳ {amount.toLocaleString()}</span>
             </div>
-            <div className="flex justify-between text-slate-400">
+            <div className="flex justify-between text-slate-500 dark:text-slate-400">
               <span>Disbursement Fee:</span>
               <span className="text-emerald-400 font-semibold">৳ 0 (Free)</span>
             </div>
-            <div className="pt-2 border-t border-slate-800 flex justify-between font-bold text-slate-100">
+            <div className="pt-2 border-t border-slate-200/80 dark:border-white/10 flex justify-between font-bold text-navy-900 dark:text-white">
               <span>Remaining Wallet Balance:</span>
               <span className="text-emerald-400 font-mono">
                 ৳ {remainingBalance.toLocaleString()}
@@ -290,7 +290,7 @@ export function RequestPayoutModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-colors"
+              className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-300 font-semibold text-xs transition-colors"
             >
               Cancel
             </button>

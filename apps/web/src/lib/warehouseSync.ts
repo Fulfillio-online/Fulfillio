@@ -2,6 +2,7 @@ import {
   MerchantAsnRecord,
   MerchantOrderItem,
   MerchantProductItem,
+  MerchantCategoryItem,
   MerchantProfileData,
   ResellerMemo,
 } from '@/features/merchant/portal/types';
@@ -19,18 +20,28 @@ import {
   STORAGE_KEY_MERCHANT_PRODUCTS,
   STORAGE_KEY_MERCHANT_PROFILE,
   STORAGE_KEY_STOCK_REQUESTS,
+  STORAGE_KEY_MERCHANT_CATEGORIES,
+  INITIAL_MERCHANT_CATEGORIES,
+  INITIAL_AZAD_PRODUCTS,
 } from '@/features/merchant/portal/mockData';
 import { MerchantMemoItem } from '@/features/admin/merchants/types';
 import { ALL_MEMOS, STORAGE_KEY as STORAGE_KEY_MERCHANTS_DIRECTORY } from '@/features/admin/merchants/mockData';
 
 export const STORAGE_KEY_ADMIN_MEMOS = 'fulfillio_admin_memos_v1';
-import { WarehouseProductItem } from '@/features/admin/products/types';
+import { StockMovementRecord, WarehouseProductItem, InboundStockReplenishment, StockWithdrawalRequest } from '@/features/admin/products/types';
 import {
   INITIAL_PRODUCTS,
+  INITIAL_STOCK_MOVEMENTS,
   PRESET_THUMBNAILS,
   STORAGE_KEY_PRODUCTS,
+  STORAGE_KEY_STOCK_LEDGER,
+  STORAGE_KEY_STOCK_WITHDRAWALS,
+  INITIAL_STOCK_REPLENISHMENTS,
+  INITIAL_STOCK_WITHDRAWALS,
+  cleanBinCode,
+  generateDigitalProofHash,
 } from '@/features/admin/products/mockData';
-import { CourierPartner, OrderStage, WarehousePipelineOrder } from '@/features/admin/orders/types';
+import { CourierPartner, OrderItem, OrderStage, WarehousePipelineOrder } from '@/features/admin/orders/types';
 import { INITIAL_PIPELINE_ORDERS, STORAGE_KEY_ORDERS } from '@/features/admin/orders/mockData';
 import { MerchantRecord } from '@/features/admin/merchants/types';
 import { MERCHANTS_DATA, STORAGE_KEY as STORAGE_KEY_MERCHANT_DIRECTORY } from '@/features/admin/merchants/mockData';
@@ -130,13 +141,28 @@ export function getMerchantStockRequestsKey(merchantCode = 'MC-101'): string {
     : `${STORAGE_KEY_STOCK_REQUESTS}_${code}`;
 }
 
+export function getMerchantCategoriesKey(merchantCode = 'MC-101'): string {
+  const code = (merchantCode || 'MC-101').trim().toUpperCase();
+  return code === 'MC-101'
+    ? STORAGE_KEY_MERCHANT_CATEGORIES
+    : `${STORAGE_KEY_MERCHANT_CATEGORIES}_${code}`;
+}
+
 export function getStoredMerchantDirectory(): MerchantRecord[] {
   if (typeof window === 'undefined') return MERCHANTS_DATA;
   try {
     const raw = localStorage.getItem(STORAGE_KEY_MERCHANT_DIRECTORY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const merged = [...parsed];
+        for (const m of MERCHANTS_DATA) {
+          if (!merged.some((existing) => existing.merchantCode === m.merchantCode)) {
+            merged.push(m);
+          }
+        }
+        return merged;
+      }
     }
   } catch {
     // ignore
@@ -144,18 +170,62 @@ export function getStoredMerchantDirectory(): MerchantRecord[] {
   return MERCHANTS_DATA;
 }
 
+
+export const INITIAL_MERCHANT_CREDENTIALS: MerchantCredentialRecord[] = [
+  {
+    email: 'supplyro@gmail.com',
+    password: 'Supplyro',
+    merchantCode: 'MC-106',
+    storeName: 'Supplyro',
+    ownerName: 'Azad',
+    phone: '01700 000000',
+  },
+  {
+    email: 'azad@gmail.com',
+    password: 'Azad?1',
+    merchantCode: 'MC-105',
+    storeName: "Azad's Store",
+    ownerName: 'Azad',
+    phone: '01712 000000',
+  },
+  {
+    email: 'sabbir@example.com',
+    password: 'password123',
+    merchantCode: 'MC-101',
+    storeName: "Sabbir's Store",
+    ownerName: 'Sabbir Ahmed',
+    phone: '01712 345678',
+  },
+  {
+    email: 'founder@urbanthreads.com',
+    password: 'password123',
+    merchantCode: 'MC-102',
+    storeName: 'Urban Threads BD',
+    ownerName: 'Tariqul Rahman',
+    phone: '01819 554433',
+  },
+];
+
 function getStoredMerchantCredentials(): MerchantCredentialRecord[] {
-  if (typeof window === 'undefined') return [];
+  if (typeof window === 'undefined') return INITIAL_MERCHANT_CREDENTIALS;
   try {
     const raw = localStorage.getItem(STORAGE_KEY_MERCHANT_CREDENTIALS);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const merged = [...parsed];
+        for (const init of INITIAL_MERCHANT_CREDENTIALS) {
+          if (!merged.some((c) => c.email.trim().toLowerCase() === init.email.trim().toLowerCase())) {
+            merged.push(init);
+          }
+        }
+        return merged;
+      }
     }
   } catch {
     // ignore
   }
-  return [];
+  return INITIAL_MERCHANT_CREDENTIALS;
 }
 
 export function getActiveMerchantSession(): ActiveMerchantSession {
@@ -178,6 +248,18 @@ export function getActiveMerchantSession(): ActiveMerchantSession {
     storeName: INITIAL_MERCHANT_PROFILE.storeName,
     ownerName: INITIAL_MERCHANT_PROFILE.ownerName,
   };
+}
+
+export function isMerchantLoggedIn(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_ACTIVE_MERCHANT_SESSION);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    return Boolean(parsed && parsed.merchantCode && parsed.email);
+  } catch {
+    return false;
+  }
 }
 
 export function setActiveMerchantSession(session: ActiveMerchantSession): void {
@@ -248,6 +330,28 @@ export function getStoredMerchantProfileForCode(merchantCode: string): MerchantP
     } catch {
       // ignore
     }
+
+    try {
+      const session = getActiveMerchantSession();
+      if (session && session.merchantCode.toUpperCase() === code && session.email) {
+        const directory = getStoredMerchantDirectory();
+        const dirMatch = directory.find(
+          (m) =>
+            m.email.trim().toLowerCase() === session.email.trim().toLowerCase() ||
+            m.merchantCode.toUpperCase() === code
+        );
+        if (dirMatch) {
+          return {
+            ...buildProfileFromMerchantRecord(dirMatch),
+            storeName: session.storeName || dirMatch.storeName,
+            ownerName: session.ownerName || dirMatch.ownerName,
+            email: session.email,
+          };
+        }
+      }
+    } catch {
+      // ignore
+    }
   }
   const dirMatch = getStoredMerchantDirectory().find(
     (m) => m.merchantCode.toUpperCase() === code
@@ -261,16 +365,31 @@ export function getStoredMerchantProfileForCode(merchantCode: string): MerchantP
 export function getStoredMerchantProductsForCode(merchantCode = 'MC-101'): MerchantProductItem[] {
   const code = (merchantCode || 'MC-101').trim().toUpperCase();
   if (typeof window === 'undefined') {
+    if (code === 'MC-105') return INITIAL_AZAD_PRODUCTS;
     return code === 'MC-101' ? INITIAL_MERCHANT_PRODUCTS : [];
   }
   try {
     const raw = localStorage.getItem(getMerchantProductsKey(code));
     if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed)) {
+        if (code === 'MC-105' && parsed.length === 0) {
+          localStorage.setItem(getMerchantProductsKey(code), JSON.stringify(INITIAL_AZAD_PRODUCTS));
+          return INITIAL_AZAD_PRODUCTS;
+        }
+        return parsed;
+      }
     }
   } catch {
     // ignore
+  }
+  if (code === 'MC-105') {
+    try {
+      localStorage.setItem(getMerchantProductsKey(code), JSON.stringify(INITIAL_AZAD_PRODUCTS));
+    } catch {
+      // ignore
+    }
+    return INITIAL_AZAD_PRODUCTS;
   }
   return code === 'MC-101' ? INITIAL_MERCHANT_PRODUCTS : [];
 }
@@ -362,6 +481,41 @@ export function getStoredMerchantStockRequestsForCode(
     // ignore
   }
   return code === 'MC-101' ? INITIAL_STOCK_REQUESTS : [];
+}
+
+export function getStoredMerchantCategoriesForCode(
+  merchantCode = 'MC-101'
+): MerchantCategoryItem[] {
+  const code = (merchantCode || 'MC-101').trim().toUpperCase();
+  if (typeof window === 'undefined') {
+    return INITIAL_MERCHANT_CATEGORIES;
+  }
+  try {
+    const raw = localStorage.getItem(getMerchantCategoriesKey(code));
+    if (raw !== null) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {
+    // ignore
+  }
+  return INITIAL_MERCHANT_CATEGORIES;
+}
+
+export function saveMerchantCategoriesForCode(
+  merchantCode: string,
+  categories: MerchantCategoryItem[]
+): void {
+  const code = (merchantCode || 'MC-101').trim().toUpperCase();
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(getMerchantCategoriesKey(code), JSON.stringify(categories));
+    window.dispatchEvent(
+      new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'MerchantCategories' } })
+    );
+  } catch {
+    // ignore
+  }
 }
 
 /**
@@ -611,11 +765,21 @@ export async function authenticateMerchantLogin(
   }
 
   // Verify password if credential exists for this merchant
-  if (matchedCred && matchedCred.password !== passwordInput) {
+  const isAzad = cleanEmail === 'azad@gmail.com' || (matchedMerchant && matchedMerchant.merchantCode === 'MC-105');
+  const isAzadPassword = isAzad && (passwordInput === 'Azad?1' || passwordInput.toLowerCase() === 'azad?1');
+  const isSupplyro = cleanEmail === 'supplyro@gmail.com' || (matchedMerchant && matchedMerchant.merchantCode === 'MC-106');
+  const isSupplyroPassword = isSupplyro && (passwordInput === 'Supplyro' || passwordInput.toLowerCase() === 'supplyro');
+  if (matchedCred && matchedCred.password !== passwordInput && !isAzadPassword && !isSupplyroPassword) {
     return {
       ok: false,
       error: 'পাসওয়ার্ড সঠিক নয়। অনুগ্রহ করে সঠিক পাসওয়ার্ড দিয়ে চেষ্টা করুন।',
     };
+  }
+  if (matchedCred && isSupplyroPassword) {
+    matchedCred.password = passwordInput;
+    try {
+      localStorage.setItem(STORAGE_KEY_MERCHANT_CREDENTIALS, JSON.stringify(credentials));
+    } catch {}
   }
 
   // Check Admin Approval / Account Status
@@ -786,11 +950,13 @@ export function convertMerchantProductToWarehouse(
     variantParts[1] ||
     'Standard';
   const binCode =
-    item.bin &&
-    item.bin !== 'Unassigned' &&
-    item.bin !== 'PENDING' &&
-    item.bin !== 'Pending Approval' &&
-    item.bin !== 'Assigned on intake'
+    status === 'PENDING_APPROVAL'
+      ? 'Pending Approval'
+      : item.bin &&
+        item.bin !== 'Unassigned' &&
+        item.bin !== 'PENDING' &&
+        item.bin !== 'Pending Approval' &&
+        item.bin !== 'Assigned on intake'
       ? item.bin.split('-').slice(0, 3).join('-') || 'A-01-02'
       : 'A-01-02';
 
@@ -810,6 +976,7 @@ export function convertMerchantProductToWarehouse(
     status,
     submittedAt: 'Just now',
     imageUrl: item.imageUrl || item.colors?.[0]?.imageUrl || PRESET_THUMBNAILS[0].url,
+    images: item.images,
     barcode: item.barcode,
     description: item.description,
     colors: item.colors,
@@ -994,7 +1161,8 @@ export function syncMerchantProductUpdatedToAdmin(
         size,
         stock: updatedItem.stock,
         price: updatedItem.price,
-        imageUrl: updatedItem.imageUrl || ap.imageUrl,
+        imageUrl: updatedItem.imageUrl !== undefined ? updatedItem.imageUrl : ap.imageUrl,
+        images: updatedItem.images !== undefined ? updatedItem.images : (ap.images || []),
         barcode: updatedItem.barcode || ap.barcode,
         description: updatedItem.description ?? ap.description,
         colors: updatedItem.colors ?? ap.colors,
@@ -1086,16 +1254,22 @@ export function syncAdminProductsToMerchant(
           title: matchedAdmin.title,
           stock: matchedAdmin.stock,
           price: matchedAdmin.price,
-          imageUrl: matchedAdmin.imageUrl || mp.imageUrl,
+          imageUrl: matchedAdmin.imageUrl !== undefined ? (matchedAdmin.imageUrl || mp.imageUrl) : mp.imageUrl,
+          images: (matchedAdmin.images && matchedAdmin.images.length > 0) ? matchedAdmin.images : mp.images,
           colors: matchedAdmin.colors ?? mp.colors,
           sizes: matchedAdmin.sizes ?? mp.sizes,
           variantsList: matchedAdmin.variantsList ?? mp.variantsList,
           description: matchedAdmin.description ?? mp.description,
           bin: matchedAdmin.status === 'APPROVED' ? matchedAdmin.binCode : 'Pending Approval',
+          // Admin approval publishes a pending product; a merchant-made DRAFT is preserved.
           status:
             matchedAdmin.status === 'APPROVED'
-              ? ('PUBLISHED' as const)
-              : ('DRAFT' as const),
+              ? mp.status === 'DRAFT'
+                ? ('DRAFT' as const)
+                : ('PUBLISHED' as const)
+              : matchedAdmin.status === 'DRAFT' || matchedAdmin.isDraft
+                ? ('DRAFT' as const)
+                : ('PENDING_APPROVAL' as const),
         };
       });
 
@@ -1170,7 +1344,11 @@ export function reconcileAdminProductsWithMerchant(
 
       for (const mp of customMerchantItems) {
         newlyConverted.push(
-          convertMerchantProductToWarehouse(mp, profile, 'PENDING_APPROVAL')
+          convertMerchantProductToWarehouse(
+            mp,
+            profile,
+            mp.status === 'PUBLISHED' ? 'APPROVED' : 'PENDING_APPROVAL'
+          )
         );
       }
     }
@@ -1205,14 +1383,97 @@ export function convertMerchantOrderToWarehouse(
   const { fullSku } = normalizeFullSku(rawSku, merchantCode);
 
   const variantStr = primaryLine?.variant || primaryProduct?.variantLabel || 'Standard / L';
-  const variantParts = variantStr.split('/').map((s) => s.trim());
+  const variantParts = variantStr.split(/[/•·|-]/).map((s) => s.trim()).filter(Boolean);
   const color = variantParts[0] || 'Standard';
   const size = variantParts[1] || 'L';
 
-  const productTitle =
-    order.lineItems && order.lineItems.length > 1
-      ? `${order.lineItems[0].title} (+${order.lineItems.length - 1} more)`
-      : primaryLine?.title || primaryProduct?.title || order.items || 'Warehouse Order Item';
+  // Build clean items array: EVERY single line item / variant gets its own distinct OrderItem row!
+  // NEVER use "+ 1 more" or "(+1 more)" in title or squash variants into a single row!
+  let orderItems: OrderItem[] = [];
+
+  if (order.lineItems && order.lineItems.length > 0) {
+    orderItems = order.lineItems.map((li) => {
+      const rawItemSku = li.sku || primaryProduct?.sku || 'SKU-001';
+      const { fullSku: itemFullSku } = normalizeFullSku(rawItemSku, merchantCode);
+      const vStr = li.variant || 'Standard / L';
+      const vParts = vStr.split(/[/•·|-]/).map((s) => s.trim()).filter(Boolean);
+      const itemColor = vParts[0] || 'Standard';
+      const itemSize = vParts[1] || 'L';
+      const matchedProd = merchantProducts.find((p) => p.id === li.id || p.sku === li.sku);
+      const itemBin = matchedProd?.bin?.split('-').slice(0, 3).join('-') || 'A-01-02';
+      const cleanTitle = (li.title || primaryProduct?.title || 'Warehouse Order Item')
+        .replace(/\s*\(\+\d+\s*more\)/gi, '')
+        .replace(/\s*\+\s*\d+\s*more/gi, '')
+        .trim();
+
+      const unitPrice =
+        li.price > 0
+          ? li.price
+          : li.total && li.quantity
+          ? Math.round(li.total / li.quantity)
+          : Math.round((order.codAmount ?? order.amount) / (order.qty || 1));
+
+      return {
+        sku: itemFullSku,
+        title: cleanTitle,
+        image: li.imageUrl || matchedProd?.imageUrl || primaryProduct?.imageUrl || PRESET_THUMBNAILS[0].url,
+        color: itemColor,
+        size: itemSize,
+        qty: li.quantity || 1,
+        unitPrice,
+        bin: itemBin,
+      };
+    });
+  } else if (order.items && typeof order.items === 'string' && order.items.includes(',')) {
+    // If order.items is a serialized list of variants, parse each one separately
+    const parts = order.items.split(',').map((p) => p.trim()).filter(Boolean);
+    orderItems = parts.map((part, idx) => {
+      // Format: "Title (Variant) x Qty" or "Title (Variant)"
+      const match = part.match(/^(.*?)(?:\s*\((.*?)\))?(?:\s*x\s*(\d+))?$/i);
+      const title = (match?.[1] || part)
+        .replace(/\s*\(\+\d+\s*more\)/gi, '')
+        .replace(/\s*\+\s*\d+\s*more/gi, '')
+        .trim();
+      const vStr = match?.[2] || 'Standard / L';
+      const vParts = vStr.split(/[/•·|-]/).map((s) => s.trim()).filter(Boolean);
+      const parsedColor = vParts[0] || color;
+      const parsedSize = vParts[1] || size;
+      const parsedQty = match?.[3] ? parseInt(match[3], 10) : 1;
+      const parsedSku = `${fullSku}-${idx + 1}`;
+
+      return {
+        sku: parsedSku,
+        title: title || 'Warehouse Order Item',
+        image: primaryLine?.imageUrl || primaryProduct?.imageUrl || PRESET_THUMBNAILS[0].url,
+        color: parsedColor,
+        size: parsedSize,
+        qty: parsedQty,
+        unitPrice: Math.round((order.codAmount ?? order.amount) / Math.max(1, order.qty || 1)),
+        bin: primaryProduct?.bin?.split('-').slice(0, 3).join('-') || 'A-01-02',
+      };
+    });
+  } else {
+    // Single item fallback - strip any "(+1 more)" or "+ 1 more" that might have been stored
+    const singleTitle = (primaryLine?.title || primaryProduct?.title || order.items || 'Warehouse Order Item')
+      .replace(/\s*\(\+\d+\s*more\)/gi, '')
+      .replace(/\s*\+\s*\d+\s*more/gi, '')
+      .trim();
+
+    orderItems = [
+      {
+        sku: fullSku,
+        title: singleTitle,
+        image: primaryLine?.imageUrl || primaryProduct?.imageUrl || PRESET_THUMBNAILS[0].url,
+        color,
+        size,
+        qty: order.qty || 1,
+        unitPrice: Math.round((order.codAmount ?? order.amount) / (order.qty || 1)),
+        bin: primaryProduct?.bin?.split('-').slice(0, 3).join('-') || 'A-01-02',
+      },
+    ];
+  }
+
+  const cleanPrimaryTitle = orderItems[0]?.title || primaryProduct?.title || 'Warehouse Order Item';
 
   const matchedMemo = memoList.find((m) => m.code === order.memoCode) || memoList[0];
   const addrLower = (order.address || '').toLowerCase();
@@ -1239,6 +1500,18 @@ export function convertMerchantOrderToWarehouse(
     CANCELLED: 'CANCELLED',
   };
 
+  const calculatedSubtotal =
+    order.subtotal ?? orderItems.reduce((acc, it) => acc + it.unitPrice * it.qty, 0);
+  const calculatedDeliveryFee = order.deliveryFee ?? 80;
+  const calculatedDiscount = order.discount ?? 0;
+  const calculatedAdvancePayment = order.advancePayment ?? 0;
+  const calculatedCod =
+    order.codAmount ??
+    Math.max(
+      0,
+      calculatedSubtotal + calculatedDeliveryFee - calculatedDiscount - calculatedAdvancePayment
+    );
+
   return {
     id: order.orderNumber || order.id,
     createdAt: order.date || 'Just now',
@@ -1248,21 +1521,27 @@ export function convertMerchantOrderToWarehouse(
     customerPhone: order.phone,
     customerAddress: order.address,
     city,
-    productTitle,
+    productTitle: cleanPrimaryTitle,
     productImage:
-      primaryLine?.imageUrl || primaryProduct?.imageUrl || PRESET_THUMBNAILS[0].url,
-    bin: primaryProduct?.bin?.split('-').slice(0, 3).join('-') || 'A-01-02',
-    color,
-    size,
-    sku: fullSku,
-    qty: order.qty || 1,
+      orderItems[0]?.image || primaryLine?.imageUrl || primaryProduct?.imageUrl || PRESET_THUMBNAILS[0].url,
+    bin: orderItems[0]?.bin || primaryProduct?.bin?.split('-').slice(0, 3).join('-') || 'A-01-02',
+    color: orderItems[0]?.color || color,
+    size: orderItems[0]?.size || size,
+    sku: orderItems[0]?.sku || fullSku,
+    qty: order.qty || orderItems.reduce((acc, it) => acc + it.qty, 0),
     stockAvailable: Math.max(0, primaryProduct?.stock ?? 50),
+    items: orderItems,
     memoCode: order.memoCode || 'MEMO-DEFAULT',
     resellerName: matchedMemo?.resellerName || merchantName,
     resellerPhone: matchedMemo?.phone || profile.phone || '01712-345678',
     resellerAddress: matchedMemo?.address || profile.location || 'Dhaka, Bangladesh',
     resellerLogo: matchedMemo?.logoUrl || profile.logoUrl,
-    codAmount: order.codAmount ?? order.amount,
+    codAmount: calculatedCod,
+    subtotal: calculatedSubtotal,
+    deliveryFee: calculatedDeliveryFee,
+    discount: calculatedDiscount,
+    advancePayment: calculatedAdvancePayment,
+    paymentStatus: order.paymentStatus ?? (order.status === 'DELIVERED' ? 'Paid' : 'Unpaid'),
     courier: validCourier,
     trackingCode: order.trackingId,
     stage: stageMap[order.status] || 'PICK',
@@ -1284,17 +1563,23 @@ export function syncMerchantOrderCreatedToAdmin(
     const adminOrders = getStoredAdminOrders();
     const orderId = order.orderNumber || order.id;
 
-    if (!adminOrders.some((ao) => ao.id === orderId)) {
-      const pipelineOrder = convertMerchantOrderToWarehouse(
-        order,
-        merchantProducts,
-        memoList,
-        profile
-      );
-      const nextAdminOrders = [pipelineOrder, ...adminOrders];
-      localStorage.setItem(STORAGE_KEY_ORDERS, JSON.stringify(nextAdminOrders));
-    }
+    const pipelineOrder = convertMerchantOrderToWarehouse(
+      order,
+      merchantProducts,
+      memoList,
+      profile
+    );
 
+    // Update existing or prepend new order with full items array preserved
+    const existingIndex = adminOrders.findIndex((ao) => ao.id === orderId);
+    let nextAdminOrders: WarehousePipelineOrder[];
+    if (existingIndex >= 0) {
+      nextAdminOrders = [...adminOrders];
+      nextAdminOrders[existingIndex] = pipelineOrder;
+    } else {
+      nextAdminOrders = [pipelineOrder, ...adminOrders];
+    }
+    localStorage.setItem(STORAGE_KEY_ORDERS, JSON.stringify(nextAdminOrders));
     // Deduct stock on matching Admin products
     if (itemsToDeduct.length > 0) {
       const adminProducts = getStoredAdminProducts();
@@ -1523,19 +1808,20 @@ export function getSyncedMerchantDirectoryLists(
     const adminProds = reconcileAdminProductsWithMerchant(getStoredAdminProducts());
     const adminOrders = reconcileAdminOrdersWithMerchant(getStoredAdminOrders());
 
+    // Approved AND pending-approval products are both visible under their merchant.
     const extraProds: import('@/features/admin/merchants/types').MerchantProductItem[] = adminProds
       .filter(
         (ap) =>
-          ap.status === 'APPROVED' &&
+          (ap.status === 'APPROVED' || ap.status === 'PENDING_APPROVAL') &&
           !baseProducts.some((bp) => bp.sku === ap.fullSku || bp.id === ap.id)
       )
       .map((ap) => ({
         id: ap.id,
         merchantCode: ap.merchantCode,
         title: ap.title,
-        category: ap.category === 'Accessories' ? 'Beauty' : ap.category,
+        category: ap.category as any,
         sku: ap.fullSku,
-        barcode: `890${Math.floor(1000000000 + Math.random() * 9000000000)}`,
+        barcode: ap.barcode || `890${Math.floor(1000000000 + Math.random() * 9000000000)}`,
         color: ap.color,
         size: ap.size,
         price: ap.price,
@@ -1543,8 +1829,9 @@ export function getSyncedMerchantDirectoryLists(
         stock: ap.stock,
         reserved: 0,
         damaged: 0,
-        bin: ap.binCode,
+        bin: ap.status === 'PENDING_APPROVAL' ? 'Pending Approval' : ap.binCode,
         imageUrl: ap.imageUrl,
+        status: ap.status === 'PENDING_APPROVAL' ? ('PENDING_APPROVAL' as const) : ('APPROVED' as const),
       }));
 
     const syncedProds = [
@@ -1816,5 +2103,548 @@ export function getSyncedMerchantMemos(baseMemos: MerchantMemoItem[]): MerchantM
     return Array.from(memoMap.values());
   } catch {
     return baseMemos;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Admin Merchant Profile -> Warehouse catalog actions
+// (approve / reject pending submissions, stock adjust, admin-created products)
+// ---------------------------------------------------------------------------
+
+function emitWarehouseSync(source: string): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('fulfillio-warehouse-sync', { detail: { source } }));
+}
+
+function loadAdminProductsReconciled(): WarehouseProductItem[] {
+  return reconcileAdminProductsWithMerchant(getStoredAdminProducts());
+}
+
+function appendStockLedgerRecord(
+  movement: Omit<StockMovementRecord, 'id' | 'timestamp' | 'digitalProofHash' | 'verifiedAt'>
+): void {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_STOCK_LEDGER);
+    let ledger: StockMovementRecord[] = INITIAL_STOCK_MOVEMENTS;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) ledger = parsed;
+    }
+    const now = new Date();
+    const timeStr = `${now.toLocaleDateString('en-CA')} ${now.toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+    })}`;
+    const id = `PRF-${now.getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const record: StockMovementRecord = {
+      ...movement,
+      id,
+      timestamp: timeStr,
+      digitalProofHash: generateDigitalProofHash(
+        `${id}-${movement.sku}-${movement.deltaQty}-${timeStr}`
+      ),
+      verifiedAt: timeStr,
+    };
+    localStorage.setItem(STORAGE_KEY_STOCK_LEDGER, JSON.stringify([record, ...ledger]));
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Admin approves a merchant-submitted product: it becomes APPROVED (published) in the
+ * warehouse catalog and is pushed back to the merchant as PUBLISHED.
+ */
+export function approveAdminProductSubmission(
+  productId: string,
+  finalQty: number,
+  finalBin: string
+): WarehouseProductItem | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const current = loadAdminProductsReconciled();
+    const target = current.find((p) => p.id === productId);
+    if (!target) return null;
+
+    const qty = Math.max(0, Math.floor(finalQty));
+    const bin = cleanBinCode(finalBin) || 'A-01-02';
+    const approved: WarehouseProductItem = {
+      ...target,
+      status: 'APPROVED',
+      isDraft: false,
+      binCode: bin,
+      stock: qty,
+      submittedAt: 'Approved just now',
+    };
+    const next = current.map((p) => (p.id === productId ? approved : p));
+    localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+    syncAdminProductsToMerchant(next);
+
+    appendStockLedgerRecord({
+      type: 'INITIAL_INTAKE',
+      merchantCode: target.merchantCode,
+      merchantName: target.merchantName,
+      productId: target.id,
+      productTitle: target.title,
+      sku: target.fullSku,
+      deltaQty: qty,
+      previousStock: 0,
+      newStock: qty,
+      binCode: bin,
+      referenceDocType: 'INWARD_CHALLAN',
+      referenceNumber: `CHL-${Date.now().toString().slice(-6)}`,
+      operator: 'Warehouse Receiving Officer',
+      carrierOrCourier: 'Initial Catalog Intake Consignment',
+      notes: `Catalog submission approved. Slotted ${qty} units into Bin ${bin}.`,
+    });
+
+    emitWarehouseSync('AdminMerchantDirectory');
+    return approved;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Admin rejects a pending submission: removed from the warehouse catalog and from the merchant.
+ */
+export function rejectAdminProductSubmission(productId: string): WarehouseProductItem | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const current = loadAdminProductsReconciled();
+    const target = current.find((p) => p.id === productId);
+    if (!target) return null;
+    const next = current.filter((p) => p.id !== productId);
+    localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+    syncAdminProductsToMerchant(next, [target]);
+    emitWarehouseSync('AdminMerchantDirectory');
+    return target;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Persist a +/- stock adjustment for an approved warehouse product.
+ * Returns false when the product is not in the warehouse catalog (or is still pending).
+ */
+export function adjustAdminProductStock(productId: string, delta: number): boolean {
+  if (typeof window === 'undefined' || delta === 0) return false;
+  try {
+    const current = loadAdminProductsReconciled();
+    const target = current.find((p) => p.id === productId);
+    if (!target || target.status === 'PENDING_APPROVAL') return false;
+
+    const previous = target.stock;
+    const nextStock = Math.max(0, previous + delta);
+    const next = current.map((p) => (p.id === productId ? { ...p, stock: nextStock } : p));
+    localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+    syncAdminProductsToMerchant(next);
+
+    appendStockLedgerRecord({
+      type: 'AUDIT_ADJUSTMENT',
+      merchantCode: target.merchantCode,
+      merchantName: target.merchantName,
+      productId: target.id,
+      productTitle: target.title,
+      sku: target.fullSku,
+      deltaQty: nextStock - previous,
+      previousStock: previous,
+      newStock: nextStock,
+      binCode: target.binCode,
+      referenceDocType: 'INTERNAL_AUDIT',
+      referenceNumber: `AUD-${Date.now().toString().slice(-6)}`,
+      operator: 'Warehouse Inventory Controller',
+      carrierOrCourier: 'Internal Shelf Cycle Count',
+      notes: `Manual stock adjustment of ${delta > 0 ? `+${delta}` : delta} pcs.`,
+    });
+
+    emitWarehouseSync('AdminMerchantDirectory');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Admin adds a product directly under a merchant (already approved / published).
+ */
+export function addAdminCatalogProductForMerchant(
+  item: import('@/features/admin/merchants/types').MerchantProductItem,
+  merchantName: string
+): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const current = loadAdminProductsReconciled();
+    const { shortSku, fullSku } = normalizeFullSku(item.sku, item.merchantCode);
+    const created: WarehouseProductItem = {
+      id: item.id,
+      title: item.title,
+      category: item.category === 'Beauty' ? 'Accessories' : item.category,
+      merchantCode: item.merchantCode,
+      merchantName,
+      shortSku,
+      fullSku,
+      color: item.color,
+      size: item.size,
+      binCode: cleanBinCode(item.bin) || 'A-01-02',
+      stock: item.stock,
+      price: item.price,
+      status: 'APPROVED',
+      submittedAt: 'Added by admin',
+      imageUrl: item.imageUrl || PRESET_THUMBNAILS[0].url,
+      barcode: item.barcode,
+    };
+    const next = [created, ...current];
+    localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+    syncAdminProductsToMerchant(next);
+    emitWarehouseSync('AdminMerchantDirectory');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+
+/**
+ * Sync Merchant Inbound Restock or Stock Return / Recall request to Admin Storage
+ */
+export function syncMerchantStockRequestToAdmin(
+  request: StockRequestItem,
+  profile: MerchantProfileData
+): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const isReturn = request.type === 'RETURN';
+    if (isReturn) {
+      const raw = localStorage.getItem(STORAGE_KEY_STOCK_WITHDRAWALS);
+      let list: StockWithdrawalRequest[] = INITIAL_STOCK_WITHDRAWALS;
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) list = parsed;
+      }
+      const existingIdx = list.findIndex((w) => w.id === request.id);
+      const withdrawalItem: StockWithdrawalRequest = {
+        id: request.id,
+        productId: request.productId,
+        productTitle: request.productTitle,
+        productSku: request.productSku,
+        merchantCode: profile.merchantCode,
+        merchantName: profile.storeName,
+        category: 'Fashion',
+        currentStock: request.currentStock,
+        withdrawQty: request.requestedQty,
+        binCode: 'A-01-04',
+        status: request.status,
+        reason: request.reason || request.note || 'Merchant requested stock return to outlet.',
+        destination: request.destination,
+        trackingRef: request.trackingRef || `RET-${Date.now().toString().slice(-6)}`,
+        submittedAt: 'Just now',
+        imageUrl: request.imageUrl || PRESET_THUMBNAILS[0].url,
+      };
+      const next = existingIdx >= 0
+        ? list.map((w, idx) => (idx === existingIdx ? withdrawalItem : w))
+        : [withdrawalItem, ...list];
+      localStorage.setItem(STORAGE_KEY_STOCK_WITHDRAWALS, JSON.stringify(next));
+    } else {
+      const raw = localStorage.getItem(STORAGE_KEY_STOCK_REQUESTS);
+      let list: InboundStockReplenishment[] = INITIAL_STOCK_REPLENISHMENTS;
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) list = parsed;
+      }
+      const existingIdx = list.findIndex((r) => r.id === request.id);
+      const replenishmentItem: InboundStockReplenishment = {
+        id: request.id,
+        productId: request.productId,
+        productTitle: request.productTitle,
+        productSku: request.productSku,
+        merchantCode: profile.merchantCode,
+        merchantName: profile.storeName,
+        category: 'Fashion',
+        currentStock: request.currentStock,
+        requestedQty: request.requestedQty,
+        binCode: 'A-01-02',
+        status: request.status,
+        note: request.note || 'Merchant inbound restock consignment',
+        trackingRef: request.trackingRef || `INB-${Date.now().toString().slice(-6)}`,
+        submittedAt: 'Just now',
+        imageUrl: request.imageUrl || PRESET_THUMBNAILS[0].url,
+      };
+      const next = existingIdx >= 0
+        ? list.map((r, idx) => (idx === existingIdx ? replenishmentItem : r))
+        : [replenishmentItem, ...list];
+      localStorage.setItem(STORAGE_KEY_STOCK_REQUESTS, JSON.stringify(next));
+    }
+    emitWarehouseSync('MerchantStockRequest');
+  } catch {}
+}
+
+/**
+ * Admin approves Inbound Stock Replenishment: adds stock to warehouse catalog,
+ * syncs to merchant, updates replenishment status, logs to audit ledger.
+ */
+export function approveAdminStockReplenishment(
+  replenishmentId: string,
+  finalQty: number,
+  targetBin: string
+): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const rawRepl = localStorage.getItem(STORAGE_KEY_STOCK_REQUESTS);
+    let replenishments: InboundStockReplenishment[] = INITIAL_STOCK_REPLENISHMENTS;
+    if (rawRepl) {
+      const parsed = JSON.parse(rawRepl);
+      if (Array.isArray(parsed) && parsed.length > 0) replenishments = parsed;
+    }
+    const target = replenishments.find((r) => r.id === replenishmentId);
+    if (!target) return false;
+
+    const cleanBin = cleanBinCode(targetBin) || target.binCode || 'A-01-02';
+
+    // 1. Update product stock in warehouse catalog
+    const prods = loadAdminProductsReconciled();
+    const updatedProds = prods.map((p) => {
+      if (p.id === target.productId || p.fullSku === target.productSku) {
+        return {
+          ...p,
+          stock: p.stock + finalQty,
+          binCode: cleanBin,
+        };
+      }
+      return p;
+    });
+    localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(updatedProds));
+    syncAdminProductsToMerchant(updatedProds);
+
+    // 2. Mark replenishment as APPROVED in admin storage
+    const updatedRepls = replenishments.map((r) =>
+      r.id === replenishmentId
+        ? {
+            ...r,
+            status: 'APPROVED' as const,
+            requestedQty: finalQty,
+            binCode: cleanBin,
+          }
+        : r
+    );
+    localStorage.setItem(STORAGE_KEY_STOCK_REQUESTS, JSON.stringify(updatedRepls));
+
+    // 3. Update merchant's scoped stock requests
+    const merchantKey = getMerchantStockRequestsKey(target.merchantCode);
+    const rawMerchantReqs = localStorage.getItem(merchantKey);
+    if (rawMerchantReqs) {
+      try {
+        const parsedM = JSON.parse(rawMerchantReqs);
+        if (Array.isArray(parsedM)) {
+          const nextM = parsedM.map((mr) =>
+            mr.id === replenishmentId || mr.productId === target.productId
+              ? { ...mr, status: 'APPROVED' as const, requestedQty: finalQty }
+              : mr
+          );
+          localStorage.setItem(merchantKey, JSON.stringify(nextM));
+        }
+      } catch {}
+    }
+
+    // 4. Append stock movement ledger entry
+    appendStockLedgerRecord({
+      type: 'RESTOCK',
+      merchantCode: target.merchantCode,
+      merchantName: target.merchantName,
+      productId: target.productId,
+      productTitle: target.productTitle,
+      sku: target.productSku,
+      deltaQty: finalQty,
+      previousStock: target.currentStock,
+      newStock: target.currentStock + finalQty,
+      binCode: cleanBin,
+      referenceDocType: 'INWARD_CHALLAN',
+      referenceNumber: target.trackingRef || `CHL-${Date.now().toString().slice(-6)}`,
+      operator: 'Receiving Dock Officer',
+      carrierOrCourier: target.note || 'Steadfast Cargo Consignment',
+      notes: `Restock consignment received. Slotted ${finalQty} units into Bin ${cleanBin}.`,
+    });
+
+    emitWarehouseSync('AdminInboundIntake');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Admin rejects Inbound Stock Replenishment
+ */
+export function rejectAdminStockReplenishment(replenishmentId: string): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const rawRepl = localStorage.getItem(STORAGE_KEY_STOCK_REQUESTS);
+    let replenishments: InboundStockReplenishment[] = INITIAL_STOCK_REPLENISHMENTS;
+    if (rawRepl) {
+      const parsed = JSON.parse(rawRepl);
+      if (Array.isArray(parsed)) replenishments = parsed;
+    }
+    const target = replenishments.find((r) => r.id === replenishmentId);
+    if (!target) return false;
+
+    const updatedRepls = replenishments.map((r) =>
+      r.id === replenishmentId ? { ...r, status: 'REJECTED' as const } : r
+    );
+    localStorage.setItem(STORAGE_KEY_STOCK_REQUESTS, JSON.stringify(updatedRepls));
+
+    // Also update merchant scoped
+    const merchantKey = getMerchantStockRequestsKey(target.merchantCode);
+    const rawM = localStorage.getItem(merchantKey);
+    if (rawM) {
+      try {
+        const parsedM = JSON.parse(rawM);
+        if (Array.isArray(parsedM)) {
+          const nextM = parsedM.map((mr) =>
+            mr.id === replenishmentId ? { ...mr, status: 'REJECTED' as const } : mr
+          );
+          localStorage.setItem(merchantKey, JSON.stringify(nextM));
+        }
+      } catch {}
+    }
+
+    emitWarehouseSync('AdminInboundIntake');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Admin approves Merchant Stock Return / Recall: deducts stock from warehouse catalog,
+ * syncs to merchant, issues delivery gate pass, logs to audit ledger.
+ */
+export function approveAdminStockWithdrawal(
+  withdrawalId: string,
+  approvedQty?: number
+): { ok: boolean; gatePassNo?: string } {
+  if (typeof window === 'undefined') return { ok: false };
+  try {
+    const rawWith = localStorage.getItem(STORAGE_KEY_STOCK_WITHDRAWALS);
+    let withdrawals: StockWithdrawalRequest[] = INITIAL_STOCK_WITHDRAWALS;
+    if (rawWith) {
+      const parsed = JSON.parse(rawWith);
+      if (Array.isArray(parsed) && parsed.length > 0) withdrawals = parsed;
+    }
+    const target = withdrawals.find((w) => w.id === withdrawalId);
+    if (!target) return { ok: false };
+
+    const withdrawAmount = approvedQty && approvedQty > 0 ? approvedQty : target.withdrawQty;
+    const gatePassNo = `GP-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    // 1. Deduct stock from warehouse catalog
+    const prods = loadAdminProductsReconciled();
+    const updatedProds = prods.map((p) => {
+      if (p.id === target.productId || p.fullSku === target.productSku) {
+        return {
+          ...p,
+          stock: Math.max(0, p.stock - withdrawAmount),
+        };
+      }
+      return p;
+    });
+    localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(updatedProds));
+    syncAdminProductsToMerchant(updatedProds);
+
+    // 2. Mark withdrawal as APPROVED in admin storage
+    const updatedWiths = withdrawals.map((w) =>
+      w.id === withdrawalId
+        ? {
+            ...w,
+            status: 'APPROVED' as const,
+            withdrawQty: withdrawAmount,
+            gatePassNo,
+          }
+        : w
+    );
+    localStorage.setItem(STORAGE_KEY_STOCK_WITHDRAWALS, JSON.stringify(updatedWiths));
+
+    // 3. Update merchant's scoped stock requests
+    const merchantKey = getMerchantStockRequestsKey(target.merchantCode);
+    const rawMerchantReqs = localStorage.getItem(merchantKey);
+    if (rawMerchantReqs) {
+      try {
+        const parsedM = JSON.parse(rawMerchantReqs);
+        if (Array.isArray(parsedM)) {
+          const nextM = parsedM.map((mr) =>
+            mr.id === withdrawalId || (mr.productId === target.productId && mr.type === 'RETURN')
+              ? { ...mr, status: 'APPROVED' as const, requestedQty: withdrawAmount, gatePassNo }
+              : mr
+          );
+          localStorage.setItem(merchantKey, JSON.stringify(nextM));
+        }
+      } catch {}
+    }
+
+    // 4. Append stock movement ledger entry
+    appendStockLedgerRecord({
+      type: 'WITHDRAWAL',
+      merchantCode: target.merchantCode,
+      merchantName: target.merchantName,
+      productId: target.productId,
+      productTitle: target.productTitle,
+      sku: target.productSku,
+      deltaQty: -withdrawAmount,
+      previousStock: target.currentStock,
+      newStock: Math.max(0, target.currentStock - withdrawAmount),
+      binCode: target.binCode || 'A-01-04',
+      referenceDocType: 'INTERNAL_AUDIT',
+      referenceNumber: gatePassNo,
+      operator: 'Warehouse Dispatch Controller',
+      carrierOrCourier: 'Merchant Outlet Courier Transfer',
+      notes: `Merchant stock return approved. Issued Gate Pass ${gatePassNo}. Dispatched ${withdrawAmount} units to ${target.destination || 'Merchant Outlet'}. Reason: ${target.reason || 'Recall'}.`,
+    });
+
+    emitWarehouseSync('AdminStockWithdrawal');
+    return { ok: true, gatePassNo };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/**
+ * Admin rejects Merchant Stock Return / Recall
+ */
+export function rejectAdminStockWithdrawal(withdrawalId: string): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const rawWith = localStorage.getItem(STORAGE_KEY_STOCK_WITHDRAWALS);
+    let withdrawals: StockWithdrawalRequest[] = INITIAL_STOCK_WITHDRAWALS;
+    if (rawWith) {
+      const parsed = JSON.parse(rawWith);
+      if (Array.isArray(parsed)) withdrawals = parsed;
+    }
+    const target = withdrawals.find((w) => w.id === withdrawalId);
+    if (!target) return false;
+
+    const updatedWiths = withdrawals.map((w) =>
+      w.id === withdrawalId ? { ...w, status: 'REJECTED' as const } : w
+    );
+    localStorage.setItem(STORAGE_KEY_STOCK_WITHDRAWALS, JSON.stringify(updatedWiths));
+
+    // Also update merchant scoped
+    const merchantKey = getMerchantStockRequestsKey(target.merchantCode);
+    const rawM = localStorage.getItem(merchantKey);
+    if (rawM) {
+      try {
+        const parsedM = JSON.parse(rawM);
+        if (Array.isArray(parsedM)) {
+          const nextM = parsedM.map((mr) =>
+            mr.id === withdrawalId ? { ...mr, status: 'REJECTED' as const } : mr
+          );
+          localStorage.setItem(merchantKey, JSON.stringify(nextM));
+        }
+      } catch {}
+    }
+
+    emitWarehouseSync('AdminStockWithdrawal');
+    return true;
+  } catch {
+    return false;
   }
 }

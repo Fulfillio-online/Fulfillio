@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CourierProvider } from '@fulfillio/contracts';
-import { OrderStatus } from '@prisma/client';
+import { OrderStatus } from '@fulfillio/contracts';
 
 @Injectable()
 export class ShippingRepository {

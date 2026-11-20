@@ -27,6 +27,7 @@ import { MerchantOrdersTab } from './profile-tabs/MerchantOrdersTab';
 import { MerchantProductsTab } from './profile-tabs/MerchantProductsTab';
 import { MerchantBankDetailsTab } from './profile-tabs/MerchantBankDetailsTab';
 import { MerchantResellerMemosTab } from './profile-tabs/MerchantResellerMemosTab';
+import { MerchantStockLedgerTab } from './profile-tabs/MerchantStockLedgerTab';
 
 export interface MerchantProfileDrawerProps {
   merchant: MerchantRecord;
@@ -39,6 +40,8 @@ export interface MerchantProfileDrawerProps {
   onUpdateMerchant: (updated: MerchantRecord) => void;
   onAdjustStock: (productId: string, delta: number) => void;
   onAddProduct: (newProduct: MerchantProductItem) => void;
+  onApproveProduct: (productId: string, finalQty: number, finalBin: string) => void;
+  onRejectProduct: (productId: string) => void;
 }
 
 export function MerchantProfileDrawer({
@@ -52,6 +55,8 @@ export function MerchantProfileDrawer({
   onUpdateMerchant,
   onAdjustStock,
   onAddProduct,
+  onApproveProduct,
+  onRejectProduct,
 }: MerchantProfileDrawerProps) {
   const [activeTab, setActiveTab] = useState<MerchantSubTab>('overview');
   const [orderPeriodFilter, setOrderPeriodFilter] = useState<OrderPeriodFilter>('ALL');
@@ -69,9 +74,15 @@ export function MerchantProfileDrawer({
     }
   };
 
-  const merchantProductsCount = productsList.filter(
+  const merchantAllProducts = productsList.filter(
     (p) => p.merchantCode === merchant.merchantCode
+  );
+  const merchantPendingCount = merchantAllProducts.filter(
+    (p) => p.status === 'PENDING_APPROVAL'
   ).length;
+  const merchantProductsCount = merchantAllProducts.length - merchantPendingCount;
+  // Overview metrics should only count live (approved / published) catalog items.
+  const liveProductsList = productsList.filter((p) => p.status !== 'PENDING_APPROVAL');
 
   return (
     <div className="space-y-6">
@@ -193,8 +204,16 @@ export function MerchantProfileDrawer({
             { id: 'overview' as const, label: 'Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
             { id: 'profile' as const, label: 'Store Profile', icon: <Store className="w-4 h-4" /> },
             { id: 'orders' as const, label: 'Orders', icon: <ShoppingCart className="w-4 h-4" /> },
-            { id: 'products' as const, label: `Products (${merchantProductsCount})`, icon: <Package className="w-4 h-4" /> },
+            {
+              id: 'products' as const,
+              label:
+                merchantPendingCount > 0
+                  ? `Products (${merchantProductsCount}) · ${merchantPendingCount} Pending`
+                  : `Products (${merchantProductsCount})`,
+              icon: <Package className="w-4 h-4" />,
+            },
             { id: 'payout' as const, label: 'Payout Info', icon: <CreditCard className="w-4 h-4" /> },
+            { id: 'ledger' as const, label: 'Stock Proof Ledger', icon: <ShieldCheck className="w-4 h-4" /> },
             { id: 'memo' as const, label: 'Reseller Memos', icon: <Printer className="w-4 h-4" /> },
           ].map((tab) => {
             const isActive = activeTab === tab.id;
@@ -226,7 +245,7 @@ export function MerchantProfileDrawer({
           onNavigateSubTab={setActiveTab}
           onSelectOrderStatusFilter={setOrderStatusFilter}
           allOrders={allOrders}
-          allProducts={productsList}
+          allProducts={liveProductsList}
         />
       )}
 
@@ -251,11 +270,18 @@ export function MerchantProfileDrawer({
           productsList={productsList}
           onAdjustStock={onAdjustStock}
           onAddProduct={onAddProduct}
+          onApproveProduct={onApproveProduct}
+          onRejectProduct={onRejectProduct}
+          onNavigateSubTab={setActiveTab}
         />
       )}
 
       {activeTab === 'payout' && (
         <MerchantBankDetailsTab merchant={merchant} />
+      )}
+
+      {activeTab === 'ledger' && (
+        <MerchantStockLedgerTab merchant={merchant} />
       )}
 
       {activeTab === 'memo' && (

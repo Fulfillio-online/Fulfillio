@@ -39,15 +39,15 @@ export function OrderPaymentCard({ order, orderTotal }: OrderPaymentCardProps) {
   };
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-md space-y-4">
+    <div className="rounded-2xl border border-slate-200/80 dark:border-white/10 bg-white dark:bg-navy-900 p-5 shadow-md space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between pb-3.5 border-b border-slate-800">
+      <div className="flex items-center justify-between pb-3.5 border-b border-slate-200/80 dark:border-white/10">
         <div className="flex items-center gap-2.5">
           <div className="h-8 w-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
             <CreditCard className="h-4 w-4" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-slate-100">Payment &amp; Collection</h3>
+            <h3 className="text-sm font-bold text-navy-900 dark:text-white">Payment &amp; Collection</h3>
             <p className="text-xs text-slate-400">Settlement terms and customer advance</p>
           </div>
         </div>
@@ -56,8 +56,8 @@ export function OrderPaymentCard({ order, orderTotal }: OrderPaymentCardProps) {
       </div>
 
       {/* Payment Method Details */}
-      <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 flex items-center justify-between gap-3 text-xs">
-        <div className="flex items-center gap-2 text-slate-200 font-semibold">
+      <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-navy-950/70 border border-slate-200/80 dark:border-white/10 flex items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2 text-navy-900 dark:text-slate-200 font-semibold">
           <CreditCard className="h-4 w-4 text-emerald-400" />
           <span>{order.paymentMethod || 'Cash on Delivery'}</span>
         </div>
@@ -72,7 +72,7 @@ export function OrderPaymentCard({ order, orderTotal }: OrderPaymentCardProps) {
           <span className="text-slate-500 uppercase tracking-wider text-[10px] font-semibold">
             Transaction Ref
           </span>
-          <span className="font-mono text-slate-300 font-medium">
+          <span className="font-mono text-slate-700 dark:text-slate-300 font-medium">
             {order.advanceTrxId || order.transactionId || `COD-TRX-${order.id}`}
           </span>
         </div>
@@ -88,8 +88,8 @@ export function OrderPaymentCard({ order, orderTotal }: OrderPaymentCardProps) {
           </div>
         ) : null}
 
-        <div className="flex justify-between items-center pt-2.5 border-t border-slate-800">
-          <span className="text-slate-200 font-bold">Due Courier COD to Collect</span>
+        <div className="flex justify-between items-center pt-2.5 border-t border-slate-200/80 dark:border-white/10">
+          <span className="text-navy-900 dark:text-slate-200 font-bold">Due Courier COD to Collect</span>
           <span className="text-base font-extrabold text-emerald-400 font-mono">
             ৳{Number(codDue).toLocaleString()}
           </span>

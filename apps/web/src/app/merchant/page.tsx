@@ -14,7 +14,7 @@ function MerchantOverviewPageInner() {
     const legacyTab = searchParams.get('tab');
     if (legacyTab) {
       if (legacyTab === 'overview') {
-        router.replace('/merchant');
+        router.replace('/merchant/overview');
       } else if (legacyTab === 'memo-designer') {
         router.replace('/merchant/memos');
       } else if (legacyTab === 'tracking') {
@@ -26,7 +26,7 @@ function MerchantOverviewPageInner() {
   }, [searchParams, router]);
 
   const handleSelectTab = (tab: string) => {
-    if (tab === 'overview') router.push('/merchant');
+    if (tab === 'overview') router.push('/merchant/overview');
     else if (tab === 'memo-designer') router.push('/merchant/memos');
     else if (tab === 'tracking') router.push('/merchant/inbound');
     else router.push(`/merchant/${tab}`);

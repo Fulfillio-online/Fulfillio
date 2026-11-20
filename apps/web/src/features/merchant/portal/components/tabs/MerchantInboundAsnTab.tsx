@@ -51,7 +51,7 @@ export function MerchantInboundAsnTab({
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-100 flex items-center gap-2">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-navy-900 dark:text-white flex items-center gap-2">
             <Truck className="h-6 w-6 text-emerald-400 shrink-0" />
             <span>Inbound ASNs & Warehouse Intake</span>
           </h1>
@@ -62,7 +62,7 @@ export function MerchantInboundAsnTab({
 
         <button
           onClick={() => setIsCreateOpen(true)}
-          className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors shadow-sm shrink-0"
+          className="w-full sm:w-auto px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors shadow-sm shrink-0"
         >
           <Plus className="h-4 w-4" />
           <span>Create Inbound ASN</span>
@@ -71,29 +71,29 @@ export function MerchantInboundAsnTab({
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="p-4 sm:p-5 rounded-xl bg-slate-900 border border-slate-800 shadow-sm">
+        <div className="p-4 sm:p-5 rounded-xl bg-white dark:bg-navy-900 border border-slate-200/80 dark:border-white/10 shadow-sm">
           <div className="flex items-center justify-between text-slate-400 text-xs font-semibold">
             <span>In-Transit Parcels</span>
             <Truck className="h-4 w-4 text-amber-400" />
           </div>
-          <div className="text-2xl font-bold mt-2 text-slate-100">{inTransitCount} Shipments</div>
+          <div className="text-2xl font-bold mt-2 text-navy-900 dark:text-white">{inTransitCount} Shipments</div>
           <span className="text-[11px] text-amber-400/90 mt-1 inline-block">
             Expected within 24-48 hours
           </span>
         </div>
 
-        <div className="p-4 sm:p-5 rounded-xl bg-slate-900 border border-slate-800 shadow-sm">
+        <div className="p-4 sm:p-5 rounded-xl bg-white dark:bg-navy-900 border border-slate-200/80 dark:border-white/10 shadow-sm">
           <div className="flex items-center justify-between text-slate-400 text-xs font-semibold">
             <span>Arrived at Dock Bay</span>
             <Clock className="h-4 w-4 text-indigo-400" />
           </div>
-          <div className="text-2xl font-bold mt-2 text-slate-100">{arrivedDockCount} Shipments</div>
+          <div className="text-2xl font-bold mt-2 text-navy-900 dark:text-white">{arrivedDockCount} Shipments</div>
           <span className="text-[11px] text-indigo-400 mt-1 inline-block">
             Under physical inspection & sorting
           </span>
         </div>
 
-        <div className="p-4 sm:p-5 rounded-xl bg-slate-900 border border-slate-800 shadow-sm">
+        <div className="p-4 sm:p-5 rounded-xl bg-white dark:bg-navy-900 border border-slate-200/80 dark:border-white/10 shadow-sm">
           <div className="flex items-center justify-between text-slate-400 text-xs font-semibold">
             <span>Put-Away Completed</span>
             <CheckCircle2 className="h-4 w-4 text-emerald-400" />
@@ -114,7 +114,7 @@ export function MerchantInboundAsnTab({
             placeholder="Search ASN code, carrier, or chalan #..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            className="w-full pl-9 pr-3 py-1.5 bg-white dark:bg-navy-900 border border-slate-200/80 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
           />
         </div>
 
@@ -125,8 +125,8 @@ export function MerchantInboundAsnTab({
               onClick={() => setStatusFilter(filter)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
                 statusFilter === filter
-                  ? 'bg-slate-800 text-emerald-400 border border-emerald-500/40'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  ? 'bg-orange-600 text-white font-bold shadow-xs'
+                  : 'text-slate-400 hover:text-navy-900 dark:text-slate-200 hover:bg-slate-100 dark:bg-navy-800/60'
               }`}
             >
               {filter === 'ALL'
@@ -142,10 +142,10 @@ export function MerchantInboundAsnTab({
       </div>
 
       {/* ASNs Table */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden shadow-sm">
+      <div className="rounded-xl border border-slate-200/80 dark:border-white/10 bg-white dark:bg-navy-900 overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-left text-sm">
-            <thead className="bg-slate-800/80 text-slate-400 text-xs uppercase tracking-wider font-semibold border-b border-slate-800">
+            <thead className="bg-slate-50 dark:bg-navy-950/60 text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider font-semibold border-b border-slate-200/80 dark:border-white/10">
               <tr>
                 <th className="p-4">ASN Code & Date</th>
                 <th className="p-4">Carrier & Tracking</th>
@@ -155,23 +155,23 @@ export function MerchantInboundAsnTab({
                 <th className="p-4">Dock Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800">
+            <tbody className="divide-y divide-slate-200/80 dark:divide-white/5">
               {filteredAsns.map((asn) => {
                 const totalExpected = asn.items.reduce((s, it) => s + it.expectedQty, 0);
                 const totalReceived = asn.items.reduce((s, it) => s + it.receivedGoodQty, 0);
                 const totalDamaged = asn.items.reduce((s, it) => s + it.receivedDamagedQty, 0);
 
                 return (
-                  <tr key={asn.id} className="hover:bg-slate-800/40 transition-colors">
+                  <tr key={asn.id} className="hover:bg-slate-100 dark:bg-navy-800/40 transition-colors">
                     <td className="p-4">
-                      <span className="font-mono text-xs font-bold text-slate-200 block">
+                      <span className="font-mono text-xs font-bold text-navy-900 dark:text-slate-200 block">
                         {asn.asnCode}
                       </span>
                       <span className="text-[11px] text-slate-500">{asn.createdAt}</span>
                     </td>
 
                     <td className="p-4">
-                      <div className="font-semibold text-xs text-slate-200">{asn.carrierName}</div>
+                      <div className="font-semibold text-xs text-navy-900 dark:text-slate-200">{asn.carrierName}</div>
                       <span className="font-mono text-[11px] text-emerald-400">
                         {asn.trackingRef}
                       </span>
@@ -179,10 +179,10 @@ export function MerchantInboundAsnTab({
 
                     <td className="p-4 max-w-xs">
                       {asn.items.map((it, idx) => (
-                        <div key={idx} className="text-xs text-slate-300">
+                        <div key={idx} className="text-xs text-slate-700 dark:text-slate-300">
                           <span className="font-mono text-[11px] text-slate-400 mr-1.5">{it.sku}</span>
                           {it.binCode && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-indigo-300 border border-slate-700 font-mono">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-navy-800 text-indigo-300 border border-slate-200 dark:border-white/10 font-mono">
                               {it.binCode}
                             </span>
                           )}
@@ -195,7 +195,7 @@ export function MerchantInboundAsnTab({
                       )}
                     </td>
 
-                    <td className="p-4 text-center font-bold text-slate-200">{totalExpected}</td>
+                    <td className="p-4 text-center font-bold text-navy-900 dark:text-slate-200">{totalExpected}</td>
 
                     <td className="p-4 text-center">
                       <div className="flex items-center justify-center gap-1.5 text-xs font-semibold">

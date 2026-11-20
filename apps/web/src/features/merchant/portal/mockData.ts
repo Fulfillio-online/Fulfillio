@@ -1,5 +1,6 @@
 import {
   MerchantAsnRecord,
+  MerchantCategoryItem,
   MerchantOrderItem,
   MerchantProductItem,
   MerchantProfileData,
@@ -13,6 +14,75 @@ export const STORAGE_KEY_MERCHANT_PRODUCTS = 'fulfillio_merchant_products_v1';
 export const STORAGE_KEY_MERCHANT_MEMOS = 'fulfillio_merchant_memos_v1';
 export const STORAGE_KEY_MERCHANT_ASNS = 'fulfillio_merchant_asns_v1';
 export const STORAGE_KEY_STOCK_REQUESTS = 'fulfillio_merchant_stock_requests_v1';
+export const STORAGE_KEY_MERCHANT_CATEGORIES = 'fulfillio_merchant_categories_v1';
+
+export const INITIAL_MERCHANT_CATEGORIES: MerchantCategoryItem[] = [
+  {
+    id: 'cat-fashion',
+    name: 'Fashion',
+    slug: 'fashion',
+    description: 'Men, Women and Unisex apparel, outerwear and garments',
+    createdAt: '2026-01-01T00:00:00Z',
+    subcategories: [
+      { id: 'sub-hoodie', name: 'Hoodie', slug: 'hoodie', description: 'Winter heavy hoodies and pullovers' },
+      { id: 'sub-tshirt', name: 'T-Shirt', slug: 't-shirt', description: 'Cotton crewneck and graphic t-shirts' },
+      { id: 'sub-jacket', name: 'Jacket', slug: 'jacket', description: 'Bomber, windbreaker and denim jackets' },
+      { id: 'sub-denim', name: 'Denim', slug: 'denim', description: 'Jeans, cargo pants and denim wear' },
+      { id: 'sub-activewear', name: 'Activewear', slug: 'activewear', description: 'Gym joggers, tracksuits, athletic fit' },
+      { id: 'sub-polo', name: 'Polo Shirt', slug: 'polo-shirt', description: 'Collar polo shirts and casual pique' },
+    ],
+  },
+  {
+    id: 'cat-electronics',
+    name: 'Electronics',
+    slug: 'electronics',
+    description: 'Consumer gadgets, phone accessories, and tech items',
+    createdAt: '2026-01-02T00:00:00Z',
+    subcategories: [
+      { id: 'sub-gadgets', name: 'Gadgets', slug: 'gadgets', description: 'Smart devices, chargers and tools' },
+      { id: 'sub-audio', name: 'Audio & Headphones', slug: 'audio-headphones', description: 'TWS earbuds, over-ear headphones' },
+      { id: 'sub-mobile-acc', name: 'Mobile Accessories', slug: 'mobile-accessories', description: 'Cases, tempered glass and stands' },
+      { id: 'sub-smart-home', name: 'Smart Home', slug: 'smart-home', description: 'Smart bulbs, plugs and sensors' },
+    ],
+  },
+  {
+    id: 'cat-footwear',
+    name: 'Footwear',
+    slug: 'footwear',
+    description: 'Casual and athletic sneakers, loafers and boots',
+    createdAt: '2026-01-03T00:00:00Z',
+    subcategories: [
+      { id: 'sub-sneakers', name: 'Sneakers', slug: 'sneakers', description: 'Running, training and lifestyle sneakers' },
+      { id: 'sub-formal-shoes', name: 'Formal Shoes', slug: 'formal-shoes', description: 'Leather oxfords, loafers and monks' },
+      { id: 'sub-sandals', name: 'Sandals & Slides', slug: 'sandals-slides', description: 'Casual slides, flip flops and sandals' },
+    ],
+  },
+  {
+    id: 'cat-accessories',
+    name: 'Accessories',
+    slug: 'accessories',
+    description: 'Bags, leather accessories, watches and jewellery',
+    createdAt: '2026-01-04T00:00:00Z',
+    subcategories: [
+      { id: 'sub-backpacks', name: 'Bags & Backpacks', slug: 'bags-backpacks', description: 'Commuter backpacks and sling bags' },
+      { id: 'sub-wallets', name: 'Wallets & Belts', slug: 'wallets-belts', description: 'Leather bi-folds, cardholders and belts' },
+      { id: 'sub-caps', name: 'Caps & Beanies', slug: 'caps-beanies', description: 'Baseball caps and winter knit beanies' },
+      { id: 'sub-watches', name: 'Watches', slug: 'watches', description: 'Analog, digital and smart watches' },
+    ],
+  },
+  {
+    id: 'cat-beauty',
+    name: 'Beauty & Personal Care',
+    slug: 'beauty-personal-care',
+    description: 'Skincare, grooming, cosmetics and fragrances',
+    createdAt: '2026-01-05T00:00:00Z',
+    subcategories: [
+      { id: 'sub-skincare', name: 'Skincare', slug: 'skincare', description: 'Moisturizers, cleansers and serums' },
+      { id: 'sub-haircare', name: 'Haircare', slug: 'haircare', description: 'Oils, pomades and shampoos' },
+      { id: 'sub-fragrance', name: 'Fragrance', slug: 'fragrance', description: 'Perfumes, attars and body sprays' },
+    ],
+  },
+];
 
 export const INITIAL_MERCHANT_PROFILE: MerchantProfileData = {
   merchantCode: 'MC-101',
@@ -276,7 +346,7 @@ export const INITIAL_MERCHANT_ORDERS: MerchantOrderItem[] = [
     phone: '01712 345678',
     address: 'House 24, Road 7, Dhanmondi, Dhaka 1209',
     productId: 'p-1',
-    items: 'Mens Heavyweight Half Zip Hoodie + 1 more',
+    items: 'Mens Heavyweight Half Zip Hoodie (Black • M) x 2, Men\'s Smiling Face Funny Fashion Couple Hoodie (Warm Beige • L) x 1',
     qty: 3,
     subtotal: 2450,
     deliveryFee: 80,
@@ -406,7 +476,7 @@ export const INITIAL_MERCHANT_ORDERS: MerchantOrderItem[] = [
     phone: '01911 223344',
     address: 'Plot 18, Block-D, Banani, Dhaka 1213',
     productId: 'p-7',
-    items: 'Classic Wool Blend Overcoat + 1 item',
+    items: 'Classic Wool Blend Overcoat (Camel • 42) x 1, Classic Wool Blend Overcoat (Charcoal Grey • 40) x 1',
     qty: 2,
     subtotal: 2280,
     deliveryFee: 120,
@@ -950,6 +1020,22 @@ export const INITIAL_WEBHOOK_LOGS: MerchantWebhookLog[] = [
 
 export const INITIAL_STOCK_REQUESTS = [
   {
+    id: 'SW-4003',
+    productId: 'p-3',
+    productTitle: 'Breathable Honeycomb Pique Polo Shirt',
+    productSku: 'POLO-HONEY-003',
+    type: 'RETURN' as const,
+    requestedQty: 10,
+    currentStock: 210,
+    status: 'PENDING_APPROVAL' as const,
+    reason: 'Store recall: Merchant recalling 10 units from warehouse stock to outlet.',
+    destination: 'Dhanmondi Branch, Road 27, Dhaka',
+    trackingRef: 'RET-109281',
+    note: 'Outlet demand replenishment',
+    createdAt: '2026-11-05 16:45',
+    imageUrl: 'https://images.unsplash.com/photo-1581655353564-df123a1eb820?auto=format&fit=crop&w=200&q=80',
+  },
+  {
     id: 'sr-101',
     productId: 'p-1',
     productTitle: 'Mens Heavyweight Half Zip Hoodie',
@@ -974,3 +1060,5 @@ export const INITIAL_STOCK_REQUESTS = [
     imageUrl: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=200&q=80',
   },
 ];
+
+export { INITIAL_AZAD_PRODUCTS } from './azadProducts';

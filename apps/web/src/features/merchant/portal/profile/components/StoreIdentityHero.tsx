@@ -53,7 +53,7 @@ export function StoreIdentityHero({ profile, onEdit }: StoreIdentityHeroProps) {
   };
 
   return (
-    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 border border-slate-800 shadow-xl p-5 sm:p-7">
+    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-white via-slate-50 to-orange-50/20 dark:from-navy-900 dark:via-navy-900 dark:to-navy-950 border border-slate-200/80 dark:border-white/10 shadow-xl p-5 sm:p-7">
       {/* Subtle top emerald ambient glow */}
       <div className="absolute top-0 right-1/4 -mt-12 h-36 w-72 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none" />
 
@@ -97,36 +97,36 @@ export function StoreIdentityHero({ profile, onEdit }: StoreIdentityHeroProps) {
               <button
                 type="button"
                 onClick={handleCopyCode}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-950/80 hover:bg-slate-800 text-emerald-400 border border-slate-800 font-mono text-xs font-bold transition-colors cursor-pointer group"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-50 dark:bg-navy-950/80 hover:bg-slate-100 dark:bg-navy-800 text-emerald-400 border border-slate-200/80 dark:border-white/10 font-mono text-xs font-bold transition-colors cursor-pointer group"
                 title="Click to copy Merchant ID"
               >
                 <span>{profile.merchantCode}</span>
                 {copiedId ? (
                   <CheckCircle2 className="h-3 w-3 text-emerald-400" />
                 ) : (
-                  <Copy className="h-3 w-3 text-slate-500 group-hover:text-emerald-400 transition-colors" />
+                  <Copy className="h-3 w-3 text-slate-500 group-hover:text-orange-600 dark:hover:text-orange-400 transition-colors" />
                 )}
               </button>
             </div>
 
-            <p className="text-xs sm:text-sm text-slate-300 font-medium">
+            <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-300 font-medium">
               Owned &amp; Managed by{' '}
               <strong className="text-white font-semibold">{profile.ownerName}</strong>
             </p>
 
             {/* Quick Contact Chips */}
-            <div className="flex flex-wrap items-center gap-2.5 sm:gap-4 pt-1 text-xs text-slate-400">
-              <div className="inline-flex items-center gap-1.5 bg-slate-950/60 px-2.5 py-1 rounded-lg border border-slate-800/80">
+            <div className="flex flex-wrap items-center gap-2.5 sm:gap-4 pt-1 text-xs text-slate-500 dark:text-slate-400">
+              <div className="inline-flex items-center gap-1.5 bg-slate-50 dark:bg-navy-950/60 px-2.5 py-1 rounded-lg border border-slate-200/80 dark:border-white/10/80">
                 <Mail className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
                 <span className="truncate max-w-[200px] sm:max-w-none">{profile.email}</span>
               </div>
 
-              <div className="inline-flex items-center gap-1.5 bg-slate-950/60 px-2.5 py-1 rounded-lg border border-slate-800/80">
+              <div className="inline-flex items-center gap-1.5 bg-slate-50 dark:bg-navy-950/60 px-2.5 py-1 rounded-lg border border-slate-200/80 dark:border-white/10/80">
                 <Phone className="h-3.5 w-3.5 text-teal-400 shrink-0" />
                 <span className="font-mono">{profile.phone}</span>
               </div>
 
-              <div className="inline-flex items-center gap-1.5 bg-slate-950/60 px-2.5 py-1 rounded-lg border border-slate-800/80">
+              <div className="inline-flex items-center gap-1.5 bg-slate-50 dark:bg-navy-950/60 px-2.5 py-1 rounded-lg border border-slate-200/80 dark:border-white/10/80">
                 <MapPin className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
                 <span className="truncate max-w-[180px] sm:max-w-xs">{profile.location}</span>
               </div>
@@ -139,19 +139,19 @@ export function StoreIdentityHero({ profile, onEdit }: StoreIdentityHeroProps) {
           <button
             type="button"
             onClick={onEdit}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 hover:border-slate-600 text-xs font-semibold shadow-sm transition-all active:scale-[0.98] cursor-pointer min-h-[40px]"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-navy-900 dark:text-slate-200 hover:text-white border border-slate-200 dark:border-white/10 hover:border-slate-600 text-xs font-semibold shadow-sm transition-all active:scale-[0.98] cursor-pointer min-h-[40px]"
           >
             <Pencil className="h-3.5 w-3.5 text-emerald-400" />
             <span>Edit Profile</span>
           </button>
 
           {/* Central Hub Tag */}
-          <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-xs space-y-1 w-full sm:w-auto lg:max-w-xs shadow-inner">
-            <div className="font-semibold text-slate-200 flex items-center gap-1.5">
+          <div className="p-3 rounded-xl bg-slate-50 dark:bg-navy-950/80 border border-slate-200/80 dark:border-white/10 text-xs space-y-1 w-full sm:w-auto lg:max-w-xs shadow-inner">
+            <div className="font-semibold text-navy-900 dark:text-slate-200 flex items-center gap-1.5">
               <Building2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
               <span>Dhaka Central Hub Intake</span>
             </div>
-            <p className="text-[11px] text-slate-400 leading-relaxed">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
               Stock stored in Fulfillio Central Warehouse. Orders auto-dispatched to Steadfast, Pathao &amp; RedX.
             </p>
           </div>

@@ -83,9 +83,9 @@ export function EarningsOrdersTable({ orders, onTriggerToast }: EarningsOrdersTa
   };
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900 overflow-hidden shadow-sm space-y-4 p-4 sm:p-6">
+    <div className="rounded-2xl border border-slate-200/80 dark:border-white/10 bg-white dark:bg-navy-900 overflow-hidden shadow-sm space-y-4 p-4 sm:p-6">
       {/* Tab Filter Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/80 dark:border-white/10 pb-4">
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
@@ -93,7 +93,7 @@ export function EarningsOrdersTable({ orders, onTriggerToast }: EarningsOrdersTa
             className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
               activeTab === 'ALL'
                 ? 'bg-emerald-500 text-slate-950 shadow-sm'
-                : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                : 'bg-slate-100 dark:bg-navy-800 text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:text-slate-200'
             }`}
           >
             Cumulative Pending
@@ -104,7 +104,7 @@ export function EarningsOrdersTable({ orders, onTriggerToast }: EarningsOrdersTa
             className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
               activeTab === 'READY_TO_CLAIM'
                 ? 'bg-emerald-500 text-slate-950 shadow-sm'
-                : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                : 'bg-slate-100 dark:bg-navy-800 text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:text-slate-200'
             }`}
           >
             <span>Ready to Claim</span>
@@ -118,7 +118,7 @@ export function EarningsOrdersTable({ orders, onTriggerToast }: EarningsOrdersTa
             className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
               activeTab === 'PENDING'
                 ? 'bg-emerald-500 text-slate-950 shadow-sm'
-                : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                : 'bg-slate-100 dark:bg-navy-800 text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:text-slate-200'
             }`}
           >
             <span>Pending</span>
@@ -136,7 +136,7 @@ export function EarningsOrdersTable({ orders, onTriggerToast }: EarningsOrdersTa
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search order or transaction..."
-            className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+            className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200/80 dark:border-white/10 text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
           />
         </div>
       </div>
@@ -144,14 +144,14 @@ export function EarningsOrdersTable({ orders, onTriggerToast }: EarningsOrdersTa
       {/* Table */}
       <div className="overflow-x-auto">
         <table className="w-full min-w-[760px] text-left text-xs">
-          <thead className="bg-slate-800/60 text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800">
+          <thead className="bg-slate-100 dark:bg-navy-800/60 text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-200/80 dark:border-white/10">
             <tr>
               <th className="p-3 w-8">
                 <input
                   type="checkbox"
                   checked={selectedIds.length === filteredOrders.length && filteredOrders.length > 0}
                   onChange={toggleSelectAll}
-                  className="rounded border-slate-700 bg-slate-900 text-emerald-500 focus:ring-emerald-500"
+                  className="rounded border-slate-200 dark:border-white/10 bg-white dark:bg-navy-900 text-orange-600 focus:ring-orange-500"
                 />
               </th>
               <th className="p-3">Date / Transaction</th>
@@ -163,7 +163,7 @@ export function EarningsOrdersTable({ orders, onTriggerToast }: EarningsOrdersTa
               <th className="p-3 text-right">Action</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800/80">
+          <tbody className="divide-y divide-slate-100 dark:divide-white/5">
             {filteredOrders.length === 0 ? (
               <tr>
                 <td colSpan={8} className="p-8 text-center text-slate-500 text-xs">
@@ -176,7 +176,7 @@ export function EarningsOrdersTable({ orders, onTriggerToast }: EarningsOrdersTa
                 return (
                   <tr
                     key={order.id}
-                    className={`hover:bg-slate-800/30 transition-colors ${
+                    className={`hover:bg-slate-100 dark:bg-navy-800/30 transition-colors ${
                       isSelected ? 'bg-emerald-950/20' : ''
                     }`}
                   >
@@ -185,24 +185,24 @@ export function EarningsOrdersTable({ orders, onTriggerToast }: EarningsOrdersTa
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => toggleSelectOne(order.id)}
-                        className="rounded border-slate-700 bg-slate-900 text-emerald-500 focus:ring-emerald-500"
+                        className="rounded border-slate-200 dark:border-white/10 bg-white dark:bg-navy-900 text-orange-600 focus:ring-orange-500"
                       />
                     </td>
                     <td className="p-3">
-                      <span className="font-mono text-slate-200 block font-semibold">
+                      <span className="font-mono text-navy-900 dark:text-slate-200 block font-semibold">
                         {order.transactionRef}
                       </span>
                       <span className="text-[10px] text-slate-500">{order.date}</span>
                     </td>
                     <td className="p-3">
-                      <span className="font-bold text-slate-200 block text-xs">
+                      <span className="font-bold text-navy-900 dark:text-slate-200 block text-xs">
                         {order.orderNumber}
                       </span>
-                      <span className="text-[11px] text-slate-400 line-clamp-1">
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1">
                         {order.itemTitle}
                       </span>
                     </td>
-                    <td className="p-3 font-semibold text-slate-300">
+                    <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">
                       ৳ {order.grossAmount.toLocaleString()}
                     </td>
                     <td className="p-3 text-rose-400 font-mono">
@@ -218,7 +218,7 @@ export function EarningsOrdersTable({ orders, onTriggerToast }: EarningsOrdersTa
                         onClick={() =>
                           onTriggerToast(`Viewing order transaction ${order.transactionRef}`)
                         }
-                        className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-colors"
+                        className="p-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:text-slate-200 transition-colors"
                         title="View Order Details"
                       >
                         <Eye className="h-3.5 w-3.5" />

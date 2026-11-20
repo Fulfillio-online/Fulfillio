@@ -110,10 +110,10 @@ export function AddSingleProductModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 space-y-5 shadow-2xl animate-in zoom-in-95 duration-200">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+      <div className="bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 space-y-5 shadow-2xl animate-in zoom-in-95 duration-200">
+        <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-3">
           <div>
-            <h3 className="font-bold text-base text-slate-100">Add New Product to Warehouse Catalog</h3>
+            <h3 className="font-bold text-base text-navy-900 dark:text-white">Add New Product to Warehouse Catalog</h3>
             <p className="text-xs text-slate-400">
               Automatically generates 2-part SKUs ({merchantCode}-[SKU]) and 13-digit barcodes.
             </p>
@@ -132,7 +132,7 @@ export function AddSingleProductModal({
               onChange={(e) => setProdTitle(e.target.value)}
               placeholder="e.g. Heavyweight Oversized T-Shirt"
               required
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-100 focus:outline-none focus:border-emerald-500"
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-sm text-navy-900 dark:text-white focus:outline-none focus:border-orange-500"
             />
           </div>
 
@@ -147,7 +147,7 @@ export function AddSingleProductModal({
                 onChange={(e) => setProdBaseSku(e.target.value.toUpperCase())}
                 placeholder="e.g. TSHIRT"
                 required
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm font-mono text-emerald-400 uppercase focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-sm font-mono text-emerald-400 uppercase focus:outline-none focus:border-orange-500"
               />
             </div>
 
@@ -159,7 +159,7 @@ export function AddSingleProductModal({
                 type="text"
                 value={merchantCode}
                 readOnly
-                className="w-full px-3 py-2 bg-slate-950/60 border border-slate-800 rounded-lg text-sm font-mono text-slate-500 cursor-not-allowed"
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950/60 border border-slate-200 dark:border-white/10 rounded-lg text-sm font-mono text-slate-500 cursor-not-allowed"
               />
             </div>
           </div>
@@ -172,7 +172,7 @@ export function AddSingleProductModal({
                 value={singlePrice}
                 onChange={(e) => setSinglePrice(e.target.value)}
                 required
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-100 focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-sm text-navy-900 dark:text-white focus:outline-none focus:border-orange-500"
               />
             </div>
 
@@ -183,7 +183,7 @@ export function AddSingleProductModal({
                 value={singleStock}
                 onChange={(e) => setSingleStock(e.target.value)}
                 required
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-100 focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-sm text-navy-900 dark:text-white focus:outline-none focus:border-orange-500"
               />
             </div>
 
@@ -193,26 +193,26 @@ export function AddSingleProductModal({
                 type="text"
                 value={binLocation}
                 onChange={(e) => setBinLocation(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm font-mono text-amber-400 focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-sm font-mono text-amber-400 focus:outline-none focus:border-orange-500"
               />
             </div>
           </div>
 
           {/* Variant Toggle */}
-          <div className="pt-2 border-t border-slate-800">
-            <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-200">
+          <div className="pt-2 border-t border-slate-200 dark:border-white/10">
+            <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-navy-900 dark:text-slate-200">
               <input
                 type="checkbox"
                 checked={hasVariants}
                 onChange={(e) => setHasVariants(e.target.checked)}
-                className="rounded bg-slate-950 border-slate-800 text-emerald-600 focus:ring-0 h-4 w-4"
+                className="rounded bg-slate-50 dark:bg-navy-950 border-slate-200 dark:border-white/10 text-emerald-600 focus:ring-0 h-4 w-4"
               />
               <span>This product has variants (Color / Size)</span>
             </label>
           </div>
 
           {hasVariants && (
-            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-4">
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 space-y-4">
               {/* Colors Builder */}
               <div>
                 <span className="text-xs font-semibold text-slate-400 block mb-1.5">Colors:</span>
@@ -220,7 +220,7 @@ export function AddSingleProductModal({
                   {colors.map((c) => (
                     <span
                       key={c}
-                      className="px-2.5 py-1 rounded bg-slate-800 border border-slate-700 text-xs text-slate-200 flex items-center gap-1.5"
+                      className="px-2.5 py-1 rounded bg-slate-100 dark:bg-navy-800 border border-slate-200 dark:border-white/10 text-xs text-navy-900 dark:text-slate-200 flex items-center gap-1.5"
                     >
                       <span>{c}</span>
                       <button
@@ -238,7 +238,7 @@ export function AddSingleProductModal({
                       value={colorInput}
                       onChange={(e) => setColorInput(e.target.value)}
                       placeholder="+ Add Color"
-                      className="w-24 px-2 py-1 bg-slate-900 border border-slate-800 rounded text-xs text-slate-200"
+                      className="w-24 px-2 py-1 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded text-xs text-navy-900 dark:text-slate-200"
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();
@@ -249,7 +249,7 @@ export function AddSingleProductModal({
                     <button
                       type="button"
                       onClick={handleAddColor}
-                      className="p-1 rounded bg-slate-800 text-xs text-slate-300"
+                      className="p-1 rounded bg-slate-100 dark:bg-navy-800 text-xs text-slate-300"
                     >
                       +
                     </button>
@@ -264,7 +264,7 @@ export function AddSingleProductModal({
                   {sizes.map((s) => (
                     <span
                       key={s}
-                      className="px-2.5 py-1 rounded bg-slate-800 border border-slate-700 text-xs text-slate-200 flex items-center gap-1.5"
+                      className="px-2.5 py-1 rounded bg-slate-100 dark:bg-navy-800 border border-slate-200 dark:border-white/10 text-xs text-navy-900 dark:text-slate-200 flex items-center gap-1.5"
                     >
                       <span>{s}</span>
                       <button
@@ -282,7 +282,7 @@ export function AddSingleProductModal({
                       value={sizeInput}
                       onChange={(e) => setSizeInput(e.target.value)}
                       placeholder="+ Add Size"
-                      className="w-24 px-2 py-1 bg-slate-900 border border-slate-800 rounded text-xs text-slate-200"
+                      className="w-24 px-2 py-1 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded text-xs text-navy-900 dark:text-slate-200"
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();
@@ -293,7 +293,7 @@ export function AddSingleProductModal({
                     <button
                       type="button"
                       onClick={handleAddSize}
-                      className="p-1 rounded bg-slate-800 text-xs text-slate-300"
+                      className="p-1 rounded bg-slate-100 dark:bg-navy-800 text-xs text-slate-300"
                     >
                       +
                     </button>
@@ -303,7 +303,7 @@ export function AddSingleProductModal({
 
               {/* Dynamic Generated SKU Preview */}
               {prodBaseSku && colors.length > 0 && sizes.length > 0 && (
-                <div className="pt-2 border-t border-slate-800/80">
+                <div className="pt-2 border-t border-slate-200/80 dark:border-white/10">
                   <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
                     Generated 2-Part SKUs Preview ({colors.length * sizes.length} variants):
                   </span>
@@ -312,7 +312,7 @@ export function AddSingleProductModal({
                       sizes.map((sz) => (
                         <div
                           key={`${col}-${sz}`}
-                          className="flex items-center justify-between text-xs py-1 px-2 rounded bg-slate-900/60"
+                          className="flex items-center justify-between text-xs py-1 px-2 rounded bg-white dark:bg-navy-900/60"
                         >
                           <span className="text-slate-300">
                             {col} / {sz}
@@ -329,17 +329,17 @@ export function AddSingleProductModal({
             </div>
           )}
 
-          <div className="pt-2 flex justify-end gap-3 border-t border-slate-800">
+          <div className="pt-2 flex justify-end gap-3 border-t border-slate-200 dark:border-white/10">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300"
+              className="px-4 py-2 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-semibold text-slate-300"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white shadow-sm flex items-center gap-1.5"
+              className="px-5 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 text-xs font-semibold text-white shadow-sm flex items-center gap-1.5"
             >
               <Sparkles className="h-4 w-4" />
               <span>Generate & Save Products</span>

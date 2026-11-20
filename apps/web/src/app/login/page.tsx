@@ -12,7 +12,7 @@ import {
   Smartphone,
   CheckCircle2,
   AlertCircle,
-  Sparkles
+  Sparkles,
 } from 'lucide-react';
 import { authenticateMerchantLogin } from '@/lib/warehouseSync';
 import { MerchantRegisterModal } from '@/features/marketing';
@@ -21,20 +21,20 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('sabbir@example.com');
   const [password, setPassword] = useState('password123');
-  const [selectedRole, setSelectedRole] = useState<'SUPER_ADMIN' | 'MERCHANT' | 'WAREHOUSE_OPERATOR'>('MERCHANT');
+  const [selectedRole, setSelectedRole] = useState<'MERCHANT' | 'WAREHOUSE_OPERATOR'>('MERCHANT');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
 
-  const handleRoleSelect = (role: 'SUPER_ADMIN' | 'MERCHANT' | 'WAREHOUSE_OPERATOR') => {
+  const handleRoleSelect = (role: 'MERCHANT' | 'WAREHOUSE_OPERATOR') => {
     setSelectedRole(role);
     setError(null);
-    if (role === 'SUPER_ADMIN') {
-      setEmail('admin@fulfillio.online');
-    } else if (role === 'MERCHANT') {
+    if (role === 'MERCHANT') {
       setEmail('sabbir@example.com');
+      setPassword('password123');
     } else {
       setEmail('worker@fulfillio.online');
+      setPassword('worker123');
     }
   };
 
@@ -47,7 +47,7 @@ export default function LoginPage() {
       const res = await authenticateMerchantLogin(email, password);
       setLoading(false);
       if (!res.ok) {
-        setError(res.error || 'লগইন করা সম্ভব হয়নি।');
+        setError(res.error || 'লগইন করা সম্ভব হয়নি। সঠিক ইমেইল ও পাসওয়ার্ড দিন।');
         return;
       }
       router.push('/merchant');
@@ -56,28 +56,24 @@ export default function LoginPage() {
 
     setTimeout(() => {
       setLoading(false);
-      if (selectedRole === 'SUPER_ADMIN') {
-        router.push('/admin');
-      } else {
-        router.push('/wms/pick');
-      }
+      router.push('/wms/pick');
     }, 450);
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-950 text-slate-100 flex-col justify-center items-center p-4 selection:bg-emerald-500 selection:text-white">
+    <div className="flex min-h-screen bg-slate-950 text-slate-100 flex-col justify-center items-center p-4 selection:bg-orange-500 selection:text-white">
       {/* Background radial glow */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-emerald-600/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-orange-600/10 rounded-full blur-3xl pointer-events-none" />
 
       <div className="w-full max-w-md relative z-10 space-y-6">
         {/* Brand Header */}
         <div className="text-center space-y-2">
           <Link href="/" className="inline-flex items-center gap-2.5">
-            <div className="h-11 w-11 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center font-black text-white text-xl shadow-lg shadow-emerald-950">
+            <div className="h-11 w-11 rounded-2xl bg-orange-600 flex items-center justify-center font-black text-white text-xl shadow-lg shadow-orange-950">
               F
             </div>
             <span className="font-extrabold text-2xl tracking-tight text-white">
-              Fulfillio<span className="text-emerald-400">.online</span>
+              Fulfill<span className="text-orange-500">io</span>
             </span>
           </Link>
           <p className="text-sm text-slate-400">
@@ -90,48 +86,69 @@ export default function LoginPage() {
           {/* Quick Role Switcher */}
           <div>
             <label className="text-xs font-semibold text-slate-400 block mb-2">
-              Select Demo Role / Destination:
+              Select Workspace Portal:
             </label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => handleRoleSelect('MERCHANT')}
-                className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center gap-1.5 cursor-pointer ${
+                className={`p-3 rounded-xl border text-center transition-all flex flex-col items-center gap-1.5 cursor-pointer ${
                   selectedRole === 'MERCHANT'
-                    ? 'bg-indigo-950/60 border-indigo-500 text-indigo-300 shadow-sm'
+                    ? 'bg-orange-950/40 border-orange-500 text-orange-400 shadow-sm'
                     : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
                 }`}
               >
                 <Package className="h-4 w-4" />
-                <span className="text-[11px] font-bold">Merchant</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleRoleSelect('SUPER_ADMIN')}
-                className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center gap-1.5 cursor-pointer ${
-                  selectedRole === 'SUPER_ADMIN'
-                    ? 'bg-emerald-950/60 border-emerald-500 text-emerald-300 shadow-sm'
-                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <ShieldCheck className="h-4 w-4" />
-                <span className="text-[11px] font-bold">Super Admin</span>
+                <span className="text-xs font-bold">Merchant Portal</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => handleRoleSelect('WAREHOUSE_OPERATOR')}
-                className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center gap-1.5 cursor-pointer ${
+                className={`p-3 rounded-xl border text-center transition-all flex flex-col items-center gap-1.5 cursor-pointer ${
                   selectedRole === 'WAREHOUSE_OPERATOR'
-                    ? 'bg-teal-950/60 border-teal-500 text-teal-300 shadow-sm'
+                    ? 'bg-amber-950/40 border-amber-500 text-amber-400 shadow-sm'
                     : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
                 }`}
               >
                 <Smartphone className="h-4 w-4" />
-                <span className="text-[11px] font-bold">Worker App</span>
+                <span className="text-xs font-bold">Warehouse Staff</span>
               </button>
             </div>
+
+            {selectedRole === 'MERCHANT' && (
+              <div className="flex items-center gap-2 pt-2.5">
+                <span className="text-[11px] text-slate-500 font-medium">Quick fill:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail('azad@gmail.com');
+                    setPassword('Azad?1');
+                  }}
+                  className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                    email === 'azad@gmail.com'
+                      ? 'bg-orange-500/20 border-orange-500/50 text-orange-400 shadow-xs'
+                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                  }`}
+                >
+                  Azad&apos;s Store
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail('sabbir@example.com');
+                    setPassword('password123');
+                  }}
+                  className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                    email === 'sabbir@example.com'
+                      ? 'bg-orange-500/20 border-orange-500/50 text-orange-400 shadow-xs'
+                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                  }`}
+                >
+                  Sabbir&apos;s Store
+                </button>
+              </div>
+            )}
           </div>
 
           {error && (
@@ -141,36 +158,36 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* Form */}
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="text-xs font-semibold text-slate-400 block mb-1">
-                Account Email
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Email Address or Username
               </label>
               <div className="relative">
-                <Mail className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+                <Mail className="h-4 w-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
-                  type="email"
+                  type="text"
+                  required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500 transition-colors"
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-orange-500 transition-colors"
                 />
               </div>
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-slate-400 block mb-1">
-                Password
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-semibold text-slate-300">Password</label>
+                <span className="text-[11px] text-orange-400">Demo active</span>
+              </div>
               <div className="relative">
-                <Lock className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+                <Lock className="h-4 w-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="password"
+                  required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500 transition-colors"
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-orange-500 transition-colors"
                 />
               </div>
             </div>
@@ -178,47 +195,52 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-lg shadow-emerald-950 flex items-center justify-center gap-2 active:scale-98 transition-all disabled:opacity-50 cursor-pointer"
+              className="w-full py-3 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-sm shadow-lg shadow-orange-600/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
               {loading ? (
-                <span>Authenticating...</span>
+                <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
               ) : (
                 <>
-                  <span>Sign In to {selectedRole.replace('_', ' ')}</span>
+                  <span>
+                    {selectedRole === 'MERCHANT' ? 'Enter Merchant Workspace' : 'Open Worker Station'}
+                  </span>
                   <ArrowRight className="h-4 w-4" />
                 </>
               )}
             </button>
           </form>
 
-          <div className="pt-3 border-t border-slate-800/80 text-center space-y-2">
-            <div className="text-xs text-slate-400">
-              <span>নতুন মার্চেন্ট? </span>
+          {/* Registration Trigger */}
+          <div className="pt-2 border-t border-slate-800 text-center text-xs text-slate-400 space-y-3">
+            <div>
+              <span>New merchant? </span>
               <button
                 type="button"
                 onClick={() => setIsRegisterModalOpen(true)}
-                className="text-emerald-400 hover:text-emerald-300 font-bold hover:underline cursor-pointer"
+                className="text-orange-400 font-bold hover:underline cursor-pointer"
               >
-                এখানে একাউন্ট খুলুন (Sign Up)
+                Become a Merchant Partner
               </button>
             </div>
-            <span className="text-[11px] text-slate-500 block">
-              Protected by JWT Role-Based Access Control
-            </span>
-          </div>
-        </div>
 
-        {/* Back link */}
-        <div className="text-center">
-          <Link href="/" className="text-xs text-slate-400 hover:text-emerald-400 transition-colors">
-            ← Back to Homepage
-          </Link>
+            {/* Admin dedicated login link */}
+            <div className="pt-2 border-t border-slate-800/60">
+              <Link
+                href="/admin/login"
+                className="inline-flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-orange-400 transition-colors"
+              >
+                <ShieldCheck className="h-3.5 w-3.5" />
+                <span>Enterprise Administrator? Sign in via /admin/login &rarr;</span>
+              </Link>
+            </div>
+          </div>
         </div>
       </div>
 
       <MerchantRegisterModal
         isOpen={isRegisterModalOpen}
         onClose={() => setIsRegisterModalOpen(false)}
+        onOpenLogin={() => setIsRegisterModalOpen(false)}
       />
     </div>
   );

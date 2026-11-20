@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, Suspense, useCallback } from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
+import { CheckCircle2 } from 'lucide-react';
 import {
   MerchantAsnRecord,
   MerchantOrderItem,
@@ -65,8 +66,8 @@ function MerchantPortalInner() {
 
   // States
   const [profile, setProfile] = useState<MerchantProfileData>(INITIAL_MERCHANT_PROFILE);
-  const [products, setProducts] = useState<MerchantProductItem[]>(INITIAL_MERCHANT_PRODUCTS);
-  const [orders, setOrders] = useState<MerchantOrderItem[]>(INITIAL_MERCHANT_ORDERS);
+  const [products, setProducts] = useState<MerchantProductItem[]>([]);
+  const [orders, setOrders] = useState<MerchantOrderItem[]>([]);
   const [memoList, setMemoList] = useState<ResellerMemo[]>(INITIAL_MERCHANT_MEMOS);
   const [asns, setAsns] = useState<MerchantAsnRecord[]>(INITIAL_MERCHANT_ASNS);
 
@@ -399,7 +400,7 @@ function MerchantPortalInner() {
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-950 text-slate-100">
+    <div className="flex min-h-screen bg-slate-50 dark:bg-navy-950 text-navy-900 dark:text-white">
       <MerchantSidebar
         activeTab={activeTab}
         onSelectTab={setActiveTab}
@@ -419,11 +420,14 @@ function MerchantPortalInner() {
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl w-full mx-auto">
           {toastMessage && (
-            <div className="p-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs sm:text-sm font-semibold flex items-center justify-between shadow-lg animate-in fade-in duration-200">
-              <span>{toastMessage}</span>
+            <div className="p-3.5 sm:p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/90 border border-emerald-300 dark:border-emerald-500/40 text-emerald-950 dark:text-emerald-100 text-xs sm:text-sm font-semibold flex items-center justify-between shadow-md shadow-emerald-950/5 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span className="leading-snug truncate sm:whitespace-normal">{toastMessage}</span>
+              </div>
               <button
                 onClick={() => setToastMessage(null)}
-                className="text-emerald-400 hover:text-white ml-2 text-xs"
+                className="text-emerald-800 dark:text-emerald-300 hover:text-emerald-950 dark:hover:text-white ml-3 text-xs font-bold px-2.5 py-1 rounded-lg bg-emerald-100/80 dark:bg-emerald-900/50 hover:bg-emerald-200 dark:hover:bg-emerald-800 transition-colors cursor-pointer shrink-0"
               >
                 Dismiss
               </button>
@@ -513,7 +517,7 @@ export function MerchantPortalManager() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400 text-sm">
+        <div className="min-h-screen bg-slate-50 dark:bg-navy-950 flex items-center justify-center text-slate-400 text-sm">
           Loading Merchant Portal...
         </div>
       }

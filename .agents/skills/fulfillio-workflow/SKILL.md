@@ -136,6 +136,16 @@ Every module in `apps/api/src/modules/<name>/` MUST follow this pattern:
 - Feature-specific UI goes in `apps/web/src/features/<feature-name>/`.
 - Route pages in `apps/web/src/app/<route>/page.tsx` should remain thin layouts that compose features.
 
+### Mandatory Component & Layout Design Standards:
+1. **Color Palette:** Pure White light mode, Dark Navy (`#12284C`, `navy-950`) dark mode, Vibrant Orange (`#F26B1D` / `orange-600`) primary branding.
+2. **Table Status Column:** ALWAYS a pure non-clickable text badge (`<span>`), NEVER a button. (Published = Emerald, Out of Stock = Rose, Pending = Amber, Draft = Neutral Slate).
+3. **Table Actions Column:** ONLY contains the 3-dots trigger button (`MoreVertical`). NEVER place outside action buttons in table cells.
+4. **Floating Dropdowns:** MUST use `createPortal(..., document.body)` with viewport clamping. Never clips or creates table scrollbars.
+5. **Charts:** Financial settlements MUST use authentic solid SVG Pie Charts (triangular slices meeting at center), never hollow donuts. Velocity metrics use vertical column/bar charts.
+6. **Bulk Actions:** Admin-pattern `Bulk Actions` select (`Publish`, `Draft`, `Delete`) with `Apply` button.
+7. **Pagination:** Bottom bar with "Showing X to Y of Z", rows per page (10, 25, 50, 100), Prev/Next, and numbered page buttons.
+
+
 ---
 
 ## 6. How to Run & Verify

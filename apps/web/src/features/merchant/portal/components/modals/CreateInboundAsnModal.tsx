@@ -105,16 +105,16 @@ export function CreateInboundAsnModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
-      <div className="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-50 dark:bg-navy-950/80 backdrop-blur-sm animate-in fade-in">
+      <div className="w-full max-w-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-900/50">
+        <div className="flex items-center justify-between p-5 border-b border-slate-200 dark:border-white/10 bg-white dark:bg-navy-900/50">
           <div className="flex items-center gap-2.5">
             <div className="h-9 w-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
               <Truck className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-100">Create Inbound Stock ASN</h2>
+              <h2 className="text-base font-bold text-navy-900 dark:text-white">Create Inbound Stock ASN</h2>
               <p className="text-xs text-slate-400">
                 Notify warehouse of incoming parcels and advance stock quantities
               </p>
@@ -122,7 +122,7 @@ export function CreateInboundAsnModal({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-100 dark:bg-navy-800 transition-colors"
           >
             <X className="h-4 w-4" />
           </button>
@@ -138,7 +138,7 @@ export function CreateInboundAsnModal({
               <select
                 value={carrierName}
                 onChange={(e) => setCarrierName(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                className="w-full px-3 py-2 bg-slate-100 dark:bg-navy-800 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-orange-500"
               >
                 <option value="SA Paribahan Parcel">SA Paribahan Parcel</option>
                 <option value="Sundarban Courier Service">Sundarban Courier Service</option>
@@ -157,7 +157,7 @@ export function CreateInboundAsnModal({
                 placeholder="e.g. SAP-992014"
                 value={trackingRef}
                 onChange={(e) => setTrackingRef(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                className="w-full px-3 py-2 bg-slate-100 dark:bg-navy-800 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-orange-500"
               />
             </div>
 
@@ -169,7 +169,7 @@ export function CreateInboundAsnModal({
                 type="date"
                 value={expectedDate}
                 onChange={(e) => setExpectedDate(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                className="w-full px-3 py-2 bg-slate-100 dark:bg-navy-800 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-orange-500"
                 required
               />
             </div>
@@ -183,13 +183,13 @@ export function CreateInboundAsnModal({
                 placeholder="e.g. 2 boxes, fragile cartons"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                className="w-full px-3 py-2 bg-slate-100 dark:bg-navy-800 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-orange-500"
               />
             </div>
           </div>
 
           {/* Line Items */}
-          <div className="space-y-3 pt-3 border-t border-slate-800">
+          <div className="space-y-3 pt-3 border-t border-slate-200 dark:border-white/10">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
                 Shipment SKU Contents
@@ -197,7 +197,7 @@ export function CreateInboundAsnModal({
               <button
                 type="button"
                 onClick={handleAddItem}
-                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors"
+                className="px-2.5 py-1 bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-emerald-400 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors"
               >
                 <Plus className="h-3 w-3" />
                 <span>Add SKU</span>
@@ -208,14 +208,14 @@ export function CreateInboundAsnModal({
               {items.map((it, idx) => (
                 <div
                   key={idx}
-                  className="p-3 bg-slate-800/60 border border-slate-700/60 rounded-xl flex flex-col sm:flex-row items-start sm:items-center gap-3"
+                  className="p-3 bg-slate-100 dark:bg-navy-800/60 border border-slate-200 dark:border-white/10/60 rounded-xl flex flex-col sm:flex-row items-start sm:items-center gap-3"
                 >
                   <div className="flex-1 w-full sm:w-auto">
                     <label className="block text-[11px] text-slate-400 mb-0.5">Select Product</label>
                     <select
                       value={it.sku}
                       onChange={(e) => handleProductSelect(idx, e.target.value)}
-                      className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      className="w-full px-2.5 py-1.5 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-orange-500"
                     >
                       {products.map((p) => (
                         <option key={p.id} value={p.sku}>
@@ -232,7 +232,7 @@ export function CreateInboundAsnModal({
                       min={1}
                       value={it.expectedQty}
                       onChange={(e) => handleQtyChange(idx, parseInt(e.target.value, 10) || 1)}
-                      className="w-full px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-slate-200 font-bold focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      className="w-full px-2 py-1.5 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 font-bold focus:outline-none focus:ring-1 focus:ring-orange-500"
                     />
                   </div>
 
@@ -242,7 +242,7 @@ export function CreateInboundAsnModal({
                       type="text"
                       readOnly
                       value={it.binCode || 'A-01-01'}
-                      className="w-full px-2 py-1.5 bg-slate-900/60 border border-slate-800 rounded-lg text-[11px] text-slate-400 font-mono"
+                      className="w-full px-2 py-1.5 bg-white dark:bg-navy-900/60 border border-slate-200 dark:border-white/10 rounded-lg text-[11px] text-slate-400 font-mono"
                     />
                   </div>
 
@@ -262,17 +262,17 @@ export function CreateInboundAsnModal({
           </div>
 
           {/* Footer Submit */}
-          <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-2">
+          <div className="pt-4 border-t border-slate-200 dark:border-white/10 flex items-center justify-end gap-2">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold transition-colors"
+              className="px-4 py-2 bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-300 rounded-lg text-xs font-semibold transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors"
+              className="px-5 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors"
             >
               <PackagePlus className="h-4 w-4" />
               <span>Submit Inbound ASN</span>

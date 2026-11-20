@@ -145,26 +145,26 @@ export function MerchantOrderDetailsTab({
     <div className="space-y-6 max-w-7xl mx-auto pb-14">
       {/* Breadcrumbs */}
       <nav className="flex items-center gap-2 text-xs text-slate-400">
-        <Link href="/merchant" className="hover:text-slate-200 transition-colors">
+        <Link href="/merchant" className="hover:text-navy-900 dark:text-slate-200 transition-colors">
           Overview
         </Link>
         <span>&gt;</span>
-        <Link href="/merchant/orders" className="hover:text-slate-200 transition-colors">
+        <Link href="/merchant/orders" className="hover:text-navy-900 dark:text-slate-200 transition-colors">
           Orders
         </Link>
         <span>&gt;</span>
-        <span className="text-slate-200 font-mono font-medium">
+        <span className="text-navy-900 dark:text-slate-200 font-mono font-medium">
           {order.orderNumber || `#${order.id}`}
         </span>
       </nav>
 
       {/* Header Bar */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-900/60 p-4 sm:p-5 rounded-2xl border border-slate-800 shadow-md">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-navy-900/60 p-4 sm:p-5 rounded-2xl border border-slate-200/80 dark:border-white/10 shadow-md">
         <div>
           <div className="flex items-center gap-3 flex-wrap">
             <button
               onClick={() => router.push('/merchant/orders')}
-              className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-100 transition-colors cursor-pointer"
+              className="p-1.5 hover:bg-slate-100 dark:bg-navy-800 rounded-lg text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white transition-colors cursor-pointer"
               title="Back to Orders"
             >
               <ArrowLeft className="h-5 w-5" />
@@ -181,7 +181,7 @@ export function MerchantOrderDetailsTab({
             <span>•</span>
             <button
               onClick={handleCopyId}
-              className="inline-flex items-center gap-1 hover:text-emerald-400 transition-colors font-mono cursor-pointer"
+              className="inline-flex items-center gap-1 hover:text-orange-600 dark:hover:text-orange-400 transition-colors font-mono cursor-pointer"
             >
               {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
               <span>{copied ? 'Copied ID' : 'Copy order ID'}</span>
@@ -205,7 +205,7 @@ export function MerchantOrderDetailsTab({
             )}&customerName=${encodeURIComponent(order.customer)}&customerPhone=${encodeURIComponent(
               order.phone,
             )}&customerAddress=${encodeURIComponent(order.address)}&codAmount=${orderTotal}`}
-            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors shadow-sm cursor-pointer min-h-[38px]"
+            className="px-3.5 py-2 bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 border border-slate-200 dark:border-white/10 text-navy-900 dark:text-slate-200 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors shadow-sm cursor-pointer min-h-[38px]"
           >
             <Printer className="h-4 w-4 text-emerald-400" />
             <span>Print Invoice Memo</span>
@@ -217,8 +217,8 @@ export function MerchantOrderDetailsTab({
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
               className={`p-2 border rounded-xl transition-colors min-h-[38px] min-w-[38px] flex items-center justify-center cursor-pointer ${
                 isDropdownOpen
-                  ? 'bg-slate-800 border-slate-700 text-slate-100'
-                  : 'border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                  ? 'bg-slate-100 dark:bg-navy-800 border-slate-200 dark:border-white/10 text-navy-900 dark:text-white'
+                  : 'border-slate-200/80 dark:border-white/10 text-slate-400 hover:text-navy-900 dark:text-slate-200 hover:bg-slate-100 dark:bg-navy-800'
               }`}
               title="More actions"
             >
@@ -228,13 +228,13 @@ export function MerchantOrderDetailsTab({
             {isDropdownOpen && (
               <>
                 <div className="fixed inset-0 z-20" onClick={() => setIsDropdownOpen(false)} />
-                <div className="absolute right-0 mt-2 w-56 rounded-xl bg-slate-900 border border-slate-800 p-1.5 shadow-2xl z-30 text-xs space-y-1 animate-in fade-in zoom-in-95 duration-100">
+                <div className="absolute right-0 mt-2 w-56 rounded-xl bg-white dark:bg-navy-900 border border-slate-200/80 dark:border-white/10 p-1.5 shadow-2xl z-30 text-xs space-y-1 animate-in fade-in zoom-in-95 duration-100">
                   <button
                     onClick={() => {
                       setIsDropdownOpen(false);
                       handleCopyId();
                     }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors text-left cursor-pointer"
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-slate-700 dark:text-slate-300 hover:text-white hover:bg-slate-100 dark:bg-navy-800 rounded-lg transition-colors text-left cursor-pointer"
                   >
                     <Copy className="h-3.5 w-3.5 text-slate-400" />
                     <span>Copy Order ID</span>
@@ -249,7 +249,7 @@ export function MerchantOrderDetailsTab({
                           onTriggerToast(`Tracking Code ${order.trackingId} copied!`);
                         }
                       }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors text-left cursor-pointer"
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-slate-700 dark:text-slate-300 hover:text-white hover:bg-slate-100 dark:bg-navy-800 rounded-lg transition-colors text-left cursor-pointer"
                     >
                       <Truck className="h-3.5 w-3.5 text-blue-400" />
                       <span>Copy Tracking ID</span>
@@ -261,13 +261,13 @@ export function MerchantOrderDetailsTab({
                       setIsDropdownOpen(false);
                       onTriggerToast('Connecting to Fulfillio Warehouse Support: support@fulfillio.online');
                     }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors text-left cursor-pointer"
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-slate-700 dark:text-slate-300 hover:text-white hover:bg-slate-100 dark:bg-navy-800 rounded-lg transition-colors text-left cursor-pointer"
                   >
                     <HelpCircle className="h-3.5 w-3.5 text-slate-400" />
                     <span>Warehouse Support</span>
                   </button>
 
-                  <div className="h-px bg-slate-800 my-1" />
+                  <div className="h-px bg-slate-100 dark:bg-navy-800 my-1" />
 
                   {order.status === 'DELIVERED' || order.status === 'DISPATCHED' ? (
                     <div className="px-3 py-2 text-[11px] text-slate-500 leading-snug">

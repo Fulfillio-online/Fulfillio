@@ -17,6 +17,7 @@ export default function MerchantProductsPage() {
     bulkUpdateStatus,
     bulkDeleteProducts,
     requestStockAdd,
+    requestStockOperation,
     approveStockRequest,
     cancelStockRequest,
     showToast,
@@ -36,6 +37,7 @@ export default function MerchantProductsPage() {
       onBulkUpdateStatus={bulkUpdateStatus}
       onBulkDelete={bulkDeleteProducts}
       onRequestStockAdd={requestStockAdd}
+      onRequestStockOperation={requestStockOperation}
       onApproveStockRequest={approveStockRequest}
       onCancelStockRequest={cancelStockRequest}
       onTriggerToast={showToast}

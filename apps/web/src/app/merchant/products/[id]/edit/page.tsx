@@ -2,7 +2,7 @@
 
 import React, { use } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Package } from 'lucide-react';
+import { ArrowLeft, Package, Loader2 } from 'lucide-react';
 import { useMerchant } from '@/features/merchant/portal/MerchantContext';
 import { ProductForm } from '@/features/merchant/portal/products/components/ProductForm';
 
@@ -14,19 +14,29 @@ export default function EditProductPage({ params }: EditProductPageProps) {
   const { id } = use(params);
   const { products, profile, updateProduct } = useMerchant();
 
-  const product = products.find((p) => p.id === id);
+  const product = products.find((p) => p.id === id || p.sku === id);
 
   if (!product) {
+    if (products.length === 0) {
+      return (
+        <div className="rounded-2xl border border-slate-200 dark:border-white/10 p-12 text-center max-w-lg mx-auto my-12 bg-white dark:bg-navy-900/40 flex flex-col items-center justify-center">
+          <Loader2 className="h-8 w-8 text-orange-500 animate-spin mb-3" />
+          <h2 className="text-sm font-bold text-navy-900 dark:text-white">Loading Product Details...</h2>
+          <p className="text-xs text-slate-400 mt-1">Please wait while we retrieve your product data.</p>
+        </div>
+      );
+    }
+
     return (
-      <div className="rounded-2xl border border-dashed border-slate-800 p-12 text-center max-w-lg mx-auto my-12 bg-slate-900/40">
+      <div className="rounded-2xl border border-dashed border-slate-200 dark:border-white/10 p-12 text-center max-w-lg mx-auto my-12 bg-white dark:bg-navy-900/40">
         <Package className="h-10 w-10 text-slate-600 mx-auto mb-3" />
-        <h2 className="text-base font-bold text-slate-100">Product Not Found</h2>
+        <h2 className="text-base font-bold text-navy-900 dark:text-white">Product Not Found</h2>
         <p className="text-xs text-slate-400 mt-1">
           The requested product ID &quot;{id}&quot; does not exist in your store catalog.
         </p>
         <Link
           href="/merchant/products"
-          className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition-colors"
+          className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-semibold text-navy-900 dark:text-slate-200 transition-colors"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           <span>Back to Products</span>
@@ -38,10 +48,11 @@ export default function EditProductPage({ params }: EditProductPageProps) {
   return (
     <div className="py-2 sm:py-4">
       <ProductForm
+        key={product.id}
         initialProduct={product}
         merchantCode={profile.merchantCode}
-        onSave={(updated) => {
-          updateProduct(product.id, updated);
+        onSave={async (updated) => {
+          return await updateProduct(product.id, updated);
         }}
       />
     </div>

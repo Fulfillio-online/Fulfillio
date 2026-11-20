@@ -19,7 +19,14 @@ import {
   Sparkle,
   Apple,
   Box,
+  ExternalLink,
+  AlertCircle,
+  X,
+  Star,
+  Link as LinkIcon,
+  Image as ImageIcon,
 } from 'lucide-react';
+import { SAMPLE_PRODUCT_PRESETS } from '../utils/imageCompressor';
 import { MerchantProductItem } from '../../types';
 import {
   ColorSwatch,
@@ -27,11 +34,14 @@ import {
   ProductVariantConfig,
 } from '../types';
 import { compressImage, compressThumbnail } from '../utils/imageCompressor';
+import { ColorPickerInput } from './ColorPickerInput';
+import { useMerchant } from '@/features/merchant/portal/MerchantContext';
+import { MerchantCategoryItem, MerchantSubcategoryItem } from '../../types';
 
 interface ProductFormProps {
   initialProduct?: MerchantProductItem | null;
   merchantCode: string;
-  onSave: (product: MerchantProductItem) => void;
+  onSave: (product: MerchantProductItem) => Promise<{ ok: boolean; error?: string } | void> | void;
 }
 
 export function ProductForm({
@@ -41,6 +51,10 @@ export function ProductForm({
 }: ProductFormProps) {
   const router = useRouter();
   const isEdit = Boolean(initialProduct);
+  const { categories } = useMerchant();
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const mainImageInputRef = useRef<HTMLInputElement>(null);
   const colorFileInputRef = useRef<HTMLInputElement>(null);
@@ -54,6 +68,19 @@ export function ProductForm({
   const [category, setCategory] = useState(initialProduct?.category || 'Fashion');
   const [subcategory, setSubcategory] = useState(initialProduct?.subcategory || 'Hoodie');
   const [description, setDescription] = useState(initialProduct?.description || '');
+
+
+  const currentCategoryObj = useMemo(() => {
+    return (
+      categories.find((c: MerchantCategoryItem) => c.name.toLowerCase() === category.toLowerCase()) ||
+      categories.find((c: MerchantCategoryItem) => c.slug.toLowerCase() === category.toLowerCase()) ||
+      null
+    );
+  }, [categories, category]);
+
+  const subcategoryList = useMemo(() => {
+    return currentCategoryObj?.subcategories || [];
+  }, [currentCategoryObj]);
 
   // 2. Declared Value
   const [declaredValue, setDeclaredValue] = useState(
@@ -75,13 +102,8 @@ export function ProductForm({
             id: 'c-1',
             name: 'Black',
             hex: '#111827',
-            imageUrl: 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=200&q=80',
-          },
-          {
-            id: 'c-2',
-            name: 'Charcoal Grey',
-            hex: '#4B5563',
-            imageUrl: 'https://images.unsplash.com/photo-1509967419530-da38b4704bc6?auto=format&fit=crop&w=200&q=80',
+            imageUrl: '',
+            sizes: ['S', 'M', 'L', 'XL', 'XXL', '3XL'],
           },
         ]
   );
@@ -138,8 +160,51 @@ export function ProductForm({
     String(initialProduct?.stock || 30)
   );
 
-  // 5. Main Image
+  // 5. Main Image & Gallery
   const [imageUrl, setImageUrl] = useState(initialProduct?.imageUrl || '');
+  const [galleryImages, setGalleryImages] = useState<string[]>(() => {
+    if (initialProduct?.images && initialProduct.images.length > 0) {
+      const main = initialProduct.imageUrl || '';
+      return initialProduct.images.filter((img) => img !== main);
+    }
+    return [];
+  });
+  const [imageInputMode, setImageInputMode] = useState<'UPLOAD' | 'URL' | 'PRESET'>('UPLOAD');
+  const [urlInput, setUrlInput] = useState('');
+  const [urlError, setUrlError] = useState<string | null>(null);
+  const galleryFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Synchronize state whenever initialProduct changes (e.g. on edit reload)
+  useEffect(() => {
+    if (!initialProduct) return;
+    setTitle(initialProduct.title || '');
+    setMasterSku(initialProduct.sku || '');
+    setCategory(initialProduct.category || 'Fashion');
+    setSubcategory(initialProduct.subcategory || 'Hoodie');
+    setDescription(initialProduct.description || '');
+    setDeclaredValue(String(initialProduct.price || 850));
+    setProductType(initialProduct.productType || 'FASHION');
+    setImageUrl(initialProduct.imageUrl || '');
+    if (initialProduct.images && initialProduct.images.length > 0) {
+      const main = initialProduct.imageUrl || '';
+      setGalleryImages(initialProduct.images.filter((img) => img !== main));
+    } else {
+      setGalleryImages([]);
+    }
+    if (initialProduct.colors && initialProduct.colors.length > 0) {
+      setColors(initialProduct.colors);
+    }
+    if (initialProduct.sizes && initialProduct.sizes.length > 0) {
+      setAllSizes(initialProduct.sizes);
+    }
+    if (initialProduct.keyFeatures && initialProduct.keyFeatures.length > 0) {
+      setFeatures(initialProduct.keyFeatures);
+    }
+    if (initialProduct.stock !== undefined) {
+      setStandardStock(String(initialProduct.stock));
+    }
+    setStatus(initialProduct.status === 'PUBLISHED' ? 'PUBLISHED' : 'DRAFT');
+  }, [initialProduct]);
 
   // 6. Key Features
   const [features, setFeatures] = useState<string[]>(
@@ -187,19 +252,28 @@ export function ProductForm({
 
     if (productType === 'FASHION') {
       const list: ProductVariantConfig[] = [];
-      colors.forEach((c) => {
+      colors.forEach((c, cIdx) => {
         const colorSizes = c.sizes && c.sizes.length > 0 ? c.sizes : allSizes;
+        const colorNameClean = (c.name || '').trim();
+        const cleanAlpha = colorNameClean.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+        const colorCode =
+          cleanAlpha.length >= 3
+            ? cleanAlpha.substring(0, 3)
+            : cleanAlpha.length > 0
+            ? cleanAlpha
+            : `C${cIdx + 1}`;
+
         colorSizes.forEach((s) => {
-          const id = `${c.name.toLowerCase().replace(/\s+/g, '-')}-${s.toLowerCase()}`;
+          const id = `${c.id}-${s.toLowerCase()}`;
           if (excludedVariantIds.includes(id)) return;
-          const colorCode = c.name.substring(0, 3).toUpperCase();
           const variantSku = `${baseSkuClean}-${colorCode}-${s}`;
           const stock = variantStockMap[id] ?? 10;
           list.push({
             id,
             variantSku,
-            color: c.name,
+            color: colorNameClean || `Color ${cIdx + 1}`,
             size: s,
+            imageUrl: c.imageUrl || '',
             stock,
           });
         });
@@ -219,6 +293,7 @@ export function ProductForm({
             id,
             variantSku,
             color: c.name,
+            imageUrl: c.imageUrl || '',
             attributeName: 'Storage',
             attributeValue: storage,
             stock,
@@ -242,6 +317,7 @@ export function ProductForm({
             attributeName: 'Volume',
             attributeValue: vol,
             color: c.name,
+            imageUrl: c.imageUrl || '',
             stock,
           });
         });
@@ -303,12 +379,98 @@ export function ProductForm({
     try {
       const compressed = await compressImage(file);
       setImageUrl(compressed);
+      // Auto-assign to first color swatch if empty
+      setColors((prev) =>
+        prev.map((c, idx) => (idx === 0 && !c.imageUrl ? { ...c, imageUrl: compressed } : c))
+      );
     } catch (err) {
       console.error('Failed to compress image:', err);
     } finally {
       if (mainImageInputRef.current) {
         mainImageInputRef.current.value = '';
       }
+    }
+  };
+
+  const handleGalleryFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    try {
+      for (const file of files) {
+        const compressed = await compressImage(file, 600, 600, 0.75);
+        if (!imageUrl) {
+          setImageUrl(compressed);
+        } else {
+          setGalleryImages((prev) => {
+            if (!prev.includes(compressed)) return [...prev, compressed];
+            return prev;
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to compress gallery image:', err);
+    } finally {
+      if (galleryFileInputRef.current) {
+        galleryFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleAddUrlImage = () => {
+    const trimmed = (urlInput || '').trim();
+    if (!trimmed) {
+      setUrlError('Please enter a valid image URL');
+      return;
+    }
+    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://') && !trimmed.startsWith('data:')) {
+      setUrlError('URL must start with http://, https://, or data:');
+      return;
+    }
+    setUrlError(null);
+    if (!imageUrl) {
+      setImageUrl(trimmed);
+      setColors((prev) =>
+        prev.map((c, idx) => (idx === 0 && !c.imageUrl ? { ...c, imageUrl: trimmed } : c))
+      );
+    } else {
+      setGalleryImages((prev) => (!prev.includes(trimmed) ? [...prev, trimmed] : prev));
+    }
+    setUrlInput('');
+  };
+
+  const handleApplyPreset = (presetUrl: string) => {
+    if (!imageUrl) {
+      setImageUrl(presetUrl);
+      setColors((prev) =>
+        prev.map((c, idx) => (idx === 0 && !c.imageUrl ? { ...c, imageUrl: presetUrl } : c))
+      );
+    } else {
+      setGalleryImages((prev) => (!prev.includes(presetUrl) ? [...prev, presetUrl] : prev));
+    }
+  };
+
+  const handleSetAsMainPhoto = (newMainUrl: string) => {
+    if (!newMainUrl || newMainUrl === imageUrl) return;
+    const oldMain = imageUrl;
+    setImageUrl(newMainUrl);
+    setGalleryImages((prev) => {
+      const filtered = prev.filter((u) => u !== newMainUrl);
+      return oldMain ? [oldMain, ...filtered] : filtered;
+    });
+  };
+
+  const handleRemovePhoto = (targetUrl: string) => {
+    if (targetUrl === imageUrl) {
+      if (galleryImages.length > 0) {
+        const nextMain = galleryImages[0];
+        setImageUrl(nextMain);
+        setGalleryImages((prev) => prev.slice(1));
+      } else {
+        setImageUrl('');
+      }
+    } else {
+      setGalleryImages((prev) => prev.filter((u) => u !== targetUrl));
     }
   };
 
@@ -336,12 +498,26 @@ export function ProductForm({
 
   const handleAddColor = () => {
     const newId = `c-${Date.now()}`;
-    setColors([
-      ...colors,
+    const palette = [
+      { name: 'White', hex: '#FFFFFF' },
+      { name: 'Navy Blue', hex: '#1E3A8A' },
+      { name: 'Red', hex: '#DC2626' },
+      { name: 'Olive Green', hex: '#4D7C0F' },
+      { name: 'Charcoal Grey', hex: '#4B5563' },
+      { name: 'Maroon', hex: '#881337' },
+      { name: 'Beige', hex: '#F5F5DC' },
+    ];
+    const fallbackChoice = palette[(colors.length - 1) % palette.length] || {
+      name: `Color ${colors.length + 1}`,
+      hex: '#6B7280',
+    };
+    setColors((prev) => [
+      ...prev,
       {
         id: newId,
-        name: 'New Color',
-        hex: '#6B7280',
+        name: fallbackChoice.name,
+        hex: fallbackChoice.hex,
+        imageUrl: '',
         sizes: [...allSizes],
       },
     ]);
@@ -407,21 +583,46 @@ export function ProductForm({
     setFeatures(features.filter((_, i) => i !== idx));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (!title.trim() || !masterSku.trim()) return;
+
+    setSubmitError(null);
+    setIsSubmitting(true);
 
     const numValue = Number(declaredValue) || 850;
     const allActiveSizes = Array.from(
       new Set(colors.flatMap((c) => (c.sizes && c.sizes.length > 0 ? c.sizes : allSizes)))
     );
-    const finalImageUrl = imageUrl || colors.find((c) => Boolean(c.imageUrl))?.imageUrl || '';
+    const primaryImage = (imageUrl || galleryImages[0] || '').trim();
 
     const isApprovedByAdmin =
       isEdit &&
       initialProduct?.bin &&
       initialProduct.bin !== 'Pending Approval' &&
-      initialProduct.bin !== 'Assigned on intake';
+      initialProduct.bin !== 'Assigned on intake' &&
+      initialProduct.status !== 'PENDING_APPROVAL';
+
+    const allActiveImages = Array.from(
+      new Set(
+        [
+          primaryImage,
+          ...galleryImages,
+          ...colors.map((c) => (c.imageUrl || '').trim()),
+        ].filter((u): u is string => Boolean(u && u.trim()))
+      )
+    );
+
+    // Clean variants so they reference color or primary image without duplicating megabytes of base64
+    const cleanedVariants = generatedVariants.map((v) => {
+      const matchColor = colors.find((c) => (c.name || '').trim().toLowerCase() === (v.color || '').trim().toLowerCase());
+      const varImg = matchColor?.imageUrl || primaryImage;
+      return {
+        ...v,
+        imageUrl: varImg,
+      };
+    });
 
     const productPayload: MerchantProductItem = {
       id: initialProduct?.id || `p-${Date.now()}`,
@@ -438,35 +639,49 @@ export function ProductForm({
       costPrice: numValue,
       stock: computedTotalStock,
       reserved: initialProduct?.reserved || 0,
-      status: isApprovedByAdmin ? status : 'DRAFT',
-      imageUrl: finalImageUrl.trim() || undefined,
+      status: isApprovedByAdmin ? status : 'PENDING_APPROVAL',
+      imageUrl: primaryImage, // Explicitly saved (empty string if removed, never undefined!)
+      images: allActiveImages,
       keyFeatures: features,
-      colors,
+      colors: colors.map((c) => ({
+        ...c,
+        imageUrl: (c.imageUrl || '').trim(),
+      })),
       sizes: allActiveSizes.length > 0 ? allActiveSizes : allSizes,
-      variantsList: generatedVariants,
+      variantsList: cleanedVariants,
       totalOrders: initialProduct?.totalOrders || 0,
     };
 
-    onSave(productPayload);
-    if (!isApprovedByAdmin && typeof window !== 'undefined') {
-      sessionStorage.setItem('fulfillio_products_initial_tab', 'PENDING_APPROVAL');
+    try {
+      const res = await onSave(productPayload);
+      if (res && typeof res === 'object' && 'ok' in res && !res.ok) {
+        setSubmitError(res.error || 'Failed to save product in database.');
+        setIsSubmitting(false);
+        return;
+      }
+      if (!isApprovedByAdmin && typeof window !== 'undefined') {
+        sessionStorage.setItem('fulfillio_products_initial_tab', 'PENDING_APPROVAL');
+      }
+      router.push('/merchant/products');
+    } catch (err: any) {
+      setSubmitError(err?.message || 'Failed to save product in database.');
+      setIsSubmitting(false);
     }
-    router.push('/merchant/products');
   };
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-16">
       {/* Top Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-white/10 pb-4">
         <div>
           <Link
             href="/merchant/products"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-emerald-400 transition-colors mb-1.5"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors mb-1.5"
           >
             <ArrowLeft className="h-4 w-4" />
             <span>Back to products</span>
           </Link>
-          <h1 className="text-xl sm:text-2xl font-extrabold text-slate-100 tracking-tight">
+          <h1 className="text-xl sm:text-2xl font-extrabold text-navy-900 dark:text-white tracking-tight">
             {isEdit ? 'Edit Product' : 'Create New Product'}
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">
@@ -477,31 +692,51 @@ export function ProductForm({
         <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
           <Link
             href="/merchant/products"
-            className="flex-1 sm:flex-initial text-center px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
+            className="flex-1 sm:flex-initial text-center px-4 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
           >
             Cancel
           </Link>
           <button
             type="button"
             onClick={handleSubmit}
-            className="flex-1 sm:flex-initial justify-center px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors cursor-pointer shadow-md shadow-emerald-900/30 flex items-center gap-1.5"
+            disabled={isSubmitting}
+            className="flex-1 sm:flex-initial justify-center px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-60 text-white text-xs font-bold transition-colors cursor-pointer shadow-md shadow-orange-500/20 flex items-center gap-1.5"
           >
-            <Check className="h-4 w-4" />
-            <span>{isEdit ? 'Save Changes' : 'Submit for Approval'}</span>
+            {isSubmitting ? (
+              <>
+                <div className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <span>Saving to Database...</span>
+              </>
+            ) : (
+              <>
+                <Check className="h-4 w-4" />
+                <span>{isEdit ? 'Save Changes' : 'Publish Product'}</span>
+              </>
+            )}
           </button>
         </div>
       </div>
 
+      {submitError && (
+        <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center gap-3">
+          <AlertCircle className="h-5 w-5 shrink-0" />
+          <div>
+            <p className="font-bold">PostgreSQL Save Error:</p>
+            <p className="text-[11px] text-rose-300 mt-0.5">{submitError}</p>
+          </div>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Section 1: Basic Information */}
-        <div className="space-y-4 p-4 sm:p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-sm">
-          <div className="flex items-center gap-2 text-xs font-bold text-slate-200 uppercase tracking-wider">
+        <div className="space-y-4 p-4 sm:p-5 rounded-2xl bg-white dark:bg-navy-900/80 border border-slate-200 dark:border-white/10 shadow-sm">
+          <div className="flex items-center gap-2 text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider">
             <Tag className="h-4 w-4 text-emerald-400" />
             <span>Basic Information</span>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
+            <label className="block text-xs font-semibold text-navy-900 dark:text-slate-200 mb-1">
               PRODUCT NAME <span className="text-rose-400">*</span>
             </label>
             <input
@@ -510,7 +745,7 @@ export function ProductForm({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. Mens Heavyweight Half Zip Hoodie"
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
             />
           </div>
 
@@ -525,34 +760,77 @@ export function ProductForm({
                 value={masterSku}
                 onChange={(e) => setMasterSku(e.target.value.toUpperCase())}
                 placeholder="e.g. HOD-HMZ-001"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-emerald-400 font-bold focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-mono text-emerald-400 font-bold focus:outline-none focus:border-orange-500"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                CATEGORY
-              </label>
-              <input
-                type="text"
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  CATEGORY
+                </label>
+                <Link
+                  href="/merchant/categories"
+                  target="_blank"
+                  className="text-[11px] font-bold text-orange-600 dark:text-orange-400 hover:underline flex items-center gap-1"
+                  title="Create or manage product categories"
+                >
+                  <span>+ Manage Categories</span>
+                  <ExternalLink className="h-2.5 w-2.5" />
+                </Link>
+              </div>
+              <select
                 value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                placeholder="Fashion"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
-              />
+                onChange={(e) => {
+                  const newCat = e.target.value;
+                  setCategory(newCat);
+                  const catObj = categories.find((c: any) => c.name.toLowerCase() === newCat.toLowerCase());
+                  if (catObj && catObj.subcategories.length > 0) {
+                    setSubcategory(catObj.subcategories[0].name);
+                  } else {
+                    setSubcategory('');
+                  }
+                }}
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-medium text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer"
+              >
+                {categories.map((cat: any) => (
+                  <option key={cat.id} value={cat.name}>
+                    {cat.name} ({cat.subcategories.length} sub-categories)
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                SUBCATEGORY
-              </label>
-              <input
-                type="text"
-                value={subcategory}
-                onChange={(e) => setSubcategory(e.target.value)}
-                placeholder="Hoodie"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
-              />
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  SUBCATEGORY
+                </label>
+                {subcategoryList.length === 0 && (
+                  <span className="text-[10px] text-slate-400">Custom input</span>
+                )}
+              </div>
+              {subcategoryList.length > 0 ? (
+                <select
+                  value={subcategory}
+                  onChange={(e) => setSubcategory(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-medium text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer"
+                >
+                  {subcategoryList.map((sub: any) => (
+                    <option key={sub.id} value={sub.name}>
+                      {sub.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={subcategory}
+                  onChange={(e) => setSubcategory(e.target.value)}
+                  placeholder="e.g. Standard item"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
+                />
+              )}
             </div>
           </div>
 
@@ -565,82 +843,258 @@ export function ProductForm({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Describe the product specifications, materials, and details..."
-              className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
             />
           </div>
         </div>
 
-        {/* Product Photo Upload Section */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-sm space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-200 uppercase tracking-wider">
-              <UploadCloud className="h-4 w-4 text-emerald-400" />
-              <span>Product Display Photo</span>
+        {/* Product Photos & Media Gallery Section */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-navy-900/80 border border-slate-200 dark:border-white/10 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-100 dark:border-white/5">
+            <div>
+              <div className="flex items-center gap-2 text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider">
+                <UploadCloud className="h-4 w-4 text-orange-500" />
+                <span>Product Photos & Media Gallery</span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Upload device photos, paste web links, or pick instant presets. The primary photo appears in catalog tables, invoices and shipping labels.
+              </p>
             </div>
-            <span className="text-[11px] text-slate-400">
-              Primary image shown across tables, orders & catalog
-            </span>
+
+            {/* Input Mode Selector Tabs */}
+            <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-navy-950 rounded-xl border border-slate-200 dark:border-white/5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setImageInputMode('UPLOAD')}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  imageInputMode === 'UPLOAD'
+                    ? 'bg-white dark:bg-navy-800 text-orange-600 dark:text-orange-400 shadow-xs'
+                    : 'text-slate-500 hover:text-navy-900 dark:hover:text-white'
+                }`}
+              >
+                <UploadCloud className="h-3.5 w-3.5" />
+                <span>Upload</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setImageInputMode('URL')}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  imageInputMode === 'URL'
+                    ? 'bg-white dark:bg-navy-800 text-orange-600 dark:text-orange-400 shadow-xs'
+                    : 'text-slate-500 hover:text-navy-900 dark:hover:text-white'
+                }`}
+              >
+                <LinkIcon className="h-3.5 w-3.5" />
+                <span>Image Link</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setImageInputMode('PRESET')}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  imageInputMode === 'PRESET'
+                    ? 'bg-white dark:bg-navy-800 text-orange-600 dark:text-orange-400 shadow-xs'
+                    : 'text-slate-500 hover:text-navy-900 dark:hover:text-white'
+                }`}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                <span>Sample Presets</span>
+              </button>
+            </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 pt-1">
-            {imageUrl ? (
-              <div className="relative group h-24 w-24 rounded-xl bg-slate-950 border border-slate-700 overflow-hidden shrink-0 flex items-center justify-center shadow-md">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={imageUrl}
-                  alt="Product Image"
-                  className="h-full w-full object-cover"
-                />
+          {/* Mode 1: URL Input Drawer */}
+          {imageInputMode === 'URL' && (
+            <div className="p-3.5 rounded-xl bg-orange-50/50 dark:bg-orange-950/20 border border-orange-200/60 dark:border-orange-500/20 space-y-2">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <div className="relative flex-1">
+                  <LinkIcon className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                  <input
+                    type="url"
+                    value={urlInput}
+                    onChange={(e) => {
+                      setUrlInput(e.target.value);
+                      setUrlError(null);
+                    }}
+                    placeholder="Paste direct image URL: https://images.unsplash.com/... or CDN link"
+                    className="w-full pl-9 pr-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
+                  />
+                </div>
                 <button
                   type="button"
-                  onClick={() => setImageUrl('')}
-                  className="absolute top-1 right-1 p-1 rounded-full bg-rose-600/90 text-white hover:bg-rose-500 shadow transition-colors cursor-pointer"
-                  title="Remove image"
+                  onClick={handleAddUrlImage}
+                  className="px-4 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold transition-colors cursor-pointer shrink-0 shadow-xs"
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
+                  Add Photo
                 </button>
               </div>
-            ) : (
-              <div
-                onClick={() => mainImageInputRef.current?.click()}
-                className="h-24 w-24 rounded-xl bg-slate-950 border-2 border-dashed border-slate-800 hover:border-emerald-500/50 flex flex-col items-center justify-center text-slate-500 hover:text-emerald-400 cursor-pointer transition-colors shrink-0"
-              >
-                <Package className="h-6 w-6 mb-1 opacity-60" />
-                <span className="text-[10px] font-semibold">Upload Photo</span>
-              </div>
-            )}
+              {urlError && <p className="text-[11px] text-rose-500 font-medium">{urlError}</p>}
+            </div>
+          )}
 
-            <div className="space-y-1.5 flex-1">
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => mainImageInputRef.current?.click()}
-                  className="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition-colors cursor-pointer"
-                >
-                  <UploadCloud className="h-3.5 w-3.5 text-emerald-400" />
-                  <span>{imageUrl ? 'Change Photo' : 'Upload Product Photo'}</span>
-                </button>
-                {imageUrl && (
+          {/* Mode 2: Sample Presets Drawer */}
+          {imageInputMode === 'PRESET' && (
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 space-y-2">
+              <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                Click any sample photo to test instantly:
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+                {SAMPLE_PRODUCT_PRESETS.map((preset, pIdx) => (
+                  <button
+                    key={pIdx}
+                    type="button"
+                    onClick={() => handleApplyPreset(preset.url)}
+                    className="group flex flex-col items-center gap-1.5 p-2 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 hover:border-orange-500 transition-all text-left cursor-pointer"
+                  >
+                    <div className="h-14 w-full rounded-lg overflow-hidden bg-slate-100 dark:bg-navy-950 relative">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={preset.url} alt={preset.name} className="h-full w-full object-cover group-hover:scale-105 transition-transform" />
+                    </div>
+                    <span className="text-[10px] font-semibold text-navy-900 dark:text-slate-200 truncate w-full text-center">
+                      {preset.name}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Gallery View: Primary Photo + Additional Gallery Photos */}
+          <div className="space-y-3 pt-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {/* Card 1: Primary / Featured Photo */}
+              <div className="relative group rounded-2xl bg-slate-50 dark:bg-navy-950 border-2 border-orange-500/50 p-2.5 flex flex-col justify-between shadow-xs">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-orange-600 text-white text-[10px] font-bold tracking-wide">
+                    <Star className="h-2.5 w-2.5 fill-current" />
+                    Primary Display Photo
+                  </span>
+                  {imageUrl && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePhoto(imageUrl)}
+                      className="p-1 rounded-full bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white transition-colors cursor-pointer"
+                      title="Remove primary photo"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="h-36 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 overflow-hidden flex items-center justify-center relative">
+                  {imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={imageUrl} alt="Primary" className="h-full w-full object-cover" />
+                  ) : (
+                    <div
+                      onClick={() => mainImageInputRef.current?.click()}
+                      className="h-full w-full flex flex-col items-center justify-center text-slate-400 hover:text-orange-500 cursor-pointer transition-colors"
+                    >
+                      <Package className="h-8 w-8 mb-1 opacity-50" />
+                      <span className="text-[11px] font-semibold">No Primary Photo</span>
+                      <span className="text-[9px] text-slate-400">Click to upload or choose</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 mt-2.5">
                   <button
                     type="button"
-                    onClick={() => setImageUrl('')}
-                    className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold border border-rose-500/20 transition-colors cursor-pointer"
+                    onClick={() => mainImageInputRef.current?.click()}
+                    className="flex-1 py-1.5 px-2 rounded-lg bg-slate-200/80 dark:bg-navy-800 hover:bg-slate-300 dark:hover:bg-navy-700 text-navy-900 dark:text-slate-200 text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                   >
-                    Remove Photo
+                    <UploadCloud className="h-3 w-3 text-orange-500" />
+                    <span>{imageUrl ? 'Change' : 'Upload'}</span>
                   </button>
-                )}
+                  {imageUrl && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePhoto(imageUrl)}
+                      className="py-1.5 px-2.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-[11px] font-bold transition-colors cursor-pointer"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
               </div>
-              <p className="text-[11px] text-slate-400">
-                Supports PNG, JPG, or WebP. Auto-compressed for fast loading and zero broken images.
-              </p>
+
+              {/* Additional Gallery Photos */}
+              {galleryImages.map((gUrl, gIdx) => (
+                <div
+                  key={gIdx}
+                  className="relative group rounded-2xl bg-white dark:bg-navy-900/60 border border-slate-200 dark:border-white/10 p-2.5 flex flex-col justify-between hover:border-slate-300 dark:hover:border-white/20 transition-all shadow-xs"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Gallery #{gIdx + 1}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePhoto(gUrl)}
+                      className="p-1 rounded-full bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white transition-colors cursor-pointer"
+                      title="Remove from gallery"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+
+                  <div className="h-36 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 overflow-hidden flex items-center justify-center">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={gUrl} alt={`Gallery ${gIdx + 1}`} className="h-full w-full object-cover" />
+                  </div>
+
+                  <div className="flex items-center gap-2 mt-2.5">
+                    <button
+                      type="button"
+                      onClick={() => handleSetAsMainPhoto(gUrl)}
+                      className="flex-1 py-1.5 px-2 rounded-lg bg-orange-500/10 hover:bg-orange-500/20 text-orange-600 dark:text-orange-400 text-[11px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                      title="Set this photo as the primary product image"
+                    >
+                      <Star className="h-3 w-3" />
+                      <span>Set as Main</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePhoto(gUrl)}
+                      className="py-1.5 px-2 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-rose-500/10 text-slate-400 hover:text-rose-500 text-[11px] font-semibold transition-colors cursor-pointer"
+                      title="Delete photo"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {/* Add New Gallery Photo Dropzone Tile */}
+              {galleryImages.length < 8 && (
+                <div
+                  onClick={() => {
+                    if (imageInputMode === 'URL') {
+                      window.scrollTo({ top: 350, behavior: 'smooth' });
+                    } else {
+                      galleryFileInputRef.current?.click();
+                    }
+                  }}
+                  className="h-full min-h-[220px] rounded-2xl border-2 border-dashed border-slate-200 dark:border-white/10 hover:border-orange-500/50 bg-slate-50/50 dark:bg-navy-950/40 hover:bg-orange-50/20 flex flex-col items-center justify-center text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 cursor-pointer transition-all p-4 text-center group"
+                >
+                  <div className="h-10 w-10 rounded-full bg-slate-100 dark:bg-navy-900 group-hover:bg-orange-500/10 flex items-center justify-center mb-2 transition-colors">
+                    <Plus className="h-5 w-5 group-hover:text-orange-500" />
+                  </div>
+                  <span className="text-xs font-bold text-navy-900 dark:text-slate-200 group-hover:text-orange-600 dark:group-hover:text-orange-400">
+                    Add Gallery Photo
+                  </span>
+                  <span className="text-[10px] text-slate-400 mt-0.5">
+                    Click to add angle or detail shots
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
         {/* Section 2: Declared Product Value */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-sm space-y-3">
+        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-navy-900/80 border border-slate-200 dark:border-white/10 shadow-sm space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-200 uppercase tracking-wider">
+            <div className="flex items-center gap-2 text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider">
               <ShieldAlert className="h-4 w-4 text-emerald-400" />
               <span>Product Declared Value (৳ BDT)</span>
             </div>
@@ -661,19 +1115,19 @@ export function ProductForm({
                 value={declaredValue}
                 onChange={(e) => setDeclaredValue(e.target.value)}
                 placeholder="850"
-                className="w-full pl-8 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm font-bold text-emerald-400 focus:outline-none focus:border-emerald-500"
+                className="w-full pl-8 pr-4 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-sm font-bold text-emerald-400 focus:outline-none focus:border-orange-500"
               />
             </div>
           </div>
           <p className="text-[11px] text-slate-500 leading-relaxed">
-            ℹ️ যদি কোনো প্রোডাক্টে কোনো সমস্যা হয় বা ওয়্যারহাউসে হারিয়ে যায়, তবে ক্ষতিপূরণ ও ইনস্যুরেন্স ক্লেইমের জন্য এই ভ্যালু ব্যবহার করা হবে। কাস্টমার অর্ডারের বিক্রয়মূল্য অর্ডারের সাথে সংযুক্ত থাকবে।
+            ℹ️ Used for warehouse declared inventory value & insurance claims in case of loss or transit damage. Sale price is assigned per order.
           </p>
         </div>
 
         {/* Section 3: Product Type & Dynamic Variant Attributes (Placed right after Declared Value!) */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-sm space-y-5">
+        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-navy-900/80 border border-slate-200 dark:border-white/10 shadow-sm space-y-5">
           <div>
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-200 uppercase tracking-wider">
+            <div className="flex items-center gap-2 text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider">
               <Sparkles className="h-4 w-4 text-emerald-400" />
               <span>Product Type & Variant Configurations</span>
             </div>
@@ -725,14 +1179,14 @@ export function ProductForm({
                   className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-2 ${
                     isSelected
                       ? 'bg-emerald-600/15 border-emerald-500 text-emerald-300 ring-2 ring-emerald-500/20'
-                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                      : 'bg-slate-50 dark:bg-navy-950 border-slate-200 dark:border-white/10 text-slate-400 hover:border-slate-200 dark:border-white/10 hover:text-navy-900 dark:text-slate-200'
                   }`}
                 >
-                  <div className="h-7 w-7 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center text-emerald-400 shrink-0">
+                  <div className="h-7 w-7 rounded-lg bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 flex items-center justify-center text-emerald-400 shrink-0">
                     {t.icon}
                   </div>
                   <div>
-                    <span className="text-xs font-bold block leading-tight text-slate-100">
+                    <span className="text-xs font-bold block leading-tight text-navy-900 dark:text-white">
                       {t.label}
                     </span>
                     <span className="text-[10px] text-slate-500 block mt-0.5">
@@ -748,21 +1202,18 @@ export function ProductForm({
 
           {/* 1. FASHION & APPAREL: Colors & Sizes */}
           {productType === 'FASHION' && (
-            <div className="space-y-5 pt-3 border-t border-slate-800">
+            <div className="space-y-5 pt-3 border-t border-slate-200 dark:border-white/10">
               {/* Color Swatches */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-                    Color Swatches & Photos
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleAddColor}
-                    className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 cursor-pointer"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    <span>Add Another Color</span>
-                  </button>
+                  <div>
+                    <span className="text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider block">
+                      Color Swatches & Photos ({colors.length} {colors.length === 1 ? 'Color' : 'Colors'})
+                    </span>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Configure color variants, images and available sizes for each color.
+                    </p>
+                  </div>
                 </div>
 
                 <div className="space-y-3">
@@ -771,20 +1222,32 @@ export function ProductForm({
                     return (
                       <div
                         key={c.id}
-                        className="p-3 sm:p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-3"
+                        className="p-3 sm:p-3.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 space-y-3"
                       >
                         <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3">
                           {/* Row 1 on mobile: Color picker & Color name */}
                           <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                            <input
-                              type="color"
-                              value={c.hex}
-                              onChange={(e) => {
-                                const hex = e.target.value;
-                                setColors(colors.map((item) => (item.id === c.id ? { ...item, hex } : item)));
+                            <ColorPickerInput
+                              colorHex={c.hex}
+                              colorName={c.name}
+                              onChange={(hex: string, suggestedName?: string) => {
+                                setColors(
+                                  colors.map((item) =>
+                                    item.id === c.id
+                                      ? {
+                                          ...item,
+                                          hex,
+                                          name:
+                                            !item.name ||
+                                            item.name === 'New Color' ||
+                                            item.name === 'Color'
+                                              ? (suggestedName || item.name)
+                                              : item.name,
+                                        }
+                                      : item
+                                  )
+                                );
                               }}
-                              className="h-8 w-8 rounded-lg cursor-pointer bg-transparent border-0 shrink-0"
-                              title="Choose color"
                             />
                             <input
                               type="text"
@@ -794,13 +1257,13 @@ export function ProductForm({
                                 setColors(colors.map((item) => (item.id === c.id ? { ...item, name } : item)));
                               }}
                               placeholder="Color Name (e.g. Black)"
-                              className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                              className="flex-1 px-3 py-1.5 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
                             />
                             {colors.length > 1 && (
                               <button
                                 type="button"
                                 onClick={() => handleRemoveColor(c.id)}
-                                className="sm:hidden p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-slate-900 transition-colors cursor-pointer shrink-0"
+                                className="sm:hidden p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-white dark:bg-navy-900 transition-colors cursor-pointer shrink-0"
                                 title="Delete color"
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -808,29 +1271,25 @@ export function ProductForm({
                             )}
                           </div>
 
-                          {/* Row 2 on mobile: Photo Preview & Upload Button */}
+                          {/* Row 2 on mobile: Photo Preview & Swatch Photo Actions */}
                           <div className="flex items-center gap-2 w-full sm:w-auto">
-                            <div className="relative h-9 w-9 rounded-lg bg-slate-900 border border-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
-                              {c.imageUrl ? (
-                                c.imageUrl.startsWith('data:') ? (
-                                  // eslint-disable-next-line @next/next/no-img-element
-                                  <img
-                                    src={c.imageUrl}
-                                    alt={c.name}
-                                    className="h-full w-full object-cover"
-                                  />
-                                ) : (
-                                  <Image
-                                    src={c.imageUrl}
-                                    alt={c.name}
-                                    fill
-                                    unoptimized={true}
-                                    sizes="36px"
-                                    className="object-cover"
-                                  />
-                                )
+                            <div
+                              onClick={() => {
+                                setActiveColorUploadId(c.id);
+                                colorFileInputRef.current?.click();
+                              }}
+                              className="relative h-9 w-9 rounded-lg bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 overflow-hidden shrink-0 flex items-center justify-center cursor-pointer hover:border-orange-500 transition-colors group"
+                              title="Click to upload or change image for this color"
+                            >
+                              {(c.imageUrl || imageUrl) ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={c.imageUrl || imageUrl}
+                                  alt={c.name}
+                                  className="h-full w-full object-cover group-hover:opacity-80 transition-opacity"
+                                />
                               ) : (
-                                <Package className="h-4 w-4 text-slate-600" />
+                                <Package className="h-4 w-4 text-slate-600 group-hover:text-orange-500 transition-colors" />
                               )}
                             </div>
 
@@ -840,11 +1299,38 @@ export function ProductForm({
                                 setActiveColorUploadId(c.id);
                                 colorFileInputRef.current?.click();
                               }}
-                              className="flex-1 sm:flex-initial justify-center px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-700"
+                              className="flex-1 sm:flex-initial justify-center px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-navy-900 dark:text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-200 dark:border-white/10"
                             >
-                              <UploadCloud className="h-3.5 w-3.5 text-emerald-400" />
-                              <span>Upload Image</span>
+                              <UploadCloud className="h-3.5 w-3.5 text-orange-500" />
+                              <span>{c.imageUrl ? 'Change' : 'Upload'}</span>
                             </button>
+
+                            {/* Quick use primary photo if swatch photo is empty */}
+                            {!c.imageUrl && imageUrl && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setColors(colors.map((item) => (item.id === c.id ? { ...item, imageUrl } : item)));
+                                }}
+                                className="px-2.5 py-1.5 rounded-lg bg-orange-500/10 hover:bg-orange-500/20 text-orange-600 dark:text-orange-400 text-[11px] font-semibold border border-orange-500/20 transition-colors cursor-pointer shrink-0"
+                                title="Use the product primary photo for this color"
+                              >
+                                Use Main
+                              </button>
+                            )}
+
+                            {c.imageUrl && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setColors(colors.map((item) => (item.id === c.id ? { ...item, imageUrl: '' } : item)));
+                                }}
+                                className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-xs font-semibold border border-rose-500/20 transition-colors cursor-pointer shrink-0"
+                                title="Remove this color photo (will use main photo)"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            )}
 
                             {colors.length > 1 && (
                               <button
@@ -863,7 +1349,7 @@ export function ProductForm({
                         <div className="pt-3 border-t border-slate-900 space-y-2.5">
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                             <div className="text-[11px] text-slate-400">
-                              Available Sizes for <strong className="text-slate-200">{c.name || 'this color'}</strong>:
+                              Available Sizes for <strong className="text-navy-900 dark:text-slate-200">{c.name || 'this color'}</strong>:
                             </div>
 
                             {/* Custom size input */}
@@ -881,7 +1367,7 @@ export function ProductForm({
                                     handleAddCustomSizeToColor(c.id);
                                   }
                                 }}
-                                className="px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 flex-1 sm:w-44"
+                                className="px-2.5 py-1.5 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-orange-500 flex-1 sm:w-44"
                               />
                               <button
                                 type="button"
@@ -907,7 +1393,7 @@ export function ProductForm({
                                     className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
                                       isSzActive
                                         ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/50 shadow-sm'
-                                        : 'bg-slate-900 text-slate-500 border-slate-800 hover:text-slate-300 hover:border-slate-700'
+                                        : 'bg-white dark:bg-navy-900 text-slate-500 border-slate-200 dark:border-white/10 hover:text-slate-300 hover:border-slate-200 dark:border-white/10'
                                     }`}
                                   >
                                     <span>{sz}</span>
@@ -932,22 +1418,34 @@ export function ProductForm({
                     );
                   })}
                 </div>
+
+                {/* Add Another Color Button placed at the bottom below all swatches */}
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={handleAddColor}
+                    className="w-full py-3 px-4 rounded-xl border-2 border-dashed border-orange-500/30 hover:border-orange-500 bg-orange-500/5 hover:bg-orange-500/10 text-orange-600 dark:text-orange-400 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer group shadow-sm hover:shadow"
+                  >
+                    <Plus className="h-4 w-4 transition-transform group-hover:scale-125" />
+                    <span>+ Add Another Color Variant</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}
 
           {/* 2. ELECTRONICS & GADGETS: Storage & Colors */}
           {productType === 'ELECTRONICS' && (
-            <div className="space-y-5 pt-3 border-t border-slate-800">
+            <div className="space-y-5 pt-3 border-t border-slate-200 dark:border-white/10">
               <div className="space-y-3">
-                <span className="text-xs font-bold text-slate-200 uppercase tracking-wider block">
+                <span className="text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider block">
                   Storage / Model Configurations
                 </span>
                 <div className="flex items-center gap-2 flex-wrap">
                   {electronicStorages.map((storage) => (
                     <span
                       key={storage}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-mono font-bold text-slate-200"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs font-mono font-bold text-navy-900 dark:text-slate-200"
                     >
                       <span>{storage}</span>
                       <button
@@ -968,7 +1466,7 @@ export function ProductForm({
                     value={newStorageInput}
                     onChange={(e) => setNewStorageInput(e.target.value)}
                     placeholder="e.g. 512GB"
-                    className="flex-1 px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                    className="flex-1 px-3 py-1.5 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
                   />
                   <button
                     type="button"
@@ -978,7 +1476,7 @@ export function ProductForm({
                         setNewStorageInput('');
                       }
                     }}
-                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 font-semibold"
+                    className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs text-navy-900 dark:text-slate-200 font-semibold"
                   >
                     Add
                   </button>
@@ -988,13 +1486,13 @@ export function ProductForm({
               {/* Color variants for electronics */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                  <span className="text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider">
                     Device Colors
                   </span>
                   <button
                     type="button"
                     onClick={handleAddColor}
-                    className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 cursor-pointer"
+                    className="text-xs font-semibold text-orange-600 dark:text-orange-400 hover:text-emerald-300 flex items-center gap-1 cursor-pointer"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     <span>Add Color</span>
@@ -1004,10 +1502,10 @@ export function ProductForm({
                   {colors.map((c) => (
                     <span
                       key={c.id}
-                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 font-medium"
+                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs text-navy-900 dark:text-slate-200 font-medium"
                     >
                       <span
-                        className="h-3 w-3 rounded-full border border-slate-700"
+                        className="h-3 w-3 rounded-full border border-slate-200 dark:border-white/10"
                         style={{ backgroundColor: c.hex }}
                       />
                       <span>{c.name}</span>
@@ -1020,16 +1518,16 @@ export function ProductForm({
 
           {/* 3. BEAUTY & SKINCARE: Volumes & Shades */}
           {productType === 'BEAUTY' && (
-            <div className="space-y-5 pt-3 border-t border-slate-800">
+            <div className="space-y-5 pt-3 border-t border-slate-200 dark:border-white/10">
               <div className="space-y-3">
-                <span className="text-xs font-bold text-slate-200 uppercase tracking-wider block">
+                <span className="text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider block">
                   Volume / Container Sizes
                 </span>
                 <div className="flex items-center gap-2 flex-wrap">
                   {beautyVolumes.map((vol) => (
                     <span
                       key={vol}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-mono font-bold text-slate-200"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs font-mono font-bold text-navy-900 dark:text-slate-200"
                     >
                       <span>{vol}</span>
                       <button
@@ -1048,7 +1546,7 @@ export function ProductForm({
                     value={newVolumeInput}
                     onChange={(e) => setNewVolumeInput(e.target.value)}
                     placeholder="e.g. 150ml"
-                    className="flex-1 px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                    className="flex-1 px-3 py-1.5 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
                   />
                   <button
                     type="button"
@@ -1058,7 +1556,7 @@ export function ProductForm({
                         setNewVolumeInput('');
                       }
                     }}
-                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 font-semibold"
+                    className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs text-navy-900 dark:text-slate-200 font-semibold"
                   >
                     Add
                   </button>
@@ -1069,16 +1567,16 @@ export function ProductForm({
 
           {/* 4. FOOD & GROCERY: Pack sizes */}
           {productType === 'GROCERY' && (
-            <div className="space-y-5 pt-3 border-t border-slate-800">
+            <div className="space-y-5 pt-3 border-t border-slate-200 dark:border-white/10">
               <div className="space-y-3">
-                <span className="text-xs font-bold text-slate-200 uppercase tracking-wider block">
+                <span className="text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider block">
                   Pack Sizes / Net Weight
                 </span>
                 <div className="flex items-center gap-2 flex-wrap">
                   {groceryPacks.map((pack) => (
                     <span
                       key={pack}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-mono font-bold text-slate-200"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs font-mono font-bold text-navy-900 dark:text-slate-200"
                     >
                       <span>{pack}</span>
                       <button
@@ -1097,7 +1595,7 @@ export function ProductForm({
                     value={newPackInput}
                     onChange={(e) => setNewPackInput(e.target.value)}
                     placeholder="e.g. 5kg"
-                    className="flex-1 px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                    className="flex-1 px-3 py-1.5 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
                   />
                   <button
                     type="button"
@@ -1107,7 +1605,7 @@ export function ProductForm({
                         setNewPackInput('');
                       }
                     }}
-                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 font-semibold"
+                    className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs text-navy-900 dark:text-slate-200 font-semibold"
                   >
                     Add
                   </button>
@@ -1118,10 +1616,10 @@ export function ProductForm({
 
           {/* 5. VARIANT INVENTORY GRID: Custom Stock per Variant pairing (From Image 1 & 4) */}
           {productType !== 'STANDARD' && generatedVariants.length > 0 && (
-            <div className="space-y-3 pt-3 border-t border-slate-800">
+            <div className="space-y-3 pt-3 border-t border-slate-200 dark:border-white/10">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
-                  <span className="text-xs font-bold text-slate-200 uppercase tracking-wider block">
+                  <span className="text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider block">
                     Variant Inventory Grid
                   </span>
                   <p className="text-[11px] text-slate-500 mt-0.5">
@@ -1141,20 +1639,12 @@ export function ProductForm({
                 {generatedVariants.map((v) => (
                   <div
                     key={v.id}
-                    className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2 text-xs"
+                    className="p-3 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 space-y-2 text-xs"
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-emerald-400 font-mono font-semibold text-[11px]">
                         {v.variantSku}
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveVariant(v.id)}
-                        className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-slate-900 transition-colors cursor-pointer"
-                        title="Exclude this variant"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
                     </div>
                     <div className="flex items-center justify-between text-slate-300">
                       <div className="flex items-center gap-1.5 flex-wrap">
@@ -1162,7 +1652,7 @@ export function ProductForm({
                           {v.color || v.attributeName || 'Standard'}
                         </span>
                         <span className="text-slate-600">•</span>
-                        <span className="px-2 py-0.5 rounded bg-slate-850 text-slate-200 border border-slate-700/80 font-mono text-[11px]">
+                        <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-navy-850 text-navy-900 dark:text-slate-200 border border-slate-200/80 dark:border-white/10 font-mono text-[11px]">
                           {v.size || v.attributeValue || 'Default'}
                         </span>
                       </div>
@@ -1175,7 +1665,7 @@ export function ProductForm({
                           onChange={(e) =>
                             handleStockChange(v.id, Number(e.target.value) || 0)
                           }
-                          className="w-20 px-2.5 py-1 text-right bg-slate-900 border border-slate-700 rounded-lg text-xs font-bold text-slate-100 focus:outline-none focus:border-emerald-500"
+                          className="w-20 px-2.5 py-1 text-right bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-bold text-navy-900 dark:text-white focus:outline-none focus:border-orange-500"
                         />
                       </div>
                     </div>
@@ -1184,20 +1674,19 @@ export function ProductForm({
               </div>
 
               {/* Desktop Table View */}
-              <div className="hidden sm:block rounded-xl border border-slate-800 overflow-x-auto bg-slate-950">
+              <div className="hidden sm:block rounded-xl border border-slate-200 dark:border-white/10 overflow-x-auto bg-slate-50 dark:bg-navy-950">
                 <table className="w-full text-left text-xs min-w-[500px]">
-                  <thead className="bg-slate-900/90 text-slate-400 font-semibold border-b border-slate-800 uppercase text-[10px]">
+                  <thead className="bg-white dark:bg-navy-900 text-slate-400 font-semibold border-b border-slate-200 dark:border-white/10 uppercase text-[10px]">
                     <tr>
                       <th className="p-3">Variant SKU</th>
                       <th className="p-3">Color / Attribute</th>
                       <th className="p-3">Size / Spec</th>
                       <th className="p-3 text-right">Initial Stock</th>
-                      <th className="p-3 text-right w-12">Action</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800/80 font-mono">
+                  <tbody className="divide-y divide-slate-100 dark:divide-white/5 font-mono">
                     {generatedVariants.map((v) => (
-                      <tr key={v.id} className="hover:bg-slate-900/40">
+                      <tr key={v.id} className="hover:bg-white dark:bg-navy-900/40">
                         <td className="p-3 text-emerald-400 font-semibold text-[11px]">
                           {v.variantSku}
                         </td>
@@ -1205,7 +1694,7 @@ export function ProductForm({
                           {v.color || v.attributeName || 'Standard'}
                         </td>
                         <td className="p-3 text-slate-400">
-                          <span className="px-2 py-0.5 rounded bg-slate-850 text-slate-200 border border-slate-700/80">
+                          <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-navy-850 text-navy-900 dark:text-slate-200 border border-slate-200/80 dark:border-white/10">
                             {v.size || v.attributeValue || 'Default'}
                           </span>
                         </td>
@@ -1217,18 +1706,8 @@ export function ProductForm({
                             onChange={(e) =>
                               handleStockChange(v.id, Number(e.target.value) || 0)
                             }
-                            className="w-20 px-2.5 py-1 text-right bg-slate-900 border border-slate-700 rounded-lg text-xs font-bold text-slate-100 focus:outline-none focus:border-emerald-500"
+                            className="w-20 px-2.5 py-1 text-right bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-bold text-navy-900 dark:text-white focus:outline-none focus:border-orange-500"
                           />
-                        </td>
-                        <td className="p-3 text-right">
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveVariant(v.id)}
-                            className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-slate-900 transition-colors cursor-pointer"
-                            title="Exclude this variant"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
                         </td>
                       </tr>
                     ))}
@@ -1240,7 +1719,7 @@ export function ProductForm({
 
           {/* STANDARD PRODUCT STOCK INPUT */}
           {productType === 'STANDARD' && (
-            <div className="pt-3 border-t border-slate-800">
+            <div className="pt-3 border-t border-slate-200 dark:border-white/10">
               <label className="block text-xs font-semibold text-slate-300 mb-1">
                 Initial Warehouse Stock Units
               </label>
@@ -1250,15 +1729,15 @@ export function ProductForm({
                 value={standardStock}
                 onChange={(e) => setStandardStock(e.target.value)}
                 placeholder="50"
-                className="w-full sm:w-48 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs font-bold text-slate-200 focus:outline-none focus:border-emerald-500"
+                className="w-full sm:w-48 px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-bold text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
               />
             </div>
           )}
         </div>
 
         {/* Section 4: Key Features (Bullet points) */}
-        <div className="space-y-3 p-4 sm:p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-sm">
-          <span className="text-xs font-bold text-slate-200 uppercase tracking-wider block">
+        <div className="space-y-3 p-4 sm:p-5 rounded-2xl bg-white dark:bg-navy-900/80 border border-slate-200 dark:border-white/10 shadow-sm">
+          <span className="text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider block">
             Key Features
           </span>
           <div className="flex flex-col sm:flex-row gap-2">
@@ -1273,12 +1752,12 @@ export function ProductForm({
                 }
               }}
               placeholder="e.g. Premium heavy cotton-blend fleece"
-              className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+              className="flex-1 px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
             />
             <button
               type="button"
               onClick={handleAddFeature}
-              className="w-full sm:w-auto px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition-colors cursor-pointer text-center"
+              className="w-full sm:w-auto px-4 py-2 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-semibold text-navy-900 dark:text-slate-200 transition-colors cursor-pointer text-center"
             >
               Add Feature
             </button>
@@ -1288,7 +1767,7 @@ export function ProductForm({
             {features.map((feat, idx) => (
               <div
                 key={idx}
-                className="flex items-center justify-between p-2 rounded-lg bg-slate-950 border border-slate-800/80 text-xs"
+                className="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-navy-950 border border-slate-200/80 dark:border-white/10 text-xs"
               >
                 <span className="text-slate-300">• {feat}</span>
                 <button
@@ -1304,7 +1783,7 @@ export function ProductForm({
         </div>
 
         {/* Section 6: Visibility Status */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-sm space-y-2">
+        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-navy-900/80 border border-slate-200 dark:border-white/10 shadow-sm space-y-2">
           <label className="block text-xs font-semibold text-slate-300">
             Storefront &amp; Warehouse Visibility
           </label>
@@ -1312,7 +1791,7 @@ export function ProductForm({
           !initialProduct?.bin ||
           initialProduct.bin === 'Pending Approval' ||
           initialProduct.bin === 'Assigned on intake' ? (
-            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-medium flex items-center gap-2">
+            <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs font-medium flex items-center gap-2">
               <ShieldAlert className="h-4 w-4 text-amber-400 shrink-0" />
               <span>
                 নতুন প্রোডাক্ট আপলোড করার পর এটি <strong>Pending Admin Approval</strong> হিসেবে থাকবে। Admin Panel থেকে Bin অ্যাসাইন ও Approve করার পর স্বয়ংক্রিয়ভাবে <strong>Published</strong> হয়ে যাবে।
@@ -1326,7 +1805,7 @@ export function ProductForm({
                 className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
                   status === 'PUBLISHED'
                     ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/50'
-                    : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
+                    : 'bg-slate-50 dark:bg-navy-950 text-slate-400 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:bg-navy-800'
                 }`}
               >
                 Published
@@ -1336,8 +1815,8 @@ export function ProductForm({
                 onClick={() => setStatus('DRAFT')}
                 className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
                   status === 'DRAFT'
-                    ? 'bg-slate-800 text-slate-200 border-slate-600'
-                    : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
+                    ? 'bg-slate-100 dark:bg-navy-800 text-navy-900 dark:text-slate-200 border-slate-600'
+                    : 'bg-slate-50 dark:bg-navy-950 text-slate-400 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:bg-navy-800'
                 }`}
               >
                 Draft
@@ -1347,19 +1826,29 @@ export function ProductForm({
         </div>
 
         {/* Bottom Actions */}
-        <div className="pt-4 border-t border-slate-800 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5 sm:gap-3">
+        <div className="pt-4 border-t border-slate-200 dark:border-white/10 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5 sm:gap-3">
           <Link
             href="/merchant/products"
-            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer text-center"
+            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer text-center"
           >
             Cancel
           </Link>
           <button
             type="submit"
-            className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors cursor-pointer shadow-md flex items-center justify-center gap-1.5"
+            disabled={isSubmitting}
+            className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-60 text-white text-xs font-bold transition-colors cursor-pointer shadow-md flex items-center justify-center gap-1.5"
           >
-            <Check className="h-4 w-4" />
-            <span>{isEdit ? 'Save Changes' : 'Submit for Approval'}</span>
+            {isSubmitting ? (
+              <>
+                <div className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <span>Saving to PostgreSQL Database...</span>
+              </>
+            ) : (
+              <>
+                <Check className="h-4 w-4" />
+                <span>{isEdit ? 'Save Changes' : 'Publish Product'}</span>
+              </>
+            )}
           </button>
         </div>
       </form>
@@ -1379,6 +1868,16 @@ export function ProductForm({
         ref={colorFileInputRef}
         onChange={handleColorFileChange}
         accept="image/*"
+        className="hidden"
+      />
+
+      {/* Hidden file input for additional gallery photos */}
+      <input
+        type="file"
+        ref={galleryFileInputRef}
+        onChange={handleGalleryFileChange}
+        accept="image/*"
+        multiple
         className="hidden"
       />
     </div>

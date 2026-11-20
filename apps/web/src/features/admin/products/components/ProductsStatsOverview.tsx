@@ -8,14 +8,17 @@ import { WarehouseBin, WarehouseProductItem } from '../types';
 interface ProductsStatsOverviewProps {
   products: WarehouseProductItem[];
   bins: WarehouseBin[];
+  pendingRestockCount?: number;
 }
 
 export function ProductsStatsOverview({
   products,
   bins,
+  pendingRestockCount = 0,
 }: ProductsStatsOverviewProps) {
   const approvedProducts = products.filter((p) => p.status === 'APPROVED');
   const pendingProducts = products.filter((p) => p.status === 'PENDING_APPROVAL');
+  const totalPendingInbound = pendingProducts.length + pendingRestockCount;
 
   const totalInStockUnits = approvedProducts.reduce((acc, p) => acc + p.stock, 0);
 
@@ -37,11 +40,15 @@ export function ProductsStatsOverview({
 
       <StatCard
         title="PENDING INBOUND APPROVALS"
-        value={pendingProducts.length}
-        description={pendingProducts.length > 0 ? 'Requires warehouse QC' : 'Queue clear'}
+        value={totalPendingInbound}
+        description={
+          totalPendingInbound > 0
+            ? `${pendingProducts.length} new + ${pendingRestockCount} restock`
+            : 'Queue clear'
+        }
         trend={
-          pendingProducts.length > 0
-            ? { value: `${pendingProducts.length} pending`, isPositive: false }
+          totalPendingInbound > 0
+            ? { value: `${totalPendingInbound} pending`, isPositive: false }
             : undefined
         }
         icon={<Clock className="w-5 h-5" />}

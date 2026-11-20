@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
+import Link from 'next/link';
 import {
   Search,
   Eye,
@@ -322,9 +323,13 @@ export function MerchantTable({
                       {/* Row 1: Store Name + Verified Badge + Status Badge */}
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                          <span className="font-bold text-navy-800 dark:text-white text-sm sm:text-[15px] leading-tight truncate">
+                          <Link
+                            href={`/admin/merchants/${encodeURIComponent(merchant.id)}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="font-bold text-navy-800 dark:text-white text-sm sm:text-[15px] leading-tight truncate hover:text-orange-600 dark:hover:text-orange-400 hover:underline underline-offset-2 transition-colors"
+                          >
                             {merchant.storeName}
-                          </span>
+                          </Link>
                           {merchant.verified && (
                             <ShieldCheck className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400 shrink-0" />
                           )}
@@ -552,9 +557,13 @@ export function MerchantTable({
                           </div>
                           <div>
                             <div className="flex items-center gap-2">
-                              <span className="font-bold text-navy-800 dark:text-navy-800 dark:text-white text-sm group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">
+                              <Link
+                                href={`/admin/merchants/${encodeURIComponent(merchant.id)}`}
+                                className="font-bold text-navy-800 dark:text-white text-sm hover:text-orange-600 dark:hover:text-orange-400 hover:underline underline-offset-2 transition-colors cursor-pointer"
+                                title={`Open ${merchant.storeName} profile`}
+                              >
                                 {merchant.storeName}
-                              </span>
+                              </Link>
                               {merchant.verified && (
                                 <ShieldCheck className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
                               )}

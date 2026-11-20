@@ -100,6 +100,18 @@ if (match) {
 
 ---
 
+### Rule E: Mandatory Fulfillio UI Component Standards (Admin, Merchant & Landing)
+Whenever generating or refactoring UI components across Fulfillio:
+1. **Color Palette:** Pure White light mode, Dark Navy (`#12284C`, `navy-950`) dark mode, Vibrant Orange (`#F26B1D` / `orange-600`) primary branding.
+2. **Table Status:** MUST be an informative non-clickable text badge (`<span>`). Never put button elements in Status cells.
+3. **Table Actions:** MUST contain ONLY the 3-dots trigger button (`MoreVertical`). Never place outside action buttons in table cells.
+4. **Floating Dropdowns:** MUST use `createPortal(..., document.body)` with clamped viewport coordinates (`Math.max(10, Math.min(top, window.innerHeight - menuHeight - 10))`). Auto upward flip near bottom. Never causes table scrollbars.
+5. **Charts:** Financial settlements MUST use authentic solid SVG Pie Charts (triangular slices meeting at center `(cx, cy)`), never hollow donuts. Velocity trends use vertical column/bar charts.
+6. **Bulk Actions:** Admin-pattern `Bulk Actions` select (`Publish`, `Draft`, `Delete`) with `Apply` button.
+7. **Pagination:** Bottom bar with "Showing X to Y of Z", rows per page (10, 25, 50, 100), Prev/Next, and numbered page buttons.
+
+---
+
 ## 👥 3. Multi-Agent Collision Prevention Protocol
 
 When delegating tasks to multiple agents or subagents:

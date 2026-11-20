@@ -1,8 +1,8 @@
 /**
- * High-performance client-side image compressor utility for Fulfillio WMS.
+ * High-performance client-side image compressor & storage safety utility for Fulfillio WMS.
  *
  * Compresses camera uploads and product images to ultra-light, clean JPEG data URLs.
- * - Prevents localStorage QuotaExceededError (keeps images under 30KB).
+ * - Prevents localStorage QuotaExceededError (keeps images under 35KB).
  * - Prevents PostgreSQL invalid byte sequence (0x00 / null bytes).
  * - Prevents NestJS / Express 413 Payload Too Large exceptions.
  */
@@ -14,13 +14,13 @@ function sanitizeBase64(dataUrl: string): string {
 
 /**
  * Compress main product display images
- * Max 480x480, quality 0.68 -> typically 15KB - 35KB
+ * Max 500x500, quality 0.7 -> typically 15KB - 35KB
  */
 export async function compressImage(
   file: File,
-  maxWidth = 480,
-  maxHeight = 480,
-  quality = 0.68
+  maxWidth = 500,
+  maxHeight = 500,
+  quality = 0.7
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     if (!file.type.startsWith('image/')) {
@@ -102,3 +102,62 @@ export async function compressImage(
 export async function compressThumbnail(file: File): Promise<string> {
   return compressImage(file, 200, 200, 0.6);
 }
+
+/**
+ * Safe localStorage setter that prevents unhandled QuotaExceededError
+ */
+export function safeSetLocalStorage(key: string, value: string): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch (err: any) {
+    console.warn(`[safeSetLocalStorage] Quota error on "${key}", attempting cleanup:`, err?.message);
+    try {
+      // Clear transient caches if quota exceeded
+      localStorage.removeItem('fulfillio_temp_cache');
+      localStorage.removeItem('fulfillio_draft_cache');
+      localStorage.setItem(key, value);
+      return true;
+    } catch (e2) {
+      console.error(`[safeSetLocalStorage] Failed to persist "${key}" even after cleanup:`, e2);
+      return false;
+    }
+  }
+}
+
+/**
+ * High-quality preset samples for instant 1-click test photos
+ */
+export const SAMPLE_PRODUCT_PRESETS = [
+  {
+    name: 'Hoodie (Black)',
+    url: 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=600&q=80',
+    category: 'Fashion',
+  },
+  {
+    name: 'Denim Jacket',
+    url: 'https://images.unsplash.com/photo-1576995853123-5a10305d93c0?auto=format&fit=crop&w=600&q=80',
+    category: 'Fashion',
+  },
+  {
+    name: 'Smart Watch',
+    url: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80',
+    category: 'Electronics',
+  },
+  {
+    name: 'Wireless Earbuds',
+    url: 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?auto=format&fit=crop&w=600&q=80',
+    category: 'Electronics',
+  },
+  {
+    name: 'Sneakers (White)',
+    url: 'https://images.unsplash.com/photo-1549298916-b41d501d3772?auto=format&fit=crop&w=600&q=80',
+    category: 'Fashion',
+  },
+  {
+    name: 'Organic Face Cream',
+    url: 'https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=600&q=80',
+    category: 'Beauty',
+  },
+];

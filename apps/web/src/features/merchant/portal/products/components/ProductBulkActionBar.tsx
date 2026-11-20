@@ -21,10 +21,10 @@ export function ProductBulkActionBar({
   if (selectedCount === 0) return null;
 
   return (
-    <div className="fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-40 max-w-[calc(100vw-24px)] overflow-x-auto bg-slate-900 border border-slate-700/80 shadow-2xl rounded-2xl px-3 sm:px-4 py-2.5 sm:py-3 flex items-center gap-2 sm:gap-4 animate-in slide-in-from-bottom-4 backdrop-blur">
-      <div className="flex items-center gap-2 pr-3 border-r border-slate-800">
+    <div className="fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-40 max-w-[calc(100vw-24px)] overflow-x-auto bg-white dark:bg-navy-900 border border-slate-200/80 dark:border-white/10 shadow-2xl rounded-2xl px-3 sm:px-4 py-2.5 sm:py-3 flex items-center gap-2 sm:gap-4 animate-in slide-in-from-bottom-4 backdrop-blur">
+      <div className="flex items-center gap-2 pr-3 border-r border-slate-200 dark:border-white/10">
         <CheckSquare className="h-4 w-4 text-emerald-400" />
-        <span className="text-xs font-bold text-slate-100 whitespace-nowrap">
+        <span className="text-xs font-bold text-navy-900 dark:text-white whitespace-nowrap">
           {selectedCount} selected
         </span>
       </div>
@@ -42,7 +42,7 @@ export function ProductBulkActionBar({
         <button
           type="button"
           onClick={onBulkDraft}
-          className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+          className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-navy-900 dark:text-slate-200 border border-slate-200 dark:border-white/10 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
         >
           <FileText className="h-3.5 w-3.5" />
           <span className="hidden sm:inline">Set as</span> Draft
@@ -61,7 +61,7 @@ export function ProductBulkActionBar({
       <button
         type="button"
         onClick={onClearSelection}
-        className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors ml-1 cursor-pointer"
+        className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-100 dark:bg-navy-800 transition-colors ml-1 cursor-pointer"
         title="Clear Selection"
       >
         <X className="h-4 w-4" />

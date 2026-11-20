@@ -59,10 +59,10 @@ export function EarningsKpiCards({
         return (
           <div
             key={idx}
-            className="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-sm space-y-3 relative overflow-hidden"
+            className="p-5 rounded-2xl bg-white dark:bg-navy-900 border border-slate-200/80 dark:border-white/10 shadow-sm space-y-3 relative overflow-hidden"
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                 {kpi.title}
               </span>
               <div
@@ -73,8 +73,8 @@ export function EarningsKpiCards({
             </div>
 
             <div>
-              <div className="text-2xl font-black text-slate-100 flex items-baseline gap-1">
-                <span className="text-sm font-bold text-slate-400">৳</span>
+              <div className="text-2xl font-black text-navy-900 dark:text-white flex items-baseline gap-1">
+                <span className="text-sm font-bold text-slate-500 dark:text-slate-400">৳</span>
                 <span>{kpi.amount.toLocaleString()}</span>
                 {kpi.badge && (
                   <span className="ml-2 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
@@ -82,7 +82,7 @@ export function EarningsKpiCards({
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-slate-400 mt-1">{kpi.subtext}</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{kpi.subtext}</p>
             </div>
           </div>
         );

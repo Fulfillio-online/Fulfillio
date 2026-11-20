@@ -1,9 +1,25 @@
 'use client';
 
 import React, { useState } from 'react';
+import { Palette, Layers } from 'lucide-react';
 import { Modal } from '@/components/admin/AdminModal';
 import { CourierPartner, WarehousePipelineOrder } from '../../types';
 import { PRODUCT_CATALOG, RESELLER_MEMOS } from '../../mockData';
+
+const POPULAR_COLORS = [
+  { name: 'Red', hex: '#ef4444' },
+  { name: 'Charcoal Black', hex: '#1e293b' },
+  { name: 'Pure White', hex: '#ffffff' },
+  { name: 'Navy Blue', hex: '#1e3a8a' },
+  { name: 'Royal Blue', hex: '#2563eb' },
+  { name: 'Maroon', hex: '#881337' },
+  { name: 'Olive Green', hex: '#3f6212' },
+  { name: 'Beige', hex: '#d4b996' },
+  { name: 'Grey', hex: '#64748b' },
+  { name: 'Yellow', hex: '#eab308' },
+];
+
+const POPULAR_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', 'Free Size'];
 
 interface CreateOrderModalProps {
   isOpen: boolean;
@@ -23,18 +39,26 @@ export function CreateOrderModal({
   const [newCustomerAddress, setNewCustomerAddress] = useState('');
   const [newCity, setNewCity] = useState('Dhaka');
   const [newSku, setNewSku] = useState(PRODUCT_CATALOG[0].sku);
+  const [newColor, setNewColor] = useState('Red');
+  const [newSize, setNewSize] = useState('XXL');
   const [newQty, setNewQty] = useState(1);
   const [newMemoCode, setNewMemoCode] = useState(RESELLER_MEMOS[0].code);
   const [newCourier, setNewCourier] = useState<CourierPartner>('Steadfast');
+
+  const selectedProduct = PRODUCT_CATALOG.find((p) => p.sku === newSku) || PRODUCT_CATALOG[0];
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCustomerName.trim() || !newCustomerPhone.trim() || !newCustomerAddress.trim()) {
       return;
     }
-    const product = PRODUCT_CATALOG.find((p) => p.sku === newSku) || PRODUCT_CATALOG[0];
+    const product = selectedProduct;
     const memo = RESELLER_MEMOS.find((m) => m.code === newMemoCode) || RESELLER_MEMOS[0];
     const nextOrderNum = 9833 + ordersCount;
+
+    const colorCode = newColor.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3) || 'RED';
+    const sizeCode = newSize.toUpperCase().replace(/[^A-Z0-9]/g, '') || 'XXL';
+    const variantSku = `${product.sku}-${colorCode}-${sizeCode}`;
 
     const created: WarehousePipelineOrder = {
       id: `ORD-${nextOrderNum}`,
@@ -48,9 +72,9 @@ export function CreateOrderModal({
       productTitle: product.title,
       productImage: product.productImage,
       bin: product.bin,
-      color: product.color,
-      size: product.size,
-      sku: product.sku,
+      color: newColor,
+      size: newSize,
+      sku: variantSku,
       qty: newQty,
       stockAvailable: Math.max(0, product.stock - newQty),
       memoCode: memo.code,
@@ -74,7 +98,7 @@ export function CreateOrderModal({
       isOpen={isOpen}
       onClose={onClose}
       title="Create Manual Order"
-      subtitle="Select product variant (Color/Size/Bin) and Reseller Memo Code. In-stock orders go directly to Pick List."
+      subtitle="Select product, pick color & size variants, and assign Reseller Memo Code. Orders go directly to Pick List."
       size="md"
     >
       <form onSubmit={handleSubmit} className="space-y-4 text-xs">
@@ -87,7 +111,7 @@ export function CreateOrderModal({
               value={newCustomerName}
               onChange={(e) => setNewCustomerName(e.target.value)}
               placeholder="e.g. Tanvir Hasan"
-              className="w-full rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 px-3 py-2 text-navy-800 dark:text-white focus:outline-none focus:border-orange-500"
+              className="w-full rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 px-3 py-2 text-navy-800 dark:text-white focus:outline-none focus:border-orange-500 shadow-2xs"
             />
           </div>
           <div>
@@ -98,7 +122,7 @@ export function CreateOrderModal({
               value={newCustomerPhone}
               onChange={(e) => setNewCustomerPhone(e.target.value)}
               placeholder="e.g. 01712-889900"
-              className="w-full rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 px-3 py-2 text-navy-800 dark:text-white focus:outline-none focus:border-orange-500"
+              className="w-full rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 px-3 py-2 text-navy-800 dark:text-white focus:outline-none focus:border-orange-500 shadow-2xs"
             />
           </div>
         </div>
@@ -112,7 +136,7 @@ export function CreateOrderModal({
               value={newCustomerAddress}
               onChange={(e) => setNewCustomerAddress(e.target.value)}
               placeholder="House, Road, Area"
-              className="w-full rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 px-3 py-2 text-navy-800 dark:text-white focus:outline-none focus:border-orange-500"
+              className="w-full rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 px-3 py-2 text-navy-800 dark:text-white focus:outline-none focus:border-orange-500 shadow-2xs"
             />
           </div>
           <div>
@@ -121,7 +145,7 @@ export function CreateOrderModal({
               value={newCity}
               onChange={(e) => setNewCity(e.target.value)}
               aria-label="City"
-              className="w-full rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 px-3 py-2 text-navy-800 dark:text-white focus:outline-none focus:border-orange-500"
+              className="w-full rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 px-3 py-2 text-navy-800 dark:text-white focus:outline-none focus:border-orange-500 shadow-2xs cursor-pointer"
             >
               <option value="Dhaka">Dhaka</option>
               <option value="Chattogram">Chattogram</option>
@@ -131,33 +155,88 @@ export function CreateOrderModal({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="sm:col-span-2">
-            <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1">
-              Product Variant (2-Part SKU · Bin · Stock)
+        {/* Product Selector */}
+        <div>
+          <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1">
+            Catalog Product (Merchant · Bin · Stock)
+          </label>
+          <select
+            value={newSku}
+            onChange={(e) => {
+              setNewSku(e.target.value);
+              const p = PRODUCT_CATALOG.find((prod) => prod.sku === e.target.value);
+              if (p?.color) setNewColor(p.color);
+              if (p?.size) setNewSize(p.size);
+            }}
+            aria-label="Product Catalog"
+            className="w-full rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 px-3 py-2 text-navy-800 dark:text-white focus:outline-none focus:border-orange-500 shadow-2xs cursor-pointer"
+          >
+            {PRODUCT_CATALOG.map((p) => (
+              <option key={p.sku} value={p.sku}>
+                {p.title} ({p.merchantName}) · Bin: {p.bin} · Stock: {p.stock}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Variant Selectors: Color, Size & Quantity */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10">
+          <div>
+            <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1 flex items-center justify-between">
+              <span className="flex items-center gap-1">
+                <Palette className="h-3 w-3 text-orange-500" />
+                Color Variant
+              </span>
+              {(() => {
+                const active = POPULAR_COLORS.find((c) => c.name.toLowerCase() === newColor.toLowerCase());
+                return active ? (
+                  <span
+                    className="inline-block w-2.5 h-2.5 rounded-full border border-slate-300 dark:border-white/30"
+                    style={{ backgroundColor: active.hex }}
+                  />
+                ) : null;
+              })()}
             </label>
             <select
-              value={newSku}
-              onChange={(e) => setNewSku(e.target.value)}
-              aria-label="Product SKU Variant"
-              className="w-full rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 px-3 py-2 text-navy-800 dark:text-white focus:outline-none focus:border-orange-500"
+              value={newColor}
+              onChange={(e) => setNewColor(e.target.value)}
+              className="w-full rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 px-3 py-2 text-navy-800 dark:text-white focus:outline-none focus:border-orange-500 shadow-2xs cursor-pointer"
             >
-              {PRODUCT_CATALOG.map((p) => (
-                <option key={p.sku} value={p.sku}>
-                  {p.sku} — {p.title} ({p.color}/{p.size}) · Bin: {p.bin} · Stock: {p.stock}
+              {POPULAR_COLORS.map((c) => (
+                <option key={c.name} value={c.name}>
+                  {c.name}
                 </option>
               ))}
             </select>
           </div>
+
+          <div>
+            <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1 flex items-center gap-1">
+              <Layers className="h-3 w-3 text-emerald-500" />
+              Size Variant
+            </label>
+            <select
+              value={newSize}
+              onChange={(e) => setNewSize(e.target.value)}
+              className="w-full rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 px-3 py-2 text-navy-800 dark:text-white focus:outline-none focus:border-orange-500 shadow-2xs cursor-pointer"
+            >
+              {POPULAR_SIZES.map((sz) => (
+                <option key={sz} value={sz}>
+                  {sz}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div>
             <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1">Quantity</label>
             <input
               type="number"
               min={1}
-              max={20}
+              max={selectedProduct.stock || 20}
               value={newQty}
               onChange={(e) => setNewQty(Math.max(1, Number(e.target.value)))}
-              className="w-full rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 px-3 py-2 text-navy-800 dark:text-white focus:outline-none focus:border-orange-500"
+              className="w-full rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 px-3 py-2 font-mono font-bold text-navy-800 dark:text-white focus:outline-none focus:border-orange-500 shadow-2xs"
             />
           </div>
         </div>
@@ -171,7 +250,7 @@ export function CreateOrderModal({
               value={newMemoCode}
               onChange={(e) => setNewMemoCode(e.target.value)}
               aria-label="Reseller Memo Template Code"
-              className="w-full rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 px-3 py-2 text-navy-800 dark:text-white focus:outline-none focus:border-orange-500"
+              className="w-full rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 px-3 py-2 text-navy-800 dark:text-white focus:outline-none focus:border-orange-500 shadow-2xs cursor-pointer"
             >
               {RESELLER_MEMOS.map((m) => (
                 <option key={m.code} value={m.code}>
@@ -186,7 +265,7 @@ export function CreateOrderModal({
               value={newCourier}
               onChange={(e) => setNewCourier(e.target.value as CourierPartner)}
               aria-label="Courier Partner"
-              className="w-full rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 px-3 py-2 text-navy-800 dark:text-white focus:outline-none focus:border-orange-500"
+              className="w-full rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 px-3 py-2 text-navy-800 dark:text-white focus:outline-none focus:border-orange-500 shadow-2xs cursor-pointer"
             >
               <option value="Steadfast">Steadfast</option>
               <option value="Pathao">Pathao</option>
@@ -195,20 +274,25 @@ export function CreateOrderModal({
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-white/10">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-200 font-semibold cursor-pointer"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold cursor-pointer"
-          >
-            Create &amp; Send to Pick List
-          </button>
+        <div className="flex justify-between items-center pt-3 border-t border-slate-200 dark:border-white/10">
+          <div className="text-[11px] text-slate-500">
+            Selected: <strong className="text-navy-900 dark:text-white">{newColor} / {newSize}</strong> · Total COD: <strong className="text-emerald-600 dark:text-emerald-400 font-mono font-bold">৳{(selectedProduct.price * newQty).toLocaleString()}</strong>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-200 font-semibold cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold cursor-pointer shadow-md shadow-orange-500/20 active:scale-95 transition-all"
+            >
+              Create &amp; Send to Pick List
+            </button>
+          </div>
         </div>
       </form>
     </Modal>

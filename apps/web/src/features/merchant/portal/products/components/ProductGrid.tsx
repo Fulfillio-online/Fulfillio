@@ -10,7 +10,7 @@ import {
   Package,
   Layers,
   FileText,
-  Eye,
+  CheckCircle2,
 } from 'lucide-react';
 import { MerchantProductItem } from '../../types';
 
@@ -41,27 +41,27 @@ export function ProductGrid({
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
       {products.map((p) => {
         const isSelected = selectedIds.includes(p.id);
-        const costPrice = p.costPrice ?? Math.round(p.price * 0.5);
-        const profit = p.profit ?? (p.price - costPrice);
-        const profitMargin =
-          p.profitMargin ??
-          (p.price > 0 ? Math.round((profit / p.price) * 100) : 50);
-        const isPublished = p.status === 'PUBLISHED' || (!p.status && p.stock > 0);
         const isPendingApproval =
-          !isPublished &&
-          (!p.bin || p.bin === 'Pending Approval' || p.bin === 'Assigned on intake');
+          p.status === 'PENDING_APPROVAL' ||
+          !p.bin ||
+          p.bin === 'Pending Approval' ||
+          p.bin === 'Assigned on intake';
+        const isPublished =
+          !isPendingApproval && (p.status === 'PUBLISHED' || (!p.status && p.stock > 0));
         const isLowStock = p.stock <= 30 && p.stock > 0;
         const isOutOfStock = p.stock === 0;
 
         return (
           <div
             key={p.id}
-            className={`rounded-xl border bg-slate-900 overflow-hidden shadow-sm transition-all hover:border-slate-700 flex flex-col justify-between ${
-              isSelected ? 'border-emerald-500 bg-emerald-950/10' : 'border-slate-800'
+            className={`rounded-xl border bg-white dark:bg-navy-900 overflow-hidden shadow-xs transition-all hover:border-orange-500/40 flex flex-col justify-between ${
+              isSelected
+                ? 'border-orange-500 ring-2 ring-orange-500/20 bg-orange-50/10 dark:bg-orange-950/10'
+                : 'border-slate-200/80 dark:border-white/10'
             }`}
           >
             {/* Image Header with badges */}
-            <div className="relative aspect-video w-full bg-slate-950 border-b border-slate-800/80 overflow-hidden">
+            <div className="relative aspect-video w-full bg-slate-100 dark:bg-navy-950 border-b border-slate-200 dark:border-white/10 overflow-hidden">
               <Link
                 href={`/merchant/products/${p.id}`}
                 className="w-full h-full relative cursor-pointer block"
@@ -86,7 +86,7 @@ export function ProductGrid({
                   )
                 ) : (
                   <div className="h-full w-full flex items-center justify-center">
-                    <Package className="h-10 w-10 text-slate-700" />
+                    <Package className="h-10 w-10 text-slate-400 dark:text-slate-700" />
                   </div>
                 )}
               </Link>
@@ -98,29 +98,37 @@ export function ProductGrid({
                   checked={isSelected}
                   onChange={() => onToggleSelect(p.id)}
                   aria-label={`Select ${p.title}`}
-                  className="rounded border-slate-700 bg-slate-900/90 text-emerald-500 focus:ring-emerald-500/20 h-4 w-4 cursor-pointer"
+                  className="rounded border-slate-300 dark:border-white/20 bg-white dark:bg-navy-900 text-orange-600 focus:ring-orange-500/20 h-4 w-4 cursor-pointer"
                 />
               </div>
 
-              {/* Status Badge */}
+              {/* Status Badge: Non-clickable pure text badge */}
               <div className="absolute top-2 right-2 z-10">
                 <span
-                  className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border backdrop-blur shadow-sm ${
-                    isPublished
-                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                      : isPendingApproval
-                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                      : 'bg-slate-800/80 text-slate-300 border-slate-700'
+                  className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border backdrop-blur shadow-xs select-none ${
+                    isPendingApproval
+                      ? 'bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/30'
+                      : !isPublished || p.status === 'DRAFT'
+                      ? 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-navy-800/80 dark:text-slate-300 dark:border-white/10'
+                      : isOutOfStock
+                      ? 'bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-500/30'
+                      : 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/30'
                   }`}
                 >
-                  {isPublished ? 'Published' : isPendingApproval ? 'Pending Approval' : 'Draft'}
+                  {isPendingApproval
+                    ? 'Pending Approval'
+                    : !isPublished || p.status === 'DRAFT'
+                    ? 'Draft'
+                    : isOutOfStock
+                    ? 'Out of Stock'
+                    : 'Published'}
                 </span>
               </div>
 
               {/* Category Pill */}
               {p.category && (
                 <div className="absolute bottom-2 left-2 z-10">
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-900/90 text-slate-300 border border-slate-700/80 backdrop-blur">
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-white/90 dark:bg-navy-900/90 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-white/10 backdrop-blur">
                     {p.category}
                   </span>
                 </div>
@@ -132,96 +140,109 @@ export function ProductGrid({
               <div>
                 <Link
                   href={`/merchant/products/${p.id}`}
-                  className="font-semibold text-slate-200 hover:text-emerald-400 text-sm line-clamp-1 text-left transition-colors cursor-pointer block"
+                  className="font-bold text-navy-900 dark:text-white hover:text-orange-600 dark:hover:text-orange-400 text-sm line-clamp-1 text-left transition-colors cursor-pointer block"
                   title={p.title}
                 >
                   {p.title}
                 </Link>
 
                 <div className="flex items-center gap-2 mt-1">
-                  <span className="font-mono text-[11px] text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
+                  <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-navy-950 px-1.5 py-0.5 rounded border border-slate-200 dark:border-white/10">
                     {p.sku}
                   </span>
-                  {p.bin && p.bin !== 'Assigned on intake' && (
-                    <span className="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                  {isPendingApproval ? (
+                    <span className="text-[10px] font-mono text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-300 dark:border-amber-500/20">
+                      Pending Admin Review
+                    </span>
+                  ) : p.bin && p.bin !== 'Assigned on intake' && p.bin !== 'Pending Approval' ? (
+                    <span className="text-[10px] font-mono text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-navy-950 px-1.5 py-0.5 rounded border border-slate-200 dark:border-white/10">
                       {p.bin}
                     </span>
-                  )}
+                  ) : null}
                 </div>
 
                 {/* Declared Value Card */}
-                <div className="mt-3 p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80 flex items-center justify-between text-xs">
+                <div className="mt-3 p-2.5 rounded-lg bg-slate-50 dark:bg-navy-950/60 border border-slate-200/80 dark:border-white/10 flex items-center justify-between text-xs">
                   <div>
                     <span className="text-slate-500 block text-[10px] uppercase font-semibold">
                       Declared Value
                     </span>
-                    <span className="font-bold text-slate-100 text-sm">
+                    <span className="font-bold text-navy-900 dark:text-white text-sm">
                       ৳{p.price.toLocaleString()}
                     </span>
                   </div>
-                  <span className="text-[10px] text-slate-500">
+                  <span className="text-[10px] text-slate-500 font-medium">
                     Liability Worth
                   </span>
                 </div>
 
-                {/* Stock Row (No jumping +/- buttons!) */}
+                {/* Stock Row */}
                 <div className="mt-3 flex items-center justify-between">
                   <div>
-                    <span className="text-[10px] text-slate-400 block">Warehouse Stock</span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-medium">Warehouse Stock</span>
                     {isOutOfStock ? (
-                      <span className="text-xs font-bold text-rose-400">Out of stock</span>
+                      <span className="text-xs font-bold text-rose-600 dark:text-rose-400 font-mono">0</span>
                     ) : isLowStock ? (
-                      <span className="text-xs font-bold text-amber-400">{p.stock} left</span>
+                      <span className="text-xs font-bold text-amber-600 dark:text-amber-400 font-mono">{p.stock}</span>
                     ) : (
-                      <span className="text-xs text-slate-200 font-semibold font-mono">{p.stock} in stock</span>
+                      <span className="text-xs text-navy-900 dark:text-white font-semibold font-mono">{p.stock}</span>
                     )}
                   </div>
                   <button
                     type="button"
                     onClick={() => onManageStock(p)}
-                    className="px-2 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1 border border-slate-700 cursor-pointer transition-colors"
+                    className="px-2 py-1 rounded-md bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-navy-900 dark:text-white text-xs font-semibold flex items-center gap-1 border border-slate-200 dark:border-white/10 cursor-pointer transition-colors"
                   >
-                    <Layers className="h-3 w-3 text-emerald-400" />
+                    <Layers className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
                     <span>+ Stock</span>
                   </button>
                 </div>
               </div>
 
               {/* Bottom Actions */}
-              <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => onToggleStatus(p.id)}
-                  className={`text-xs font-semibold px-2 py-1.5 rounded-lg border transition-all flex items-center gap-1 cursor-pointer flex-1 justify-center ${
-                    isPublished
-                      ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
-                      : isPendingApproval
-                      ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/30'
-                      : 'bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border-emerald-500/40'
-                  }`}
-                >
-                  {isPublished ? (
-                    <>
-                      <FileText className="h-3 w-3" />
-                      <span>Draft</span>
-                    </>
-                  ) : isPendingApproval ? (
-                    <>
-                      <FileText className="h-3 w-3 text-amber-400" />
-                      <span>Pending</span>
-                    </>
-                  ) : (
-                    <>
-                      <Eye className="h-3 w-3" />
-                      <span>Publish</span>
-                    </>
-                  )}
-                </button>
+              <div className="mt-4 pt-3 border-t border-slate-200/80 dark:border-white/10 flex items-center justify-between gap-1.5">
+                {/* Publish to Store or Move to Draft Button */}
+                {isPendingApproval ? (
+                  <div
+                    className="text-xs font-bold px-2 py-1.5 rounded-lg border bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/30 flex items-center gap-1.5 flex-1 justify-center cursor-default select-none"
+                    title="Awaiting admin approval & bin allocation"
+                  >
+                    <FileText className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                    <span>Pending</span>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onToggleStatus(p.id)}
+                    className={`text-xs font-bold px-2 py-1.5 rounded-lg border transition-all flex items-center gap-1.5 cursor-pointer flex-1 justify-center ${
+                      isPublished
+                        ? 'bg-slate-100 hover:bg-slate-200 dark:bg-navy-800 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-white/10'
+                        : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-600 shadow-xs'
+                    }`}
+                    title={
+                      isPublished
+                        ? 'Move product to drafts'
+                        : 'Publish product live to your store'
+                    }
+                  >
+                    {isPublished ? (
+                      <>
+                        <FileText className="h-3.5 w-3.5 text-slate-500" />
+                        <span>Draft</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        <span>Publish to Store</span>
+                      </>
+                    )}
+                  </button>
+                )}
 
                 <button
                   type="button"
                   onClick={() => onPrintBarcode(p)}
-                  className="p-1.5 rounded-lg border border-indigo-500/30 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-300 transition-colors cursor-pointer"
+                  className="p-1.5 rounded-lg border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50 dark:bg-indigo-600/10 hover:bg-indigo-100 dark:hover:bg-indigo-600/20 text-indigo-700 dark:text-indigo-300 transition-colors cursor-pointer"
                   title="Print Thermal Barcode"
                 >
                   <Printer className="h-4 w-4" />
@@ -229,7 +250,7 @@ export function ProductGrid({
 
                 <Link
                   href={`/merchant/products/${p.id}/edit`}
-                  className="p-1.5 rounded-lg border border-slate-800 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
+                  className="p-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
                   title="Edit Product"
                 >
                   <Edit2 className="h-4 w-4" />
@@ -238,8 +259,8 @@ export function ProductGrid({
                 <button
                   type="button"
                   onClick={() => onRequestDelete(p)}
-                  className="p-1.5 rounded-lg border border-rose-500/20 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors cursor-pointer"
-                  title="Delete Product"
+                  className="p-1.5 rounded-lg border border-rose-200 dark:border-rose-500/20 bg-rose-50 dark:bg-rose-500/10 hover:bg-rose-100 dark:hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 transition-colors cursor-pointer"
+                  title={p.status === 'DRAFT' ? 'Permanently Delete Product' : 'Move to Drafts (Safe Delete)'}
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>

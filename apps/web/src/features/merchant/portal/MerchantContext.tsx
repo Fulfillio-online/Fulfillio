@@ -7,10 +7,13 @@ import {
   MerchantProductItem,
   MerchantProfileData,
   ResellerMemo,
+  MerchantCategoryItem,
+  MerchantSubcategoryItem,
 } from './types';
 import { StockRequestItem } from './products/types';
+import { safeSetLocalStorage } from './products/utils/imageCompressor';
 import {
-  INITIAL_MERCHANT_PROFILE,
+  INITIAL_MERCHANT_PROFILE, INITIAL_MERCHANT_PRODUCTS, INITIAL_MERCHANT_ORDERS,
 } from './mockData';
 import { merchantApi } from './api';
 import {
@@ -34,6 +37,10 @@ import {
   syncMerchantProductUpdatedToAdmin,
   syncMerchantMemoToAdmin,
   syncMerchantMemoDeletedToAdmin,
+  syncMerchantStockRequestToAdmin,
+  getStoredMerchantCategoriesForCode,
+  saveMerchantCategoriesForCode,
+  getMerchantCategoriesKey,
 } from '@/lib/warehouseSync';
 
 function safeLocalStorageSet(key: string, value: string): void {
@@ -67,12 +74,13 @@ interface MerchantContextType {
   updateProfile: (updated: Partial<MerchantProfileData>) => void;
   adjustStock: (id: string, delta: number) => void;
   deleteProduct: (id: string) => void;
-  addProducts: (newItems: MerchantProductItem[]) => void;
-  updateProduct: (id: string, updated: Partial<MerchantProductItem>) => void;
+  addProducts: (newItems: MerchantProductItem[]) => Promise<{ ok: boolean; error?: string }>;
+  updateProduct: (id: string, updated: Partial<MerchantProductItem>) => Promise<{ ok: boolean; error?: string }>;
   toggleProductStatus: (id: string) => void;
   bulkUpdateStatus: (ids: string[], status: 'PUBLISHED' | 'DRAFT') => void;
   bulkDeleteProducts: (ids: string[]) => void;
   requestStockAdd: (productId: string, requestedQty: number, note?: string) => void;
+  requestStockOperation: (payload: import("./products/modals/ManageStockModal").SubmitStockRequestPayload) => void;
   approveStockRequest: (requestId: string) => void;
   cancelStockRequest: (requestId: string) => void;
   createOrder: (
@@ -86,32 +94,101 @@ interface MerchantContextType {
   saveMemo: (newMemo: ResellerMemo) => void;
   setDefaultMemo: (id: string) => void;
   deleteMemo: (id: string) => void;
+  categories: MerchantCategoryItem[];
+  addCategory: (item: { name: string; description?: string; subcategories?: string[] }) => void;
+  updateCategory: (id: string, updated: Partial<MerchantCategoryItem>) => void;
+  deleteCategory: (id: string) => void;
+  addSubcategory: (categoryId: string, subcategory: { name: string; description?: string }) => void;
+  updateSubcategory: (categoryId: string, subcategoryId: string, updated: Partial<MerchantSubcategoryItem>) => void;
+  deleteSubcategory: (categoryId: string, subcategoryId: string) => void;
 }
 
 const MerchantContext = createContext<MerchantContextType | undefined>(undefined);
 
 export function MerchantProvider({ children }: { children: ReactNode }) {
-  const [profile, setProfile] = useState<MerchantProfileData>(INITIAL_MERCHANT_PROFILE);
-  const [products, setProducts] = useState<MerchantProductItem[]>([]);
-  const [orders, setOrders] = useState<MerchantOrderItem[]>([]);
+  const [profile, setProfile] = useState<MerchantProfileData>(() => {
+    if (typeof window !== 'undefined') {
+      const session = getActiveMerchantSession();
+      const code = session?.merchantCode || 'MC-101';
+      return getStoredMerchantProfileForCode(code);
+    }
+    return INITIAL_MERCHANT_PROFILE;
+  });
+  const [products, setProducts] = useState<MerchantProductItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      const session = getActiveMerchantSession();
+      const code = session?.merchantCode || 'MC-101';
+      return getStoredMerchantProductsForCode(code);
+    }
+    return [];
+  });
+  const [orders, setOrders] = useState<MerchantOrderItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      const session = getActiveMerchantSession();
+      const code = session?.merchantCode || 'MC-101';
+      return getStoredMerchantOrdersForCode(code);
+    }
+    return [];
+  });
   const [memoList, setMemoList] = useState<ResellerMemo[]>([]);
   const [asns, setAsns] = useState<MerchantAsnRecord[]>([]);
   const [stockRequests, setStockRequests] = useState<StockRequestItem[]>([]);
+  const [categories, setCategories] = useState<MerchantCategoryItem[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   // Load active merchant session & scoped data
   useEffect(() => {
-    const loadActiveMerchantWorkspace = () => {
+    const loadActiveMerchantWorkspace = async () => {
       const session = getActiveMerchantSession();
       const code = session.merchantCode || 'MC-101';
       const prof = getStoredMerchantProfileForCode(code);
       setProfile(prof);
-      setProducts(getStoredMerchantProductsForCode(code));
-      setOrders(getStoredMerchantOrdersForCode(code));
+
+      try {
+        const [serverProds, serverOrds] = await Promise.all([
+          merchantApi.getProducts(),
+          merchantApi.getOrders(),
+        ]);
+        if (serverProds && serverProds.length > 0) {
+          const localProds = getStoredMerchantProductsForCode(code);
+          const reconciled = serverProds.map((sp) => {
+            const localMatch = localProds.find((lp) => lp.id === sp.id || lp.sku === sp.sku);
+            if (localMatch) {
+              return {
+                ...localMatch,
+                ...sp,
+                imageUrl: (sp.imageUrl && sp.imageUrl.trim()) ? sp.imageUrl : localMatch.imageUrl,
+                images: (sp.images && sp.images.length > 0) ? sp.images : (localMatch.images || []),
+                colors: (sp.colors && sp.colors.some((c) => c.imageUrl)) ? sp.colors : (localMatch.colors || sp.colors),
+              };
+            }
+            return sp;
+          });
+          setProducts(reconciled);
+          if (typeof window !== 'undefined') {
+            safeSetLocalStorage(getMerchantProductsKey(code), JSON.stringify(reconciled));
+          }
+        } else {
+          setProducts(getStoredMerchantProductsForCode(code));
+        }
+        if (serverOrds && serverOrds.length > 0) {
+          setOrders(serverOrds);
+          if (typeof window !== 'undefined') {
+            safeSetLocalStorage(getMerchantOrdersKey(code), JSON.stringify(serverOrds));
+          }
+        } else {
+          setOrders(getStoredMerchantOrdersForCode(code));
+        }
+      } catch {
+        setProducts(getStoredMerchantProductsForCode(code));
+        setOrders(getStoredMerchantOrdersForCode(code));
+      }
+
       setMemoList(getStoredMerchantMemosForCode(code, prof));
       setAsns(getStoredMerchantAsnsForCode(code));
       setStockRequests(getStoredMerchantStockRequestsForCode(code));
+      setCategories(getStoredMerchantCategoriesForCode(code));
     };
 
     loadActiveMerchantWorkspace();
@@ -171,6 +248,23 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
   };
 
   const deleteProduct = (id: string) => {
+    const target = products.find((p) => p.id === id);
+    if (!target) return;
+
+    // Step 1: If product is not in DRAFT, move it to DRAFT first
+    if (target.status !== 'DRAFT') {
+      setProducts((prev) => {
+        const next = prev.map((p) => (p.id === id ? { ...p, status: 'DRAFT' as const } : p));
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
+        }
+        return next;
+      });
+      showToast(`"${target.title}" প্রোডাক্টটি Drafts-এ পাঠানো হয়েছে। স্থায়ীভাবে মুছে ফেলতে Drafts ট্যাব থেকে ডিলিট করুন।`);
+      return;
+    }
+
+    // Step 2: If already in DRAFT, permanently delete from catalog
     setProducts((prev) => {
       const deleted = prev.filter((p) => p.id === id);
       const next = prev.filter((p) => p.id !== id);
@@ -180,57 +274,137 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       }
       return next;
     });
-    showToast('Product removed from catalog.');
+    showToast(`"${target.title}" স্থায়ীভাবে ক্যাটালগ থেকে মুছে ফেলা হয়েছে।`);
   };
 
-  const addProducts = (newItems: MerchantProductItem[]) => {
+  const addProducts = async (newItems: MerchantProductItem[]): Promise<{ ok: boolean; error?: string }> => {
     const pendingItems: MerchantProductItem[] = newItems.map((item) => ({
       ...item,
-      status: 'DRAFT',
+      status: 'PENDING_APPROVAL',
       bin: 'Pending Approval',
     }));
-    setProducts((prev) => {
-      const next = [...pendingItems, ...prev];
-      if (typeof window !== 'undefined') {
-        safeLocalStorageSet(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
-        syncMerchantProductsAddedToAdmin(pendingItems, profile);
+    // 1. Send directly to PostgreSQL backend
+    for (const it of newItems) {
+      const res = await merchantApi.createProduct(it);
+      if (!res.ok) {
+        showToast(`ডাটাবেজে সেভ হতে সমস্যা হয়েছে: ${res.error}`);
+        return { ok: false, error: res.error };
       }
-      return next;
-    });
+    }
 
-    // Background sync to backend/PostgreSQL (non-blocking, graceful fallback)
-    newItems.forEach((item) => {
-      merchantApi.createProduct?.(item).catch(() => {});
-    });
+    // 2. Refresh products from PostgreSQL
+    try {
+      const serverProds = await merchantApi.getProducts();
+      if (serverProds && serverProds.length > 0) {
+        const reconciled = serverProds.map((sp) => {
+          const matchPending = pendingItems.find(
+            (pi) => pi.sku === sp.sku || pi.id === sp.id || pi.title === sp.title
+          );
+          if (matchPending) {
+            return {
+              ...sp,
+              colors: (sp.colors && sp.colors.some((c) => c.imageUrl))
+                ? sp.colors
+                : (matchPending.colors || sp.colors),
+              imageUrl: sp.imageUrl || matchPending.imageUrl,
+            };
+          }
+          return sp;
+        });
+        setProducts(reconciled);
+        if (typeof window !== 'undefined') {
+          safeSetLocalStorage(getMerchantProductsKey(profile.merchantCode), JSON.stringify(reconciled));
+        }
+      } else {
+        setProducts((prev) => {
+          const next = [...pendingItems, ...prev];
+          if (typeof window !== 'undefined') {
+            safeSetLocalStorage(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
+            syncMerchantProductsAddedToAdmin(pendingItems, profile);
+          }
+          return next;
+        });
+      }
+    } catch {
+      setProducts((prev) => {
+        const next = [...pendingItems, ...prev];
+        if (typeof window !== 'undefined') {
+          safeSetLocalStorage(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
+          syncMerchantProductsAddedToAdmin(pendingItems, profile);
+        }
+        return next;
+      });
+    }
 
     showToast(
-      `Submitted ${pendingItems.length} product SKU(s) for Admin Approval. It will publish automatically once approved.`
+      `প্রোডাক্ট সফলভাবে PostgreSQL ডাটাবেজে সেভ হয়েছে (Pending Approval)!`
     );
+    return { ok: true };
   };
 
-  const updateProduct = (id: string, updated: Partial<MerchantProductItem>) => {
+  const updateProduct = async (
+    id: string,
+    updated: Partial<MerchantProductItem>,
+  ): Promise<{ ok: boolean; error?: string }> => {
+    let targetProduct = products.find((p) => p.id === id || p.sku === id);
+
+    const mergedProduct: MerchantProductItem = {
+      ...(targetProduct || ({} as MerchantProductItem)),
+      ...updated,
+      id: targetProduct ? targetProduct.id : id,
+    };
+
+    let serverError: string | undefined;
+    let serverOk = false;
+
+    // Send update directly to backend API (PostgreSQL database)
+    try {
+      const res = await merchantApi.updateProduct(id, mergedProduct);
+      if (res.ok) {
+        serverOk = true;
+      } else {
+        serverError = res.error;
+        console.warn('[MerchantContext] updateProduct server sync failed:', res.error);
+      }
+    } catch (err: any) {
+      serverError = err?.message || 'Server connection failed';
+      console.warn('[MerchantContext] updateProduct network error:', err);
+    }
+
     setProducts((prev) => {
       let updatedTarget: MerchantProductItem | null = null;
       const next = prev.map((p) => {
-        if (p.id !== id) return p;
+        if (p.id !== id && p.sku !== id) return p;
         const isPendingApproval =
-          !p.bin || p.bin === 'Pending Approval' || p.bin === 'Assigned on intake';
+          p.status === 'PENDING_APPROVAL' ||
+          !p.bin ||
+          p.bin === 'Pending Approval' ||
+          p.bin === 'Assigned on intake';
         updatedTarget = {
           ...p,
           ...updated,
-          status: isPendingApproval ? 'DRAFT' : updated.status ?? p.status,
+          imageUrl: updated.imageUrl !== undefined ? updated.imageUrl : p.imageUrl,
+          images: updated.images !== undefined ? updated.images : (p.images || []),
+          status: isPendingApproval ? 'PENDING_APPROVAL' : updated.status ?? p.status,
         };
         return updatedTarget;
       });
       if (typeof window !== 'undefined') {
-        safeLocalStorageSet(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
+        safeSetLocalStorage(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
         if (updatedTarget) {
           syncMerchantProductUpdatedToAdmin(updatedTarget, profile);
         }
       }
       return next;
     });
-    showToast('Product updated successfully.');
+
+    if (serverOk) {
+      showToast('প্রোডাক্ট সফলভাবে PostgreSQL ডাটাবেজে আপডেট হয়েছে!');
+      return { ok: true };
+    } else {
+      showToast(`প্রোডাক্ট লোকালি আপডেট হয়েছে (${serverError || 'ডাটাবেজ সিঙ্ক ব্যর্থ'})`);
+      return { ok: true }; // Allow UI transition while noting local update
+    }
   };
 
   const toggleProductStatus = (id: string) => {
@@ -298,19 +472,30 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     showToast(`Removed ${ids.length} products.`);
   };
 
-  const requestStockAdd = (productId: string, requestedQty: number, note?: string) => {
-    const product = products.find((p) => p.id === productId);
-    if (!product || requestedQty <= 0) return;
+  const requestStockOperation = (payload: import("./products/modals/ManageStockModal").SubmitStockRequestPayload) => {
+    const product = products.find((p) => p.id === payload.productId);
+    if (!product || payload.requestedQty <= 0) return;
 
+    const isReturn = payload.type === 'RETURN';
     const newReq: StockRequestItem = {
-      id: `sr-${Date.now()}`,
-      productId,
+      id: isReturn ? `SW-${Date.now().toString().slice(-4)}` : `SR-${Date.now().toString().slice(-4)}`,
+      productId: payload.productId,
       productTitle: product.title,
       productSku: product.sku,
-      requestedQty,
+      variantSku: payload.variantSku,
+      color: payload.color,
+      size: payload.size,
+      type: payload.type,
+      requestedQty: payload.requestedQty,
       currentStock: product.stock,
       status: 'PENDING_APPROVAL',
-      note: note || 'Merchant requested restock',
+      note: payload.note,
+      reason: payload.reason,
+      destination: payload.destination,
+      carrier: payload.carrier,
+      trackingRef:
+        payload.trackingRef ||
+        (isReturn ? `RET-${Date.now().toString().slice(-6)}` : `INB-${Date.now().toString().slice(-6)}`),
       createdAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
       imageUrl: product.imageUrl,
     };
@@ -323,19 +508,72 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       return next;
     });
 
-    showToast(`Stock request (+${requestedQty} units) submitted for Admin Approval.`);
+    syncMerchantStockRequestToAdmin(newReq, profile);
+
+    // If Return, deduct stock from the product and matching variant
+    if (isReturn) {
+      setProducts((prev) => {
+        let updatedTarget: MerchantProductItem | null = null;
+        const next = prev.map((p) => {
+          if (p.id !== payload.productId) return p;
+          const updatedVariants = (p.variantsList || []).map((v) => {
+            const matches =
+              (payload.variantSku && v.variantSku === payload.variantSku) ||
+              (payload.color &&
+                payload.size &&
+                (v.color || '').toLowerCase() === payload.color.toLowerCase() &&
+                (v.size || '').toLowerCase() === payload.size.toLowerCase());
+            if (matches) {
+              return { ...v, stock: Math.max(0, v.stock - payload.requestedQty) };
+            }
+            return v;
+          });
+          const newTotalStock = Math.max(0, p.stock - payload.requestedQty);
+          updatedTarget = {
+            ...p,
+            stock: newTotalStock,
+            variantsList: updatedVariants.length > 0 ? updatedVariants : p.variantsList,
+          };
+          return updatedTarget;
+        });
+
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
+          if (updatedTarget) {
+            syncMerchantProductUpdatedToAdmin(updatedTarget, profile);
+          }
+        }
+        return next;
+      });
+
+      showToast(`Return request of ${payload.requestedQty} units (${payload.color || ''} ${payload.size || ''}) submitted & warehouse stock updated.`);
+    } else {
+      showToast(`Inbound restock request (+${payload.requestedQty} units) submitted for Admin Approval.`);
+    }
+  };
+
+  const requestStockAdd = (productId: string, requestedQty: number, note?: string) => {
+    requestStockOperation({
+      productId,
+      type: 'RESTOCK',
+      requestedQty,
+      note,
+    });
   };
 
   const approveStockRequest = (requestId: string) => {
     const req = stockRequests.find((r) => r.id === requestId);
     if (!req || req.status === 'APPROVED') return;
 
-    // Credit stock to product
+    const isReturn = req.type === 'RETURN';
+    const delta = isReturn ? -req.requestedQty : req.requestedQty;
+
+    // Adjust stock to product
     setProducts((prev) => {
       let updatedTarget: MerchantProductItem | null = null;
       const next = prev.map((p) => {
         if (p.id !== req.productId) return p;
-        updatedTarget = { ...p, stock: p.stock + req.requestedQty };
+        updatedTarget = { ...p, stock: Math.max(0, p.stock + delta) };
         return updatedTarget;
       });
       if (typeof window !== 'undefined') {
@@ -358,7 +596,11 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       return next;
     });
 
-    showToast(`Admin approved: +${req.requestedQty} units added to ${req.productSku}.`);
+    showToast(
+      isReturn
+        ? `Admin approved return: -${req.requestedQty} units withdrawn from ${req.productSku}.`
+        : `Admin approved restock: +${req.requestedQty} units added to ${req.productSku}.`
+    );
   };
 
   const cancelStockRequest = (requestId: string) => {
@@ -418,6 +660,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       return next;
     });
 
+    merchantApi.createOrder(order).catch(() => {});
     syncMerchantOrderCreatedToAdmin(order, itemsToDeduct, latestProducts, memoList, profile);
   };
 
@@ -542,6 +785,103 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     });
     showToast('Memo design deleted.');
   };
+  const addCategory = (item: { name: string; description?: string; subcategories?: string[] }) => {
+    const slug = item.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    const newCat: MerchantCategoryItem = {
+      id: `cat-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      name: item.name.trim(),
+      slug: slug || `cat-${Date.now()}`,
+      description: item.description?.trim(),
+      createdAt: new Date().toISOString(),
+      subcategories: (item.subcategories || []).map((subName) => ({
+        id: `sub-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        name: subName.trim(),
+        slug: subName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+        createdAt: new Date().toISOString(),
+      })),
+    };
+    setCategories((prev) => {
+      const next = [newCat, ...prev];
+      saveMerchantCategoriesForCode(profile.merchantCode, next);
+      return next;
+    });
+    showToast(`Category "${newCat.name}" added successfully.`);
+  };
+
+  const updateCategory = (id: string, updated: Partial<MerchantCategoryItem>) => {
+    setCategories((prev) => {
+      const next = prev.map((c) => (c.id === id ? { ...c, ...updated } : c));
+      saveMerchantCategoriesForCode(profile.merchantCode, next);
+      return next;
+    });
+    showToast('Category updated.');
+  };
+
+  const deleteCategory = (id: string) => {
+    setCategories((prev) => {
+      const target = prev.find((c) => c.id === id);
+      const next = prev.filter((c) => c.id !== id);
+      saveMerchantCategoriesForCode(profile.merchantCode, next);
+      if (target) {
+        showToast(`Category "${target.name}" removed.`);
+      }
+      return next;
+    });
+  };
+
+  const addSubcategory = (categoryId: string, subcategory: { name: string; description?: string }) => {
+    const slug = subcategory.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    const newSub: MerchantSubcategoryItem = {
+      id: `sub-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      name: subcategory.name.trim(),
+      slug: slug || `sub-${Date.now()}`,
+      description: subcategory.description?.trim(),
+      createdAt: new Date().toISOString(),
+    };
+    setCategories((prev) => {
+      const next = prev.map((c) => {
+        if (c.id !== categoryId) return c;
+        return {
+          ...c,
+          subcategories: [...c.subcategories, newSub],
+        };
+      });
+      saveMerchantCategoriesForCode(profile.merchantCode, next);
+      return next;
+    });
+    showToast(`Sub-category "${newSub.name}" added.`);
+  };
+
+  const updateSubcategory = (categoryId: string, subcategoryId: string, updated: Partial<MerchantSubcategoryItem>) => {
+    setCategories((prev) => {
+      const next = prev.map((c) => {
+        if (c.id !== categoryId) return c;
+        return {
+          ...c,
+          subcategories: c.subcategories.map((s: MerchantSubcategoryItem) => (s.id === subcategoryId ? { ...s, ...updated } : s)),
+        };
+      });
+      saveMerchantCategoriesForCode(profile.merchantCode, next);
+      return next;
+    });
+    showToast('Sub-category updated.');
+  };
+
+  const deleteSubcategory = (categoryId: string, subcategoryId: string) => {
+    setCategories((prev) => {
+      const next = prev.map((c) => {
+        if (c.id !== categoryId) return c;
+        return {
+          ...c,
+          subcategories: c.subcategories.filter((s: MerchantSubcategoryItem) => s.id !== subcategoryId),
+        };
+      });
+      saveMerchantCategoriesForCode(profile.merchantCode, next);
+      return next;
+    });
+    showToast('Sub-category removed.');
+  };
+
 
   return (
     <MerchantContext.Provider
@@ -566,6 +906,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
         bulkUpdateStatus,
         bulkDeleteProducts,
         requestStockAdd,
+        requestStockOperation,
         approveStockRequest,
         cancelStockRequest,
         createOrder,
@@ -575,6 +916,13 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
         saveMemo,
         setDefaultMemo,
         deleteMemo,
+        categories,
+        addCategory,
+        updateCategory,
+        deleteCategory,
+        addSubcategory,
+        updateSubcategory,
+        deleteSubcategory,
       }}
     >
       {children}

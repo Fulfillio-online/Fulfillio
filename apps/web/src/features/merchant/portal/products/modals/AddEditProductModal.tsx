@@ -15,6 +15,10 @@ import {
 } from 'lucide-react';
 import { MerchantProductItem } from '../../types';
 import { compressImage } from '../utils/imageCompressor';
+import { ColorPickerInput } from '../components/ColorPickerInput';
+import { useMerchant } from '@/features/merchant/portal/MerchantContext';
+import Link from 'next/link';
+import { ExternalLink } from 'lucide-react';
 
 interface ColorSwatch {
   id: string;
@@ -40,6 +44,7 @@ export function AddEditProductModal({
   onSave,
 }: AddEditProductModalProps) {
   const isEdit = Boolean(initialProduct);
+  const { categories } = useMerchant();
   const colorFileInputRef = useRef<HTMLInputElement>(null);
   const [activeColorUploadId, setActiveColorUploadId] = useState<string | null>(null);
 
@@ -49,6 +54,18 @@ export function AddEditProductModal({
   const [category, setCategory] = useState('Fashion');
   const [subcategory, setSubcategory] = useState('Hoodie');
   const [description, setDescription] = useState('');
+
+  const currentCategoryObj = React.useMemo(() => {
+    return (
+      categories.find((c: any) => c.name.toLowerCase() === category.toLowerCase()) ||
+      categories.find((c: any) => c.slug.toLowerCase() === category.toLowerCase()) ||
+      null
+    );
+  }, [categories, category]);
+
+  const subcategoryList = React.useMemo(() => {
+    return currentCategoryObj?.subcategories || [];
+  }, [currentCategoryObj]);
 
   // Declared Product Value (For damage/loss liability)
   const [declaredValue, setDeclaredValue] = useState('850');
@@ -60,14 +77,7 @@ export function AddEditProductModal({
       id: 'c-1',
       name: 'Black',
       hex: '#111827',
-      imageUrl: 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=200&q=80',
-      sizes: ['S', 'M', 'L', 'XL', 'XXL', '3XL'],
-    },
-    {
-      id: 'c-2',
-      name: 'Charcoal Grey',
-      hex: '#4B5563',
-      imageUrl: 'https://images.unsplash.com/photo-1509967419530-da38b4704bc6?auto=format&fit=crop&w=200&q=80',
+      imageUrl: '',
       sizes: ['S', 'M', 'L', 'XL', 'XXL', '3XL'],
     },
   ]);
@@ -123,20 +133,13 @@ export function AddEditProductModal({
       setSubcategory('Hoodie');
       setDescription('');
       setDeclaredValue('850');
-      setImageUrl('https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=300&q=80');
+      setImageUrl('');
       setColors([
         {
           id: 'c-1',
           name: 'Black',
           hex: '#111827',
-          imageUrl: 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=200&q=80',
-          sizes: ['S', 'M', 'L', 'XL', 'XXL', '3XL'],
-        },
-        {
-          id: 'c-2',
-          name: 'Charcoal Grey',
-          hex: '#4B5563',
-          imageUrl: 'https://images.unsplash.com/photo-1509967419530-da38b4704bc6?auto=format&fit=crop&w=200&q=80',
+          imageUrl: '',
           sizes: ['S', 'M', 'L', 'XL', 'XXL', '3XL'],
         },
       ]);
@@ -159,7 +162,7 @@ export function AddEditProductModal({
     if (!file || !activeColorUploadId) return;
 
     try {
-      const compressed = await compressImage(file, 800, 800, 0.8);
+      const compressed = await compressImage(file, 600, 600, 0.75);
       setColors((prev) =>
         prev.map((c) => (c.id === activeColorUploadId ? { ...c, imageUrl: compressed } : c))
       );
@@ -176,9 +179,22 @@ export function AddEditProductModal({
 
   const handleAddColor = () => {
     const newId = `c-${Date.now()}`;
+    const palette = [
+      { name: 'White', hex: '#FFFFFF' },
+      { name: 'Navy Blue', hex: '#1E3A8A' },
+      { name: 'Red', hex: '#DC2626' },
+      { name: 'Olive Green', hex: '#4D7C0F' },
+      { name: 'Charcoal Grey', hex: '#4B5563' },
+      { name: 'Maroon', hex: '#881337' },
+      { name: 'Beige', hex: '#F5F5DC' },
+    ];
+    const fallbackChoice = palette[(colors.length - 1) % palette.length] || {
+      name: `Color ${colors.length + 1}`,
+      hex: '#6B7280',
+    };
     setColors([
       ...colors,
-      { id: newId, name: 'New Color', hex: '#6B7280', sizes: [...allSizes] },
+      { id: newId, name: fallbackChoice.name, hex: fallbackChoice.hex, imageUrl: '', sizes: [...allSizes] },
     ]);
   };
 
@@ -283,17 +299,17 @@ export function AddEditProductModal({
       onClick={onClose}
     >
       <div
-        className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-3xl my-6 p-5 sm:p-7 space-y-6 shadow-2xl animate-in zoom-in-95 duration-200 cursor-default text-slate-100 max-h-[92vh] overflow-y-auto"
+        className="bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl w-full max-w-3xl my-6 p-5 sm:p-7 space-y-6 shadow-2xl animate-in zoom-in-95 duration-200 cursor-default text-navy-900 dark:text-white max-h-[92vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+        <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-4">
           <div className="flex items-center gap-2.5">
             <div className="h-9 w-9 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
               <Package className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-bold text-slate-100">
+              <h2 className="text-base sm:text-lg font-bold text-navy-900 dark:text-white">
                 {isEdit ? 'Edit Product' : 'Create New Product'}
               </h2>
               <p className="text-xs text-slate-400">
@@ -304,7 +320,7 @@ export function AddEditProductModal({
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-100 dark:bg-navy-800 transition-colors cursor-pointer"
           >
             <X className="h-5 w-5" />
           </button>
@@ -312,8 +328,8 @@ export function AddEditProductModal({
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Section 1: Basic Information */}
-          <div className="space-y-3 p-4 rounded-xl bg-slate-950/60 border border-slate-800">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-200 uppercase tracking-wider">
+          <div className="space-y-3 p-4 rounded-xl bg-slate-50 dark:bg-navy-950/60 border border-slate-200 dark:border-white/10">
+            <div className="flex items-center gap-2 text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider">
               <Tag className="h-4 w-4 text-emerald-400" />
               <span>Basic Information</span>
             </div>
@@ -328,7 +344,7 @@ export function AddEditProductModal({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. Mens Heavyweight Half Zip Hoodie"
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
               />
             </div>
 
@@ -343,24 +359,44 @@ export function AddEditProductModal({
                   value={masterSku}
                   onChange={(e) => setMasterSku(e.target.value.toUpperCase())}
                   placeholder="e.g. HOD-HMZ-001"
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs font-mono text-emerald-400 font-bold focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-mono text-emerald-400 font-bold focus:outline-none focus:border-orange-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  CATEGORY
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-300">
+                    CATEGORY
+                  </label>
+                  <Link
+                    href="/merchant/categories"
+                    target="_blank"
+                    className="text-[11px] font-bold text-orange-400 hover:underline flex items-center gap-1"
+                    title="Manage product categories"
+                  >
+                    <span>+ Manage</span>
+                    <ExternalLink className="h-2.5 w-2.5" />
+                  </Link>
+                </div>
                 <select
                   value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                  onChange={(e) => {
+                    const newCat = e.target.value;
+                    setCategory(newCat);
+                    const catObj = categories.find((c: any) => c.name.toLowerCase() === newCat.toLowerCase());
+                    if (catObj && catObj.subcategories.length > 0) {
+                      setSubcategory(catObj.subcategories[0].name);
+                    } else {
+                      setSubcategory('');
+                    }
+                  }}
+                  className="w-full px-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer"
                 >
-                  <option value="Fashion">Fashion</option>
-                  <option value="Apparel">Apparel</option>
-                  <option value="Electronics">Electronics</option>
-                  <option value="Footwear">Footwear</option>
-                  <option value="Accessories">Accessories</option>
+                  {categories.map((cat: any) => (
+                    <option key={cat.id} value={cat.name}>
+                      {cat.name} ({cat.subcategories.length} sub-categories)
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -368,13 +404,27 @@ export function AddEditProductModal({
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
                   SUBCATEGORY
                 </label>
-                <input
-                  type="text"
-                  value={subcategory}
-                  onChange={(e) => setSubcategory(e.target.value)}
-                  placeholder="e.g. hoodie"
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
-                />
+                {subcategoryList.length > 0 ? (
+                  <select
+                    value={subcategory}
+                    onChange={(e) => setSubcategory(e.target.value)}
+                    className="w-full px-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer"
+                  >
+                    {subcategoryList.map((sub: any) => (
+                      <option key={sub.id} value={sub.name}>
+                        {sub.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={subcategory}
+                    onChange={(e) => setSubcategory(e.target.value)}
+                    placeholder="e.g. hoodie"
+                    className="w-full px-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
+                  />
+                )}
               </div>
             </div>
 
@@ -387,15 +437,15 @@ export function AddEditProductModal({
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Describe the apparel fabric, fit, and style..."
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
               />
             </div>
           </div>
 
           {/* Section 2: Declared Product Value (For Liability & Insurance claims) */}
-          <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-2">
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-navy-950/60 border border-slate-200 dark:border-white/10 space-y-2">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-200 uppercase tracking-wider">
+              <div className="flex items-center gap-2 text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider">
                 <ShieldAlert className="h-4 w-4 text-emerald-400" />
                 <span>Product Declared Value (৳ BDT)</span>
               </div>
@@ -416,29 +466,26 @@ export function AddEditProductModal({
                   value={declaredValue}
                   onChange={(e) => setDeclaredValue(e.target.value)}
                   placeholder="850"
-                  className="w-full pl-8 pr-4 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm font-bold text-emerald-400 focus:outline-none focus:border-emerald-500"
+                  className="w-full pl-8 pr-4 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-sm font-bold text-emerald-400 focus:outline-none focus:border-orange-500"
                 />
               </div>
             </div>
             <p className="text-[11px] text-slate-500 leading-relaxed">
-              ℹ️ যদি ওয়্যারহাউস বা কুরিয়ারে কোনো সমস্যা, হারিয়ে যাওয়া বা ড্যামেজ হয়, তবে ক্ষতিপূরণ ও ইনস্যুরেন্স ভ্যালু নির্ধারণে এই মূল্য ব্যবহার করা হবে। কাস্টমার অর্ডার আসলে তাতে বিক্রয়মূল্য আলাদাভাবে সংযুক্ত হবে।
+              ℹ️ Used for warehouse declared inventory value & insurance claims in case of loss or transit damage. Sale price is assigned per order.
             </p>
           </div>
 
           {/* Section 3: Color Swatches & Photos */}
-          <div className="space-y-3 p-4 rounded-xl bg-slate-950/60 border border-slate-800">
+          <div className="space-y-3 p-4 rounded-xl bg-slate-50 dark:bg-navy-950/60 border border-slate-200 dark:border-white/10">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-                Color Swatches & Photos
-              </span>
-              <button
-                type="button"
-                onClick={handleAddColor}
-                className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 cursor-pointer"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                <span>Add Another Color</span>
-              </button>
+              <div>
+                <span className="text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider block">
+                  Color Swatches & Photos ({colors.length} {colors.length === 1 ? 'Color' : 'Colors'})
+                </span>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Configure color variants and images. Click below to add more.
+                </p>
+              </div>
             </div>
 
             {/* Hidden file input for color swatches */}
@@ -456,20 +503,30 @@ export function AddEditProductModal({
                 return (
                   <div
                     key={c.id}
-                    className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-3"
+                    className="p-3.5 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 space-y-3"
                   >
                     {/* Responsive Color Row */}
                     <div className="space-y-2.5">
                       <div className="flex items-center gap-2.5">
-                        <input
-                          type="color"
-                          value={c.hex}
-                          onChange={(e) => {
-                            const hex = e.target.value;
-                            setColors(colors.map((item) => (item.id === c.id ? { ...item, hex } : item)));
+                        <ColorPickerInput
+                          colorHex={c.hex}
+                          colorName={c.name}
+                          onChange={(hex: string, suggestedName?: string) => {
+                            setColors(
+                              colors.map((item) =>
+                                item.id === c.id
+                                  ? {
+                                      ...item,
+                                      hex,
+                                      name:
+                                        !item.name || item.name === 'New Color'
+                                          ? (suggestedName || item.name)
+                                          : item.name,
+                                    }
+                                  : item
+                              )
+                            );
                           }}
-                          className="h-8 w-8 rounded-lg cursor-pointer bg-transparent border-0 shrink-0"
-                          title="Choose color"
                         />
                         <input
                           type="text"
@@ -479,7 +536,7 @@ export function AddEditProductModal({
                             setColors(colors.map((item) => (item.id === c.id ? { ...item, name } : item)));
                           }}
                           placeholder="Color Name (e.g. Charcoal Grey)"
-                          className="flex-1 px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500 min-w-0"
+                          className="flex-1 px-3 py-1.5 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500 min-w-0"
                         />
                         {colors.length > 1 && (
                           <button
@@ -493,9 +550,9 @@ export function AddEditProductModal({
                         )}
                       </div>
 
-                      <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-800/60">
+                      <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-200/60 dark:border-white/10">
                         <div className="flex items-center gap-2">
-                          <div className="relative h-8 w-8 rounded-lg bg-slate-950 border border-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
+                          <div className="relative h-8 w-8 rounded-lg bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 overflow-hidden shrink-0 flex items-center justify-center">
                             {c.imageUrl ? (
                               c.imageUrl.startsWith('data:') ? (
                                 // eslint-disable-next-line @next/next/no-img-element
@@ -529,7 +586,7 @@ export function AddEditProductModal({
                             setActiveColorUploadId(c.id);
                             colorFileInputRef.current?.click();
                           }}
-                          className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-700 shrink-0"
+                          className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-navy-900 dark:text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-200 dark:border-white/10 shrink-0"
                         >
                           <UploadCloud className="h-3.5 w-3.5 text-emerald-400" />
                           <span>Upload Image</span>
@@ -538,10 +595,10 @@ export function AddEditProductModal({
                     </div>
 
                     {/* Per-color sizes customization with custom size adder */}
-                    <div className="pt-2.5 border-t border-slate-800/80 space-y-2.5">
+                    <div className="pt-2.5 border-t border-slate-200/80 dark:border-white/10 space-y-2.5">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <div className="text-[11px] text-slate-400">
-                          Available Sizes for <strong className="text-slate-200">{c.name || 'this color'}</strong>:
+                          Available Sizes for <strong className="text-navy-900 dark:text-slate-200">{c.name || 'this color'}</strong>:
                         </div>
 
                         {/* Custom size input */}
@@ -559,7 +616,7 @@ export function AddEditProductModal({
                                 handleAddCustomSizeToColor(c.id);
                               }
                             }}
-                            className="flex-1 sm:flex-initial px-2.5 py-1 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 w-full sm:w-44"
+                            className="flex-1 sm:flex-initial px-2.5 py-1 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-orange-500 w-full sm:w-44"
                           />
                           <button
                             type="button"
@@ -585,7 +642,7 @@ export function AddEditProductModal({
                                 className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
                                   isSzActive
                                     ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/50 shadow-sm'
-                                    : 'bg-slate-950 text-slate-500 border-slate-800 hover:text-slate-300 hover:border-slate-700'
+                                    : 'bg-slate-50 dark:bg-navy-950 text-slate-500 border-slate-200 dark:border-white/10 hover:text-slate-300 hover:border-slate-200 dark:border-white/10'
                                 }`}
                               >
                                 <span>{sz}</span>
@@ -610,11 +667,23 @@ export function AddEditProductModal({
                 );
               })}
             </div>
+
+            {/* Bottom Add Another Color button */}
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={handleAddColor}
+                className="w-full py-2.5 px-4 rounded-xl border-2 border-dashed border-orange-500/30 hover:border-orange-500 bg-orange-500/5 hover:bg-orange-500/10 text-orange-600 dark:text-orange-400 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer group shadow-sm hover:shadow"
+              >
+                <Plus className="h-4 w-4 transition-transform group-hover:scale-125" />
+                <span>+ Add Another Color Variant</span>
+              </button>
+            </div>
           </div>
 
           {/* Section 4: Key Features (Bullet points) */}
-          <div className="space-y-3 p-4 rounded-xl bg-slate-950/60 border border-slate-800">
-            <span className="text-xs font-bold text-slate-200 uppercase tracking-wider block">
+          <div className="space-y-3 p-4 rounded-xl bg-slate-50 dark:bg-navy-950/60 border border-slate-200 dark:border-white/10">
+            <span className="text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider block">
               Key Features
             </span>
             <div className="flex flex-col sm:flex-row gap-2">
@@ -629,12 +698,12 @@ export function AddEditProductModal({
                   }
                 }}
                 placeholder="e.g. Premium heavy cotton-blend fleece"
-                className="flex-1 px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                className="flex-1 px-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
               />
               <button
                 type="button"
                 onClick={handleAddFeature}
-                className="w-full sm:w-auto px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition-colors cursor-pointer text-center"
+                className="w-full sm:w-auto px-4 py-2 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-semibold text-navy-900 dark:text-slate-200 transition-colors cursor-pointer text-center"
               >
                 Add Feature
               </button>
@@ -644,7 +713,7 @@ export function AddEditProductModal({
               {features.map((feat, idx) => (
                 <div
                   key={idx}
-                  className="flex items-center justify-between p-2 rounded-lg bg-slate-900 border border-slate-800/80 text-xs"
+                  className="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-navy-900 border border-slate-200/80 dark:border-white/10 text-xs"
                 >
                   <span className="text-slate-300">• {feat}</span>
                   <button
@@ -671,7 +740,7 @@ export function AddEditProductModal({
                 value={initialStock}
                 onChange={(e) => setInitialStock(e.target.value)}
                 placeholder="30"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs font-bold text-slate-200 focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-bold text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
               />
             </div>
 
@@ -686,7 +755,7 @@ export function AddEditProductModal({
                   className={`py-2 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
                     status === 'PUBLISHED'
                       ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/50'
-                      : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
+                      : 'bg-slate-50 dark:bg-navy-950 text-slate-400 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:bg-navy-800'
                   }`}
                 >
                   Published
@@ -696,8 +765,8 @@ export function AddEditProductModal({
                   onClick={() => setStatus('DRAFT')}
                   className={`py-2 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
                     status === 'DRAFT'
-                      ? 'bg-slate-800 text-slate-200 border-slate-600'
-                      : 'bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800'
+                      ? 'bg-slate-100 dark:bg-navy-800 text-navy-900 dark:text-slate-200 border-slate-600'
+                      : 'bg-slate-50 dark:bg-navy-950 text-slate-400 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:bg-navy-800'
                   }`}
                 >
                   Draft
@@ -707,17 +776,17 @@ export function AddEditProductModal({
           </div>
 
           {/* Bottom Actions */}
-          <div className="pt-4 border-t border-slate-800 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5 sm:gap-3">
+          <div className="pt-4 border-t border-slate-200 dark:border-white/10 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5 sm:gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="w-full sm:w-auto px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer text-center"
+              className="w-full sm:w-auto px-4 py-2 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer text-center"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="w-full sm:w-auto px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors cursor-pointer shadow-md flex items-center justify-center gap-1.5"
+              className="w-full sm:w-auto px-5 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold transition-colors cursor-pointer shadow-md flex items-center justify-center gap-1.5"
             >
               <Check className="h-4 w-4" />
               <span>{isEdit ? 'Save Changes' : 'Publish Product'}</span>

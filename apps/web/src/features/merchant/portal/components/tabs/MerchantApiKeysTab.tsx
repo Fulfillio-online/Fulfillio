@@ -71,21 +71,21 @@ export function MerchantApiKeysTab({
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-100 flex items-center gap-2">
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-navy-900 dark:text-white flex items-center gap-2">
           <Key className="h-6 w-6 text-emerald-400 shrink-0" />
           <span>API Key & Webhook Dispatcher</span>
         </h1>
-        <p className="text-sm text-slate-400 mt-0.5">
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
           Connect your WooCommerce, Shopify, or custom store to Fulfillio via REST API & real-time webhooks.
         </p>
       </div>
 
       {/* Production API Key */}
-      <div className="p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-4 shadow-sm">
+      <div className="p-5 rounded-xl bg-white dark:bg-navy-900 border border-slate-200/80 dark:border-white/10 space-y-4 shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-emerald-400" />
-            <h3 className="font-bold text-sm text-slate-200">Production REST API Key</h3>
+            <h3 className="font-bold text-sm text-navy-900 dark:text-slate-200">Production REST API Key</h3>
           </div>
           <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
             Active
@@ -97,11 +97,11 @@ export function MerchantApiKeysTab({
             type="password"
             value={apiKey}
             readOnly
-            className="flex-1 px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs font-mono text-emerald-400 focus:outline-none"
+            className="flex-1 px-4 py-2 bg-slate-100 dark:bg-navy-800 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-mono text-emerald-400 focus:outline-none"
           />
           <button
             onClick={handleCopyKey}
-            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-semibold rounded-lg border border-slate-700 flex items-center justify-center gap-1.5 transition-colors text-slate-200"
+            className="px-4 py-2 bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-semibold rounded-lg border border-slate-200 dark:border-white/10 flex items-center justify-center gap-1.5 transition-colors text-navy-900 dark:text-slate-200"
           >
             {copiedKey ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
             <span>{copiedKey ? 'Copied' : 'Copy Key'}</span>
@@ -110,11 +110,11 @@ export function MerchantApiKeysTab({
       </div>
 
       {/* Webhook Configuration */}
-      <div className="p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-4 shadow-sm">
+      <div className="p-5 rounded-xl bg-white dark:bg-navy-900 border border-slate-200/80 dark:border-white/10 space-y-4 shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Globe className="h-4 w-4 text-indigo-400" />
-            <h3 className="font-bold text-sm text-slate-200">Outbound Webhook Listener</h3>
+            <h3 className="font-bold text-sm text-navy-900 dark:text-slate-200">Outbound Webhook Listener</h3>
           </div>
           <button
             onClick={handleTestPing}
@@ -127,7 +127,7 @@ export function MerchantApiKeysTab({
 
         <form onSubmit={handleSaveWebhook} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1">
+            <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
               Your Webhook Receiver URL
             </label>
             <div className="flex flex-col sm:flex-row gap-2">
@@ -136,13 +136,13 @@ export function MerchantApiKeysTab({
                 value={webhookUrl}
                 onChange={(e) => setWebhookUrl(e.target.value)}
                 placeholder="https://myshop.com/api/fulfillio-webhook"
-                className="flex-1 px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs font-mono text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                className="flex-1 px-4 py-2 bg-slate-100 dark:bg-navy-800 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-mono text-navy-900 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-orange-500"
                 required
               />
               <button
                 type="submit"
                 disabled={isSaving}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition-colors shrink-0"
+                className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-xs font-semibold transition-colors shrink-0"
               >
                 {isSaving ? 'Saving...' : 'Save Endpoint'}
               </button>
@@ -150,7 +150,7 @@ export function MerchantApiKeysTab({
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1">
+            <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
               Webhook HMAC Signing Secret (X-Fulfillio-Signature)
             </label>
             <div className="flex flex-col sm:flex-row gap-2">
@@ -158,12 +158,12 @@ export function MerchantApiKeysTab({
                 type="password"
                 value={webhookSecret}
                 readOnly
-                className="flex-1 px-4 py-2 bg-slate-800/60 border border-slate-700/80 rounded-lg text-xs font-mono text-slate-400 focus:outline-none"
+                className="flex-1 px-4 py-2 bg-slate-100 dark:bg-navy-800/60 border border-slate-200 dark:border-white/10/80 rounded-lg text-xs font-mono text-slate-500 dark:text-slate-400 focus:outline-none"
               />
               <button
                 type="button"
                 onClick={handleCopySecret}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-semibold rounded-lg border border-slate-700 flex items-center justify-center gap-1.5 transition-colors text-slate-300"
+                className="px-4 py-2 bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-semibold rounded-lg border border-slate-200 dark:border-white/10 flex items-center justify-center gap-1.5 transition-colors text-slate-700 dark:text-slate-300"
               >
                 {copiedSecret ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
                 <span>{copiedSecret ? 'Copied' : 'Copy Secret'}</span>
@@ -174,18 +174,18 @@ export function MerchantApiKeysTab({
       </div>
 
       {/* Webhook Delivery Logs Table */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden shadow-sm">
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+      <div className="rounded-xl border border-slate-200/80 dark:border-white/10 bg-white dark:bg-navy-900 overflow-hidden shadow-sm">
+        <div className="p-4 border-b border-slate-200/80 dark:border-white/10 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Activity className="h-4 w-4 text-emerald-400" />
-            <h3 className="text-sm font-bold text-slate-200">Recent Webhook Event Deliveries</h3>
+            <h3 className="text-sm font-bold text-navy-900 dark:text-slate-200">Recent Webhook Event Deliveries</h3>
           </div>
           <span className="text-xs text-slate-500">Auto-retries on HTTP 5xx errors</span>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-left text-xs">
-            <thead className="bg-slate-800/80 text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800">
+            <thead className="bg-slate-100 dark:bg-navy-800/80 text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-200/80 dark:border-white/10">
               <tr>
                 <th className="p-3.5">Event Type</th>
                 <th className="p-3.5">Payload Summary</th>
@@ -193,11 +193,11 @@ export function MerchantApiKeysTab({
                 <th className="p-3.5 text-right">Delivered</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800">
+            <tbody className="divide-y divide-slate-100 dark:divide-white/5">
               {logs.map((l) => (
-                <tr key={l.id} className="hover:bg-slate-800/40 transition-colors">
+                <tr key={l.id} className="hover:bg-slate-100 dark:bg-navy-800/40 transition-colors">
                   <td className="p-3.5 font-mono font-bold text-indigo-400">{l.event}</td>
-                  <td className="p-3.5 text-slate-300 truncate max-w-sm">{l.payloadSummary}</td>
+                  <td className="p-3.5 text-slate-700 dark:text-slate-300 truncate max-w-sm">{l.payloadSummary}</td>
                   <td className="p-3.5 text-center">
                     <span
                       className={`px-2 py-0.5 rounded-full font-bold ${
@@ -209,7 +209,7 @@ export function MerchantApiKeysTab({
                       {l.httpCode} OK
                     </span>
                   </td>
-                  <td className="p-3.5 text-right text-slate-400">{l.timestamp}</td>
+                  <td className="p-3.5 text-right text-slate-500 dark:text-slate-400">{l.timestamp}</td>
                 </tr>
               ))}
             </tbody>

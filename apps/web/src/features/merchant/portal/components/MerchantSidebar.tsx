@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
   Package,
+  FolderTree,
   ShoppingCart,
   Layers,
   Truck,
@@ -13,6 +14,8 @@ import {
   Key,
   User,
   X,
+  LogOut,
+  ShieldCheck,
 } from 'lucide-react';
 import { MerchantProfileData, MerchantTab } from '../types';
 
@@ -37,7 +40,7 @@ export function MerchantSidebar({
     {
       id: 'overview' as MerchantTab,
       label: 'Overview',
-      href: '/merchant',
+      href: '/merchant/overview',
       icon: LayoutDashboard,
     },
     {
@@ -45,6 +48,12 @@ export function MerchantSidebar({
       label: 'Products',
       href: '/merchant/products',
       icon: Package,
+    },
+    {
+      id: 'categories' as MerchantTab,
+      label: 'Categories',
+      href: '/merchant/categories',
+      icon: FolderTree,
     },
     {
       id: 'orders' as MerchantTab,
@@ -86,55 +95,63 @@ export function MerchantSidebar({
 
   const checkIsActive = (item: (typeof navItems)[0]) => {
     if (activeTab) return activeTab === item.id;
-    if (item.href === '/merchant') {
-      return pathname === '/merchant';
+    if (item.href === '/merchant/overview') {
+      return pathname === '/merchant' || pathname === '/merchant/overview';
     }
     return pathname.startsWith(item.href);
   };
 
   return (
     <>
-      {/* Mobile Backdrop */}
+      {/* Mobile Backdrop Overlay */}
       {isMobileOpen && (
         <div
-          className="fixed inset-0 z-40 bg-slate-950/80 backdrop-blur-sm lg:hidden animate-in fade-in"
+          className="fixed inset-0 z-40 bg-navy-950/80 backdrop-blur-sm lg:hidden animate-in fade-in"
           onClick={onCloseMobile}
         />
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 border-r border-slate-800 p-4 flex flex-col justify-between transition-transform duration-200 ease-in-out lg:translate-x-0 ${
-          isMobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'
+        className={`fixed inset-y-0 left-0 z-50 w-72 lg:w-64 h-full bg-white dark:bg-navy-950 border-r border-slate-200 dark:border-white/10 flex flex-col justify-between shrink-0 transition-transform duration-200 ease-in-out lg:translate-x-0 ${
+          isMobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
         }`}
       >
-        <div className="space-y-6">
-          {/* Logo / Header */}
-          <div className="flex items-center justify-between px-2">
-            <Link href="/merchant" className="flex items-center gap-2 group">
-              <div className="h-8 w-8 rounded-lg bg-emerald-600 flex items-center justify-center font-black text-white text-lg tracking-wider group-hover:scale-105 transition-transform">
-                F
-              </div>
-              <div className="leading-none">
-                <span className="text-base font-extrabold tracking-tight text-white block">
-                  FULFILLIO
-                </span>
-                <span className="text-[10px] font-semibold text-emerald-400 tracking-wider">
-                  MERCHANT PORTAL
-                </span>
-              </div>
-            </Link>
+        {/* 1. FIXED TOP CORNER: Logo & Brand Header */}
+        <div className="shrink-0 px-5 py-4 border-b border-slate-200 dark:border-white/10 bg-white/95 dark:bg-navy-950/95 backdrop-blur-xs flex items-center justify-between">
+          <Link
+            href="/merchant"
+            onClick={onCloseMobile}
+            className="flex items-center gap-3 group cursor-pointer"
+          >
+            <div className="h-10 w-10 rounded-xl bg-orange-600 flex items-center justify-center font-extrabold text-white text-lg shadow-md shadow-orange-500/25 group-hover:scale-105 group-hover:bg-orange-500 transition-all">
+              F
+            </div>
+            <div className="min-w-0">
+              <p className="font-extrabold text-xl tracking-tight text-navy-900 dark:text-white leading-tight">
+                Fulfill<span className="text-orange-500">io</span>
+              </p>
+              <span className="inline-block text-[10px] uppercase font-bold text-orange-600 dark:text-orange-400 tracking-wider">
+                MERCHANT PORTAL
+              </span>
+            </div>
+          </Link>
 
-            <button
-              onClick={onCloseMobile}
-              className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-              aria-label="Close sidebar"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
+          <button
+            onClick={onCloseMobile}
+            className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-navy-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-navy-900 transition-colors cursor-pointer"
+            aria-label="Close sidebar"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
 
-          {/* Navigation Links */}
+        {/* 2. SCROLLABLE MIDDLE: Navigation Menu */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-4 overscroll-contain">
           <nav className="space-y-1">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 px-3 block mb-2">
+              Store Management
+            </span>
+
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = checkIsActive(item);
@@ -146,10 +163,10 @@ export function MerchantSidebar({
                     if (onSelectTab) onSelectTab(item.id);
                     onCloseMobile();
                   }}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all ${
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                     isActive
-                      ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25 font-bold'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                      ? 'bg-orange-600 text-white shadow-sm font-bold'
+                      : 'text-slate-600 dark:text-slate-300 hover:text-orange-600 dark:hover:text-white hover:bg-orange-50/70 dark:hover:bg-navy-800/80'
                   }`}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
@@ -160,22 +177,10 @@ export function MerchantSidebar({
           </nav>
         </div>
 
-        {/* Store & Nav Footer */}
-        <div className="border-t border-slate-800 pt-3 space-y-2">
-          <div className="px-2">
-            <span className="text-xs font-semibold text-slate-200 block truncate">
-              {profile.storeName}
-            </span>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="h-2 w-2 rounded-full bg-emerald-400" />
-              <span className="text-[11px] text-emerald-400 font-medium">
-                Store Verified ({profile.merchantCode})
-              </span>
-            </div>
-          </div>
-
-          <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-xs text-slate-400 px-2">
-            <span className="text-slate-500 text-[11px]">Merchant Mode</span>
+                {/* 3. FIXED BOTTOM CORNER: Sign Out */}
+        <div className="shrink-0 p-3 sm:p-4 border-t border-slate-200 dark:border-white/10 bg-white/95 dark:bg-navy-950/95 backdrop-blur-xs">
+          <div className="flex items-center justify-between text-xs px-1">
+            <span className="text-slate-400 dark:text-slate-500 text-[11px]">Mode: Merchant</span>
             <Link
               href="/login"
               onClick={() => {
@@ -183,9 +188,10 @@ export function MerchantSidebar({
                   localStorage.removeItem('fulfillio_active_merchant_session_v1');
                 } catch {}
               }}
-              className="text-rose-400 hover:text-rose-300 font-semibold transition-colors flex items-center gap-1"
+              className="text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 font-semibold transition-colors flex items-center gap-1 cursor-pointer py-1 px-2 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/30"
             >
-              Sign Out
+              <LogOut className="h-3.5 w-3.5" />
+              <span>Sign Out</span>
             </Link>
           </div>
         </div>

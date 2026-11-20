@@ -3,6 +3,7 @@
 import React from 'react';
 import { MapPin, Plus } from 'lucide-react';
 import { WarehouseBin, WarehouseProductItem } from '../../types';
+import { cleanBinCode } from '../../mockData';
 
 interface WarehouseBinsTabProps {
   bins: WarehouseBin[];
@@ -15,7 +16,7 @@ export function WarehouseBinsTab({
   products,
   onOpenCreateBinModal,
 }: WarehouseBinsTabProps) {
-  const approvedProducts = products.filter((p) => p.status === 'APPROVED');
+
 
   return (
     <div className="space-y-4">
@@ -43,8 +44,17 @@ export function WarehouseBinsTab({
       {/* Bins Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {bins.map((bin) => {
-          const storedProducts = approvedProducts.filter((p) => p.binCode === bin.code);
-          const totalUnits = storedProducts.reduce((sum, p) => sum + p.stock, 0);
+          const cleanCode = cleanBinCode(bin.code);
+          const storedProducts = products.filter((p) => {
+            const pBin = cleanBinCode(p.binCode);
+            if (!pBin || pBin !== cleanCode) return false;
+            if (p.status === 'REJECTED' || p.status === 'DRAFT') return false;
+            return true;
+          });
+          const totalUnits = storedProducts.reduce(
+            (sum, p) => sum + (Number(p.stock) || 0),
+            0
+          );
           const utilizationPct = Math.min(
             100,
             Math.round((totalUnits / (bin.capacityUnits || 250)) * 100)

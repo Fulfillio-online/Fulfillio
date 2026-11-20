@@ -11,8 +11,8 @@ export default function NewProductPage() {
     <div className="py-2 sm:py-4">
       <ProductForm
         merchantCode={profile.merchantCode}
-        onSave={(newProd) => {
-          addProducts([newProd]);
+        onSave={async (newProd) => {
+          return await addProducts([newProd]);
         }}
       />
     </div>

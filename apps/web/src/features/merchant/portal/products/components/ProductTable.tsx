@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
-import Image from 'next/image';
 import {
   Printer,
   Edit2,
@@ -11,13 +11,26 @@ import {
   Layers,
   FileText,
   Eye,
-  Package,
   CheckSquare,
   Square,
+  CheckCircle2,
+  Clock,
+  ArrowUpRight,
+  RotateCcw,
 } from 'lucide-react';
 import { ProductTableProps } from '../types';
 import { MerchantExpandableCard } from '../../components/common/MerchantExpandableCard';
 import { ProductThumbnail } from './ProductThumbnail';
+import { MerchantProductItem } from '../../types';
+
+export const isPendingApprovalProductItem = (p: MerchantProductItem): boolean => {
+  return (
+    p.status === 'PENDING_APPROVAL' ||
+    !p.bin ||
+    p.bin === 'Pending Approval' ||
+    p.bin === 'Assigned on intake'
+  );
+};
 
 export function ProductTable({
   products,
@@ -31,33 +44,86 @@ export function ProductTable({
   onPrintBarcode,
   onRequestDelete,
 }: ProductTableProps) {
+  const [mounted, setMounted] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [menuCoords, setMenuCoords] = useState<{ top: number; right: number; openUpward: boolean } | null>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const isAllSelected = products.length > 0 && selectedIds.length === products.length;
 
+  // Auto-close floating dropdown on window scroll or resize
+  useEffect(() => {
+    const handleClose = () => {
+      if (activeMenuId) {
+        setActiveMenuId(null);
+        setMenuCoords(null);
+      }
+    };
+    window.addEventListener('scroll', handleClose, true);
+    window.addEventListener('resize', handleClose);
+    return () => {
+      window.removeEventListener('scroll', handleClose, true);
+      window.removeEventListener('resize', handleClose);
+    };
+  }, [activeMenuId]);
+
+  const handleToggleMenu = (id: string, e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    if (activeMenuId === id) {
+      setActiveMenuId(null);
+      setMenuCoords(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const menuHeight = 250;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
+    // Open upward if space below is insufficient AND space above is greater
+    const openUpward = (spaceBelow < menuHeight && spaceAbove >= spaceBelow) || spaceBelow < 180;
+
+    let top = openUpward ? rect.top - menuHeight - 6 : rect.bottom + 6;
+
+    // Viewport safety clamp: Never hide above top of screen or below bottom of screen!
+    const minTop = 10;
+    const maxTop = Math.max(minTop, window.innerHeight - menuHeight - 10);
+    top = Math.max(minTop, Math.min(top, maxTop));
+
+    const right = Math.max(16, window.innerWidth - rect.right);
+
+    setMenuCoords({ top, right, openUpward });
+    setActiveMenuId(id);
+  };
+
+  const activeProduct = activeMenuId ? products.find((p) => p.id === activeMenuId) : null;
+  const isActiveProductPending = activeProduct ? isPendingApprovalProductItem(activeProduct) : false;
+
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden shadow-sm">
+    <div className="rounded-xl border border-slate-200/80 dark:border-white/10 bg-white dark:bg-navy-900 overflow-hidden shadow-xs">
       {/* ============================================================== */}
       {/* 1. MOBILE RESPONSIVE CARDS VIEW (Visible on screens < 768px)  */}
       {/* ============================================================== */}
       <div className="block md:hidden">
         {/* Mobile "Select All" Bar */}
-        <div className="p-3 bg-slate-950/70 border-b border-slate-800 flex items-center justify-between text-xs">
+        <div className="p-3 bg-slate-50 dark:bg-navy-950/70 border-b border-slate-200 dark:border-white/10 flex items-center justify-between text-xs">
           <button
             type="button"
             onClick={onToggleSelectAll}
-            className="flex items-center gap-2 text-slate-300 font-semibold hover:text-white transition-colors"
+            className="flex items-center gap-2 text-slate-700 dark:text-slate-300 font-semibold hover:text-navy-900 dark:hover:text-white transition-colors cursor-pointer"
           >
             {isAllSelected ? (
-              <CheckSquare className="h-4 w-4 text-emerald-400" />
+              <CheckSquare className="h-4 w-4 text-emerald-500" />
             ) : (
-              <Square className="h-4 w-4 text-slate-500" />
+              <Square className="h-4 w-4 text-slate-400" />
             )}
             <span>Select All ({products.length} products)</span>
           </button>
 
           {selectedIds.length > 0 && (
-            <span className="text-[11px] font-mono text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+            <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
               {selectedIds.length} selected
             </span>
           )}
@@ -67,12 +133,10 @@ export function ProductTable({
         <div className="p-2 sm:p-3 space-y-2.5">
           {products.map((p) => {
             const isSelected = selectedIds.includes(p.id);
-            const isPublished = p.status === 'PUBLISHED' || (!p.status && p.stock > 0);
-            const isPendingApproval =
-              !isPublished &&
-              (!p.bin || p.bin === 'Pending Approval' || p.bin === 'Assigned on intake');
-            const isLowStock = p.stock <= 30 && p.stock > 0;
-            const isOutOfStock = p.stock === 0;
+            const isPendingApproval = isPendingApprovalProductItem(p);
+            const isDraft = !isPendingApproval && p.status === 'DRAFT';
+            const isOutOfStock = !isPendingApproval && !isDraft && p.stock === 0;
+            const isLowStock = !isPendingApproval && !isDraft && p.stock > 0 && p.stock <= 30;
 
             return (
               <MerchantExpandableCard
@@ -80,43 +144,44 @@ export function ProductTable({
                 isSelected={isSelected}
                 onToggleSelect={() => onToggleSelect(p.id)}
                 statusBadge={
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onToggleStatus(p.id);
-                    }}
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-all cursor-pointer ${
-                      isPublished
-                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                        : isPendingApproval
-                        ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-                        : 'bg-slate-800 text-slate-400 border-slate-700'
-                    }`}
-                    title={
+                  <span
+                    className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border select-none ${
                       isPendingApproval
-                        ? 'Awaiting Admin Approval'
-                        : 'Click to toggle status'
-                    }
+                        ? 'bg-amber-500/15 text-amber-600 dark:text-amber-300 border-amber-500/30'
+                        : isDraft
+                        ? 'bg-slate-100 dark:bg-navy-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10'
+                        : isOutOfStock
+                        ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
+                        : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                    }`}
                   >
-                    {isPublished
-                      ? '● Published'
-                      : isPendingApproval
-                      ? '⏳ Pending Approval'
-                      : '○ Draft'}
-                  </button>
+                    {isPendingApproval
+                      ? 'PENDING APPROVAL'
+                      : isDraft
+                      ? 'DRAFT'
+                      : isOutOfStock
+                      ? 'OUT OF STOCK'
+                      : 'PUBLISHED'}
+                  </span>
                 }
                 row1={
-                  <div className="flex items-center gap-2 min-w-0">
-                    <ProductThumbnail src={p.imageUrl} alt={p.title} size="md" />
-                    <div className="min-w-0 flex-1">
-                      <span className="font-mono text-[10px] text-emerald-400 font-bold bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
-                        {p.sku}
-                      </span>
-                      {p.category && (
-                        <span className="text-[11px] text-slate-400 font-medium ml-1.5 truncate">
-                          {p.category}
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="font-mono text-[11px] font-bold text-orange-600 dark:text-orange-400 bg-orange-500/10 px-1.5 py-0.5 rounded border border-orange-500/20">
+                      {p.sku}
+                    </span>
+                    <span className="text-slate-400 text-[11px]">•</span>
+                    <span className="text-slate-500 dark:text-slate-400 text-[11px] truncate">{p.category || 'General'}</span>
+                    <div className="ml-auto font-mono text-[10px]">
+                      {isPendingApproval ? (
+                        <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-bold">
+                          Pending Review
                         </span>
+                      ) : p.bin && p.bin !== 'Pending Approval' && p.bin !== 'Assigned on intake' ? (
+                        <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-bold">
+                          {p.bin}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">Unassigned</span>
                       )}
                     </div>
                   </div>
@@ -125,86 +190,61 @@ export function ProductTable({
                   <Link
                     href={`/merchant/products/${p.id}`}
                     onClick={(e) => e.stopPropagation()}
-                    className="font-bold text-xs text-slate-100 hover:text-emerald-400 transition-colors line-clamp-1 block cursor-pointer"
+                    className="font-bold text-xs text-navy-900 dark:text-white hover:text-orange-600 dark:hover:text-orange-400 transition-colors line-clamp-1 block cursor-pointer"
                   >
                     {p.title}
                   </Link>
                 }
                 row3={
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-mono text-xs font-extrabold text-slate-100">
+                    <span className="font-mono text-xs font-extrabold text-navy-900 dark:text-white">
                       ৳{p.price.toLocaleString()}
                     </span>
-                    <span className="text-slate-600 text-[10px]">•</span>
-                    {isOutOfStock ? (
-                      <span className="text-[10px] font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20">
-                        Out of stock
+                    <span className="text-slate-400 text-[11px]">•</span>
+                    <div className="flex items-center gap-1.5 text-[11px]">
+                      <span className="text-slate-400 font-medium">Stock:</span>
+                      <span
+                        className={`font-mono font-bold ${
+                          isOutOfStock
+                            ? 'text-rose-500'
+                            : isLowStock
+                            ? 'text-amber-600 dark:text-amber-400'
+                            : 'text-navy-900 dark:text-white'
+                        }`}
+                      >
+                        {p.stock}
                       </span>
-                    ) : isLowStock ? (
-                      <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                        {p.stock} left (Low)
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                        {p.stock} in stock
-                      </span>
-                    )}
-                  </div>
-                }
-                expandedContent={
-                  <div className="space-y-2.5">
-                    {/* Barcode & Stock breakdown */}
-                    <div className="grid grid-cols-2 gap-2 text-[11px]">
-                      <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
-                        <span className="text-slate-500 text-[10px] uppercase font-semibold block">Barcode</span>
-                        <span className="font-mono font-bold text-slate-200 block mt-0.5 truncate">{p.barcode}</span>
-                        <span className="text-slate-500 text-[10px]">Bin: {p.bin || 'Intake bin'}</span>
-                      </div>
-                      <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
-                        <span className="text-slate-500 text-[10px] uppercase font-semibold block">Warehouse Stock</span>
-                        <span className="font-mono font-bold text-emerald-400 block mt-0.5">{p.stock} units</span>
-                        <span className="text-slate-400 text-[10px]">{p.reserved} reserved</span>
-                      </div>
                     </div>
                   </div>
                 }
-                actions={
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => onManageStock(p)}
-                      className="flex-1 min-w-[100px] py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-slate-700/80 cursor-pointer"
-                    >
-                      <Layers className="h-3.5 w-3.5 text-emerald-400" />
-                      <span>Manage Stock</span>
-                    </button>
+                expandedContent={
+                  <div className="space-y-3 pt-1">
+                    {/* Secondary details */}
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="p-2 rounded-lg bg-slate-50 dark:bg-navy-950 border border-slate-200/80 dark:border-white/10">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 block">Barcode</span>
+                        <span className="font-mono text-xs text-slate-700 dark:text-slate-300">{p.barcode || p.sku}</span>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-50 dark:bg-navy-950 border border-slate-200/80 dark:border-white/10">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 block">Warehouse Bin</span>
+                        <span className="font-mono text-xs text-amber-600 dark:text-amber-400 font-bold">
+                          {isPendingApproval ? 'Pending Review' : p.bin || 'Unassigned'}
+                        </span>
+                      </div>
+                    </div>
 
-                    <button
-                      type="button"
-                      onClick={() => onPrintBarcode(p)}
-                      className="flex-1 min-w-[90px] py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-slate-700/80 cursor-pointer"
-                    >
-                      <Printer className="h-3.5 w-3.5 text-indigo-400" />
-                      <span>Barcode</span>
-                    </button>
-
-                    <Link
-                      href={`/merchant/products/${p.id}/edit`}
-                      className="py-2 px-3.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-slate-700/80 cursor-pointer shrink-0"
-                    >
-                      <Edit2 className="h-3.5 w-3.5 text-slate-300" />
-                      <span>Edit</span>
-                    </Link>
-
-                    <button
-                      type="button"
-                      onClick={() => onRequestDelete(p)}
-                      className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-semibold flex items-center justify-center transition-colors cursor-pointer shrink-0"
-                      title="Delete Product"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </>
+                    {/* Actions button for mobile */}
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-white/10">
+                      <button
+                        type="button"
+                        onClick={(e) => handleToggleMenu(p.id, e)}
+                        className="px-3.5 py-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-200 dark:border-white/10"
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                        <span>Product Actions</span>
+                      </button>
+                    </div>
+                  </div>
                 }
               />
             );
@@ -213,236 +253,165 @@ export function ProductTable({
       </div>
 
       {/* ============================================================== */}
-      {/* 2. DESKTOP / TABLET DATA TABLE VIEW (Visible on screens >= 768px) */}
+      {/* 2. DESKTOP FULL DATA TABLE VIEW                                */}
       {/* ============================================================== */}
       <div className="hidden md:block overflow-x-auto">
-        <table className="w-full min-w-[760px] text-left text-sm">
-          <thead className="bg-slate-950/60 text-slate-400 text-xs uppercase tracking-wider font-semibold border-b border-slate-800">
-            <tr>
-              <th className="p-4 w-12 text-center">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="border-b border-slate-200/80 dark:border-white/10 bg-slate-50/70 dark:bg-navy-950/60 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider select-none">
+              <th className="py-3 px-3.5 w-10 text-center">
                 <input
                   type="checkbox"
                   checked={isAllSelected}
                   onChange={onToggleSelectAll}
                   aria-label="Select all products"
-                  className="rounded border-slate-700 bg-slate-800 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-0 cursor-pointer h-4 w-4"
+                  className="rounded border-slate-300 dark:border-white/20 bg-white dark:bg-navy-900 text-orange-600 focus:ring-orange-500/20 h-4 w-4 cursor-pointer"
                 />
               </th>
-              <th className="p-4">Product</th>
-              <th className="p-4">Declared Value</th>
-              <th className="p-4">Stock</th>
-              <th className="p-4 text-right">Actions</th>
+              <th className="py-3 px-3.5">Product & SKU</th>
+              <th className="py-3 px-3.5">Category</th>
+              <th className="py-3 px-3.5">Location / Bin</th>
+              <th className="py-3 px-3.5 text-center">Warehouse Stock</th>
+              <th className="py-3 px-3.5 text-right">Price</th>
+              <th className="py-3 px-3.5 text-center">Status</th>
+              <th className="py-3 px-3.5 text-center w-20">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800/80">
+          <tbody className="divide-y divide-slate-100 dark:divide-white/5 text-xs text-slate-700 dark:text-slate-200">
             {products.map((p) => {
               const isSelected = selectedIds.includes(p.id);
-              const isPublished = p.status === 'PUBLISHED' || (!p.status && p.stock > 0);
-              const isPendingApproval =
-                !isPublished &&
-                (!p.bin || p.bin === 'Pending Approval' || p.bin === 'Assigned on intake');
-              const isLowStock = p.stock <= 30 && p.stock > 0;
-              const isOutOfStock = p.stock === 0;
+              const isPendingApproval = isPendingApprovalProductItem(p);
+              const isDraft = !isPendingApproval && p.status === 'DRAFT';
+              const isOutOfStock = !isPendingApproval && !isDraft && p.stock === 0;
+              const isLowStock = !isPendingApproval && !isDraft && p.stock > 0 && p.stock <= 30;
 
               return (
                 <tr
                   key={p.id}
-                  className={`transition-colors hover:bg-slate-800/40 ${
-                    isSelected ? 'bg-emerald-950/10' : ''
+                  className={`hover:bg-slate-50/80 dark:hover:bg-navy-800/40 transition-colors ${
+                    isSelected ? 'bg-orange-50/30 dark:bg-orange-950/15' : ''
                   }`}
                 >
-                  {/* Row Checkbox */}
-                  <td className="p-4 text-center">
+                  {/* Select Checkbox */}
+                  <td className="py-3.5 px-3.5 text-center">
                     <input
                       type="checkbox"
                       checked={isSelected}
                       onChange={() => onToggleSelect(p.id)}
                       aria-label={`Select ${p.title}`}
-                      className="rounded border-slate-700 bg-slate-800 text-emerald-500 focus:ring-emerald-500/20 focus:ring-offset-0 cursor-pointer h-4 w-4"
+                      className="rounded border-slate-300 dark:border-white/20 bg-white dark:bg-navy-900 text-orange-600 focus:ring-orange-500/20 h-4 w-4 cursor-pointer"
                     />
                   </td>
 
-                  {/* Product Details */}
-                  <td className="p-4">
+                  {/* Product Title, Image & SKU */}
+                  <td className="py-3.5 px-3.5">
                     <div className="flex items-center gap-3">
-                      {/* Product Thumbnail */}
-                      <Link
-                        href={`/merchant/products/${p.id}`}
-                        className="cursor-pointer hover:opacity-90 transition-opacity"
-                      >
-                        <ProductThumbnail src={p.imageUrl} alt={p.title} size="lg" />
-                      </Link>
-
-                      {/* Title & SKU info */}
+                      <ProductThumbnail
+                        src={p.imageUrl}
+                        alt={p.title}
+                        size="md"
+                        className="rounded-lg border border-slate-200 dark:border-white/10 shrink-0"
+                      />
                       <div className="min-w-0">
                         <Link
                           href={`/merchant/products/${p.id}`}
-                          className="font-semibold text-slate-200 hover:text-emerald-400 transition-colors text-sm text-left truncate block max-w-xs sm:max-w-sm cursor-pointer"
+                          className="font-bold text-navy-900 dark:text-white hover:text-orange-600 dark:hover:text-orange-400 transition-colors truncate block max-w-xs cursor-pointer"
+                          title={p.title}
                         >
                           {p.title}
                         </Link>
-                        <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400 flex-wrap">
-                          {p.category && (
-                            <span className="text-slate-400 font-medium">
-                              {p.category}
-                            </span>
-                          )}
-                          <span className="font-mono text-[11px] text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="font-mono text-[11px] font-semibold text-orange-600 dark:text-orange-400 bg-orange-500/10 px-1.5 py-0.5 rounded border border-orange-500/20">
                             {p.sku}
+                          </span>
+                          <span className="text-[11px] text-slate-400 font-mono">
+                            {p.barcode || p.sku}
                           </span>
                         </div>
                       </div>
                     </div>
                   </td>
 
-                  {/* Declared Value */}
-                  <td className="p-4">
-                    <div className="font-bold text-slate-100 text-sm">
-                      ৳{p.price.toLocaleString()}
-                    </div>
-                    <div className="text-[11px] text-slate-500 mt-0.5">
-                      Replacement worth
-                    </div>
+                  {/* Category */}
+                  <td className="py-3.5 px-3.5 text-slate-600 dark:text-slate-300">
+                    <span className="inline-block px-2 py-0.5 rounded bg-slate-100 dark:bg-navy-950 text-[11px] font-medium border border-slate-200/60 dark:border-white/10">
+                      {p.category || 'General'}
+                    </span>
                   </td>
 
-                  {/* Stock */}
-                  <td className="p-4">
-                    <div>
-                      {isOutOfStock ? (
-                        <span className="text-xs font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20">
-                          Out of stock
-                        </span>
-                      ) : isLowStock ? (
-                        <span className="text-xs font-bold text-amber-400">
-                          {p.stock} left
-                        </span>
-                      ) : (
-                        <span className="text-xs text-slate-200 font-semibold font-mono">
-                          {p.stock} in stock
-                        </span>
-                      )}
-                      {p.reserved > 0 && (
-                        <div className="text-[10px] text-slate-500 mt-0.5">
-                          ({p.reserved} reserved)
-                        </div>
-                      )}
-                    </div>
+                  {/* Warehouse Bin Location: When pending approval, shows clear badge */}
+                  <td className="py-3.5 px-3.5">
+                    {isPendingApproval ? (
+                      <span className="inline-flex items-center gap-1.5 font-mono text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-300 dark:border-amber-500/20">
+                        <Clock className="h-3 w-3 text-amber-500" />
+                        <span>Pending Admin Review</span>
+                      </span>
+                    ) : p.bin && p.bin !== 'Pending Approval' && p.bin !== 'Assigned on intake' ? (
+                      <span className="font-mono text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                        {p.bin}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-slate-400 font-medium">Unassigned</span>
+                    )}
                   </td>
 
-                  {/* Actions */}
-                  <td className="p-4 text-right">
-                    <div className="flex items-center justify-end gap-2 relative">
-                      {/* Status Badge / Toggle Button */}
+                  {/* Warehouse Stock Units: ONLY the stock number, colored by status */}
+                  <td className="py-3.5 px-3.5 text-center font-mono">
+                    <span
+                      className={`font-extrabold text-sm ${
+                        isOutOfStock
+                          ? 'text-rose-500'
+                          : isLowStock
+                          ? 'text-amber-600 dark:text-amber-400'
+                          : 'text-navy-900 dark:text-white'
+                      }`}
+                    >
+                      {p.stock}
+                    </span>
+                  </td>
+
+                  {/* Price */}
+                  <td className="py-3.5 px-3.5 text-right font-mono font-bold text-navy-900 dark:text-white text-sm">
+                    ৳{p.price.toLocaleString()}
+                  </td>
+
+                  {/* Status Column: PURE INFORMATIVE TEXT BADGE (NOT a button!) */}
+                  <td className="py-3.5 px-3.5 text-center">
+                    <span
+                      className={`inline-flex items-center justify-center text-[11px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-full border select-none mx-auto ${
+                        isPendingApproval
+                          ? 'bg-amber-500/15 text-amber-600 dark:text-amber-300 border-amber-500/30'
+                          : isDraft
+                          ? 'bg-slate-100 dark:bg-navy-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10'
+                          : isOutOfStock
+                          ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
+                          : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                      }`}
+                    >
+                      {isPendingApproval
+                        ? 'Pending Approval'
+                        : isDraft
+                        ? 'Draft'
+                        : isOutOfStock
+                        ? 'Out of Stock'
+                        : 'Published'}
+                    </span>
+                  </td>
+
+                  {/* Actions Column: ONLY the clean 3-dots trigger button! */}
+                  <td className="py-3.5 px-3.5 text-center">
+                    <div className="flex items-center justify-center">
                       <button
                         type="button"
-                        onClick={() => onToggleStatus(p.id)}
-                        className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-all flex items-center gap-1.5 cursor-pointer shadow-sm ${
-                          isPublished
-                            ? 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border-emerald-500/30'
-                            : isPendingApproval
-                            ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/30'
-                            : 'bg-slate-800/90 hover:bg-slate-700 text-slate-300 border-slate-700'
+                        onClick={(e) => handleToggleMenu(p.id, e)}
+                        className={`p-2 rounded-xl text-slate-500 hover:text-navy-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-navy-800 transition-colors cursor-pointer border border-transparent hover:border-slate-200 dark:hover:border-white/10 ${
+                          activeMenuId === p.id ? 'bg-slate-100 dark:bg-navy-800 text-orange-600 dark:text-orange-400 border-slate-200 dark:border-white/10' : ''
                         }`}
-                        title={
-                          isPendingApproval
-                            ? 'Awaiting Admin Approval'
-                            : isPublished
-                            ? 'Published (Click to set as Draft)'
-                            : 'Draft (Click to Publish)'
-                        }
+                        aria-label="Actions menu"
+                        title="Actions"
                       >
-                        {isPublished ? (
-                          <>
-                            <Eye className="h-3 w-3 text-emerald-400" />
-                            <span>Published</span>
-                          </>
-                        ) : isPendingApproval ? (
-                          <>
-                            <FileText className="h-3 w-3 text-amber-400" />
-                            <span>Pending Approval</span>
-                          </>
-                        ) : (
-                          <>
-                            <FileText className="h-3 w-3 text-slate-400" />
-                            <span>Draft</span>
-                          </>
-                        )}
+                        <MoreVertical className="h-4 w-4" />
                       </button>
-
-                      {/* Action Menu (⋮) */}
-                      <div className="relative">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setActiveMenuId(activeMenuId === p.id ? null : p.id)
-                          }
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors cursor-pointer"
-                          aria-label="More actions"
-                        >
-                          <MoreVertical className="h-4 w-4" />
-                        </button>
-
-                        {activeMenuId === p.id && (
-                          <>
-                            <div
-                              className="fixed inset-0 z-20"
-                              onClick={() => setActiveMenuId(null)}
-                            />
-                            <div className="absolute right-0 mt-1 w-48 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl py-1 z-30 animate-in fade-in zoom-in-95 text-left">
-                              <Link
-                                href={`/merchant/products/${p.id}`}
-                                onClick={() => setActiveMenuId(null)}
-                                className="w-full px-3 py-2 text-xs text-slate-300 hover:bg-slate-800 flex items-center gap-2 cursor-pointer"
-                              >
-                                <Eye className="h-3.5 w-3.5 text-sky-400" />
-                                <span>View Product Details</span>
-                              </Link>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setActiveMenuId(null);
-                                  onManageStock(p);
-                                }}
-                                className="w-full px-3 py-2 text-xs text-slate-300 hover:bg-slate-800 flex items-center gap-2 cursor-pointer"
-                              >
-                                <Layers className="h-3.5 w-3.5 text-emerald-400" />
-                                <span>Manage Stock</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setActiveMenuId(null);
-                                  onPrintBarcode(p);
-                                }}
-                                className="w-full px-3 py-2 text-xs text-slate-300 hover:bg-slate-800 flex items-center gap-2 cursor-pointer"
-                              >
-                                <Printer className="h-3.5 w-3.5 text-indigo-400" />
-                                <span>Print Thermal Sticker</span>
-                              </button>
-                              <Link
-                                href={`/merchant/products/${p.id}/edit`}
-                                onClick={() => setActiveMenuId(null)}
-                                className="w-full px-3 py-2 text-xs text-slate-300 hover:bg-slate-800 flex items-center gap-2 cursor-pointer"
-                              >
-                                <Edit2 className="h-3.5 w-3.5 text-slate-400" />
-                                <span>Edit Product & Valuation</span>
-                              </Link>
-                              <div className="border-t border-slate-800 my-1" />
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setActiveMenuId(null);
-                                  onRequestDelete(p);
-                                }}
-                                className="w-full px-3 py-2 text-xs text-rose-400 hover:bg-rose-500/10 flex items-center gap-2 cursor-pointer"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                                <span>Delete Product</span>
-                              </button>
-                            </div>
-                          </>
-                        )}
-                      </div>
                     </div>
                   </td>
                 </tr>
@@ -451,6 +420,157 @@ export function ProductTable({
           </tbody>
         </table>
       </div>
+
+      {/* ============================================================== */}
+      {/* 3. PORTALED VIEWPORT-SAFE FLOATING DROPDOWN (Zero-overflow clipping) */}
+      {/* ============================================================== */}
+      {mounted && activeMenuId && menuCoords && activeProduct && typeof document !== 'undefined' && createPortal(
+        <>
+          <div
+            className="fixed inset-0 z-[9998] bg-transparent"
+            onClick={() => {
+              setActiveMenuId(null);
+              setMenuCoords(null);
+            }}
+          />
+          <div
+            style={{
+              position: 'fixed',
+              top: `${menuCoords.top}px`,
+              right: `${menuCoords.right}px`,
+              zIndex: 9999,
+              maxHeight: 'calc(100vh - 20px)',
+            }}
+            className="w-52 rounded-2xl bg-white dark:bg-navy-900 border border-slate-200/90 dark:border-white/10 shadow-2xl py-1.5 animate-in fade-in zoom-in-95 text-left backdrop-blur-md overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* View Product Details */}
+            <Link
+              href={`/merchant/products/${activeProduct.id}`}
+              onClick={() => {
+                setActiveMenuId(null);
+                setMenuCoords(null);
+              }}
+              className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors"
+            >
+              <Eye className="h-3.5 w-3.5 text-sky-500" />
+              <span>View Product Details</span>
+            </Link>
+
+            {/* If pending approval, shows status notice; else allows Publish/Draft toggle */}
+            {isActiveProductPending ? (
+              <div className="px-3.5 py-2 text-xs text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-2 bg-amber-50/60 dark:bg-amber-950/20 border-y border-amber-200/50 dark:border-amber-500/20 my-1">
+                <Clock className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                <span>Awaiting Admin Approval</span>
+              </div>
+            ) : activeProduct.status === 'DRAFT' ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveMenuId(null);
+                  setMenuCoords(null);
+                  onToggleStatus(activeProduct.id);
+                }}
+                className="w-full px-3.5 py-2 text-xs text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 flex items-center gap-2 cursor-pointer transition-colors font-bold"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                <span>Publish to Store</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveMenuId(null);
+                  setMenuCoords(null);
+                  onToggleStatus(activeProduct.id);
+                }}
+                className="w-full px-3.5 py-2 text-xs text-amber-600 dark:text-amber-400 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors"
+              >
+                <FileText className="h-3.5 w-3.5 text-amber-500" />
+                <span>Move to Drafts</span>
+              </button>
+            )}
+
+            {/* Inbound Restock Request */}
+            <button
+              type="button"
+              onClick={() => {
+                setActiveMenuId(null);
+                setMenuCoords(null);
+                onManageStock(activeProduct, 'RESTOCK');
+              }}
+              className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors"
+            >
+              <ArrowUpRight className="h-3.5 w-3.5 text-emerald-500" />
+              <span>Request Inbound Restock (+Stock)</span>
+            </button>
+
+            {/* Product Return / Recall Request */}
+            <button
+              type="button"
+              onClick={() => {
+                setActiveMenuId(null);
+                setMenuCoords(null);
+                onManageStock(activeProduct, 'RETURN');
+              }}
+              className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors"
+            >
+              <RotateCcw className="h-3.5 w-3.5 text-orange-500" />
+              <span>Request Product Return / Recall (-Stock)</span>
+            </button>
+
+            {/* Thermal Barcode Sticker */}
+            <button
+              type="button"
+              onClick={() => {
+                setActiveMenuId(null);
+                setMenuCoords(null);
+                onPrintBarcode(activeProduct);
+              }}
+              className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors"
+            >
+              <Printer className="h-3.5 w-3.5 text-indigo-500" />
+              <span>Print Thermal Sticker</span>
+            </button>
+
+            {/* Edit */}
+            <Link
+              href={`/merchant/products/${activeProduct.id}/edit`}
+              onClick={() => {
+                setActiveMenuId(null);
+                setMenuCoords(null);
+              }}
+              className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors"
+            >
+              <Edit2 className="h-3.5 w-3.5 text-slate-400" />
+              <span>Edit Product & Valuation</span>
+            </Link>
+
+            <div className="border-t border-slate-100 dark:border-white/10 my-1" />
+
+            {/* Delete / Safe Delete */}
+            <button
+              type="button"
+              onClick={() => {
+                setActiveMenuId(null);
+                setMenuCoords(null);
+                onRequestDelete(activeProduct);
+              }}
+              className="w-full px-3.5 py-2 text-xs text-rose-500 hover:bg-rose-500/10 flex items-center gap-2 cursor-pointer transition-colors font-medium"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span>
+                {isActiveProductPending
+                  ? 'Cancel Submission'
+                  : activeProduct.status === 'DRAFT'
+                  ? 'Permanently Delete'
+                  : 'Move to Drafts (Delete)'}
+              </span>
+            </button>
+          </div>
+        </>,
+        document.body
+      )}
     </div>
   );
 }

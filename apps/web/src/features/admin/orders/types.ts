@@ -10,6 +10,17 @@ export type OrderStage =
 
 export type CourierPartner = 'Steadfast' | 'Pathao' | 'RedX';
 
+export interface OrderItem {
+  sku: string;
+  title: string;
+  image: string;
+  color: string;
+  size: string;
+  qty: number;
+  unitPrice: number;
+  bin: string;
+}
+
 export interface WarehousePipelineOrder {
   id: string;
   createdAt: string;
@@ -19,6 +30,7 @@ export interface WarehousePipelineOrder {
   customerPhone: string;
   customerAddress: string;
   city: string;
+  // single item fields for backward compatibility
   productTitle: string;
   productImage: string;
   bin: string;
@@ -27,12 +39,19 @@ export interface WarehousePipelineOrder {
   sku: string;
   qty: number;
   stockAvailable: number;
+  // multiple items support
+  items?: OrderItem[];
   memoCode: string;
   resellerName: string;
   resellerPhone: string;
   resellerAddress: string;
   resellerLogo?: string;
   codAmount: number;
+  subtotal?: number;
+  deliveryFee?: number;
+  discount?: number;
+  advancePayment?: number;
+  paymentStatus?: 'Paid' | 'Partial' | 'Unpaid';
   courier: CourierPartner;
   trackingCode?: string;
   stage: OrderStage;
@@ -92,3 +111,17 @@ export type PendingConfirmationAction =
       type: 'CANCEL_ORDER';
       orders: WarehousePipelineOrder[];
     };
+
+/**
+ * Format date string for Order table row (Today / Yesterday / Clean Date without time)
+ */
+export function formatOrderDate(createdAt: string): string {
+  if (!createdAt) return 'Today';
+  const lower = createdAt.toLowerCase();
+  if (lower.includes('today')) return 'Today';
+  if (lower.includes('yesterday')) return 'Yesterday';
+
+  // Strip timestamp part after comma or space
+  const withoutTime = createdAt.split(',')[0].trim();
+  return withoutTime || createdAt;
+}

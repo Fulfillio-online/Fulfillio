@@ -72,7 +72,7 @@ export function HomeHero({ onOpenRegister, onOpenLogin }: HomeHeroProps) {
             settle your COD cash — every week.
           </p>
           <p className="fx-in mt-2 text-sm text-navy-800/50 dark:text-white/40" style={{ ['--d' as string]: '260ms' }}>
-            আপনি শুধু বিক্রি করুন — বাকিটা আমাদের ওয়্যারহাউস সামলাবে।
+            Focus on sales — our automated warehouse fulfills the rest.
           </p>
 
           <div className="fx-in mt-7 flex flex-wrap items-center gap-3" style={{ ['--d' as string]: '320ms' }}>

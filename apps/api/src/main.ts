@@ -6,7 +6,7 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Increase payload limit to 50MB to support high-res Base64 product images
+  // Increase payload limit to 50MB to support high-res Base64 product images and variants without 413
   app.use(json({ limit: '50mb' }));
   app.use(urlencoded({ extended: true, limit: '50mb' }));
 

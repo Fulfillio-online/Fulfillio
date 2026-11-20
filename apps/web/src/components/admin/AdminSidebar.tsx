@@ -1,13 +1,14 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React from 'react';
 import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
   Users,
   Printer,
   Package,
+  MapPin,
   Boxes,
   Truck,
   RotateCcw,
@@ -15,8 +16,6 @@ import {
   CreditCard,
   Settings,
   HandCoins,
-  ChevronDown,
-  ChevronRight,
   LogOut,
 } from 'lucide-react';
 
@@ -27,14 +26,6 @@ interface AdminSidebarProps {
 
 export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
   const pathname = usePathname();
-  const [isProductsExpanded, setIsProductsExpanded] = useState(false);
-
-  // Auto-expand when active route matches
-  useEffect(() => {
-    if (pathname.startsWith('/admin/products')) {
-      setIsProductsExpanded(true);
-    }
-  }, [pathname]);
 
   const isCurrent = (path: string, exact = false) => {
     if (exact) return pathname === path;
@@ -132,50 +123,62 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
               Warehouse Section
             </span>
             <div className="mt-2 space-y-1">
-              {/* Products Collapsible Option + Sub-tabs */}
-              <div className="space-y-1">
-                <div
-                  onClick={() => setIsProductsExpanded((prev) => !prev)}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer select-none ${
-                    isCurrent('/admin/products')
-                      ? 'bg-orange-600 text-white shadow-sm'
-                      : 'text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-slate-100 hover:bg-slate-100/60 dark:hover:bg-navy-800/60'
-                  }`}
-                >
-                  <Link
-                    href="/admin/products"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setIsProductsExpanded(true);
-                      onClose();
-                    }}
-                    className="flex items-center gap-3 flex-1"
-                  >
-                    <Package className="h-4 w-4" />
-                    <span>Products</span>
-                  </Link>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] tabular-nums px-1.5 py-0.5 rounded bg-black/20">
-                      SKUs &amp; Bins
-                    </span>
-                    {isProductsExpanded ? (
-                      <ChevronDown className="h-3.5 w-3.5 text-navy-800 dark:text-white/80" />
-                    ) : (
-                      <ChevronRight className="h-3.5 w-3.5 text-slate-600 dark:text-slate-300" />
-                    )}
-                  </div>
-                </div>
+              {/* Products: Direct Menu Item */}
+              <Link
+                href="/admin/products"
+                onClick={onClose}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  isCurrent('/admin/products')
+                    ? 'bg-orange-600 text-white shadow-sm'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-slate-100 hover:bg-slate-100/60 dark:hover:bg-navy-800/60'
+                }`}
+              >
+                <span className="flex items-center gap-3">
+                  <Package className="h-4 w-4" />
+                  <span>Products</span>
+                </span>
+                <span className="text-[11px] tabular-nums px-1.5 py-0.5 rounded bg-black/20">
+                  Catalog
+                </span>
+              </Link>
 
-                {/* Sub-options under Products */}
-                {isProductsExpanded && (
-                  <Suspense fallback={<div className="ml-4 pl-3 border-l border-slate-200 dark:border-white/10 py-1" />}>
-                    <ProductsSubNav
-                      pathname={pathname}
-                      onItemClick={onClose}
-                    />
-                  </Suspense>
-                )}
-              </div>
+              {/* Inbound Restock: Dedicated Menu Item */}
+              <Link
+                href="/admin/inbound"
+                onClick={onClose}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  isCurrent('/admin/inbound')
+                    ? 'bg-orange-600 text-white shadow-sm'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-slate-100 hover:bg-slate-100/60 dark:hover:bg-navy-800/60'
+                }`}
+              >
+                <span className="flex items-center gap-3">
+                  <Truck className="h-4 w-4" />
+                  <span>Inbound Restock</span>
+                </span>
+                <span className="text-[11px] tabular-nums px-1.5 py-0.5 rounded bg-black/20">
+                  Receiving
+                </span>
+              </Link>
+
+              {/* Warehouse Bins: Dedicated Menu Item */}
+              <Link
+                href="/admin/bins"
+                onClick={onClose}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  isCurrent('/admin/bins')
+                    ? 'bg-orange-600 text-white shadow-sm'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-slate-100 hover:bg-slate-100/60 dark:hover:bg-navy-800/60'
+                }`}
+              >
+                <span className="flex items-center gap-3">
+                  <MapPin className="h-4 w-4" />
+                  <span>Warehouse Bins</span>
+                </span>
+                <span className="text-[11px] tabular-nums px-1.5 py-0.5 rounded bg-black/20">
+                  Slotting
+                </span>
+              </Link>
 
               {/* Orders Single Link */}
               <Link
@@ -233,14 +236,19 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
               <Link
                 href="/admin/stock"
                 onClick={onClose}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                   isCurrent('/admin/stock')
                     ? 'bg-orange-600 text-white shadow-sm'
                     : 'text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-slate-100 hover:bg-slate-100/60 dark:hover:bg-navy-800/60'
                 }`}
               >
-                <SlidersHorizontal className="h-4 w-4" />
-                <span>Stock &amp; Cycle Count</span>
+                <span className="flex items-center gap-3">
+                  <SlidersHorizontal className="h-4 w-4" />
+                  <span>Stock &amp; Cycle Count</span>
+                </span>
+                <span className="text-[11px] tabular-nums px-1.5 py-0.5 rounded bg-black/20">
+                  Ledger
+                </span>
               </Link>
             </div>
           </div>
@@ -321,48 +329,5 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
         </div>
       </div>
     </aside>
-  );
-}
-
-function ProductsSubNav({
-  pathname,
-  onItemClick,
-}: {
-  pathname: string;
-  onItemClick: () => void;
-}) {
-  const searchParams = useSearchParams();
-  const isProductsRoute = pathname.startsWith('/admin/products');
-  const currentTab = searchParams.get('tab') || 'all';
-
-  const subOptions = [
-    { tab: 'all', label: 'All Products' },
-    { tab: 'approval', label: 'Product Approval' },
-    { tab: 'bins', label: 'Warehouse Bins' },
-  ];
-
-  return (
-    <div className="ml-4 pl-3 border-l border-slate-200 dark:border-white/10 space-y-0.5 py-1">
-      {subOptions.map((sub) => {
-        const isActive = isProductsRoute && currentTab === sub.tab;
-        return (
-          <Link
-            key={sub.tab}
-            href={`/admin/products?tab=${sub.tab}`}
-            onClick={onItemClick}
-            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-medium transition-all ${
-              isActive
-                ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400 font-semibold border border-orange-500/30 shadow-2xs'
-                : 'text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-slate-100 hover:bg-slate-100/40 dark:hover:bg-navy-800/40'
-            }`}
-          >
-            <span>{sub.label}</span>
-            {isActive && (
-              <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shadow-2xs shadow-orange-500" />
-            )}
-          </Link>
-        );
-      })}
-    </div>
   );
 }

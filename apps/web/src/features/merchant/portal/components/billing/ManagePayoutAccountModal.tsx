@@ -70,16 +70,16 @@ export function ManagePayoutAccountModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="w-full max-w-lg rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl p-5 sm:p-6 space-y-5">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+    <div className="fixed inset-0 z-50 bg-slate-50 dark:bg-navy-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div className="w-full max-w-lg rounded-2xl bg-white dark:bg-navy-900 border border-slate-200/80 dark:border-white/10 shadow-2xl p-5 sm:p-6 space-y-5">
+        <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-white/10 pb-3">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
               <CheckCircle2 className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-bold text-base text-slate-100">Manage Payout Account</h3>
-              <p className="text-xs text-slate-400">
+              <h3 className="font-bold text-base text-navy-900 dark:text-white">Manage Payout Account</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 Configure your verified bank or mobile wallet for automatic disbursements.
               </p>
             </div>
@@ -87,7 +87,7 @@ export function ManagePayoutAccountModal({
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+            className="p-1 rounded-lg text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:text-slate-200 hover:bg-slate-100 dark:bg-navy-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -96,7 +96,7 @@ export function ManagePayoutAccountModal({
         <form onSubmit={handleSave} className="space-y-4">
           {/* Method Type */}
           <div>
-            <label className="text-xs font-semibold text-slate-300 block mb-1.5">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1.5">
               Account Type
             </label>
             <div className="grid grid-cols-3 gap-2">
@@ -106,7 +106,7 @@ export function ManagePayoutAccountModal({
                 className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition-all ${
                   providerType === 'BKASH'
                     ? 'border-emerald-500 bg-emerald-500/10 text-emerald-300'
-                    : 'border-slate-800 bg-slate-950/60 text-slate-400 hover:text-slate-200'
+                    : 'border-slate-200/80 dark:border-white/10 bg-slate-50 dark:bg-navy-950/60 text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:text-slate-200'
                 }`}
               >
                 <Smartphone className="w-4 h-4" />
@@ -119,7 +119,7 @@ export function ManagePayoutAccountModal({
                 className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition-all ${
                   providerType === 'NAGAD'
                     ? 'border-emerald-500 bg-emerald-500/10 text-emerald-300'
-                    : 'border-slate-800 bg-slate-950/60 text-slate-400 hover:text-slate-200'
+                    : 'border-slate-200/80 dark:border-white/10 bg-slate-50 dark:bg-navy-950/60 text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:text-slate-200'
                 }`}
               >
                 <Smartphone className="w-4 h-4" />
@@ -132,7 +132,7 @@ export function ManagePayoutAccountModal({
                 className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition-all ${
                   providerType === 'BANK'
                     ? 'border-emerald-500 bg-emerald-500/10 text-emerald-300'
-                    : 'border-slate-800 bg-slate-950/60 text-slate-400 hover:text-slate-200'
+                    : 'border-slate-200/80 dark:border-white/10 bg-slate-50 dark:bg-navy-950/60 text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:text-slate-200'
                 }`}
               >
                 <Building2 className="w-4 h-4" />
@@ -143,7 +143,7 @@ export function ManagePayoutAccountModal({
 
           {providerType === 'BANK' && (
             <div>
-              <label className="text-xs font-semibold text-slate-400 block mb-1">
+              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-1">
                 Bank Name
               </label>
               <input
@@ -152,13 +152,13 @@ export function ManagePayoutAccountModal({
                 onChange={(e) => setProvider(e.target.value)}
                 placeholder="e.g. BRAC Bank PLC, City Bank PLC"
                 required
-                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200/80 dark:border-white/10 text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
               />
             </div>
           )}
 
           <div>
-            <label className="text-xs font-semibold text-slate-400 block mb-1">
+            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-1">
               Account Holder Name
             </label>
             <input
@@ -167,12 +167,12 @@ export function ManagePayoutAccountModal({
               onChange={(e) => setAccountHolder(e.target.value)}
               placeholder="e.g. Tariqul Rahman / Official Business Name"
               required
-              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200/80 dark:border-white/10 text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
             />
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-400 block mb-1">
+            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-1">
               {providerType === 'BANK' ? 'Bank Account Number' : 'Mobile Wallet Number'}
             </label>
             <input
@@ -181,14 +181,14 @@ export function ManagePayoutAccountModal({
               onChange={(e) => setAccountNumber(e.target.value)}
               placeholder={providerType === 'BANK' ? '150120489...' : '017xx-xxxxxx'}
               required
-              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs font-mono text-slate-200 focus:outline-none focus:border-emerald-500"
+              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200/80 dark:border-white/10 text-xs font-mono text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
             />
           </div>
 
           {providerType === 'BANK' && (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-semibold text-slate-400 block mb-1">
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-1">
                   Branch Name
                 </label>
                 <input
@@ -196,12 +196,12 @@ export function ManagePayoutAccountModal({
                   value={branchName}
                   onChange={(e) => setBranchName(e.target.value)}
                   placeholder="e.g. Banani Branch"
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200/80 dark:border-white/10 text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-400 block mb-1">
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-1">
                   Routing Number
                 </label>
                 <input
@@ -209,20 +209,20 @@ export function ManagePayoutAccountModal({
                   value={routingNumber}
                   onChange={(e) => setRoutingNumber(e.target.value)}
                   placeholder="e.g. 060261122"
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs font-mono text-slate-200 focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200/80 dark:border-white/10 text-xs font-mono text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
                 />
               </div>
             </div>
           )}
 
           <div>
-            <label className="text-xs font-semibold text-slate-400 block mb-1">
+            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-1">
               Disbursement Frequency
             </label>
             <select
               value={frequency}
               onChange={(e) => setFrequency(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200/80 dark:border-white/10 text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
             >
               <option value="Weekly (Every Friday)">Weekly (Every Friday)</option>
               <option value="Bi-Weekly (1st & 15th)">Bi-Weekly (1st & 15th)</option>
@@ -235,7 +235,7 @@ export function ManagePayoutAccountModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-colors"
+              className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-300 font-semibold text-xs transition-colors"
             >
               Cancel
             </button>

@@ -49,7 +49,7 @@ export function UnifiedThermalSticker({
   trackingCode = 'TRK-STE-202699',
   packagingType = 'POLY_SMALL',
   items,
-  footerTerms = 'পণ্য গ্রহণের সময় ডেলিভারি ম্যানের সামনে চেক করে নিন। ডেলিভারির ৭ দিনের মধ্যে এক্সচেঞ্জযোগ্য।',
+  footerTerms = 'Please inspect parcel before accepting. 7-day exchange available with unboxing video.',
 }: UnifiedThermalStickerProps) {
   return (
     <div
@@ -93,7 +93,7 @@ export function UnifiedThermalSticker({
       <div className="grid grid-cols-12 gap-2 py-2.5 border-b-2 border-black items-center">
         <div className="col-span-7 pr-1">
           <p className="text-[9px] font-bold uppercase tracking-wider text-neutral-500">
-            Deliver To (প্রাপক):
+            Deliver To:
           </p>
           <p className="text-sm font-black text-black leading-tight">{customerName}</p>
           <p className="text-xs font-extrabold font-mono text-black mt-0.5">{customerPhone}</p>

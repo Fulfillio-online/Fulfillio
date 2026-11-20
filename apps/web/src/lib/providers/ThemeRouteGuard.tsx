@@ -4,12 +4,18 @@ import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 
 /**
- * The marketing home page and the admin panel follow the device / user theme (light | dark).
- * Every other area (merchant, warehouse/worker, login, print) is dark-only, so force `dark` there.
+ * The marketing home page, the admin panel, and the merchant portal follow the device / user theme (light | dark).
+ * Every other area (warehouse/worker, login, print) is dark-only, so force `dark` there.
  */
 export function isThemedRoute(pathname: string | null): boolean {
   if (!pathname) return false;
-  return pathname === '/' || pathname === '/admin' || pathname.startsWith('/admin/');
+  return (
+    pathname === '/' ||
+    pathname === '/admin' ||
+    pathname.startsWith('/admin/') ||
+    pathname === '/merchant' ||
+    pathname.startsWith('/merchant/')
+  );
 }
 
 export function ThemeRouteGuard() {
