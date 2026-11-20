@@ -20,6 +20,7 @@ export interface ProductVariantConfig {
   variantSku: string;
   color?: string;
   size?: string;
+  imageUrl?: string;
   attributeName?: string;
   attributeValue?: string;
   stock: number;
@@ -57,6 +58,9 @@ export interface StockRequestItem {
   productId: string;
   productTitle: string;
   productSku: string;
+  variantSku?: string;
+  color?: string;
+  size?: string;
   type?: StockRequestType;
   requestedQty: number;
   currentStock: number;

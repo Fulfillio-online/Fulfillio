@@ -15,12 +15,15 @@ export class InventoryService {
       description?: string;
       baseSku: string;
       imageUrl?: string;
+      images?: string[];
       variants: Array<{
         title: string;
         variantCode: string; // e.g., BLK-XL
         price: number;
         wholesalePrice?: number;
         defaultBinCode?: string;
+        initialStock?: number;
+        imageUrl?: string;
         attributes?: Record<string, any>;
       }>;
     },
@@ -54,22 +57,122 @@ export class InventoryService {
         price: v.price,
         wholesalePrice: v.wholesalePrice ?? v.price * 0.75,
         defaultBinCode: v.defaultBinCode || 'A-01-01',
+        initialStock: Math.max(0, Number(v.initialStock) || 0),
+        imageUrl: v.imageUrl || (v.attributes as any)?.imageUrl || payload.imageUrl,
         attributes: v.attributes || {},
       };
     });
 
+    // Compile all distinct images
+    const allImages = Array.from(
+      new Set(
+        [
+          payload.imageUrl,
+          ...(payload.images || []),
+          ...formattedVariants.map((fv) => fv.imageUrl),
+        ].filter((u): u is string => Boolean(u && u.trim()))
+      )
+    );
+
     return this.inventoryRepo.createProductWithVariants({
-      merchantId,
+      merchantId: merchant.id,
       title: payload.title,
       description: payload.description,
       baseSku: cleanBaseSku,
-      imageUrl: payload.imageUrl,
+      imageUrl: payload.imageUrl || allImages[0],
+      images: allImages,
       defaultLocationId: defaultLocation.id,
       variants: formattedVariants,
     });
   }
 
-  /**
+    /**
+   * Update an existing product and its variants
+   */
+  async updateProductWithVariants(
+    productId: string,
+    merchantId: string,
+    payload: {
+      title?: string;
+      description?: string;
+      baseSku?: string;
+      imageUrl?: string;
+      images?: string[];
+      variants?: Array<{
+        id?: string;
+        sku?: string;
+        barcode?: string;
+        title: string;
+        variantCode?: string;
+        price: number;
+        wholesalePrice?: number;
+        defaultBinCode?: string;
+        initialStock?: number;
+        imageUrl?: string;
+        attributes?: Record<string, any>;
+      }>;
+    },
+  ) {
+    const merchant = await this.inventoryRepo.findMerchantById(merchantId);
+    if (!merchant) {
+      throw new NotFoundException(`Merchant '${merchantId}' not found.`);
+    }
+
+    const defaultLocation = await this.inventoryRepo.upsertLocation({
+      zone: 'A',
+      aisle: '01',
+      rack: '01',
+      shelf: '01',
+      binCode: 'A-01-01',
+    });
+
+    const merchantPrefix = merchant.merchantCode.toUpperCase();
+    const cleanBaseSku = (payload.baseSku || 'SKU').trim().toUpperCase().replace(/\s+/g, '-');
+
+    const formattedVariants = (payload.variants || []).map((v, idx) => {
+      let finalSku = v.sku;
+      if (!finalSku) {
+        const cleanVar = (v.variantCode || `VAR-${idx}`).trim().toUpperCase().replace(/\s+/g, '-');
+        finalSku = `${merchantPrefix}-${cleanBaseSku}-${cleanVar}`;
+      }
+      const ean13 = v.barcode || `894${Date.now().toString().slice(-9)}${idx % 10}`;
+
+      return {
+        id: v.id,
+        sku: finalSku,
+        barcode: ean13,
+        title: v.title,
+        price: v.price,
+        wholesalePrice: v.wholesalePrice ?? v.price * 0.75,
+        defaultBinCode: v.defaultBinCode || 'A-01-01',
+        initialStock: Math.max(0, Number(v.initialStock) || 0),
+        imageUrl: v.imageUrl || (v.attributes as any)?.imageUrl || payload.imageUrl,
+        attributes: v.attributes || {},
+      };
+    });
+
+    const allImages = Array.from(
+      new Set(
+        [
+          payload.imageUrl,
+          ...(payload.images || []),
+          ...formattedVariants.map((fv) => fv.imageUrl),
+        ].filter((u): u is string => Boolean(u && u.trim()))
+      )
+    );
+
+    return this.inventoryRepo.updateProductWithVariants(productId, {
+      title: payload.title,
+      description: payload.description,
+      baseSku: payload.baseSku ? cleanBaseSku : undefined,
+      imageUrl: payload.imageUrl || allImages[0],
+      images: allImages,
+      defaultLocationId: defaultLocation.id,
+      variants: formattedVariants.length > 0 ? formattedVariants : undefined,
+    });
+  }
+
+/**
    * List all products & variants with real-time stock breakdown
    */
   async listMerchantProducts(merchantId?: string) {

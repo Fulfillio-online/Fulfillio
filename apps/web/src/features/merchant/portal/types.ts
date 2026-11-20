@@ -175,11 +175,13 @@ export interface MerchantProductItem {
     variantSku: string;
     color?: string;
     size?: string;
+    imageUrl?: string;
     attributeName?: string;
     attributeValue?: string;
     stock: number;
   }[];
   imageUrl?: string;
+  images?: string[];
   status?: 'PUBLISHED' | 'DRAFT' | 'ARCHIVED' | 'PENDING_APPROVAL';
   totalOrders?: number;
 }

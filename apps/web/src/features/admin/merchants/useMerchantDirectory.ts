@@ -1,5 +1,7 @@
 'use client';
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+
 import { useCallback, useEffect, useState } from 'react';
 import {
   MerchantRecord,
@@ -51,6 +53,55 @@ export function useMerchantDirectory() {
           setMerchants(parsed);
         }
       }
+
+      fetch(`${API_BASE}/merchants/public-directory`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.items && Array.isArray(data.items)) {
+            const dbList: MerchantRecord[] = data.items.map((m: any) => ({
+              id: m.id,
+              merchantCode: m.merchantCode,
+              storeName: m.businessName,
+              ownerName: m.ownerName || m.users?.[0]?.name || 'Store Owner',
+              email: m.email,
+              phone: m.phone || '01700-000000',
+              location: m.location || 'Dhaka, Bangladesh',
+              deliveryArea: 'Nationwide Bangladesh',
+              status: m.status === 'APPROVED' ? 'Active' : m.status === 'SUSPENDED' ? 'Suspended' : 'Pending',
+              verified: m.status === 'APPROVED',
+              joinedDate: new Date(m.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+              avatarInitials: (m.businessName || 'MC').slice(0, 2).toUpperCase(),
+              avatarBg: 'from-orange-500 to-amber-600',
+              payoutAccount: m.payoutAccount || {
+                provider: 'Pending Bank Setup',
+                accountHolder: m.ownerName || 'Store Owner',
+                accountNumber: '0000000000000',
+                branchName: 'Dhaka Main Branch',
+                routingNumber: '000000000',
+                bkashNumber: m.phone || '',
+                frequency: 'Weekly (Every Friday)',
+                status: 'PENDING_REVIEW',
+                availableBalance: 0,
+                lastPayoutAmount: 0,
+              },
+            }));
+
+            setMerchants((prev) => {
+              const merged = [...dbList];
+              for (const existing of prev) {
+                if (!merged.some((m) => m.merchantCode === existing.merchantCode || m.email === existing.email)) {
+                  merged.push(existing);
+                }
+              }
+              try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+              } catch {}
+              return merged;
+            });
+          }
+        })
+        .catch(() => {});
+
       const { products, orders } = getSyncedMerchantDirectoryLists(ALL_PRODUCTS, ALL_ORDERS);
       setProductsList(products);
       setOrdersList(orders);
@@ -85,6 +136,11 @@ export function useMerchantDirectory() {
     );
     setMerchants(updated);
     syncMerchantDirectoryToProfiles(updated);
+    fetch(`${API_BASE}/merchants/${merchantId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: nextStatus === 'Active' ? 'APPROVED' : 'SUSPENDED' }),
+    }).catch(() => {});
     triggerToast(`Status changed to ${nextStatus}`);
   };
 

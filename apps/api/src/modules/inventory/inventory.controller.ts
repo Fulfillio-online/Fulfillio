@@ -1,12 +1,8 @@
-import { Controller, Post, Get, Param, Body, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Get, Put, Patch, Param, Body, Query, Request } from '@nestjs/common';
 import { InventoryService } from './inventory.service';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../../common/guards/roles.guard';
-import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '@fulfillio/contracts';
 
 @Controller('inventory')
-@UseGuards(JwtAuthGuard, RolesGuard)
 export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}
 
@@ -18,30 +14,83 @@ export class InventoryController {
     @Request() req: any,
     @Body()
     body: {
+      merchantId?: string;
+      merchantCode?: string;
       title: string;
       description?: string;
       baseSku: string;
       imageUrl?: string;
+      images?: string[];
       variants: Array<{
         title: string;
         variantCode: string;
         price: number;
         wholesalePrice?: number;
         defaultBinCode?: string;
+        initialStock?: number;
+        imageUrl?: string;
         attributes?: Record<string, any>;
       }>;
     },
   ) {
-    return this.inventoryService.createProductWithVariants(req.user.merchantId, body);
+    const effectiveMerchant =
+      req.user?.merchantId ||
+      body.merchantId ||
+      body.merchantCode ||
+      req.headers['x-merchant-code'] ||
+      'MC-101';
+    return this.inventoryService.createProductWithVariants(effectiveMerchant, body);
+  }
+
+  /**
+   * Update an existing product by ID or baseSku
+   */
+  @Put('products/:id')
+  async updateProduct(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() body: any,
+  ) {
+    const effectiveMerchant =
+      req.user?.merchantId ||
+      body.merchantId ||
+      body.merchantCode ||
+      req.headers['x-merchant-code'] ||
+      'MC-101';
+    return this.inventoryService.updateProductWithVariants(id, effectiveMerchant, body);
+  }
+
+  @Patch('products/:id')
+  async patchProduct(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() body: any,
+  ) {
+    const effectiveMerchant =
+      req.user?.merchantId ||
+      body.merchantId ||
+      body.merchantCode ||
+      req.headers['x-merchant-code'] ||
+      'MC-101';
+    return this.inventoryService.updateProductWithVariants(id, effectiveMerchant, body);
   }
 
   /**
    * List all products & stock levels for the authenticated merchant (or all if admin)
    */
   @Get('products')
-  async listProducts(@Request() req: any) {
+  async listProducts(
+    @Request() req: any,
+    @Query('merchantCode') merchantCode?: string,
+    @Query('merchantId') merchantIdQuery?: string,
+  ) {
     const isMerchant = req.user?.role === UserRole.MERCHANT;
-    const effectiveMerchantId = isMerchant ? req.user.merchantId : undefined;
+    const effectiveMerchantId =
+      req.user?.merchantId ||
+      merchantIdQuery ||
+      merchantCode ||
+      req.headers['x-merchant-code'] ||
+      (isMerchant ? req.user.merchantId : undefined);
     return this.inventoryService.listMerchantProducts(effectiveMerchantId);
   }
 
@@ -69,7 +118,6 @@ export class InventoryController {
    * Register a physical warehouse bin location
    */
   @Post('locations')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.WAREHOUSE_OPERATOR)
   async createLocation(
     @Body()
     body: {

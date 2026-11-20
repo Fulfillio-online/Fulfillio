@@ -119,6 +119,7 @@ model Product {
   description String?
   baseSku     String
   imageUrl    String?
+  images      String[]         @default([])
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
@@ -139,6 +140,7 @@ model ProductVariant {
   price          Decimal               @db.Decimal(10, 2)
   wholesalePrice Decimal?              @db.Decimal(10, 2)
   defaultBinCode String?               @default("A-01-01")
+  imageUrl       String?
   attributes     Json?                 @db.JsonB
   createdAt      DateTime              @default(now())
   updatedAt      DateTime              @updatedAt

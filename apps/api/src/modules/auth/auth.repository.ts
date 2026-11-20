@@ -38,8 +38,12 @@ export class AuthRepository {
     passwordHash: string;
   }) {
     return this.prisma.$transaction(async (tx) => {
-      const count = await tx.merchant.count();
-      const merchantCode = `MC-${101 + count}`;
+      const existingMerchants = await tx.merchant.findMany({ select: { merchantCode: true } });
+      const maxNum = existingMerchants.reduce((max, m) => {
+        const num = parseInt(m.merchantCode.replace(/[^0-9]/g, ''), 10);
+        return Number.isFinite(num) && num > max ? num : max;
+      }, 105);
+      const merchantCode = `MC-${maxNum + 1}`;
 
       const merchant = await tx.merchant.create({
         data: {

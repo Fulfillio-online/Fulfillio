@@ -1,12 +1,16 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { CheckCircle2 } from 'lucide-react';
 import { MerchantProvider, useMerchant } from '@/features/merchant/portal/MerchantContext';
 import { MerchantSidebar } from '@/features/merchant/portal/components/MerchantSidebar';
 import { MerchantHeader } from '@/features/merchant/portal/components/MerchantHeader';
+import { isMerchantLoggedIn } from '@/lib/warehouseSync';
 
 function MerchantLayoutInner({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const [authChecked, setAuthChecked] = useState(false);
   const {
     profile,
     toastMessage,
@@ -14,6 +18,26 @@ function MerchantLayoutInner({ children }: { children: React.ReactNode }) {
     isMobileSidebarOpen,
     setIsMobileSidebarOpen,
   } = useMerchant();
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const loggedIn = isMerchantLoggedIn();
+      if (!loggedIn) {
+        router.replace('/login');
+        return;
+      }
+      setAuthChecked(true);
+    }
+  }, [router]);
+
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400 gap-3">
+        <div className="h-6 w-6 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+        <span className="text-xs font-medium">Checking login session...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen bg-slate-50 dark:bg-navy-950 text-navy-900 dark:text-white w-full overflow-x-hidden transition-colors duration-200">

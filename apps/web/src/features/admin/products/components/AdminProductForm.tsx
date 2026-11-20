@@ -65,13 +65,8 @@ export function AdminProductForm() {
       id: 'c-1',
       name: 'Black',
       hex: '#111827',
-      imageUrl: 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=200&q=80',
-    },
-    {
-      id: 'c-2',
-      name: 'Charcoal Grey',
-      hex: '#4B5563',
-      imageUrl: 'https://images.unsplash.com/photo-1509967419530-da38b4704bc6?auto=format&fit=crop&w=200&q=80',
+      imageUrl: '',
+      sizes: ['S', 'M', 'L', 'XL', 'XXL'],
     },
   ]);
 
@@ -196,12 +191,26 @@ export function AdminProductForm() {
 
   const handleAddColor = () => {
     const newId = `c-${Date.now()}`;
+    const palette = [
+      { name: 'White', hex: '#FFFFFF' },
+      { name: 'Navy Blue', hex: '#1E3A8A' },
+      { name: 'Red', hex: '#DC2626' },
+      { name: 'Olive Green', hex: '#4D7C0F' },
+      { name: 'Charcoal Grey', hex: '#4B5563' },
+      { name: 'Maroon', hex: '#881337' },
+      { name: 'Beige', hex: '#F5F5DC' },
+    ];
+    const fallbackChoice = palette[(colors.length - 1) % palette.length] || {
+      name: `Color ${colors.length + 1}`,
+      hex: '#6B7280',
+    };
     setColors([
       ...colors,
       {
         id: newId,
-        name: 'New Color',
-        hex: '#ea580c',
+        name: fallbackChoice.name,
+        hex: fallbackChoice.hex,
+        imageUrl: '',
         sizes: [...allSizes],
       },
     ]);
@@ -765,16 +774,8 @@ export function AdminProductForm() {
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/5 pb-3">
               <div className="flex items-center gap-2 text-xs font-bold text-navy-900 dark:text-white uppercase tracking-wider">
                 <Palette className="w-4 h-4 text-orange-600 dark:text-orange-400" />
-                <span>Colors & Associated Sizes ({colors.length} colors)</span>
+                <span>Colors & Associated Sizes ({colors.length} {colors.length === 1 ? 'color' : 'colors'})</span>
               </div>
-              <button
-                type="button"
-                onClick={handleAddColor}
-                className="px-3 py-1.5 rounded-lg bg-orange-600/10 hover:bg-orange-600/20 text-orange-600 dark:text-orange-400 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                <span>Add Color</span>
-              </button>
             </div>
 
             <div className="space-y-4">
@@ -917,6 +918,18 @@ export function AdminProductForm() {
                   </div>
                 );
               })}
+            </div>
+
+            {/* Bottom Add Color button */}
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={handleAddColor}
+                className="w-full py-2.5 px-4 rounded-xl border-2 border-dashed border-orange-500/30 hover:border-orange-500 bg-orange-500/5 hover:bg-orange-500/10 text-orange-600 dark:text-orange-400 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer group shadow-sm hover:shadow"
+              >
+                <Plus className="h-4 w-4 transition-transform group-hover:scale-125" />
+                <span>+ Add Another Color Variant</span>
+              </button>
             </div>
           </div>
         )}

@@ -20,6 +20,8 @@ import {
   Apple,
   Box,
   ExternalLink,
+  AlertCircle,
+  X,
 } from 'lucide-react';
 import { MerchantProductItem } from '../../types';
 import {
@@ -35,7 +37,7 @@ import { MerchantCategoryItem, MerchantSubcategoryItem } from '../../types';
 interface ProductFormProps {
   initialProduct?: MerchantProductItem | null;
   merchantCode: string;
-  onSave: (product: MerchantProductItem) => void;
+  onSave: (product: MerchantProductItem) => Promise<{ ok: boolean; error?: string } | void> | void;
 }
 
 export function ProductForm({
@@ -46,6 +48,9 @@ export function ProductForm({
   const router = useRouter();
   const isEdit = Boolean(initialProduct);
   const { categories } = useMerchant();
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const mainImageInputRef = useRef<HTMLInputElement>(null);
   const colorFileInputRef = useRef<HTMLInputElement>(null);
@@ -93,13 +98,8 @@ export function ProductForm({
             id: 'c-1',
             name: 'Black',
             hex: '#111827',
-            imageUrl: 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=200&q=80',
-          },
-          {
-            id: 'c-2',
-            name: 'Charcoal Grey',
-            hex: '#4B5563',
-            imageUrl: 'https://images.unsplash.com/photo-1509967419530-da38b4704bc6?auto=format&fit=crop&w=200&q=80',
+            imageUrl: '',
+            sizes: ['S', 'M', 'L', 'XL', 'XXL', '3XL'],
           },
         ]
   );
@@ -205,19 +205,28 @@ export function ProductForm({
 
     if (productType === 'FASHION') {
       const list: ProductVariantConfig[] = [];
-      colors.forEach((c) => {
+      colors.forEach((c, cIdx) => {
         const colorSizes = c.sizes && c.sizes.length > 0 ? c.sizes : allSizes;
+        const colorNameClean = (c.name || '').trim();
+        const cleanAlpha = colorNameClean.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+        const colorCode =
+          cleanAlpha.length >= 3
+            ? cleanAlpha.substring(0, 3)
+            : cleanAlpha.length > 0
+            ? cleanAlpha
+            : `C${cIdx + 1}`;
+
         colorSizes.forEach((s) => {
-          const id = `${c.name.toLowerCase().replace(/\s+/g, '-')}-${s.toLowerCase()}`;
+          const id = `${c.id}-${s.toLowerCase()}`;
           if (excludedVariantIds.includes(id)) return;
-          const colorCode = c.name.substring(0, 3).toUpperCase();
           const variantSku = `${baseSkuClean}-${colorCode}-${s}`;
           const stock = variantStockMap[id] ?? 10;
           list.push({
             id,
             variantSku,
-            color: c.name,
+            color: colorNameClean || `Color ${cIdx + 1}`,
             size: s,
+            imageUrl: c.imageUrl || '',
             stock,
           });
         });
@@ -237,6 +246,7 @@ export function ProductForm({
             id,
             variantSku,
             color: c.name,
+            imageUrl: c.imageUrl || '',
             attributeName: 'Storage',
             attributeValue: storage,
             stock,
@@ -260,6 +270,7 @@ export function ProductForm({
             attributeName: 'Volume',
             attributeValue: vol,
             color: c.name,
+            imageUrl: c.imageUrl || '',
             stock,
           });
         });
@@ -354,12 +365,26 @@ export function ProductForm({
 
   const handleAddColor = () => {
     const newId = `c-${Date.now()}`;
-    setColors([
-      ...colors,
+    const palette = [
+      { name: 'White', hex: '#FFFFFF' },
+      { name: 'Navy Blue', hex: '#1E3A8A' },
+      { name: 'Red', hex: '#DC2626' },
+      { name: 'Olive Green', hex: '#4D7C0F' },
+      { name: 'Charcoal Grey', hex: '#4B5563' },
+      { name: 'Maroon', hex: '#881337' },
+      { name: 'Beige', hex: '#F5F5DC' },
+    ];
+    const fallbackChoice = palette[(colors.length - 1) % palette.length] || {
+      name: `Color ${colors.length + 1}`,
+      hex: '#6B7280',
+    };
+    setColors((prev) => [
+      ...prev,
       {
         id: newId,
-        name: 'New Color',
-        hex: '#6B7280',
+        name: fallbackChoice.name,
+        hex: fallbackChoice.hex,
+        imageUrl: '',
         sizes: [...allSizes],
       },
     ]);
@@ -425,9 +450,13 @@ export function ProductForm({
     setFeatures(features.filter((_, i) => i !== idx));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (!title.trim() || !masterSku.trim()) return;
+
+    setSubmitError(null);
+    setIsSubmitting(true);
 
     const numValue = Number(declaredValue) || 850;
     const allActiveSizes = Array.from(
@@ -441,6 +470,16 @@ export function ProductForm({
       initialProduct.bin !== 'Pending Approval' &&
       initialProduct.bin !== 'Assigned on intake' &&
       initialProduct.status !== 'PENDING_APPROVAL';
+
+    const allActiveImages = Array.from(
+      new Set(
+        [
+          finalImageUrl.trim(),
+          ...colors.map((c) => c.imageUrl),
+          ...generatedVariants.map((v) => v.imageUrl),
+        ].filter((u): u is string => Boolean(u && u.trim()))
+      )
+    );
 
     const productPayload: MerchantProductItem = {
       id: initialProduct?.id || `p-${Date.now()}`,
@@ -458,7 +497,8 @@ export function ProductForm({
       stock: computedTotalStock,
       reserved: initialProduct?.reserved || 0,
       status: isApprovedByAdmin ? status : 'PENDING_APPROVAL',
-      imageUrl: finalImageUrl.trim() || undefined,
+      imageUrl: finalImageUrl.trim() || allActiveImages[0] || undefined,
+      images: allActiveImages,
       keyFeatures: features,
       colors,
       sizes: allActiveSizes.length > 0 ? allActiveSizes : allSizes,
@@ -466,11 +506,21 @@ export function ProductForm({
       totalOrders: initialProduct?.totalOrders || 0,
     };
 
-    onSave(productPayload);
-    if (!isApprovedByAdmin && typeof window !== 'undefined') {
-      sessionStorage.setItem('fulfillio_products_initial_tab', 'PENDING_APPROVAL');
+    try {
+      const res = await onSave(productPayload);
+      if (res && typeof res === 'object' && 'ok' in res && !res.ok) {
+        setSubmitError(res.error || 'Failed to save product in database.');
+        setIsSubmitting(false);
+        return;
+      }
+      if (!isApprovedByAdmin && typeof window !== 'undefined') {
+        sessionStorage.setItem('fulfillio_products_initial_tab', 'PENDING_APPROVAL');
+      }
+      router.push('/merchant/products');
+    } catch (err: any) {
+      setSubmitError(err?.message || 'Failed to save product in database.');
+      setIsSubmitting(false);
     }
-    router.push('/merchant/products');
   };
 
   return (
@@ -503,13 +553,33 @@ export function ProductForm({
           <button
             type="button"
             onClick={handleSubmit}
-            className="flex-1 sm:flex-initial justify-center px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold transition-colors cursor-pointer shadow-md shadow-orange-500/20 flex items-center gap-1.5"
+            disabled={isSubmitting}
+            className="flex-1 sm:flex-initial justify-center px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-60 text-white text-xs font-bold transition-colors cursor-pointer shadow-md shadow-orange-500/20 flex items-center gap-1.5"
           >
-            <Check className="h-4 w-4" />
-            <span>{isEdit ? 'Save Changes' : 'Submit for Approval'}</span>
+            {isSubmitting ? (
+              <>
+                <div className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <span>Saving to Database...</span>
+              </>
+            ) : (
+              <>
+                <Check className="h-4 w-4" />
+                <span>{isEdit ? 'Save Changes' : 'Publish Product'}</span>
+              </>
+            )}
           </button>
         </div>
       </div>
+
+      {submitError && (
+        <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center gap-3">
+          <AlertCircle className="h-5 w-5 shrink-0" />
+          <div>
+            <p className="font-bold">PostgreSQL Save Error:</p>
+            <p className="text-[11px] text-rose-300 mt-0.5">{submitError}</p>
+          </div>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Section 1: Basic Information */}
@@ -814,17 +884,14 @@ export function ProductForm({
               {/* Color Swatches */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider">
-                    Color Swatches & Photos
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleAddColor}
-                    className="text-xs font-semibold text-orange-600 dark:text-orange-400 hover:text-emerald-300 flex items-center gap-1 cursor-pointer"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    <span>Add Another Color</span>
-                  </button>
+                  <div>
+                    <span className="text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider block">
+                      Color Swatches & Photos ({colors.length} {colors.length === 1 ? 'Color' : 'Colors'})
+                    </span>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Configure color variants, images and available sizes for each color.
+                    </p>
+                  </div>
                 </div>
 
                 <div className="space-y-3">
@@ -884,14 +951,21 @@ export function ProductForm({
 
                           {/* Row 2 on mobile: Photo Preview & Upload Button */}
                           <div className="flex items-center gap-2 w-full sm:w-auto">
-                            <div className="relative h-9 w-9 rounded-lg bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 overflow-hidden shrink-0 flex items-center justify-center">
+                            <div
+                              onClick={() => {
+                                setActiveColorUploadId(c.id);
+                                colorFileInputRef.current?.click();
+                              }}
+                              className="relative h-9 w-9 rounded-lg bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 overflow-hidden shrink-0 flex items-center justify-center cursor-pointer hover:border-orange-500 transition-colors group"
+                              title="Click to upload or change image"
+                            >
                               {c.imageUrl ? (
                                 c.imageUrl.startsWith('data:') ? (
                                   // eslint-disable-next-line @next/next/no-img-element
                                   <img
                                     src={c.imageUrl}
                                     alt={c.name}
-                                    className="h-full w-full object-cover"
+                                    className="h-full w-full object-cover group-hover:opacity-80 transition-opacity"
                                   />
                                 ) : (
                                   <Image
@@ -900,11 +974,11 @@ export function ProductForm({
                                     fill
                                     unoptimized={true}
                                     sizes="36px"
-                                    className="object-cover"
+                                    className="object-cover group-hover:opacity-80 transition-opacity"
                                   />
                                 )
                               ) : (
-                                <Package className="h-4 w-4 text-slate-600" />
+                                <Package className="h-4 w-4 text-slate-600 group-hover:text-orange-500 transition-colors" />
                               )}
                             </div>
 
@@ -917,8 +991,21 @@ export function ProductForm({
                               className="flex-1 sm:flex-initial justify-center px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-navy-900 dark:text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-200 dark:border-white/10"
                             >
                               <UploadCloud className="h-3.5 w-3.5 text-emerald-400" />
-                              <span>Upload Image</span>
+                              <span>{c.imageUrl ? 'Change Photo' : 'Upload Photo'}</span>
                             </button>
+
+                            {c.imageUrl && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setColors(colors.map((item) => (item.id === c.id ? { ...item, imageUrl: '' } : item)));
+                                }}
+                                className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-xs font-semibold border border-rose-500/20 transition-colors cursor-pointer shrink-0"
+                                title="Remove this color photo"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            )}
 
                             {colors.length > 1 && (
                               <button
@@ -1005,6 +1092,18 @@ export function ProductForm({
                       </div>
                     );
                   })}
+                </div>
+
+                {/* Add Another Color Button placed at the bottom below all swatches */}
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={handleAddColor}
+                    className="w-full py-3 px-4 rounded-xl border-2 border-dashed border-orange-500/30 hover:border-orange-500 bg-orange-500/5 hover:bg-orange-500/10 text-orange-600 dark:text-orange-400 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer group shadow-sm hover:shadow"
+                  >
+                    <Plus className="h-4 w-4 transition-transform group-hover:scale-125" />
+                    <span>+ Add Another Color Variant</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -1221,14 +1320,6 @@ export function ProductForm({
                       <span className="text-emerald-400 font-mono font-semibold text-[11px]">
                         {v.variantSku}
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveVariant(v.id)}
-                        className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-white dark:bg-navy-900 transition-colors cursor-pointer"
-                        title="Exclude this variant"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
                     </div>
                     <div className="flex items-center justify-between text-slate-300">
                       <div className="flex items-center gap-1.5 flex-wrap">
@@ -1266,7 +1357,6 @@ export function ProductForm({
                       <th className="p-3">Color / Attribute</th>
                       <th className="p-3">Size / Spec</th>
                       <th className="p-3 text-right">Initial Stock</th>
-                      <th className="p-3 text-right w-12">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-white/5 font-mono">
@@ -1293,16 +1383,6 @@ export function ProductForm({
                             }
                             className="w-20 px-2.5 py-1 text-right bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-bold text-navy-900 dark:text-white focus:outline-none focus:border-orange-500"
                           />
-                        </td>
-                        <td className="p-3 text-right">
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveVariant(v.id)}
-                            className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-white dark:bg-navy-900 transition-colors cursor-pointer"
-                            title="Exclude this variant"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
                         </td>
                       </tr>
                     ))}
@@ -1430,10 +1510,20 @@ export function ProductForm({
           </Link>
           <button
             type="submit"
-            className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold transition-colors cursor-pointer shadow-md flex items-center justify-center gap-1.5"
+            disabled={isSubmitting}
+            className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-60 text-white text-xs font-bold transition-colors cursor-pointer shadow-md flex items-center justify-center gap-1.5"
           >
-            <Check className="h-4 w-4" />
-            <span>{isEdit ? 'Save Changes' : 'Submit for Approval'}</span>
+            {isSubmitting ? (
+              <>
+                <div className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <span>Saving to PostgreSQL Database...</span>
+              </>
+            ) : (
+              <>
+                <Check className="h-4 w-4" />
+                <span>{isEdit ? 'Save Changes' : 'Publish Product'}</span>
+              </>
+            )}
           </button>
         </div>
       </form>

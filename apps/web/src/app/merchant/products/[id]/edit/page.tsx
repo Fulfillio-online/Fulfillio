@@ -14,7 +14,7 @@ export default function EditProductPage({ params }: EditProductPageProps) {
   const { id } = use(params);
   const { products, profile, updateProduct } = useMerchant();
 
-  const product = products.find((p) => p.id === id);
+  const product = products.find((p) => p.id === id || p.sku === id);
 
   if (!product) {
     return (
@@ -40,8 +40,8 @@ export default function EditProductPage({ params }: EditProductPageProps) {
       <ProductForm
         initialProduct={product}
         merchantCode={profile.merchantCode}
-        onSave={(updated) => {
-          updateProduct(product.id, updated);
+        onSave={async (updated) => {
+          return await updateProduct(product.id, updated);
         }}
       />
     </div>

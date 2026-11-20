@@ -31,6 +31,7 @@ interface ProductOrderListSectionProps {
   storeName?: string;
   merchantCode?: string;
   memos?: ResellerMemo[];
+  hideQuickAddForm?: boolean;
   onCreateOrder?: (
     order: MerchantOrderItem,
     productIdOrItems?: string | { productId: string; qty: number; variantSku?: string }[],
@@ -44,6 +45,7 @@ export function ProductOrderListSection({
   storeName,
   merchantCode,
   memos,
+  hideQuickAddForm = false,
   onCreateOrder,
   onTriggerToast,
 }: ProductOrderListSectionProps) {
@@ -187,128 +189,130 @@ export function ProductOrderListSection({
 
   return (
     <div className="space-y-6">
-      {/* 1. Quick Add to Order List Selector Box */}
-      <div className="p-5 rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-sm space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-white/5 pb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded-lg bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-600 dark:text-orange-400">
-              <ShoppingCart className="h-4 w-4" />
+      {/* 1. Quick Add to Order List Selector Box (Shown only if not hidden) */}
+      {!hideQuickAddForm && (
+        <div className="p-5 rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-white/5 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="h-8 w-8 rounded-lg bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-600 dark:text-orange-400">
+                <ShoppingCart className="h-4 w-4" />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-navy-900 dark:text-white">
+                  Add to Order List (B2B Quick Order)
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Select color, size, and quantity to add to your persistent order queue
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="font-bold text-sm text-navy-900 dark:text-white">
-                Add to Order List (B2B Quick Order)
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Select color, size, and quantity to add to your persistent order queue
-              </p>
-            </div>
-          </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-              ৳{product.price.toLocaleString()} / unit
-            </span>
-            <span className="text-xs text-slate-400 font-mono">
-              Stock: <span className="font-bold text-navy-900 dark:text-slate-200">{maxStock}</span>
-            </span>
-          </div>
-        </div>
-
-        {/* Variant Selectors: Color, Size, Qty */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {/* Color Selector */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-              Select Color
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {availableColors.map((c) => (
-                <button
-                  key={c.id || c.name}
-                  type="button"
-                  onClick={() => setSelectedColor(c.name)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all cursor-pointer ${
-                    selectedColor === c.name
-                      ? 'bg-orange-50 dark:bg-orange-950/40 border-orange-500 text-orange-600 dark:text-orange-400 font-bold shadow-xs'
-                      : 'bg-slate-50 dark:bg-navy-950 border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:border-slate-300'
-                  }`}
-                >
-                  <span
-                    className="h-2.5 w-2.5 rounded-full border border-black/20 shrink-0"
-                    style={{ backgroundColor: c.hex || '#f97316' }}
-                  />
-                  <span>{c.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Size Selector */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-              Select Size / Spec
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {availableSizes.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setSelectedSize(s)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
-                    selectedSize === s
-                      ? 'bg-orange-50 dark:bg-orange-950/40 border-orange-500 text-orange-600 dark:text-orange-400 font-bold shadow-xs'
-                      : 'bg-slate-50 dark:bg-navy-950 border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:border-slate-300'
-                  }`}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Quantity and Add Button */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-              Quantity &amp; Action
-            </label>
             <div className="flex items-center gap-2">
-              <div className="flex items-center border border-slate-200 dark:border-white/10 rounded-xl bg-slate-50 dark:bg-navy-950 p-1 shrink-0">
+              <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                ৳{product.price.toLocaleString()} / unit
+              </span>
+              <span className="text-xs text-slate-400 font-mono">
+                Stock: <span className="font-bold text-navy-900 dark:text-slate-200">{maxStock}</span>
+              </span>
+            </div>
+          </div>
+
+          {/* Variant Selectors: Color, Size, Qty */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {/* Color Selector */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                Select Color
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {availableColors.map((c) => (
+                  <button
+                    key={c.id || c.name}
+                    type="button"
+                    onClick={() => setSelectedColor(c.name)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all cursor-pointer ${
+                      selectedColor === c.name
+                        ? 'bg-orange-50 dark:bg-orange-950/40 border-orange-500 text-orange-600 dark:text-orange-400 font-bold shadow-xs'
+                        : 'bg-slate-50 dark:bg-navy-950 border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:border-slate-300'
+                    }`}
+                  >
+                    <span
+                      className="h-2.5 w-2.5 rounded-full border border-black/20 shrink-0"
+                      style={{ backgroundColor: c.hex || '#f97316' }}
+                    />
+                    <span>{c.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Size Selector */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                Select Size / Spec
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {availableSizes.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setSelectedSize(s)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                      selectedSize === s
+                        ? 'bg-orange-50 dark:bg-orange-950/40 border-orange-500 text-orange-600 dark:text-orange-400 font-bold shadow-xs'
+                        : 'bg-slate-50 dark:bg-navy-950 border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:border-slate-300'
+                    }`}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Quantity and Add Button */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                Quantity &amp; Action
+              </label>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center border border-slate-200 dark:border-white/10 rounded-xl bg-slate-50 dark:bg-navy-950 p-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedQty((q) => Math.max(1, q - 1))}
+                    className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-navy-800 text-slate-500 cursor-pointer"
+                  >
+                    <Minus className="h-3.5 w-3.5" />
+                  </button>
+                  <input
+                    type="number"
+                    min="1"
+                    max={maxStock}
+                    value={selectedQty}
+                    onChange={(e) => setSelectedQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                    className="w-12 text-center text-xs font-mono font-bold bg-transparent border-0 focus:outline-none text-navy-900 dark:text-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setSelectedQty((q) => Math.min(maxStock, q + 1))}
+                    className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-navy-800 text-slate-500 cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
                 <button
                   type="button"
-                  onClick={() => setSelectedQty((q) => Math.max(1, q - 1))}
-                  className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-navy-800 text-slate-500 cursor-pointer"
-                >
-                  <Minus className="h-3.5 w-3.5" />
-                </button>
-                <input
-                  type="number"
-                  min="1"
-                  max={maxStock}
-                  value={selectedQty}
-                  onChange={(e) => setSelectedQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                  className="w-12 text-center text-xs font-mono font-bold bg-transparent border-0 focus:outline-none text-navy-900 dark:text-white"
-                />
-                <button
-                  type="button"
-                  onClick={() => setSelectedQty((q) => Math.min(maxStock, q + 1))}
-                  className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-navy-800 text-slate-500 cursor-pointer"
+                  onClick={handleAddToOrderList}
+                  className="flex-1 py-2 px-3 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-orange-500/20 transition-all cursor-pointer active:scale-95"
                 >
                   <Plus className="h-3.5 w-3.5" />
+                  <span>Add to Order List</span>
                 </button>
               </div>
-
-              <button
-                type="button"
-                onClick={handleAddToOrderList}
-                className="flex-1 py-2 px-3 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-orange-500/20 transition-all cursor-pointer active:scale-95"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                <span>Add to Order List</span>
-              </button>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* 2. Persistent Order List Table Card (Stored across all product pages) */}
       <div className="p-5 rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-sm space-y-4">

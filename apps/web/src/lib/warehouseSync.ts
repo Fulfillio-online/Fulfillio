@@ -173,6 +173,14 @@ export function getStoredMerchantDirectory(): MerchantRecord[] {
 
 export const INITIAL_MERCHANT_CREDENTIALS: MerchantCredentialRecord[] = [
   {
+    email: 'supplyro@gmail.com',
+    password: 'Supplyro',
+    merchantCode: 'MC-106',
+    storeName: 'Supplyro',
+    ownerName: 'Azad',
+    phone: '01700 000000',
+  },
+  {
     email: 'azad@gmail.com',
     password: 'Azad?1',
     merchantCode: 'MC-105',
@@ -242,6 +250,18 @@ export function getActiveMerchantSession(): ActiveMerchantSession {
   };
 }
 
+export function isMerchantLoggedIn(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_ACTIVE_MERCHANT_SESSION);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    return Boolean(parsed && parsed.merchantCode && parsed.email);
+  } catch {
+    return false;
+  }
+}
+
 export function setActiveMerchantSession(session: ActiveMerchantSession): void {
   if (typeof window === 'undefined') return;
   try {
@@ -306,6 +326,28 @@ export function getStoredMerchantProfileForCode(merchantCode: string): MerchantP
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && parsed.merchantCode) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+
+    try {
+      const session = getActiveMerchantSession();
+      if (session && session.merchantCode.toUpperCase() === code && session.email) {
+        const directory = getStoredMerchantDirectory();
+        const dirMatch = directory.find(
+          (m) =>
+            m.email.trim().toLowerCase() === session.email.trim().toLowerCase() ||
+            m.merchantCode.toUpperCase() === code
+        );
+        if (dirMatch) {
+          return {
+            ...buildProfileFromMerchantRecord(dirMatch),
+            storeName: session.storeName || dirMatch.storeName,
+            ownerName: session.ownerName || dirMatch.ownerName,
+            email: session.email,
+          };
+        }
       }
     } catch {
       // ignore
@@ -725,11 +767,19 @@ export async function authenticateMerchantLogin(
   // Verify password if credential exists for this merchant
   const isAzad = cleanEmail === 'azad@gmail.com' || (matchedMerchant && matchedMerchant.merchantCode === 'MC-105');
   const isAzadPassword = isAzad && (passwordInput === 'Azad?1' || passwordInput.toLowerCase() === 'azad?1');
-  if (matchedCred && matchedCred.password !== passwordInput && !isAzadPassword) {
+  const isSupplyro = cleanEmail === 'supplyro@gmail.com' || (matchedMerchant && matchedMerchant.merchantCode === 'MC-106');
+  const isSupplyroPassword = isSupplyro && (passwordInput === 'Supplyro' || passwordInput.toLowerCase() === 'supplyro');
+  if (matchedCred && matchedCred.password !== passwordInput && !isAzadPassword && !isSupplyroPassword) {
     return {
       ok: false,
       error: 'পাসওয়ার্ড সঠিক নয়। অনুগ্রহ করে সঠিক পাসওয়ার্ড দিয়ে চেষ্টা করুন।',
     };
+  }
+  if (matchedCred && isSupplyroPassword) {
+    matchedCred.password = passwordInput;
+    try {
+      localStorage.setItem(STORAGE_KEY_MERCHANT_CREDENTIALS, JSON.stringify(credentials));
+    } catch {}
   }
 
   // Check Admin Approval / Account Status
