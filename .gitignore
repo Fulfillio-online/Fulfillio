@@ -52,3 +52,6 @@ uploads/invoices/*
 # Workflows (ignored until PAT has workflow scope)
 .github/workflows/
 
+# Local fallback store
+.data/
+

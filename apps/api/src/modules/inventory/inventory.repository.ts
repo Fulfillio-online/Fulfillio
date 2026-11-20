@@ -6,21 +6,44 @@ import { StockMovementReason } from '@fulfillio/contracts';
 export class InventoryRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  private isConnectionError(err: any): boolean {
+    return (
+      err?.name === 'PrismaClientInitializationError' ||
+      err?.name === 'PrismaClientRustPanicError' ||
+      err?.code === 'P1001' ||
+      err?.code === 'P1002' ||
+      err?.message?.includes("Can't reach database server") ||
+      err?.message?.includes('connect ECONNREFUSED')
+    );
+  }
+
   async findMerchantById(merchantId: string) {
     if (!merchantId) return null;
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.findMerchantById(merchantId) as any;
+    }
     const clean = merchantId.trim();
-    return this.prisma.merchant.findFirst({
-      where: {
-        OR: [
-          { id: clean },
-          { merchantCode: clean.toUpperCase() },
-          { email: clean.toLowerCase() },
-        ],
-      },
-    });
+    try {
+      return await this.prisma.merchant.findFirst({
+        where: {
+          OR: [
+            { id: clean },
+            { merchantCode: clean.toUpperCase() },
+            { email: clean.toLowerCase() },
+          ],
+        },
+      });
+    } catch (err: any) {
+      if (this.isConnectionError(err)) {
+        this.prisma.isConnected = false;
+        return this.prisma.fallbackStore.findMerchantById(merchantId) as any;
+      }
+      throw err;
+    }
   }
 
   async ensureProductImagesColumn() {
+    if (this.prisma.isOffline()) return;
     try {
       await this.prisma.$executeRawUnsafe(
         `ALTER TABLE IF EXISTS "products" ADD COLUMN IF NOT EXISTS "images" text[] DEFAULT ARRAY[]::text[];`
@@ -31,6 +54,9 @@ export class InventoryRepository {
   }
 
   async findProductByMerchantAndBaseSku(merchantId: string, baseSku: string) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.findProductByMerchantAndBaseSku(merchantId, baseSku) as any;
+    }
     try {
       return await this.prisma.product.findFirst({
         where: {
@@ -45,6 +71,10 @@ export class InventoryRepository {
         },
       });
     } catch (err: any) {
+      if (this.isConnectionError(err)) {
+        this.prisma.isConnected = false;
+        return this.prisma.fallbackStore.findProductByMerchantAndBaseSku(merchantId, baseSku) as any;
+      }
       if (err?.code === 'P2022') {
         await this.ensureProductImagesColumn();
         return await this.prisma.product.findFirst({
@@ -65,21 +95,32 @@ export class InventoryRepository {
   }
 
   async upsertMerchantStub(merchantCode: string) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.upsertMerchantStub(merchantCode) as any;
+    }
     const cleanCode = merchantCode.trim().toUpperCase();
     const safeEmail = `${cleanCode.toLowerCase().replace(/[^a-z0-9]/g, '')}@fulfillio.online`;
-    return this.prisma.merchant.upsert({
-      where: { merchantCode: cleanCode },
-      update: {},
-      create: {
-        merchantCode: cleanCode,
-        businessName: `Merchant Store (${cleanCode})`,
-        ownerName: 'Store Owner',
-        email: safeEmail,
-        phone: '01700-000000',
-        location: 'Dhaka, Bangladesh',
-        status: 'APPROVED',
-      },
-    });
+    try {
+      return await this.prisma.merchant.upsert({
+        where: { merchantCode: cleanCode },
+        update: {},
+        create: {
+          merchantCode: cleanCode,
+          businessName: `Merchant Store (${cleanCode})`,
+          ownerName: 'Store Owner',
+          email: safeEmail,
+          phone: '01700-000000',
+          location: 'Dhaka, Bangladesh',
+          status: 'APPROVED',
+        },
+      });
+    } catch (err: any) {
+      if (this.isConnectionError(err)) {
+        this.prisma.isConnected = false;
+        return this.prisma.fallbackStore.upsertMerchantStub(merchantCode) as any;
+      }
+      throw err;
+    }
   }
 
   async upsertLocation(data: {
@@ -90,18 +131,29 @@ export class InventoryRepository {
     binCode: string;
     isDamaged?: boolean;
   }) {
-    return this.prisma.inventoryLocation.upsert({
-      where: { binCode: data.binCode.toUpperCase() },
-      update: { isDamaged: data.isDamaged ?? false },
-      create: {
-        zone: data.zone,
-        aisle: data.aisle,
-        rack: data.rack,
-        shelf: data.shelf,
-        binCode: data.binCode.toUpperCase(),
-        isDamaged: data.isDamaged ?? false,
-      },
-    });
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.upsertLocation(data) as any;
+    }
+    try {
+      return await this.prisma.inventoryLocation.upsert({
+        where: { binCode: data.binCode.toUpperCase() },
+        update: { isDamaged: data.isDamaged ?? false },
+        create: {
+          zone: data.zone,
+          aisle: data.aisle,
+          rack: data.rack,
+          shelf: data.shelf,
+          binCode: data.binCode.toUpperCase(),
+          isDamaged: data.isDamaged ?? false,
+        },
+      });
+    } catch (err: any) {
+      if (this.isConnectionError(err)) {
+        this.prisma.isConnected = false;
+        return this.prisma.fallbackStore.upsertLocation(data) as any;
+      }
+      throw err;
+    }
   }
 
   async listLocations() {
@@ -130,6 +182,10 @@ export class InventoryRepository {
       attributes?: Record<string, any>;
     }>;
   }) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.createProductWithVariants(data) as any;
+    }
+
     // Sanitize imageUrl to prevent PostgreSQL UTF-8 null byte error (0x00)
     const sanitizedImageUrl = data.imageUrl
       ? data.imageUrl.replace(/\0/g, '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
@@ -260,6 +316,10 @@ export class InventoryRepository {
           console.error('[PostgreSQL Save Error] Retry after unique constraint resolve failed:', retryErr?.message || retryErr);
         }
       }
+      if (this.isConnectionError(err)) {
+        this.prisma.isConnected = false;
+        return this.prisma.fallbackStore.createProductWithVariants(data) as any;
+      }
       console.error('[PostgreSQL Save Error] Failed to create product with variants:', err?.message || err);
       throw new BadRequestException(`PostgreSQL Save Error: ${err?.message || 'Database transaction failed'}`);
     }
@@ -289,6 +349,9 @@ export class InventoryRepository {
       }>;
     },
   ) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.updateProductWithVariants(productId, data.merchantId || 'MC-101', data) as any;
+    }
     const searchConditions: any[] = [
       { id: productId },
       { baseSku: productId },
@@ -460,6 +523,9 @@ export class InventoryRepository {
   }
 
   async findProducts(merchantId?: string) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.findProducts(merchantId) as any;
+    }
     const where: any = {};
     if (merchantId) {
       where.OR = [
@@ -486,6 +552,10 @@ export class InventoryRepository {
         orderBy: { createdAt: 'desc' },
       });
     } catch (err: any) {
+      if (this.isConnectionError(err)) {
+        this.prisma.isConnected = false;
+        return this.prisma.fallbackStore.findProducts(merchantId) as any;
+      }
       if (err?.code === 'P2022') {
         await this.ensureProductImagesColumn();
         return await this.prisma.product.findMany({
@@ -510,6 +580,9 @@ export class InventoryRepository {
   }
 
   async findProductById(id: string, merchantId?: string) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.findProductById(id, merchantId) as any;
+    }
     const where: any = { id };
     if (merchantId) where.merchantId = merchantId;
 
@@ -528,6 +601,10 @@ export class InventoryRepository {
         },
       });
     } catch (err: any) {
+      if (this.isConnectionError(err)) {
+        this.prisma.isConnected = false;
+        return this.prisma.fallbackStore.findProductById(id, merchantId) as any;
+      }
       if (err?.code === 'P2022') {
         await this.ensureProductImagesColumn();
         return await this.prisma.product.findFirst({

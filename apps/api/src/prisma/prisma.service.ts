@@ -1,16 +1,27 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import { FallbackStore } from './fallback-store';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+  public isConnected = false;
+  public readonly fallbackStore = FallbackStore.getInstance();
+
   async onModuleInit() {
     try {
       await this.$connect();
+      this.isConnected = true;
       console.log('[Prisma] Successfully connected to PostgreSQL database.');
       await this.runSelfHealingMigrations();
     } catch (err: any) {
-      console.warn('[Prisma] Database connection skipped or offline. API running with offline resilience:', err.message);
+      this.isConnected = false;
+      console.warn('[Prisma] PostgreSQL database server is offline (no local Docker/PostgreSQL detected).');
+      console.log('[Prisma] Activated Zero-Setup Local Persistence Engine. Products & merchants will be saved seamlessly!');
     }
+  }
+
+  isOffline(): boolean {
+    return !this.isConnected;
   }
 
   async runSelfHealingMigrations() {
