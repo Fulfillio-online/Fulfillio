@@ -150,7 +150,7 @@ export function MerchantProductsTab({
     const pendingApprovalProducts = products.filter((p) => isPendingApprovalProduct(p));
 
     return {
-      all: approvedProducts.length,
+      all: products.length,
       published: approvedProducts.filter(
         (p) => p.status === 'PUBLISHED' || (!p.status && p.stock > 0)
       ).length,
@@ -167,20 +167,18 @@ export function MerchantProductsTab({
       .filter((p) => {
         const isPendingApproval = isPendingApprovalProduct(p);
 
-        // Strict isolation: unapproved products ONLY appear in the PENDING_APPROVAL tab
         if (activeTab === 'PENDING_APPROVAL') {
           if (!isPendingApproval) return false;
-        } else {
+        } else if (activeTab === 'PUBLISHED') {
           if (isPendingApproval) return false;
-
-          if (activeTab === 'PUBLISHED') {
-            const isPublished = p.status === 'PUBLISHED' || (!p.status && p.stock > 0);
-            if (!isPublished) return false;
-          } else if (activeTab === 'DRAFT') {
-            if (p.status !== 'DRAFT') return false;
-          } else if (activeTab === 'OUT_OF_STOCK') {
-            if (p.stock !== 0) return false;
-          }
+          const isPublished = p.status === 'PUBLISHED' || (!p.status && p.stock > 0);
+          if (!isPublished) return false;
+        } else if (activeTab === 'DRAFT') {
+          if (isPendingApproval) return false;
+          if (p.status !== 'DRAFT') return false;
+        } else if (activeTab === 'OUT_OF_STOCK') {
+          if (isPendingApproval) return false;
+          if (p.stock !== 0) return false;
         }
 
         // Category Filter

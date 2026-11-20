@@ -586,7 +586,15 @@ export function ProductForm({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
-    if (!title.trim() || !masterSku.trim()) return;
+
+    if (!title.trim()) {
+      setSubmitError('অনুগ্রহ করে প্রোডাক্টের নাম (Product Name) লিখুন।');
+      return;
+    }
+    if (!masterSku.trim()) {
+      setSubmitError('প্রোডাক্টের SKU আবশ্যক।');
+      return;
+    }
 
     setSubmitError(null);
     setIsSubmitting(true);

@@ -390,14 +390,22 @@ export const merchantApi = {
       imageUrl: product.imageUrl || allDistinctImages[0],
       images: allDistinctImages,
       variants: (product.variantsList && product.variantsList.length > 0)
-        ? product.variantsList.map((v) => {
+        ? product.variantsList.map((v, vIdx) => {
             const matchingColor = (product.colors || []).find(
               (c) => (c.name || '').trim().toLowerCase() === (v.color || '').trim().toLowerCase()
             );
             const colorImg = matchingColor?.imageUrl || (v as any).imageUrl || product.imageUrl || '';
+            const rawVarCode = v.variantSku
+              ? v.variantSku.replace(new RegExp(`^${product.sku}-?`, 'i'), '').trim()
+              : `${v.color || 'STD'}-${v.size || v.attributeValue || 'STD'}`;
+            const cleanVarCode = (rawVarCode || `V${vIdx + 1}`)
+              .replace(/[^a-zA-Z0-9_-]/g, '-')
+              .toUpperCase();
+
             return {
-              title: `${v.color || 'Standard'} / ${v.size || 'Standard'}`,
-              variantCode: `${(v.color || 'STD').slice(0, 3)}-${(v.size || 'STD').slice(0, 3)}`.toUpperCase(),
+              title: `${v.color || 'Standard'} / ${v.size || v.attributeValue || 'Standard'}`,
+              variantCode: cleanVarCode,
+              barcode: (v as any).barcode || `890${Math.floor(1000000000 + Math.random() * 9000000000)}`,
               price: Number(product.price) || 0,
               defaultBinCode: 'Pending Approval',
               initialStock: Math.max(0, Number(v.stock) || 0),

@@ -53,10 +53,18 @@ export class InventoryService {
       binCode: 'A-01-01',
     });
 
+    const seenSkus = new Set<string>();
     const formattedVariants = payload.variants.map((v, idx) => {
-      const cleanVar = v.variantCode.trim().toUpperCase().replace(/\s+/g, '-');
-      const twoPartSku = `${merchantPrefix}-${finalBaseSku}-${cleanVar}`;
-      const ean13 = `894${Date.now().toString().slice(-9)}${idx % 10}`;
+      const rawVar = (v.variantCode || `V${idx + 1}`).trim().toUpperCase().replace(/[^a-zA-Z0-9_-]/g, '-');
+      let cleanVar = rawVar.length > 0 ? rawVar : `V${idx + 1}`;
+      let twoPartSku = `${merchantPrefix}-${finalBaseSku}-${cleanVar}`;
+      if (seenSkus.has(twoPartSku)) {
+        twoPartSku = `${merchantPrefix}-${finalBaseSku}-${cleanVar}-${idx + 1}`;
+      }
+      seenSkus.add(twoPartSku);
+
+      const randEntropy = Math.floor(100 + Math.random() * 900);
+      const ean13 = (v as any).barcode?.trim() || `894${Date.now().toString().slice(-7)}${idx % 10}${randEntropy}`;
 
       return {
         sku: twoPartSku,
