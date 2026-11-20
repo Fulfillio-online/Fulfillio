@@ -26,7 +26,7 @@ import {
   ProductType,
   ProductVariantConfig,
 } from '../types';
-import { compressImage } from '../utils/imageCompressor';
+import { compressImage, compressThumbnail } from '../utils/imageCompressor';
 
 interface ProductFormProps {
   initialProduct?: MerchantProductItem | null;
@@ -301,7 +301,7 @@ export function ProductForm({
     if (!file) return;
 
     try {
-      const compressed = await compressImage(file, 800, 800, 0.8);
+      const compressed = await compressImage(file);
       setImageUrl(compressed);
     } catch (err) {
       console.error('Failed to compress image:', err);
@@ -317,7 +317,7 @@ export function ProductForm({
     if (!file || !activeColorUploadId) return;
 
     try {
-      const compressed = await compressImage(file, 800, 800, 0.8);
+      const compressed = await compressThumbnail(file);
       setColors((prev) =>
         prev.map((c) => (c.id === activeColorUploadId ? { ...c, imageUrl: compressed } : c))
       );

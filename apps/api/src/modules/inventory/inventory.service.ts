@@ -33,6 +33,10 @@ export class InventoryService {
     const cleanBaseSku = payload.baseSku.trim().toUpperCase().replace(/\s+/g, '-');
     const merchantPrefix = merchant.merchantCode.toUpperCase();
 
+    // Prevent PostgreSQL unique constraint error on (merchantId, baseSku)
+    const existingProduct = await this.inventoryRepo.findProductByMerchantAndBaseSku(merchant.id, cleanBaseSku);
+    const finalBaseSku = existingProduct ? `${cleanBaseSku}-${Date.now().toString().slice(-4)}` : cleanBaseSku;
+
     // Ensure default warehouse bin exists
     const defaultLocation = await this.inventoryRepo.upsertLocation({
       zone: 'A',
@@ -44,7 +48,7 @@ export class InventoryService {
 
     const formattedVariants = payload.variants.map((v, idx) => {
       const cleanVar = v.variantCode.trim().toUpperCase().replace(/\s+/g, '-');
-      const twoPartSku = `${merchantPrefix}-${cleanBaseSku}-${cleanVar}`;
+      const twoPartSku = `${merchantPrefix}-${finalBaseSku}-${cleanVar}`;
       const ean13 = `894${Date.now().toString().slice(-9)}${idx % 10}`;
 
       return {
@@ -58,12 +62,17 @@ export class InventoryService {
       };
     });
 
+    // Sanitize image url: strip null bytes and trim
+    const sanitizedImage = payload.imageUrl
+      ? payload.imageUrl.replace(/\0/g, '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim()
+      : undefined;
+
     return this.inventoryRepo.createProductWithVariants({
-      merchantId,
+      merchantId: merchant.id,
       title: payload.title,
       description: payload.description,
-      baseSku: cleanBaseSku,
-      imageUrl: payload.imageUrl,
+      baseSku: finalBaseSku,
+      imageUrl: sanitizedImage,
       defaultLocationId: defaultLocation.id,
       variants: formattedVariants,
     });

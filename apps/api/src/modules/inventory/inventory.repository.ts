@@ -7,8 +7,23 @@ export class InventoryRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async findMerchantById(merchantId: string) {
-    return this.prisma.merchant.findUnique({
-      where: { id: merchantId },
+    if (!merchantId) return null;
+    return this.prisma.merchant.findFirst({
+      where: {
+        OR: [
+          { id: merchantId },
+          { merchantCode: merchantId },
+        ],
+      },
+    });
+  }
+
+  async findProductByMerchantAndBaseSku(merchantId: string, baseSku: string) {
+    return this.prisma.product.findFirst({
+      where: {
+        merchantId,
+        baseSku,
+      },
     });
   }
 
@@ -57,13 +72,19 @@ export class InventoryRepository {
       attributes?: Record<string, any>;
     }>;
   }) {
-    return this.prisma.product.create({
-      data: {
-        merchantId: data.merchantId,
-        title: data.title,
-        description: data.description,
-        baseSku: data.baseSku,
-        imageUrl: data.imageUrl,
+    // Sanitize imageUrl to prevent PostgreSQL UTF-8 null byte error (0x00)
+    const sanitizedImageUrl = data.imageUrl
+      ? data.imageUrl.replace(/\0/g, '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+      : null;
+
+    try {
+      return await this.prisma.product.create({
+        data: {
+          merchantId: data.merchantId,
+          title: data.title,
+          description: data.description,
+          baseSku: data.baseSku,
+          imageUrl: sanitizedImageUrl,
         variants: {
           create: data.variants.map((v) => ({
             sku: v.sku,
@@ -90,6 +111,10 @@ export class InventoryRepository {
         },
       },
     });
+    } catch (err: any) {
+      console.error('[PostgreSQL Save Error] Failed to create product with variants:', err?.message || err);
+      throw new BadRequestException(`PostgreSQL Save Error: ${err?.message || 'Database transaction failed'}`);
+    }
   }
 
   async findProducts(merchantId?: string) {

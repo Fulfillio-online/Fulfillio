@@ -934,7 +934,22 @@ export function syncMerchantProductsAddedToAdmin(
     if (mappedNew.length === 0) return;
 
     const updatedAdmin = [...mappedNew, ...currentAdmin];
-    localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(updatedAdmin));
+    try {
+      localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(updatedAdmin));
+    } catch {
+      try {
+        // If quota exceeded, trim large base64 strings from older items
+        const leanAdmin = updatedAdmin.map((p, idx) => {
+          if (idx > 15 && p.imageUrl?.startsWith('data:')) {
+            return { ...p, imageUrl: '' };
+          }
+          return p;
+        });
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(leanAdmin));
+      } catch {
+        // Gracefully ignore
+      }
+    }
     window.dispatchEvent(
       new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'MerchantContext' } })
     );

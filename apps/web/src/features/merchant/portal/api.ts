@@ -123,6 +123,63 @@ export const merchantApi = {
     return INITIAL_MERCHANT_PRODUCTS;
   },
 
+  async createProduct(item: MerchantProductItem): Promise<any> {
+    try {
+      const baseSkuClean =
+        item.sku.replace(/^[A-Z0-9]+-PRD-/i, '').replace(/^[A-Z0-9]+-/i, '') || item.sku;
+      const payload = {
+        title: item.title,
+        description: item.description || '',
+        baseSku: baseSkuClean,
+        imageUrl: item.imageUrl,
+        variants:
+          item.variantsList && item.variantsList.length > 0
+            ? item.variantsList.map((v) => ({
+                title: `${item.title} - ${v.attributeValue || v.color || ''}`,
+                variantCode:
+                  v.variantSku.replace(new RegExp(`^.*-${baseSkuClean}-?`, 'i'), '') || v.id,
+                price: item.price,
+                wholesalePrice: item.costPrice || item.price * 0.75,
+                defaultBinCode: item.bin && item.bin !== 'Pending Approval' ? item.bin : 'A-01-01',
+                attributes: {
+                  attributeName: v.attributeName,
+                  attributeValue: v.attributeValue,
+                  color: v.color,
+                  size: v.size,
+                },
+              }))
+            : item.colors && item.colors.length > 0
+            ? item.colors.flatMap((c) =>
+                (c.sizes && c.sizes.length > 0 ? c.sizes : ['Standard']).map((sz) => ({
+                  title: `${item.title} - ${c.name} / ${sz}`,
+                  variantCode: `${c.name.slice(0, 3).toUpperCase()}-${sz}`,
+                  price: item.price,
+                  wholesalePrice: item.costPrice || item.price * 0.75,
+                  defaultBinCode: 'A-01-01',
+                  attributes: { color: c.name, hex: c.hex, size: sz },
+                }))
+              )
+            : [
+                {
+                  title: item.title,
+                  variantCode: 'STD',
+                  price: item.price,
+                  wholesalePrice: item.costPrice || item.price * 0.75,
+                  defaultBinCode: 'A-01-01',
+                  attributes: {},
+                },
+              ],
+      };
+
+      return await safeFetch('/inventory/products', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      return null;
+    }
+  },
+
   async getOrders(): Promise<MerchantOrderItem[]> {
     const remote = await safeFetch<{ items: any[] }>('/orders');
     if (remote?.items && Array.isArray(remote.items) && remote.items.length > 0) {

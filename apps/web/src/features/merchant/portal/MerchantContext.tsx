@@ -36,6 +36,22 @@ import {
   syncMerchantMemoDeletedToAdmin,
 } from '@/lib/warehouseSync';
 
+function safeLocalStorageSet(key: string, value: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(key, value);
+  } catch (err) {
+    console.warn(`[Storage] Quota exceeded for "${key}", cleaning non-critical cache...`, err);
+    try {
+      const purgeKeys = ['fulfillio_temp_cache', 'fulfillio_audit_logs'];
+      purgeKeys.forEach((k) => localStorage.removeItem(k));
+      localStorage.setItem(key, value);
+    } catch {
+      // Gracefully prevent unhandled DOMException quota errors
+    }
+  }
+}
+
 interface MerchantContextType {
   profile: MerchantProfileData;
   products: MerchantProductItem[];
@@ -144,7 +160,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
         return updatedTarget;
       });
       if (typeof window !== 'undefined') {
-        localStorage.setItem(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
+        safeLocalStorageSet(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
         if (updatedTarget) {
           syncMerchantProductUpdatedToAdmin(updatedTarget, profile);
         }
@@ -159,7 +175,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       const deleted = prev.filter((p) => p.id === id);
       const next = prev.filter((p) => p.id !== id);
       if (typeof window !== 'undefined') {
-        localStorage.setItem(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
+        safeLocalStorageSet(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
         syncMerchantProductsDeletedToAdmin(deleted);
       }
       return next;
@@ -176,11 +192,17 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     setProducts((prev) => {
       const next = [...pendingItems, ...prev];
       if (typeof window !== 'undefined') {
-        localStorage.setItem(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
+        safeLocalStorageSet(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
         syncMerchantProductsAddedToAdmin(pendingItems, profile);
       }
       return next;
     });
+
+    // Background sync to backend/PostgreSQL (non-blocking, graceful fallback)
+    newItems.forEach((item) => {
+      merchantApi.createProduct?.(item).catch(() => {});
+    });
+
     showToast(
       `Submitted ${pendingItems.length} product SKU(s) for Admin Approval. It will publish automatically once approved.`
     );
@@ -201,7 +223,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
         return updatedTarget;
       });
       if (typeof window !== 'undefined') {
-        localStorage.setItem(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
+        safeLocalStorageSet(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
         if (updatedTarget) {
           syncMerchantProductUpdatedToAdmin(updatedTarget, profile);
         }

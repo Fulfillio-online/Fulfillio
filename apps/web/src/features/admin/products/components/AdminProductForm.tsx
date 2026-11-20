@@ -28,7 +28,7 @@ import {
 import { WarehouseBin, WarehouseProductItem } from '../types';
 import { INITIAL_BINS, INITIAL_PRODUCTS, STORAGE_KEY_BINS, STORAGE_KEY_PRODUCTS } from '../mockData';
 import { ColorSwatch, ProductType, ProductVariantConfig } from '@/features/merchant/portal/products/types';
-import { compressImage } from '@/features/merchant/portal/products/utils/imageCompressor';
+import { compressImage, compressThumbnail } from '@/features/merchant/portal/products/utils/imageCompressor';
 import {
   getStoredMerchantDirectory,
   syncAdminProductsToMerchant,
@@ -160,7 +160,7 @@ export function AdminProductForm() {
     if (!file) return;
 
     try {
-      const compressed = await compressImage(file, 800, 800, 0.8);
+      const compressed = await compressImage(file);
       setImageUrl(compressed);
     } catch (err) {
       console.error('Failed to compress image:', err);
@@ -177,7 +177,7 @@ export function AdminProductForm() {
     if (!file || !activeColorUploadId) return;
 
     try {
-      const compressed = await compressImage(file, 800, 800, 0.8);
+      const compressed = await compressThumbnail(file);
       setColors((prev) =>
         prev.map((c) => (c.id === activeColorUploadId ? { ...c, imageUrl: compressed } : c))
       );
