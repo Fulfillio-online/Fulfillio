@@ -29,6 +29,24 @@ export class InventoryRepository {
     });
   }
 
+  async upsertMerchantStub(merchantCode: string) {
+    const cleanCode = merchantCode.trim().toUpperCase();
+    const safeEmail = `${cleanCode.toLowerCase().replace(/[^a-z0-9]/g, '')}@fulfillio.online`;
+    return this.prisma.merchant.upsert({
+      where: { merchantCode: cleanCode },
+      update: {},
+      create: {
+        merchantCode: cleanCode,
+        businessName: `Merchant Store (${cleanCode})`,
+        ownerName: 'Store Owner',
+        email: safeEmail,
+        phone: '01700-000000',
+        location: 'Dhaka, Bangladesh',
+        status: 'APPROVED',
+      },
+    });
+  }
+
   async upsertLocation(data: {
     zone: string;
     aisle: string;

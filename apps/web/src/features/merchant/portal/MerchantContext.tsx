@@ -303,6 +303,8 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
           if (matchPending) {
             return {
               ...sp,
+              status: 'PENDING_APPROVAL' as const,
+              bin: 'Pending Approval',
               colors: (sp.colors && sp.colors.some((c) => c.imageUrl))
                 ? sp.colors
                 : (matchPending.colors || sp.colors),
@@ -314,6 +316,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
         setProducts(reconciled);
         if (typeof window !== 'undefined') {
           safeSetLocalStorage(getMerchantProductsKey(profile.merchantCode), JSON.stringify(reconciled));
+          syncMerchantProductsAddedToAdmin(pendingItems, profile);
         }
       } else {
         setProducts((prev) => {

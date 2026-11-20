@@ -176,8 +176,8 @@ export const merchantApi = {
           profitMargin,
           minPrice,
           maxPrice,
-          bin: firstVariant?.defaultBinCode || 'A-01-01',
-          status: 'PUBLISHED' as const,
+          bin: (variants[0]?.attributes as any)?.bin || (firstVariant?.defaultBinCode === 'Pending Approval' ? 'Pending Approval' : (firstVariant?.defaultBinCode || 'A-01-01')),
+          status: (variants[0]?.attributes as any)?.status === 'PENDING_APPROVAL' || firstVariant?.defaultBinCode === 'Pending Approval' ? ('PENDING_APPROVAL' as const) : ('PUBLISHED' as const),
           imageUrl: p.imageUrl,
           images: p.images && p.images.length > 0 ? p.images : (p.imageUrl ? [p.imageUrl] : []),
           description: p.description,
@@ -388,7 +388,7 @@ export const merchantApi = {
               title: `${v.color || 'Standard'} / ${v.size || 'Standard'}`,
               variantCode: `${(v.color || 'STD').slice(0, 3)}-${(v.size || 'STD').slice(0, 3)}`.toUpperCase(),
               price: Number(product.price) || 0,
-              defaultBinCode: 'A-01-01',
+              defaultBinCode: 'Pending Approval',
               initialStock: Math.max(0, Number(v.stock) || 0),
               imageUrl: colorImg,
               attributes: {
@@ -403,6 +403,9 @@ export const merchantApi = {
                 subcategory: product.subcategory,
                 productType: product.productType,
                 keyFeatures: product.keyFeatures,
+                status: 'PENDING_APPROVAL',
+                approvalStatus: 'PENDING_APPROVAL',
+                bin: 'Pending Approval',
               },
             };
           })
@@ -410,7 +413,7 @@ export const merchantApi = {
             title: product.variantLabel || 'Standard',
             variantCode: 'STD',
             price: Number(product.price) || 0,
-            defaultBinCode: 'A-01-01',
+            defaultBinCode: 'Pending Approval',
             initialStock: Math.max(0, Number(product.stock) || 0),
             imageUrl: product.imageUrl,
             attributes: {
@@ -419,6 +422,9 @@ export const merchantApi = {
               subcategory: product.subcategory,
               productType: product.productType,
               keyFeatures: product.keyFeatures,
+              status: 'PENDING_APPROVAL',
+              approvalStatus: 'PENDING_APPROVAL',
+              bin: 'Pending Approval',
             },
           }],
     };

@@ -11,6 +11,8 @@ export class InventoryService {
   async createProductWithVariants(
     merchantId: string,
     payload: {
+      merchantId?: string;
+      merchantCode?: string;
       title: string;
       description?: string;
       baseSku: string;
@@ -28,9 +30,11 @@ export class InventoryService {
       }>;
     },
   ) {
-    const merchant = await this.inventoryRepo.findMerchantById(merchantId);
+    let merchant = await this.inventoryRepo.findMerchantById(merchantId);
     if (!merchant) {
-      throw new NotFoundException(`Merchant '${merchantId}' not found.`);
+      // Auto-provision merchant in PostgreSQL if not present
+      const candidateCode = (payload.merchantCode || merchantId || 'MC-101').trim().toUpperCase();
+      merchant = await this.inventoryRepo.upsertMerchantStub(candidateCode);
     }
 
     const cleanBaseSku = payload.baseSku.trim().toUpperCase().replace(/\s+/g, '-');
@@ -121,9 +125,10 @@ export class InventoryService {
       }>;
     },
   ) {
-    const merchant = await this.inventoryRepo.findMerchantById(merchantId);
+    let merchant = await this.inventoryRepo.findMerchantById(merchantId);
     if (!merchant) {
-      throw new NotFoundException(`Merchant '${merchantId}' not found.`);
+      const candidateCode = (merchantId || 'MC-101').trim().toUpperCase();
+      merchant = await this.inventoryRepo.upsertMerchantStub(candidateCode);
     }
 
     const defaultLocation = await this.inventoryRepo.upsertLocation({
