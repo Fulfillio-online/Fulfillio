@@ -576,7 +576,7 @@ export function CreateManualOrderModal({
       : 'Cash on Delivery';
 
     const lineItems: OrderLineItem[] = items.map((it) => ({
-      id: it.productId,
+      id: it.selectedVariantId || it.productId,
       title: it.title,
       variant: it.variantLabel,
       sku: it.sku,

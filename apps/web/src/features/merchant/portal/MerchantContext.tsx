@@ -87,7 +87,8 @@ interface MerchantContextType {
     order: MerchantOrderItem,
     productIdOrItems?: string | { productId: string; qty: number }[],
     qty?: number
-  ) => void;
+  ) => Promise<{ ok: boolean; error?: string }>;
+  syncLocalOrdersToDatabase: () => Promise<{ uploaded: number; failed: number }>;
   cancelOrder: (orderId: string) => void;
   updateOrderStatus: (orderId: string, status: MerchantOrderItem['status']) => void;
   createAsn: (newAsn: MerchantAsnRecord) => void;
@@ -651,11 +652,11 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     showToast('Stock request cancelled.');
   };
 
-  const createOrder = (
+  const createOrder = async (
     order: MerchantOrderItem,
     productIdOrItems?: string | { productId: string; qty: number }[],
     qty?: number
-  ) => {
+  ): Promise<{ ok: boolean; error?: string }> => {
     const itemsToDeduct: { productId: string; qty: number }[] = [];
     if (Array.isArray(productIdOrItems)) {
       itemsToDeduct.push(...productIdOrItems);
@@ -689,16 +690,88 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       return next;
     });
 
-    setOrders((prev) => {
-      const next = [order, ...prev];
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(getMerchantOrdersKey(profile.merchantCode), JSON.stringify(next));
-      }
-      return next;
-    });
+    // 1. Upload order directly to PostgreSQL backend
+    const res = await merchantApi.createOrder(order);
 
-    merchantApi.createOrder(order).catch(() => {});
+    if (!res.ok) {
+      console.warn('Backend order upload notice:', res.error);
+      // Fallback: preserve in local cache memory so no user data is lost
+      setOrders((prev) => {
+        const next = [order, ...prev];
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(getMerchantOrdersKey(profile.merchantCode), JSON.stringify(next));
+        }
+        return next;
+      });
+      syncMerchantOrderCreatedToAdmin(order, itemsToDeduct, latestProducts, memoList, profile);
+      showToast(`সতর্কতা: ডাটাবেজে সেভ হতে সমস্যা হয়েছে (${res.error}), লোকাল ক্যাশে সেভ করা হয়েছে।`);
+      return { ok: false, error: res.error };
+    }
+
+    // 2. If uploaded successfully, refresh orders from PostgreSQL
+    try {
+      const serverOrds = await merchantApi.getOrders();
+      if (serverOrds && serverOrds.length > 0) {
+        setOrders(serverOrds);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(getMerchantOrdersKey(profile.merchantCode), JSON.stringify(serverOrds));
+        }
+      } else {
+        setOrders((prev) => {
+          const next = [order, ...prev];
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(getMerchantOrdersKey(profile.merchantCode), JSON.stringify(next));
+          }
+          return next;
+        });
+      }
+    } catch {
+      setOrders((prev) => {
+        const next = [order, ...prev];
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(getMerchantOrdersKey(profile.merchantCode), JSON.stringify(next));
+        }
+        return next;
+      });
+    }
+
     syncMerchantOrderCreatedToAdmin(order, itemsToDeduct, latestProducts, memoList, profile);
+    showToast(
+      `অর্ডার ${order.orderNumber || order.id} সফলভাবে PostgreSQL ডাটাবেজে সেভ হয়েছে!`
+    );
+    return { ok: true };
+  };
+
+  const syncLocalOrdersToDatabase = async (): Promise<{ uploaded: number; failed: number }> => {
+    let uploaded = 0;
+    let failed = 0;
+    for (const ord of orders) {
+      try {
+        const res = await merchantApi.createOrder(ord);
+        if (res.ok) {
+          uploaded++;
+        } else {
+          failed++;
+        }
+      } catch {
+        failed++;
+      }
+    }
+    if (uploaded > 0) {
+      const serverOrds = await merchantApi.getOrders();
+      if (serverOrds && serverOrds.length > 0) {
+        setOrders(serverOrds);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(getMerchantOrdersKey(profile.merchantCode), JSON.stringify(serverOrds));
+        }
+      }
+      showToast(`${uploaded} টি অর্ডার সফলভাবে PostgreSQL ডাটাবেজে আপলোড হয়েছে!`);
+    } else if (failed > 0) {
+      showToast('অর্ডার ডাটাবেজে আপলোড হতে সমস্যা হয়েছে।');
+    } else {
+      showToast('সব অর্ডার ইতিমধ্যে ডাটাবেজে সংরক্ষিত রয়েছে।');
+    }
+    return { uploaded, failed };
   };
 
   const cancelOrder = (orderId: string) => {
@@ -947,6 +1020,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
         approveStockRequest,
         cancelStockRequest,
         createOrder,
+        syncLocalOrdersToDatabase,
         cancelOrder,
         updateOrderStatus,
         createAsn,

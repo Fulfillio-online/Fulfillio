@@ -14,13 +14,15 @@ import {
   Truck,
   CheckCircle2,
   TrendingUp,
-  AlertCircle,
   ExternalLink,
+  RefreshCw,
+  Database,
 } from 'lucide-react';
 import { FraudRatioBadge } from '@/components/ui/FraudRatioBadge';
 import { MerchantOrderItem, MerchantProductItem, ResellerMemo } from '../../types';
 import { CreateManualOrderModal } from '../modals/CreateManualOrderModal';
 import { MerchantExpandableCard } from '../common/MerchantExpandableCard';
+import { useMerchant } from '../../MerchantContext';
 
 interface MerchantOrdersTabProps {
   orders: MerchantOrderItem[];
@@ -46,11 +48,24 @@ export function MerchantOrdersTab({
   onTriggerToast,
 }: MerchantOrdersTabProps) {
   const router = useRouter();
+  const { syncLocalOrdersToDatabase } = useMerchant();
+  const [isSyncing, setIsSyncing] = useState(false);
   const [isCreateOrderOpen, setIsCreateOrderOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<TabFilter>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 8; // Matching the reference screenshot showing 8 items per page
+
+  const handleSyncDatabase = async () => {
+    setIsSyncing(true);
+    try {
+      await syncLocalOrdersToDatabase();
+    } catch {
+      onTriggerToast('ডাটাবেজে আপলোড হতে সমস্যা হয়েছে।');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   // Calculate Stat Cards Metrics
   const stats = useMemo(() => {
@@ -206,6 +221,17 @@ export function MerchantOrdersTab({
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+          <button
+            type="button"
+            disabled={isSyncing}
+            onClick={handleSyncDatabase}
+            className="flex-1 sm:flex-initial px-4 py-2.5 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors shadow-xs cursor-pointer disabled:opacity-50"
+            title="Upload cached local orders to PostgreSQL database"
+          >
+            <RefreshCw className={`h-4 w-4 text-emerald-600 dark:text-emerald-400 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>{isSyncing ? 'Uploading...' : 'Sync to Database'}</span>
+          </button>
+
           <button
             type="button"
             onClick={handleExportCsv}
