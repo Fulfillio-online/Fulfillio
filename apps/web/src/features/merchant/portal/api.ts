@@ -2,6 +2,7 @@ import { getActiveMerchantSession, getMerchantProductsKey, getMerchantOrdersKey 
 import {
   MerchantAsnRecord,
   MerchantOrderItem,
+  OrderLineItem,
   MerchantProductItem,
   MerchantProfileData,
   MerchantWebhookLog,
@@ -223,26 +224,73 @@ export const merchantApi = {
   },
 
   async getOrders(): Promise<MerchantOrderItem[]> {
-    const remote = await safeFetch<{ items: any[] }>('/orders');
+    const session = typeof window !== 'undefined' ? getActiveMerchantSession() : null;
+    const code = session?.merchantCode || 'MC-101';
+    const remote = await safeFetch<{ items: any[] }>(`/orders?merchantCode=${code}`, {
+      headers: { 'x-merchant-code': code },
+    });
     if (remote?.items && Array.isArray(remote.items) && remote.items.length > 0) {
-      return remote.items.map((o) => ({
-        id: o.orderNumber || o.id,
-        date: new Date(o.createdAt).toLocaleDateString(),
-        customer: o.customerName || 'Customer',
-        phone: o.customerPhone || '',
-        address: o.customerAddress || '',
-        productId: o.items?.[0]?.variantId || '',
-        items: o.items?.[0]?.variant?.title || 'Ordered Items',
-        qty: o.items?.reduce((sum: number, it: any) => sum + (it.quantity || 1), 0) || 1,
-        amount: Number(o.codAmount) || 0,
-        memoCode: o.memoCode || 'MEMO-DEFAULT',
-        status: o.status,
-        courier: o.courierProvider || 'STEADFAST',
-      }));
+      return remote.items.map((o) => {
+        const itemNames =
+          o.items && o.items.length > 0
+            ? o.items
+                .map((it: any) => `${it.productTitle || it.variant?.title || 'Product'} x ${it.quantity}`)
+                .join(', ')
+            : 'Ordered Items';
+        const totalQty =
+          o.items && o.items.length > 0
+            ? o.items.reduce((sum: number, it: any) => sum + (it.quantity || 1), 0)
+            : 1;
+
+        const mappedLineItems: OrderLineItem[] = (o.items || []).map((it: any) => ({
+          id: it.id || it.variantId || 'item-1',
+          title: it.productTitle || it.variant?.product?.title || it.variant?.title || 'Product',
+          variant: it.variantLabel || it.variant?.title || 'Standard',
+          sku: it.sku || it.variant?.sku || '',
+          price: Number(it.unitPrice) || 0,
+          quantity: it.quantity || 1,
+          total: (Number(it.unitPrice) || 0) * (it.quantity || 1),
+          imageUrl: it.variant?.imageUrl || it.variant?.product?.imageUrl || '',
+        }));
+
+        return {
+          id: o.orderNumber || o.externalOrderId || o.id,
+          orderNumber: o.externalOrderId || o.orderNumber || o.id,
+          date: new Date(o.createdAt).toLocaleDateString(),
+          customer: o.customerName || 'Customer',
+          phone: o.customerPhone || '',
+          address: o.customerAddress || '',
+          productId: o.items?.[0]?.variantId || '',
+          items: itemNames,
+          qty: totalQty,
+          amount: Number(o.totalAmount) || Number(o.codAmount) || 0,
+          subtotal: Number(o.subtotal) || Number(o.totalAmount) || 0,
+          deliveryFee: Number(o.deliveryFee) || 0,
+          discount: Number(o.discount) || 0,
+          advancePayment: Number(o.advancePayment) || 0,
+          codAmount: Number(o.codAmount) || 0,
+          memoCode: o.memoCode || 'MEMO-DEFAULT',
+          status: o.status,
+          courier: o.courierProvider || 'Steadfast',
+          paymentMethod: o.paymentMethod || 'Cash on Delivery',
+          paymentStatus:
+            (o.paymentStatus as any) || (Number(o.codAmount) === 0 ? 'Paid' : 'Unpaid'),
+          advancePaymentMethod: o.advancePaymentMethod,
+          advanceTrxId: o.advanceTrxId,
+          lineItems: mappedLineItems,
+          timeline:
+            (Array.isArray(o.timeline) ? o.timeline : null) || [
+              {
+                title: 'Order Placed',
+                description: `Order registered in PostgreSQL database`,
+                timestamp: new Date(o.createdAt).toLocaleTimeString(),
+                isCompleted: true,
+              },
+            ],
+        };
+      });
     }
     if (typeof window !== 'undefined') {
-      const session = getActiveMerchantSession();
-      const code = session?.merchantCode || 'MC-101';
       const local = localStorage.getItem(getMerchantOrdersKey(code));
       if (local !== null) {
         try {
@@ -538,8 +586,12 @@ export const merchantApi = {
     }
   },
 
-  async createOrder(order: MerchantOrderItem): Promise<any> {
+  async createOrder(order: MerchantOrderItem): Promise<{ ok: boolean; data?: any; error?: string }> {
+    const session = typeof window !== 'undefined' ? getActiveMerchantSession() : null;
+    const code = session?.merchantCode || 'MC-101';
+
     const payload = {
+      merchantCode: code,
       externalOrderId: order.orderNumber || order.id,
       customerName: order.customer,
       customerPhone: order.phone,
@@ -547,23 +599,66 @@ export const merchantApi = {
       city: 'Dhaka',
       memoCode: order.memoCode || 'MEMO-DEFAULT',
       totalAmount: Number(order.amount) || Number(order.codAmount) || 0,
-      codAmount: Number(order.codAmount) || Number(order.amount) || 0,
+      codAmount: Number(order.codAmount) ?? Number(order.amount) ?? 0,
+      subtotal: Number(order.subtotal) ?? Number(order.amount) ?? 0,
+      deliveryFee: Number(order.deliveryFee) ?? 0,
+      discount: Number(order.discount) ?? 0,
+      advancePayment: Number(order.advancePayment) ?? 0,
+      paymentMethod: order.paymentMethod,
+      paymentStatus: order.paymentStatus || (Number(order.codAmount) === 0 ? 'Paid' : 'Unpaid'),
+      advancePaymentMethod: order.advancePaymentMethod,
+      advanceTrxId: order.advanceTrxId,
+      timeline: order.timeline,
       allowBackorder: true,
       items: (order.lineItems && order.lineItems.length > 0)
         ? order.lineItems.map((li) => ({
             variantId: li.id,
+            productId: li.id,
+            sku: li.sku,
+            title: li.title,
+            productTitle: li.title,
+            variantLabel: li.variant,
             quantity: li.quantity || 1,
-            unitPrice: li.price || 0,
+            unitPrice: Number(li.price) || 0,
           }))
         : [{
-            variantId: order.productId || 'dummy-variant',
+            variantId: order.productId,
+            productId: order.productId,
+            sku: '',
+            title: order.items || 'Product',
+            productTitle: order.items || 'Product',
+            variantLabel: 'Standard',
             quantity: order.qty || 1,
             unitPrice: Math.round((Number(order.amount) || 0) / Math.max(1, order.qty || 1)),
           }],
     };
-    return safeFetch('/orders', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
+
+    try {
+      const res = await fetch(`${API_BASE}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-merchant-code': code,
+          ...getAuthHeader(),
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        let errMessage = `HTTP ${res.status}`;
+        try {
+          const errData = await res.json();
+          if (errData?.message) {
+            errMessage = Array.isArray(errData.message) ? errData.message.join(', ') : errData.message;
+          }
+        } catch {}
+        return { ok: false, error: errMessage };
+      }
+
+      const data = await res.json();
+      return { ok: true, data };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Network request failed' };
+    }
   },
 };

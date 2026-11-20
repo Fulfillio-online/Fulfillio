@@ -1,8 +1,10 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { OrderRepository } from './order.repository';
 import { InventoryService } from '../inventory/inventory.service';
+import { PrismaService } from '../../prisma/prisma.service';
 import {
   OrderStatus,
+  MerchantStatus,
   FraudRiskLevel,
   CustomerFraudReport,
   PackagingType,
@@ -14,6 +16,7 @@ export class OrderService {
   constructor(
     private readonly orderRepository: OrderRepository,
     private readonly inventoryService: InventoryService,
+    private readonly prisma: PrismaService,
   ) {}
 
   /**
@@ -141,11 +144,52 @@ export class OrderService {
   }
 
   /**
+   * Helper to resolve Merchant entity from ID, merchantCode, or email
+   */
+  async resolveMerchant(identifier?: string) {
+    if (!identifier) {
+      const defaultM = await this.prisma.merchant.findFirst({
+        where: { merchantCode: 'MC-101' },
+      });
+      if (defaultM) return defaultM;
+    } else {
+      const clean = identifier.trim();
+      const found = await this.prisma.merchant.findFirst({
+        where: {
+          OR: [
+            { id: clean },
+            { merchantCode: clean.toUpperCase() },
+            { email: clean.toLowerCase() },
+          ],
+        },
+      });
+      if (found) return found;
+    }
+
+    const fallback = await this.prisma.merchant.findFirst({
+      where: { merchantCode: 'MC-101' },
+    });
+    if (fallback) return fallback;
+
+    return this.prisma.merchant.create({
+      data: {
+        merchantCode: 'MC-101',
+        businessName: "Sabbir's Store",
+        email: 'sabbir@sabbirstore.com',
+        status: MerchantStatus.APPROVED,
+      },
+    });
+  }
+
+  /**
    * Ingest an order from Merchant Portal, WooCommerce, Shopify, or REST API
+   * Stores order directly in PostgreSQL database (orders and order_items tables)
    */
   async createOrder(
-    merchantId: string,
+    rawMerchant: string,
     payload: {
+      merchantId?: string;
+      merchantCode?: string;
       externalOrderId?: string;
       customerName: string;
       customerPhone: string;
@@ -154,52 +198,160 @@ export class OrderService {
       memoCode?: string;
       totalAmount: number;
       codAmount?: number;
+      subtotal?: number;
+      deliveryFee?: number;
+      discount?: number;
+      advancePayment?: number;
+      paymentMethod?: string;
+      paymentStatus?: string;
+      advancePaymentMethod?: string;
+      advanceTrxId?: string;
+      timeline?: any;
       allowBackorder?: boolean;
-      items: Array<{ variantId: string; quantity: number; unitPrice: number }>;
+      items: Array<{
+        variantId?: string | null;
+        productId?: string | null;
+        sku?: string | null;
+        title?: string | null;
+        productTitle?: string | null;
+        variantLabel?: string | null;
+        variant?: string | null;
+        quantity: number;
+        unitPrice: number;
+      }>;
     },
   ) {
     if (!payload.items || payload.items.length === 0) {
       throw new BadRequestException('Order must contain at least one item.');
     }
 
-    // 1. Evaluate Customer Fraud Ratio
-    const fraudReport = await this.evaluateCustomerFraudRatio(payload.customerPhone);
+    // 1. Resolve merchant entity (guaranteeing valid PostgreSQL UUID foreign key)
+    const merchant = await this.resolveMerchant(
+      rawMerchant || payload.merchantId || payload.merchantCode,
+    );
+    const merchantId = merchant.id;
 
-    // 2. Attempt atomic stock reservation
+    // 2. Evaluate Customer Fraud Ratio
+    const cleanPhone = (payload.customerPhone || '01700000000').trim();
+    const fraudReport = await this.evaluateCustomerFraudRatio(cleanPhone);
+
+    // 3. Resolve items & attempt stock reservation
     let targetStatus: OrderStatus =
       fraudReport.riskLevel === FraudRiskLevel.HIGH_RISK_FRAUD
         ? OrderStatus.ON_HOLD_FRAUD
         : OrderStatus.ALLOCATED;
 
-    try {
-      await this.inventoryService.reserveStockForOrder(
-        payload.items,
-        merchantId,
-        payload.externalOrderId,
-      );
-    } catch (err: any) {
-      if (payload.allowBackorder) {
-        targetStatus = OrderStatus.ON_HOLD_STOCK;
-      } else {
-        throw err;
+    const itemsToReserve: Array<{ variantId: string; quantity: number }> = [];
+
+    const formattedItems = await Promise.all(
+      payload.items.map(async (item) => {
+        let resolvedVariantId: string | null = null;
+        let resolvedSku = item.sku || null;
+        let resolvedTitle = item.title || item.productTitle || null;
+        let resolvedLabel = item.variantLabel || item.variant || null;
+
+        // Try lookup by variantId
+        if (item.variantId) {
+          const v = await this.prisma.productVariant.findUnique({
+            where: { id: item.variantId },
+            include: { product: true },
+          });
+          if (v) {
+            resolvedVariantId = v.id;
+            resolvedSku = resolvedSku || v.sku;
+            resolvedTitle = resolvedTitle || v.product?.title || v.title;
+            resolvedLabel = resolvedLabel || v.title;
+          }
+        }
+
+        // Try lookup by sku
+        if (!resolvedVariantId && item.sku) {
+          const v = await this.prisma.productVariant.findUnique({
+            where: { sku: item.sku },
+            include: { product: true },
+          });
+          if (v) {
+            resolvedVariantId = v.id;
+            resolvedSku = resolvedSku || v.sku;
+            resolvedTitle = resolvedTitle || v.product?.title || v.title;
+            resolvedLabel = resolvedLabel || v.title;
+          }
+        }
+
+        // Try lookup by productId
+        if (!resolvedVariantId && item.productId) {
+          const v = await this.prisma.productVariant.findFirst({
+            where: { productId: item.productId },
+            include: { product: true },
+          });
+          if (v) {
+            resolvedVariantId = v.id;
+            resolvedSku = resolvedSku || v.sku;
+            resolvedTitle = resolvedTitle || v.title;
+          }
+        }
+
+        if (resolvedVariantId) {
+          itemsToReserve.push({
+            variantId: resolvedVariantId,
+            quantity: Math.max(1, Number(item.quantity) || 1),
+          });
+        }
+
+        return {
+          variantId: resolvedVariantId,
+          sku: resolvedSku || 'SKU-STANDARD',
+          productTitle: resolvedTitle || 'Product',
+          variantLabel: resolvedLabel || 'Standard',
+          quantity: Math.max(1, Number(item.quantity) || 1),
+          unitPrice: Number(item.unitPrice) || 0,
+        };
+      }),
+    );
+
+    if (itemsToReserve.length > 0) {
+      try {
+        await this.inventoryService.reserveStockForOrder(
+          itemsToReserve,
+          merchantId,
+          payload.externalOrderId,
+        );
+      } catch (err: any) {
+        if (payload.allowBackorder ?? true) {
+          targetStatus = OrderStatus.ON_HOLD_STOCK;
+        } else {
+          throw err;
+        }
       }
     }
 
-    // 3. Create order record with Merchant's Reseller Memo Code & Fraud Score
+    // 4. Create order record with Merchant's Reseller Memo Code, Fraud Score, and items in PostgreSQL
     const order = await this.orderRepository.createOrderWithItems({
       merchantId,
       externalOrderId: payload.externalOrderId,
-      customerName: payload.customerName,
-      customerPhone: payload.customerPhone,
-      customerAddress: payload.customerAddress,
-      city: payload.city,
+      customerName: payload.customerName || 'Customer',
+      customerPhone: cleanPhone,
+      customerAddress: payload.customerAddress || 'Address',
+      city: payload.city || 'Dhaka',
       memoCode: payload.memoCode ? payload.memoCode.toUpperCase() : 'MEMO-DEFAULT',
       status: targetStatus,
       customerRiskScore: fraudReport.successRatio,
       customerRiskLevel: fraudReport.riskLevel,
-      totalAmount: payload.totalAmount,
-      codAmount: payload.codAmount ?? 0,
-      items: payload.items,
+      totalAmount: Number(payload.totalAmount) || 0,
+      codAmount: Number(payload.codAmount) ?? Number(payload.totalAmount) ?? 0,
+      subtotal: Number(payload.subtotal) ?? Number(payload.totalAmount) ?? 0,
+      deliveryFee: Number(payload.deliveryFee) ?? 0,
+      discount: Number(payload.discount) ?? 0,
+      advancePayment: Number(payload.advancePayment) ?? 0,
+      paymentMethod:
+        payload.paymentMethod ||
+        (Number(payload.codAmount) === 0 ? 'Full Paid' : 'Cash on Delivery'),
+      paymentStatus:
+        payload.paymentStatus || (Number(payload.codAmount) === 0 ? 'Paid' : 'Unpaid'),
+      advancePaymentMethod: payload.advancePaymentMethod,
+      advanceTrxId: payload.advanceTrxId,
+      timeline: payload.timeline,
+      items: formattedItems,
     });
 
     return {

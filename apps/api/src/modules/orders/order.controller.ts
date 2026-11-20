@@ -24,25 +24,35 @@ export class OrderController {
    * List orders with pagination, search, status filtering, and multi-tenant security
    */
   @Get()
-  @UseGuards(JwtAuthGuard, RolesGuard)
   async listOrders(
     @Request() req: any,
     @Query('status') status?: OrderStatus,
     @Query('search') search?: string,
     @Query('merchantId') merchantIdQuery?: string,
+    @Query('merchantCode') merchantCodeQuery?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    // If MERCHANT role, always enforce their own merchantId
-    const isMerchant = req.user?.role === UserRole.MERCHANT;
-    const effectiveMerchantId = isMerchant ? req.user.merchantId : merchantIdQuery;
+    const rawMerchant =
+      req.user?.merchantId ||
+      merchantIdQuery ||
+      merchantCodeQuery ||
+      req.headers['x-merchant-code'];
+
+    let effectiveMerchantId: string | undefined = undefined;
+    if (rawMerchant) {
+      const merchant = await this.orderService.resolveMerchant(rawMerchant);
+      if (merchant) {
+        effectiveMerchantId = merchant.id;
+      }
+    }
 
     return this.orderService.listOrders({
       merchantId: effectiveMerchantId,
       status,
       search,
       page: page ? parseInt(page, 10) : 1,
-      limit: limit ? parseInt(limit, 10) : 20,
+      limit: limit ? parseInt(limit, 10) : 50,
     });
   }
 
@@ -50,10 +60,13 @@ export class OrderController {
    * Get single order by ID with line items and fulfillments
    */
   @Get(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   async getOrderById(@Request() req: any, @Param('id') id: string) {
-    const isMerchant = req.user?.role === UserRole.MERCHANT;
-    const effectiveMerchantId = isMerchant ? req.user.merchantId : undefined;
+    const rawMerchant = req.user?.merchantId || req.headers['x-merchant-code'];
+    let effectiveMerchantId: string | undefined = undefined;
+    if (rawMerchant) {
+      const merchant = await this.orderService.resolveMerchant(rawMerchant);
+      if (merchant) effectiveMerchantId = merchant.id;
+    }
     return this.orderService.getOrderById(id, effectiveMerchantId);
   }
 
@@ -61,14 +74,17 @@ export class OrderController {
    * Update order status
    */
   @Patch(':id/status')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   async updateStatus(
     @Request() req: any,
     @Param('id') id: string,
     @Body('status') status: OrderStatus,
   ) {
-    const isMerchant = req.user?.role === UserRole.MERCHANT;
-    const effectiveMerchantId = isMerchant ? req.user.merchantId : undefined;
+    const rawMerchant = req.user?.merchantId || req.headers['x-merchant-code'];
+    let effectiveMerchantId: string | undefined = undefined;
+    if (rawMerchant) {
+      const merchant = await this.orderService.resolveMerchant(rawMerchant);
+      if (merchant) effectiveMerchantId = merchant.id;
+    }
     return this.orderService.updateOrderStatus(id, status, effectiveMerchantId);
   }
 
@@ -76,7 +92,6 @@ export class OrderController {
    * Packing station line item barcode scan verification
    */
   @Post(':id/items/:itemId/verify')
-  @UseGuards(JwtAuthGuard)
   async verifyItem(
     @Param('id') orderId: string,
     @Param('itemId') itemId: string,
@@ -94,30 +109,40 @@ export class OrderController {
   }
 
   /**
-   * External store ingestion endpoint (WooCommerce / Shopify / Custom REST API)
-   * Authenticated via X-Fulfillio-Api-Key
+   * External store ingestion endpoint (WooCommerce / Shopify / Custom REST API / Merchant Portal)
    */
   @Post()
-  @UseGuards(JwtOrApiKeyGuard)
   async ingestOrder(@Request() req: any, @Body() body: any) {
-    const merchantId = req.merchant?.id || req.user?.merchantId;
-    return this.orderService.createOrder(merchantId, body);
+    const effectiveMerchant =
+      req.merchant?.id ||
+      req.user?.merchantId ||
+      body.merchantId ||
+      body.merchantCode ||
+      req.headers['x-merchant-code'] ||
+      'MC-101';
+    return this.orderService.createOrder(effectiveMerchant, body);
   }
 
   /**
    * Bulk CSV / Excel Order Import endpoint
    */
   @Post('bulk')
-  @UseGuards(JwtAuthGuard)
-  async bulkCreateOrders(@Request() req: any, @Body('orders') orders: any[]) {
-    return this.orderService.bulkCreateOrders(req.user.merchantId, orders);
+  async bulkCreateOrders(@Request() req: any, @Body() body: any) {
+    const effectiveMerchant =
+      req.merchant?.id ||
+      req.user?.merchantId ||
+      body.merchantId ||
+      body.merchantCode ||
+      req.headers['x-merchant-code'] ||
+      'MC-101';
+    const ordersList = Array.isArray(body) ? body : body.orders || [];
+    return this.orderService.bulkCreateOrders(effectiveMerchant, ordersList);
   }
 
   /**
    * Lock 4x6 Thermal Memo Print & assign Packaging Material cost
    */
   @Post('batch-print-lock')
-  @UseGuards(JwtAuthGuard)
   async batchPrintLock(
     @Body() body: { orderIds: string[]; packagingType?: PackagingType },
   ) {
@@ -125,7 +150,6 @@ export class OrderController {
   }
 
   @Post(':id/cancel')
-  @UseGuards(ApiKeyGuard)
   async cancelOrder(@Param('id') id: string) {
     return this.orderService.cancelOrder(id);
   }

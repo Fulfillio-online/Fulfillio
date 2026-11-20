@@ -132,8 +132,20 @@ export class OrderRepository {
     customerRiskLevel: string;
     totalAmount: number;
     codAmount: number;
+    subtotal?: number;
+    deliveryFee?: number;
+    discount?: number;
+    advancePayment?: number;
+    paymentMethod?: string;
+    paymentStatus?: string;
+    advancePaymentMethod?: string;
+    advanceTrxId?: string;
+    timeline?: any;
     items: Array<{
-      variantId: string;
+      variantId?: string | null;
+      sku?: string | null;
+      productTitle?: string | null;
+      variantLabel?: string | null;
       quantity: number;
       unitPrice: number;
       isVerifiedAtPacking?: boolean;
@@ -153,9 +165,21 @@ export class OrderRepository {
         customerRiskLevel: data.customerRiskLevel,
         totalAmount: data.totalAmount,
         codAmount: data.codAmount,
+        subtotal: data.subtotal ?? 0,
+        deliveryFee: data.deliveryFee ?? 0,
+        discount: data.discount ?? 0,
+        advancePayment: data.advancePayment ?? 0,
+        paymentMethod: data.paymentMethod,
+        paymentStatus: data.paymentStatus ?? 'Unpaid',
+        advancePaymentMethod: data.advancePaymentMethod,
+        advanceTrxId: data.advanceTrxId,
+        timeline: data.timeline ?? undefined,
         items: {
           create: data.items.map((i) => ({
-            variantId: i.variantId,
+            variantId: i.variantId || null,
+            sku: i.sku,
+            productTitle: i.productTitle,
+            variantLabel: i.variantLabel,
             quantity: i.quantity,
             unitPrice: i.unitPrice,
             isVerifiedAtPacking: i.isVerifiedAtPacking ?? false,
@@ -163,7 +187,15 @@ export class OrderRepository {
         },
       },
       include: {
-        items: true,
+        items: {
+          include: {
+            variant: {
+              include: {
+                product: true,
+              },
+            },
+          },
+        },
       },
     });
   }

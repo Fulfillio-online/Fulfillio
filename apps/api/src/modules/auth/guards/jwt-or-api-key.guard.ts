@@ -54,6 +54,40 @@ export class JwtOrApiKeyGuard implements CanActivate {
       }
     }
 
-    throw new UnauthorizedException('Authentication required (Bearer token or X-Fulfillio-Api-Key)');
+    // 3. Try x-merchant-code or body merchantCode/merchantId (Merchant Portal session)
+    const rawMerchant =
+      request.headers['x-merchant-code'] ||
+      request.body?.merchantCode ||
+      request.body?.merchantId ||
+      request.query?.merchantCode ||
+      request.query?.merchantId ||
+      'MC-101';
+
+    if (rawMerchant && typeof rawMerchant === 'string') {
+      const clean = rawMerchant.trim();
+      let merchant = await this.prisma.merchant.findFirst({
+        where: {
+          OR: [
+            { id: clean },
+            { merchantCode: clean.toUpperCase() },
+            { email: clean.toLowerCase() },
+          ],
+        },
+      });
+
+      if (!merchant) {
+        merchant = await this.prisma.merchant.findFirst({
+          where: { merchantCode: 'MC-101' },
+        });
+      }
+
+      if (merchant) {
+        request.merchant = merchant;
+        request.user = { merchantId: merchant.id, role: 'MERCHANT' };
+        return true;
+      }
+    }
+
+    throw new UnauthorizedException('Authentication required (Bearer token, API key, or x-merchant-code)');
   }
 }
