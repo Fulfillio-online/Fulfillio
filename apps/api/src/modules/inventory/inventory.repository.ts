@@ -20,13 +20,48 @@ export class InventoryRepository {
     });
   }
 
+  async ensureProductImagesColumn() {
+    try {
+      await this.prisma.$executeRawUnsafe(
+        `ALTER TABLE IF EXISTS "products" ADD COLUMN IF NOT EXISTS "images" text[] DEFAULT ARRAY[]::text[];`
+      );
+    } catch {
+      // ignore
+    }
+  }
+
   async findProductByMerchantAndBaseSku(merchantId: string, baseSku: string) {
-    return this.prisma.product.findFirst({
-      where: {
-        merchantId,
-        baseSku,
-      },
-    });
+    try {
+      return await this.prisma.product.findFirst({
+        where: {
+          merchantId,
+          baseSku,
+        },
+        select: {
+          id: true,
+          merchantId: true,
+          title: true,
+          baseSku: true,
+        },
+      });
+    } catch (err: any) {
+      if (err?.code === 'P2022') {
+        await this.ensureProductImagesColumn();
+        return await this.prisma.product.findFirst({
+          where: {
+            merchantId,
+            baseSku,
+          },
+          select: {
+            id: true,
+            merchantId: true,
+            title: true,
+            baseSku: true,
+          },
+        });
+      }
+      throw err;
+    }
   }
 
   async upsertMerchantStub(merchantCode: string) {
@@ -137,6 +172,48 @@ export class InventoryRepository {
       },
     });
     } catch (err: any) {
+      if (err?.code === 'P2022') {
+        await this.ensureProductImagesColumn();
+        try {
+          return await this.prisma.product.create({
+            data: {
+              merchantId: data.merchantId,
+              title: data.title,
+              description: data.description,
+              baseSku: data.baseSku,
+              imageUrl: sanitizedImageUrl,
+              images: data.images || (sanitizedImageUrl ? [sanitizedImageUrl] : []),
+              variants: {
+                create: data.variants.map((v) => ({
+                  sku: v.sku,
+                  barcode: v.barcode,
+                  title: v.title,
+                  price: v.price,
+                  wholesalePrice: v.wholesalePrice,
+                  defaultBinCode: v.defaultBinCode || 'A-01-01',
+                  imageUrl: v.imageUrl,
+                  attributes: v.attributes || {},
+                  inventoryItems: {
+                    create: {
+                      locationId: data.defaultLocationId,
+                      quantityAvailable: Math.max(0, Number(v.initialStock) || 0),
+                      quantityReserved: 0,
+                      quantityDamaged: 0,
+                    },
+                  },
+                })),
+              },
+            },
+            include: {
+              variants: {
+                include: { inventoryItems: true },
+              },
+            },
+          });
+        } catch (retryErr: any) {
+          console.error('[PostgreSQL Save Error] Retry after schema patch failed:', retryErr?.message || retryErr);
+        }
+      }
       console.error('[PostgreSQL Save Error] Failed to create product with variants:', err?.message || err);
       throw new BadRequestException(`PostgreSQL Save Error: ${err?.message || 'Database transaction failed'}`);
     }
@@ -173,36 +250,77 @@ export class InventoryRepository {
     if (data.baseSku) {
       searchConditions.push({ baseSku: data.baseSku });
     }
-    const existing = await this.prisma.product.findFirst({
-      where: {
-        OR: searchConditions,
-      },
-      include: {
-        variants: {
-          include: {
-            inventoryItems: true,
-            orderItems: { select: { id: true } },
-            inboundItems: { select: { id: true } },
+    let existing;
+    try {
+      existing = await this.prisma.product.findFirst({
+        where: {
+          OR: searchConditions,
+        },
+        include: {
+          variants: {
+            include: {
+              inventoryItems: true,
+              orderItems: { select: { id: true } },
+              inboundItems: { select: { id: true } },
+            },
           },
         },
-      },
-    });
+      });
+    } catch (err: any) {
+      if (err?.code === 'P2022') {
+        await this.ensureProductImagesColumn();
+        existing = await this.prisma.product.findFirst({
+          where: {
+            OR: searchConditions,
+          },
+          include: {
+            variants: {
+              include: {
+                inventoryItems: true,
+                orderItems: { select: { id: true } },
+                inboundItems: { select: { id: true } },
+              },
+            },
+          },
+        });
+      } else {
+        throw err;
+      }
+    }
 
     if (!existing) {
       throw new BadRequestException(`Product with ID '${productId}' not found.`);
     }
 
     // Update Product scalar fields
-    await this.prisma.product.update({
-      where: { id: existing.id },
-      data: {
-        title: data.title ?? existing.title,
-        description: data.description !== undefined ? data.description : existing.description,
-        baseSku: data.baseSku ?? existing.baseSku,
-        imageUrl: data.imageUrl !== undefined ? data.imageUrl : existing.imageUrl,
-        images: data.images !== undefined ? data.images : existing.images,
-      },
-    });
+    try {
+      await this.prisma.product.update({
+        where: { id: existing.id },
+        data: {
+          title: data.title ?? existing.title,
+          description: data.description !== undefined ? data.description : existing.description,
+          baseSku: data.baseSku ?? existing.baseSku,
+          imageUrl: data.imageUrl !== undefined ? data.imageUrl : existing.imageUrl,
+          images: data.images !== undefined ? data.images : existing.images,
+        },
+      });
+    } catch (err: any) {
+      if (err?.code === 'P2022') {
+        await this.ensureProductImagesColumn();
+        await this.prisma.product.update({
+          where: { id: existing.id },
+          data: {
+            title: data.title ?? existing.title,
+            description: data.description !== undefined ? data.description : existing.description,
+            baseSku: data.baseSku ?? existing.baseSku,
+            imageUrl: data.imageUrl !== undefined ? data.imageUrl : existing.imageUrl,
+            images: data.images !== undefined ? data.images : existing.images,
+          },
+        });
+      } else {
+        throw err;
+      }
+    }
 
     // If variants were provided, synchronize them
     if (data.variants && data.variants.length > 0) {
@@ -304,41 +422,84 @@ export class InventoryRepository {
       ];
     }
 
-    return this.prisma.product.findMany({
-      where,
-      include: {
-        merchant: {
-          select: { merchantCode: true, businessName: true },
-        },
-        variants: {
-          include: {
-            inventoryItems: {
-              include: { location: true },
+    try {
+      return await this.prisma.product.findMany({
+        where,
+        include: {
+          merchant: {
+            select: { merchantCode: true, businessName: true },
+          },
+          variants: {
+            include: {
+              inventoryItems: {
+                include: { location: true },
+              },
             },
           },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+        orderBy: { createdAt: 'desc' },
+      });
+    } catch (err: any) {
+      if (err?.code === 'P2022') {
+        await this.ensureProductImagesColumn();
+        return await this.prisma.product.findMany({
+          where,
+          include: {
+            merchant: {
+              select: { merchantCode: true, businessName: true },
+            },
+            variants: {
+              include: {
+                inventoryItems: {
+                  include: { location: true },
+                },
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+      }
+      throw err;
+    }
   }
 
   async findProductById(id: string, merchantId?: string) {
     const where: any = { id };
     if (merchantId) where.merchantId = merchantId;
 
-    return this.prisma.product.findFirst({
-      where,
-      include: {
-        merchant: true,
-        variants: {
-          include: {
-            inventoryItems: {
-              include: { location: true },
+    try {
+      return await this.prisma.product.findFirst({
+        where,
+        include: {
+          merchant: true,
+          variants: {
+            include: {
+              inventoryItems: {
+                include: { location: true },
+              },
             },
           },
         },
-      },
-    });
+      });
+    } catch (err: any) {
+      if (err?.code === 'P2022') {
+        await this.ensureProductImagesColumn();
+        return await this.prisma.product.findFirst({
+          where,
+          include: {
+            merchant: true,
+            variants: {
+              include: {
+                inventoryItems: {
+                  include: { location: true },
+                },
+              },
+            },
+          },
+        });
+      }
+      throw err;
+    }
   }
 
   async findAuditLogs(merchantId?: string, limit: number = 100) {
