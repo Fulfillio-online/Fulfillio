@@ -11,6 +11,8 @@ import {
   Package,
   CreditCard,
   Printer,
+  CheckCircle2,
+  Ban,
 } from 'lucide-react';
 import {
   MerchantRecord,
@@ -174,12 +176,22 @@ export function MerchantProfileDrawer({
 
               {/* Status Badges */}
               <div className="flex items-center gap-2 flex-wrap pt-0.5">
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                <span
+                  className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                    merchant.status === 'Active'
+                      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                      : merchant.status === 'Pending'
+                      ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30'
+                      : 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30'
+                  }`}
+                >
                   {merchant.status}
                 </span>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30">
-                  Verified Merchant
-                </span>
+                {merchant.verified && (
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30">
+                    Verified Merchant
+                  </span>
+                )}
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 dark:bg-navy-800 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-white/15">
                   {merchant.deliveryArea}
                 </span>
@@ -195,6 +207,91 @@ export function MerchantProfileDrawer({
                 </span>
               </div>
             </div>
+          </div>
+
+          {/* Quick Admin Actions (Direct 1-Click Approve / Suspend / Active) */}
+          <div className="flex flex-col sm:flex-row md:flex-col items-start md:items-end justify-center gap-2.5 shrink-0 pt-3 md:pt-0 border-t md:border-t-0 border-slate-200 dark:border-white/10">
+            {merchant.status === 'Pending' && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onUpdateMerchant({
+                      ...merchant,
+                      status: 'Active',
+                      verified: true,
+                    });
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 active:scale-95 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-orange-500/25 transition-all cursor-pointer"
+                  title="Approve this merchant account"
+                >
+                  <CheckCircle2 className="w-4 h-4 pointer-events-none" />
+                  <span>Approve Merchant</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onUpdateMerchant({
+                      ...merchant,
+                      status: 'Suspended',
+                      verified: false,
+                    });
+                  }}
+                  className="px-3.5 py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Reject or suspend merchant"
+                >
+                  <Ban className="w-3.5 h-3.5 pointer-events-none" />
+                  <span>Reject</span>
+                </button>
+              </div>
+            )}
+
+            {merchant.status === 'Active' && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-700 dark:text-emerald-300 text-xs font-bold">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Approved &amp; Active</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onUpdateMerchant({
+                      ...merchant,
+                      status: 'Suspended',
+                      verified: false,
+                    });
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-rose-50 dark:bg-navy-800 dark:hover:bg-rose-950/30 text-slate-600 hover:text-rose-600 dark:text-slate-300 dark:hover:text-rose-400 border border-slate-200 dark:border-white/10 text-xs font-medium transition-colors cursor-pointer"
+                  title="Suspend Merchant Account"
+                >
+                  Suspend
+                </button>
+              </div>
+            )}
+
+            {merchant.status === 'Suspended' && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/25 text-rose-700 dark:text-rose-300 text-xs font-bold">
+                  <Ban className="w-3.5 h-3.5" />
+                  <span>Account Suspended</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onUpdateMerchant({
+                      ...merchant,
+                      status: 'Active',
+                      verified: true,
+                    });
+                  }}
+                  className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-orange-500/25 transition-all cursor-pointer"
+                  title="Re-activate Merchant Account"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5 pointer-events-none" />
+                  <span>Re-activate Account</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
 

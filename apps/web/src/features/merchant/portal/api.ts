@@ -240,66 +240,74 @@ export const merchantApi = {
     const remote = await safeFetch<{ items: any[] }>(`/orders?merchantCode=${code}`, {
       headers: { 'x-merchant-code': code },
     });
-    if (remote?.items && Array.isArray(remote.items) && remote.items.length > 0) {
-      return remote.items.map((o) => {
-        const itemNames =
-          o.items && o.items.length > 0
-            ? o.items
-                .map((it: any) => `${it.productTitle || it.variant?.title || 'Product'} x ${it.quantity}`)
-                .join(', ')
-            : 'Ordered Items';
-        const totalQty =
-          o.items && o.items.length > 0
-            ? o.items.reduce((sum: number, it: any) => sum + (it.quantity || 1), 0)
-            : 1;
+    if (remote?.items && Array.isArray(remote.items)) {
+      const filtered = remote.items.filter(
+        (o) => !o.merchantCode || o.merchantCode.toUpperCase() === code.toUpperCase()
+      );
+      if (filtered.length > 0) {
+        return filtered.map((o) => {
+          const itemNames =
+            o.items && o.items.length > 0
+              ? o.items
+                  .map((it: any) => `${it.productTitle || it.variant?.title || 'Product'} x ${it.quantity}`)
+                  .join(', ')
+              : 'Ordered Items';
+          const totalQty =
+            o.items && o.items.length > 0
+              ? o.items.reduce((sum: number, it: any) => sum + (it.quantity || 1), 0)
+              : 1;
 
-        const mappedLineItems: OrderLineItem[] = (o.items || []).map((it: any) => ({
-          id: it.id || it.variantId || 'item-1',
-          title: it.productTitle || it.variant?.product?.title || it.variant?.title || 'Product',
-          variant: it.variantLabel || it.variant?.title || 'Standard',
-          sku: it.sku || it.variant?.sku || '',
-          price: Number(it.unitPrice) || 0,
-          quantity: it.quantity || 1,
-          total: (Number(it.unitPrice) || 0) * (it.quantity || 1),
-          imageUrl: it.variant?.imageUrl || it.variant?.product?.imageUrl || '',
-        }));
+          const mappedLineItems: OrderLineItem[] = (o.items || []).map((it: any) => ({
+            id: it.id || it.variantId || 'item-1',
+            title: it.productTitle || it.variant?.product?.title || it.variant?.title || 'Product',
+            variant: it.variantLabel || it.variant?.title || 'Standard',
+            sku: it.sku || it.variant?.sku || '',
+            price: Number(it.unitPrice) || 0,
+            quantity: it.quantity || 1,
+            total: (Number(it.unitPrice) || 0) * (it.quantity || 1),
+            imageUrl: it.variant?.imageUrl || it.variant?.product?.imageUrl || '',
+          }));
 
-        return {
-          id: o.orderNumber || o.externalOrderId || o.id,
-          orderNumber: o.externalOrderId || o.orderNumber || o.id,
-          date: new Date(o.createdAt).toLocaleDateString(),
-          customer: o.customerName || 'Customer',
-          phone: o.customerPhone || '',
-          address: o.customerAddress || '',
-          productId: o.items?.[0]?.variantId || '',
-          items: itemNames,
-          qty: totalQty,
-          amount: Number(o.totalAmount) || Number(o.codAmount) || 0,
-          subtotal: Number(o.subtotal) || Number(o.totalAmount) || 0,
-          deliveryFee: Number(o.deliveryFee) || 0,
-          discount: Number(o.discount) || 0,
-          advancePayment: Number(o.advancePayment) || 0,
-          codAmount: Number(o.codAmount) || 0,
-          memoCode: o.memoCode || 'MEMO-DEFAULT',
-          status: o.status,
-          courier: o.courierProvider || 'Steadfast',
-          paymentMethod: o.paymentMethod || 'Cash on Delivery',
-          paymentStatus:
-            (o.paymentStatus as any) || (Number(o.codAmount) === 0 ? 'Paid' : 'Unpaid'),
-          advancePaymentMethod: o.advancePaymentMethod,
-          advanceTrxId: o.advanceTrxId,
-          lineItems: mappedLineItems,
-          timeline:
-            (Array.isArray(o.timeline) ? o.timeline : null) || [
-              {
-                title: 'Order Placed',
-                description: `Order registered in PostgreSQL database`,
-                timestamp: new Date(o.createdAt).toLocaleTimeString(),
-                isCompleted: true,
-              },
-            ],
-        };
-      });
+          return {
+            id: o.orderNumber || o.externalOrderId || o.id,
+            orderNumber: o.externalOrderId || o.orderNumber || o.id,
+            date: new Date(o.createdAt).toLocaleDateString(),
+            customer: o.customerName || 'Customer',
+            phone: o.customerPhone || '',
+            address: o.customerAddress || '',
+            productId: o.items?.[0]?.variantId || '',
+            items: itemNames,
+            qty: totalQty,
+            amount: Number(o.totalAmount) || Number(o.codAmount) || 0,
+            subtotal: Number(o.subtotal) || Number(o.totalAmount) || 0,
+            deliveryFee: Number(o.deliveryFee) || 0,
+            discount: Number(o.discount) || 0,
+            advancePayment: Number(o.advancePayment) || 0,
+            codAmount: Number(o.codAmount) || 0,
+            memoCode: o.memoCode || 'MEMO-DEFAULT',
+            status: o.status,
+            courier: o.courierProvider || 'Steadfast',
+            paymentMethod: o.paymentMethod || 'Cash on Delivery',
+            paymentStatus:
+              (o.paymentStatus as any) || (Number(o.codAmount) === 0 ? 'Paid' : 'Unpaid'),
+            advancePaymentMethod: o.advancePaymentMethod,
+            advanceTrxId: o.advanceTrxId,
+            lineItems: mappedLineItems,
+            timeline:
+              (Array.isArray(o.timeline) ? o.timeline : null) || [
+                {
+                  title: 'Order Placed',
+                  description: `Order registered in PostgreSQL database`,
+                  timestamp: new Date(o.createdAt).toLocaleTimeString(),
+                  isCompleted: true,
+                },
+              ],
+          };
+        });
+      }
+      if (code !== 'MC-101') {
+        return [];
+      }
     }
     if (typeof window !== 'undefined') {
       const local = localStorage.getItem(getMerchantOrdersKey(code));

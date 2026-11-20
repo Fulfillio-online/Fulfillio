@@ -403,7 +403,25 @@ export function getStoredMerchantOrdersForCode(merchantCode = 'MC-101'): Merchan
     const raw = localStorage.getItem(getMerchantOrdersKey(code));
     if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed)) {
+        // Guarantee newly registered merchants (MC-106+) never retain seed pipeline orders
+        const isSeedMerchant = ['MC-101', 'MC-102', 'MC-103', 'MC-104', 'MC-105'].includes(code);
+        if (!isSeedMerchant) {
+          const cleaned = parsed.filter(
+            (o) =>
+              !INITIAL_PIPELINE_ORDERS.some(
+                (seed) => seed.id === (o.orderNumber || o.id) || seed.id === o.id
+              )
+          );
+          if (cleaned.length !== parsed.length) {
+            try {
+              localStorage.setItem(getMerchantOrdersKey(code), JSON.stringify(cleaned));
+            } catch {}
+          }
+          return cleaned;
+        }
+        return parsed;
+      }
     }
   } catch {
     // ignore
@@ -1855,7 +1873,11 @@ export function getSyncedMerchantDirectoryLists(
     };
 
     const extraOrders: import('@/features/admin/merchants/types').MerchantOrderItem[] = adminOrders
-      .filter((ao) => !baseOrders.some((bo) => bo.id === ao.id))
+      .filter(
+        (ao) =>
+          !baseOrders.some((bo) => bo.id === ao.id) &&
+          !INITIAL_PIPELINE_ORDERS.some((seed) => seed.id === ao.id)
+      )
       .map((ao) => ({
         id: ao.id,
         merchantCode: ao.merchantCode,

@@ -163,7 +163,23 @@ export function useMerchantDirectory() {
     const updated = merchants.map((m) => (m.id === updatedMerchant.id ? updatedMerchant : m));
     setMerchants(updated);
     syncMerchantDirectoryToProfiles(updated);
-    triggerToast(`Saved settings for ${updatedMerchant.storeName}!`);
+
+    if (updatedMerchant.status === 'Active') {
+      triggerToast(`Merchant "${updatedMerchant.storeName}" Approved Successfully!`);
+    } else if (updatedMerchant.status === 'Suspended') {
+      triggerToast(`Merchant "${updatedMerchant.storeName}" Suspended.`);
+    } else {
+      triggerToast(`Saved settings for ${updatedMerchant.storeName}!`);
+    }
+
+    // Sync with backend API
+    fetch(`${API_BASE}/merchants/${updatedMerchant.id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: updatedMerchant.status === 'Active' ? 'APPROVED' : 'SUSPENDED',
+      }),
+    }).catch(() => {});
   };
 
   const handleAdjustStock = (productId: string, delta: number) => {
