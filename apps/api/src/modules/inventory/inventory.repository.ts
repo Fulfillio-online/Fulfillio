@@ -420,6 +420,17 @@ export class InventoryRepository {
       throw new BadRequestException(`Product with ID '${productId}' not found.`);
     }
 
+    // Security & Inventory Integrity Guard:
+    // Merchants can strictly only edit products while in Pending Approval status.
+    const existingStatus = ((existing as any).status || '').trim().toUpperCase();
+    const isPending = existingStatus === 'PENDING_APPROVAL';
+
+    if (!isPending) {
+      throw new BadRequestException(
+        `Cannot edit product '${existing.title}': Merchants can strictly only edit products under Pending Approval status (current status: ${existingStatus}).`,
+      );
+    }
+
     // Update Product scalar fields
     const rawUpdateStatus = data.status !== undefined ? data.status.toUpperCase() : (existing as any).status;
     const updatedStatus =

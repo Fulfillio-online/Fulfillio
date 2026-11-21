@@ -376,6 +376,14 @@ export class FallbackStore {
       });
     }
 
+    const existingStatus = (existing.status || '').trim().toUpperCase();
+    const isPending = existingStatus === 'PENDING_APPROVAL';
+    if (!isPending) {
+      throw new Error(
+        `Cannot edit product '${existing.title}': Merchants can strictly only edit products under Pending Approval status (current status: ${existingStatus}).`,
+      );
+    }
+
     if (data.title) existing.title = data.title;
     if (data.description !== undefined) existing.description = data.description;
     if (data.baseSku) existing.baseSku = data.baseSku;

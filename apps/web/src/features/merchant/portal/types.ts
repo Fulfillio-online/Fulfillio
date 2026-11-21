@@ -185,6 +185,7 @@ export interface MerchantProductItem {
   imageUrl?: string;
   images?: string[];
   status?: 'PUBLISHED' | 'STOCK_STORED' | 'APPROVED' | 'DRAFT' | 'ARCHIVED' | 'PENDING_APPROVAL';
+  isDraft?: boolean;
   totalOrders?: number;
 }
 

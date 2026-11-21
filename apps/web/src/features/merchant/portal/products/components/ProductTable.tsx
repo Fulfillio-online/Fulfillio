@@ -560,19 +560,6 @@ export function ProductTable({
                   </>
                 )}
 
-                {/* Edit Product */}
-                <Link
-                  href={`/merchant/products/${activeProduct.id}/edit`}
-                  onClick={() => {
-                    setActiveMenuId(null);
-                    setMenuCoords(null);
-                  }}
-                  className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors"
-                >
-                  <Edit2 className="h-3.5 w-3.5 text-slate-400" />
-                  <span>Edit Product</span>
-                </Link>
-
                 {/* Save in Draft / Submit from Draft */}
                 {isActiveProductDraft ? (
                   <button

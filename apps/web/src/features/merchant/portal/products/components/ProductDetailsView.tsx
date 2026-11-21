@@ -18,6 +18,7 @@ import {
   AlertCircle,
   FileText,
   Clock,
+  Lock,
 } from 'lucide-react';
 import { MerchantProductItem, ResellerMemo, MerchantOrderItem } from '../../types';
 import { ProductOrderListSection } from './ProductOrderListSection';
@@ -515,13 +516,31 @@ export function ProductDetailsView({
               </button>
             </>
           )}
-          <Link
-            href={`/merchant/products/${product.id}/edit`}
-            className="px-3.5 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm shadow-orange-500/20 transition-colors cursor-pointer"
-          >
-            <Edit2 className="h-3.5 w-3.5" />
-            <span>Edit Product</span>
-          </Link>
+          {isPendingApproval ? (
+            <Link
+              href={`/merchant/products/${product.id}/edit`}
+              className="px-3.5 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm shadow-orange-500/20 transition-colors cursor-pointer"
+            >
+              <Edit2 className="h-3.5 w-3.5" />
+              <span>Edit Product</span>
+            </Link>
+          ) : (
+            <div
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 select-none ${
+                isDraft
+                  ? 'bg-slate-100 dark:bg-navy-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10'
+                  : isReadyToOrder
+                  ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30'
+                  : 'bg-sky-50 dark:bg-sky-950/30 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-500/30'
+              }`}
+              title="Editing is locked. Merchants can only edit products under Pending Approval."
+            >
+              <Lock className="h-3.5 w-3.5" />
+              <span>
+                {isDraft ? 'Draft · Locked' : isReadyToOrder ? 'Stock Stored · Locked' : 'Approved · Locked'}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 

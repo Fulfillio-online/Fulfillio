@@ -591,6 +591,24 @@ export function ProductForm({
     if (e) e.preventDefault();
     if (isSubmitting) return;
 
+    // Security & Inventory Integrity Guard:
+    const isInitialDraft = initialProduct?.status === 'DRAFT' || Boolean(initialProduct?.isDraft);
+    const isInitialPending =
+      !isInitialDraft &&
+      (initialProduct?.status === 'PENDING_APPROVAL' ||
+        !initialProduct?.bin ||
+        initialProduct?.bin === 'Pending Approval' ||
+        initialProduct?.bin === 'Assigned on intake');
+    const canEdit = !isEdit || isInitialPending;
+
+    if (isEdit && !canEdit) {
+      setSubmitError(
+        'Merchants can strictly only edit products while under Pending Approval status.',
+      );
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
     if (!title.trim()) {
       setSubmitError('Product name is required. Please provide a title.');
       window.scrollTo({ top: 0, behavior: 'smooth' });

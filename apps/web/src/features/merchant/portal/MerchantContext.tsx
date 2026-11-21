@@ -410,6 +410,25 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
   ): Promise<{ ok: boolean; error?: string }> => {
     let targetProduct = products.find((p) => p.id === id || p.sku === id);
 
+    // Security & Inventory Integrity Guard:
+    // Merchants can strictly only edit products while in Pending Approval status.
+    const isTargetDraft = targetProduct?.status === 'DRAFT' || Boolean(targetProduct?.isDraft);
+    const isTargetPending =
+      targetProduct &&
+      !isTargetDraft &&
+      (targetProduct.status === 'PENDING_APPROVAL' ||
+        !targetProduct.bin ||
+        targetProduct.bin === 'Pending Approval' ||
+        targetProduct.bin === 'Assigned on intake');
+    const canEdit = !targetProduct || isTargetPending;
+
+    if (!canEdit) {
+      const errorMsg =
+        'Product editing is locked. Merchants can strictly only edit products while under Pending Approval.';
+      showToast(errorMsg);
+      return { ok: false, error: errorMsg };
+    }
+
     const mergedProduct: MerchantProductItem = {
       ...(targetProduct || ({} as MerchantProductItem)),
       ...updated,

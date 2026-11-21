@@ -242,13 +242,15 @@ export function ProductGrid({
                   </button>
                 )}
 
-                <Link
-                  href={`/merchant/products/${p.id}/edit`}
-                  className="p-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
-                  title="Edit Product"
-                >
-                  <Edit2 className="h-4 w-4" />
-                </Link>
+                {isPendingApproval && (
+                  <Link
+                    href={`/merchant/products/${p.id}/edit`}
+                    className="p-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
+                    title="Edit Product"
+                  >
+                    <Edit2 className="h-4 w-4" />
+                  </Link>
+                )}
 
                 <button
                   type="button"
