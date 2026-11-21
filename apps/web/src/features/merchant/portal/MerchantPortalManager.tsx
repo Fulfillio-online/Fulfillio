@@ -27,6 +27,7 @@ import { merchantApi } from './api';
 import {
   syncMerchantMemoToAdmin,
   syncMerchantMemoDeletedToAdmin,
+  syncMerchantProductUpdatedToAdmin,
   getMerchantProfileKey,
 } from '@/lib/warehouseSync';
 import { MerchantSidebar } from './components/MerchantSidebar';
@@ -204,29 +205,59 @@ function MerchantPortalInner() {
   };
 
   const handleToggleStatus = (id: string) => {
+    let updatedProduct: MerchantProductItem | undefined;
     setProducts((prev) => {
       const next = prev.map((p) => {
         if (p.id !== id) return p;
-        const newStatus = p.status === 'DRAFT' ? ('PUBLISHED' as const) : ('DRAFT' as const);
-        return { ...p, status: newStatus };
+        // Restoring from DRAFT requires Admin Approval again
+        const newStatus = p.status === 'DRAFT' ? ('PENDING_APPROVAL' as const) : ('DRAFT' as const);
+        updatedProduct = { ...p, status: newStatus };
+        return updatedProduct;
       });
       if (typeof window !== 'undefined') {
         localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
       }
       return next;
     });
-    showToast('Status updated.');
+    if (updatedProduct) {
+      const targetStatus: 'DRAFT' | 'PENDING_APPROVAL' =
+        updatedProduct.status === 'DRAFT' ? 'DRAFT' : 'PENDING_APPROVAL';
+      syncMerchantProductUpdatedToAdmin(updatedProduct, profile);
+      merchantApi.updateProductStatus(id, targetStatus).catch(() => {});
+    }
+    showToast(
+      updatedProduct?.status === 'DRAFT'
+        ? 'Product saved in Draft.'
+        : 'Product submitted for Admin Approval.'
+    );
   };
 
   const handleBulkUpdateStatus = (ids: string[], status: 'PUBLISHED' | 'DRAFT') => {
+    const idSet = new Set(ids);
     setProducts((prev) => {
-      const next = prev.map((p) => (ids.includes(p.id) ? { ...p, status } : p));
+      const next = prev.map((p) => {
+        if (!idSet.has(p.id)) return p;
+        const nextStatus =
+          status === 'DRAFT'
+            ? ('DRAFT' as const)
+            : p.status === 'DRAFT'
+              ? ('PENDING_APPROVAL' as const)
+              : status;
+        const updated = { ...p, status: nextStatus };
+        syncMerchantProductUpdatedToAdmin(updated, profile);
+        merchantApi.updateProductStatus(p.id, nextStatus).catch(() => {});
+        return updated;
+      });
       if (typeof window !== 'undefined') {
         localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
       }
       return next;
     });
-    showToast(`Updated ${ids.length} products to ${status.toLowerCase()}.`);
+    showToast(
+      status === 'DRAFT'
+        ? `Moved ${ids.length} products to Draft.`
+        : `Submitted ${ids.length} products for Admin Approval.`
+    );
   };
 
   const handleBulkDelete = (ids: string[]) => {

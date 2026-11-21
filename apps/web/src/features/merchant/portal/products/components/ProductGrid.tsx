@@ -41,15 +41,20 @@ export function ProductGrid({
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
       {products.map((p) => {
         const isSelected = selectedIds.includes(p.id);
+        const isDraft = p.status === 'DRAFT';
         const isPendingApproval =
-          p.status === 'PENDING_APPROVAL' ||
-          !p.bin ||
-          p.bin === 'Pending Approval' ||
-          p.bin === 'Assigned on intake';
-        const isPublished =
-          !isPendingApproval && (p.status === 'PUBLISHED' || (!p.status && p.stock > 0));
-        const isLowStock = p.stock <= 30 && p.stock > 0;
-        const isOutOfStock = p.stock === 0;
+          !isDraft &&
+          (p.status === 'PENDING_APPROVAL' ||
+            !p.bin ||
+            p.bin === 'Pending Approval' ||
+            p.bin === 'Assigned on intake');
+        const isStockStored =
+          !isDraft &&
+          !isPendingApproval &&
+          (p.status === 'STOCK_STORED' || (p.stock || 0) > 0);
+        const isPublished = !isDraft && !isPendingApproval;
+        const isLowStock = !isDraft && p.stock <= 30 && p.stock > 0;
+        const isOutOfStock = !isDraft && p.stock === 0;
 
         return (
           <div
@@ -111,17 +116,17 @@ export function ProductGrid({
                       : !isPublished || p.status === 'DRAFT'
                       ? 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-navy-800/80 dark:text-slate-300 dark:border-white/10'
                       : isOutOfStock
-                      ? 'bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-500/30'
+                      ? 'bg-sky-50 text-sky-700 border-sky-300 dark:bg-sky-500/20 dark:text-sky-300 dark:border-sky-500/30'
                       : 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/30'
                   }`}
                 >
-                  {isPendingApproval
-                    ? 'Pending Approval'
-                    : !isPublished || p.status === 'DRAFT'
+                  {isDraft
                     ? 'Draft'
+                    : isPendingApproval
+                    ? 'Pending Approval'
                     : isOutOfStock
-                    ? 'Out of Stock'
-                    : 'Published'}
+                    ? 'Approved'
+                    : `Stock Stored (${p.stock})`}
                 </span>
               </div>
 
@@ -188,65 +193,54 @@ export function ProductGrid({
                       <span className="text-xs text-navy-900 dark:text-white font-semibold font-mono">{p.stock}</span>
                     )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => onManageStock(p)}
-                    className="px-2 py-1 rounded-md bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-navy-900 dark:text-white text-xs font-semibold flex items-center gap-1 border border-slate-200 dark:border-white/10 cursor-pointer transition-colors"
-                  >
-                    <Layers className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-                    <span>+ Stock</span>
-                  </button>
+                  {isStockStored && (
+                    <button
+                      type="button"
+                      onClick={() => onManageStock(p)}
+                      className="px-2 py-1 rounded-md bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-navy-900 dark:text-white text-xs font-semibold flex items-center gap-1 border border-slate-200 dark:border-white/10 cursor-pointer transition-colors"
+                    >
+                      <Layers className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                      <span>+ Stock</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
               {/* Bottom Actions */}
               <div className="mt-4 pt-3 border-t border-slate-200/80 dark:border-white/10 flex items-center justify-between gap-1.5">
-                {/* Publish to Store or Move to Draft Button */}
-                {isPendingApproval ? (
-                  <div
-                    className="text-xs font-bold px-2 py-1.5 rounded-lg border bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/30 flex items-center gap-1.5 flex-1 justify-center cursor-default select-none"
-                    title="Awaiting admin approval & bin allocation"
+                {/* Save in Draft or Restore Button */}
+                {isDraft ? (
+                  <button
+                    type="button"
+                    onClick={() => onToggleStatus(p.id)}
+                    className="text-xs font-bold px-2 py-1.5 rounded-lg border bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-600 shadow-xs flex items-center gap-1.5 cursor-pointer flex-1 justify-center transition-all"
+                    title="Submit Product for Admin Approval"
                   >
-                    <FileText className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-                    <span>Pending</span>
-                  </div>
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    <span>Submit for Approval</span>
+                  </button>
                 ) : (
                   <button
                     type="button"
                     onClick={() => onToggleStatus(p.id)}
-                    className={`text-xs font-bold px-2 py-1.5 rounded-lg border transition-all flex items-center gap-1.5 cursor-pointer flex-1 justify-center ${
-                      isPublished
-                        ? 'bg-slate-100 hover:bg-slate-200 dark:bg-navy-800 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-white/10'
-                        : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-600 shadow-xs'
-                    }`}
-                    title={
-                      isPublished
-                        ? 'Move product to drafts'
-                        : 'Publish product live to your store'
-                    }
+                    className="text-xs font-bold px-2 py-1.5 rounded-lg border bg-slate-100 hover:bg-slate-200 dark:bg-navy-800 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-white/10 transition-all flex items-center gap-1.5 cursor-pointer flex-1 justify-center"
+                    title="Save product in Draft"
                   >
-                    {isPublished ? (
-                      <>
-                        <FileText className="h-3.5 w-3.5 text-slate-500" />
-                        <span>Draft</span>
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        <span>Publish to Store</span>
-                      </>
-                    )}
+                    <FileText className="h-3.5 w-3.5 text-amber-500" />
+                    <span>Save in Draft</span>
                   </button>
                 )}
 
-                <button
-                  type="button"
-                  onClick={() => onPrintBarcode(p)}
-                  className="p-1.5 rounded-lg border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50 dark:bg-indigo-600/10 hover:bg-indigo-100 dark:hover:bg-indigo-600/20 text-indigo-700 dark:text-indigo-300 transition-colors cursor-pointer"
-                  title="Print Thermal Barcode"
-                >
-                  <Printer className="h-4 w-4" />
-                </button>
+                {isStockStored && (
+                  <button
+                    type="button"
+                    onClick={() => onPrintBarcode(p)}
+                    className="p-1.5 rounded-lg border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50 dark:bg-indigo-600/10 hover:bg-indigo-100 dark:hover:bg-indigo-600/20 text-indigo-700 dark:text-indigo-300 transition-colors cursor-pointer"
+                    title="Print Thermal Sticker"
+                  >
+                    <Printer className="h-4 w-4" />
+                  </button>
+                )}
 
                 <Link
                   href={`/merchant/products/${p.id}/edit`}
@@ -260,7 +254,7 @@ export function ProductGrid({
                   type="button"
                   onClick={() => onRequestDelete(p)}
                   className="p-1.5 rounded-lg border border-rose-200 dark:border-rose-500/20 bg-rose-50 dark:bg-rose-500/10 hover:bg-rose-100 dark:hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 transition-colors cursor-pointer"
-                  title={p.status === 'DRAFT' ? 'Permanently Delete Product' : 'Move to Drafts (Safe Delete)'}
+                  title={isPendingApproval ? 'Cancel Request' : (p.stock || 0) >= 1 ? 'Cannot delete while stock > 0' : 'Delete Product'}
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>

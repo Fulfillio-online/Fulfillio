@@ -23,6 +23,8 @@ export function DeleteConfirmModal({
   if (!isOpen || !product) return null;
 
   const isDraft = product.status === 'DRAFT';
+  const isPending = product.status === 'PENDING_APPROVAL';
+  const hasStock = (product.stock || 0) >= 1;
 
   return (
     <div
@@ -37,21 +39,25 @@ export function DeleteConfirmModal({
           <div className="flex items-center gap-3">
             <div
               className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${
-                isDraft
-                  ? 'bg-rose-500/10 border border-rose-500/20 text-rose-500'
-                  : 'bg-amber-500/10 border border-amber-500/20 text-amber-500'
+                hasStock
+                  ? 'bg-amber-500/10 border border-amber-500/20 text-amber-500'
+                  : 'bg-rose-500/10 border border-rose-500/20 text-rose-500'
               }`}
             >
-              {isDraft ? <Trash2 className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
+              <Trash2 className="h-5 w-5" />
             </div>
             <div>
               <h3 className="font-bold text-base text-navy-900 dark:text-white">
-                {isDraft ? 'Permanently Delete Product?' : 'Move Product to Drafts?'}
+                {hasStock
+                  ? 'Deletion Blocked — Warehouse Stock Exists'
+                  : isPending
+                    ? 'Cancel Store Request?'
+                    : 'Permanently Delete Product?'}
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                {isDraft
-                  ? 'This action is irreversible and deletes the SKU data.'
-                  : 'Unpublishes the product and preserves SKU inventory.'}
+                {hasStock
+                  ? 'Products with 1 or more units in the warehouse cannot be deleted.'
+                  : 'This action removes the product from your catalog and PostgreSQL database.'}
               </p>
             </div>
           </div>
@@ -98,33 +104,39 @@ export function DeleteConfirmModal({
                 {product.sku}
               </span>
               <span>•</span>
-              <span>{product.stock} in stock</span>
+              <span className={hasStock ? 'text-rose-500 font-bold' : ''}>
+                {product.stock} in stock
+              </span>
               <span>•</span>
-              <span className="uppercase text-[10px] font-bold text-slate-500">{product.status || 'PUBLISHED'}</span>
+              <span className="uppercase text-[10px] font-bold text-slate-500">{product.status || 'PENDING_APPROVAL'}</span>
             </div>
           </div>
         </div>
 
         <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-          {isDraft ? (
-            'এই প্রোডাক্টটি বর্তমানে Drafts-এ রয়েছে। আপনি চাইলে একে সরাসরি স্টোরে পুনরায় Publish করতে পারেন অথবা স্থায়ীভাবে মুছে ফেলতে পারেন।'
+          {hasStock ? (
+            <>
+              Warehouse currently stores <strong className="text-rose-600 dark:text-rose-400">{product.stock} pcs</strong> of this product. Even if a single unit exists in the warehouse, the product cannot be deleted. Please withdraw/return or clear all stock to <strong>0 units</strong> before deleting, or save it in Draft instead.
+            </>
+          ) : isPending ? (
+            'Are you sure you want to cancel this product approval request? It will be permanently removed from the pending queue and database.'
           ) : (
-            'প্রোডাক্টটি সরাসরি ডিলিট না হয়ে প্রথমে Drafts-এ যাবে যাতে আপনার কাস্টমাররা এটি আর দেখতে না পায়। পরবর্তীতে স্থায়ীভাবে মুছে ফেলতে চাইলে Drafts ট্যাব থেকে ডিলিট করতে পারবেন।'
+            'This product has 0 stock in the warehouse. Confirming will permanently delete it from both your catalog and the PostgreSQL database.'
           )}
         </p>
 
         <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-slate-100 dark:border-white/10 flex-wrap">
-          {isDraft && onRestore && (
+          {hasStock && !isDraft && onRestore && (
             <button
               type="button"
               onClick={() => {
                 onRestore(product.id);
                 onClose();
               }}
-              className="mr-auto px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all cursor-pointer shadow-xs flex items-center gap-1.5 active:scale-95"
+              className="mr-auto px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition-all cursor-pointer shadow-xs flex items-center gap-1.5 active:scale-95"
             >
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              <span>Publish to Store</span>
+              <FileText className="h-3.5 w-3.5" />
+              <span>Save in Draft Instead</span>
             </button>
           )}
 
@@ -133,23 +145,22 @@ export function DeleteConfirmModal({
             onClick={onClose}
             className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
           >
-            Cancel
+            {hasStock ? 'Close' : 'Cancel'}
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              onConfirmDelete(product.id);
-              onClose();
-            }}
-            className={`px-4 py-2 rounded-xl text-white text-xs font-bold transition-all cursor-pointer shadow-md flex items-center gap-1.5 ${
-              isDraft
-                ? 'bg-rose-600 hover:bg-rose-500 shadow-rose-500/20'
-                : 'bg-amber-600 hover:bg-amber-500 shadow-amber-500/20'
-            }`}
-          >
-            {isDraft ? <Trash2 className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
-            <span>{isDraft ? 'Permanently Delete' : 'Move to Drafts (Safe Delete)'}</span>
-          </button>
+
+          {!hasStock && (
+            <button
+              type="button"
+              onClick={() => {
+                onConfirmDelete(product.id);
+                onClose();
+              }}
+              className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 shadow-rose-500/20 text-white text-xs font-bold transition-all cursor-pointer shadow-md flex items-center gap-1.5"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span>{isPending ? 'Confirm Cancel Request' : 'Delete Product'}</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

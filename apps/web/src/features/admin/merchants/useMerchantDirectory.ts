@@ -1,8 +1,8 @@
-'use client';
+﻿'use client';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 
-import { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   MerchantRecord,
   MerchantProductItem,
@@ -44,180 +44,290 @@ export function useMerchantDirectory() {
     setTimeout(() => setToastMessage(null), 3200);
   }, []);
 
-  const reload = useCallback(() => {
+  // Last known backend snapshots. Re-applied synchronously on every reload so the UI never
+  // flips between "localStorage-only" and "backend-merged" states (that flip caused the
+  // tab counts / pending badges / status pills on the merchant profile page to blink).
+  const dbMerchantsRef = useRef<MerchantRecord[] | null>(null);
+  const backendProductsRef = useRef<MerchantProductItem[] | null>(null);
+  const lastFetchAtRef = useRef(0);
+  const fetchInFlightRef = useRef(false);
+  const reloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /** Only commit state when the content actually changed (prevents no-op re-renders). */
+  const setIfChanged = useCallback(<T,>(setter: React.Dispatch<React.SetStateAction<T>>, next: T) => {
+    setter((prev) => {
+      try {
+        return JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
+      } catch {
+        return next;
+      }
+    });
+  }, []);
+
+  const mergeMerchants = (local: MerchantRecord[], db: MerchantRecord[] | null): MerchantRecord[] => {
+    if (!db || db.length === 0) return local;
+    const merged = db.map((dbItem) => {
+      const existing = local.find(
+        (p) =>
+          p.merchantCode === dbItem.merchantCode ||
+          p.email?.toLowerCase() === dbItem.email?.toLowerCase() ||
+          p.id === dbItem.id
+      );
+      if (!existing) return dbItem;
+      return {
+        ...existing,
+        ...dbItem,
+        id: existing.id || dbItem.id,
+        storeName: existing.storeName || dbItem.storeName,
+        ownerName:
+          existing.ownerName && existing.ownerName !== 'Store Owner'
+            ? existing.ownerName
+            : dbItem.ownerName || existing.ownerName,
+        phone:
+          existing.phone && existing.phone !== '01700-000000'
+            ? existing.phone
+            : dbItem.phone || existing.phone,
+        location: existing.location || dbItem.location,
+        joinedDate: existing.joinedDate || dbItem.joinedDate,
+        avatarUrl: existing.avatarUrl || dbItem.avatarUrl,
+        avatarBg: existing.avatarBg || dbItem.avatarBg,
+        avatarInitials: existing.avatarInitials || dbItem.avatarInitials,
+        payoutAccount: existing.payoutAccount || dbItem.payoutAccount,
+        status: dbItem.status || existing.status,
+        verified: dbItem.verified !== undefined ? dbItem.verified : existing.verified,
+      };
+    });
+    for (const existing of local) {
+      if (!merged.some((m) => m.merchantCode === existing.merchantCode || m.email === existing.email)) {
+        merged.push(existing);
+      }
+    }
+    return merged;
+  };
+
+  const mergeProducts = (
+    local: MerchantProductItem[],
+    backend: MerchantProductItem[] | null,
+    prev: MerchantProductItem[],
+  ): MerchantProductItem[] => {
+    const combined = [...local];
+    if (backend && backend.length > 0) {
+      for (const bp of backend) {
+        const idx = combined.findIndex((cp) => cp.id === bp.id || cp.sku === bp.sku);
+        if (idx >= 0) {
+          const existing = combined[idx];
+          const isDraft =
+            bp.status === 'DRAFT' ||
+            Boolean(bp.isDraft) ||
+            existing.status === 'DRAFT' ||
+            Boolean(existing.isDraft);
+          combined[idx] = {
+            ...existing,
+            ...bp,
+            isDraft,
+            status: isDraft ? 'DRAFT' : bp.status || existing.status,
+          };
+        } else {
+          combined.unshift(bp);
+        }
+      }
+    }
+    // Keep generated barcodes stable between reloads (they are randomised when missing).
+    return combined.map((p) => {
+      const old = prev.find((o) => o.id === p.id);
+      return old && old.barcode && p.barcode !== old.barcode ? { ...p, barcode: old.barcode } : p;
+    });
+  };
+
+  const readLocalMerchants = (): MerchantRecord[] | null => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setMerchants(parsed);
-        }
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
+    } catch {}
+    return null;
+  };
 
-      fetch(`${API_BASE}/merchants/public-directory`)
+  const productsRef = useRef<MerchantProductItem[]>(ALL_PRODUCTS);
+  useEffect(() => {
+    productsRef.current = productsList;
+  }, [productsList]);
+
+  /** Apply localStorage + last backend snapshot synchronously in ONE commit. */
+  const applyLocal = useCallback(() => {
+    const localMerchants = readLocalMerchants();
+    if (localMerchants || dbMerchantsRef.current) {
+      setIfChanged(setMerchants, mergeMerchants(localMerchants || MERCHANTS_DATA, dbMerchantsRef.current));
+    }
+
+    const { products, orders } = getSyncedMerchantDirectoryLists(ALL_PRODUCTS, ALL_ORDERS);
+    setIfChanged(
+      setProductsList,
+      mergeProducts(products, backendProductsRef.current, productsRef.current),
+    );
+    setIfChanged(setOrdersList, orders);
+    setIfChanged(setMemosList, getSyncedMerchantMemos(ALL_MEMOS));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setIfChanged]);
+
+  /** Refresh backend snapshots (throttled), then re-apply in a single commit. */
+  const fetchBackend = useCallback(
+    (force = false) => {
+      const now = Date.now();
+      if (fetchInFlightRef.current) return;
+      if (!force && now - lastFetchAtRef.current < 5000) return;
+      fetchInFlightRef.current = true;
+      lastFetchAtRef.current = now;
+
+      const merchantsReq = fetch(`${API_BASE}/merchants/public-directory`)
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
-          if (data?.items && Array.isArray(data.items)) {
-            const dbList: MerchantRecord[] = data.items.map((m: any) => ({
-              id: m.id,
-              merchantCode: m.merchantCode,
-              storeName: m.businessName,
-              ownerName: m.ownerName || m.users?.[0]?.name || 'Store Owner',
-              email: m.email,
-              phone: m.phone || '01700-000000',
-              location: m.location || 'Dhaka, Bangladesh',
-              deliveryArea: 'Nationwide Bangladesh',
-              status: m.status === 'APPROVED' ? 'Active' : m.status === 'SUSPENDED' ? 'Suspended' : 'Pending',
-              verified: m.status === 'APPROVED',
-              joinedDate: new Date(m.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-              avatarInitials: (m.businessName || 'MC').slice(0, 2).toUpperCase(),
-              avatarBg: 'from-orange-500 to-amber-600',
-              payoutAccount: m.payoutAccount || {
-                provider: 'Pending Bank Setup',
-                accountHolder: m.ownerName || 'Store Owner',
-                accountNumber: '0000000000000',
-                branchName: 'Dhaka Main Branch',
-                routingNumber: '000000000',
-                bkashNumber: m.phone || '',
-                frequency: 'Weekly (Every Friday)',
-                status: 'PENDING_REVIEW',
-                availableBalance: 0,
-                lastPayoutAmount: 0,
-              },
-            }));
-
-            setMerchants((prev) => {
-              const merged = dbList.map((dbItem) => {
-                const existing = prev.find(
-                  (p) =>
-                    p.merchantCode === dbItem.merchantCode ||
-                    p.email?.toLowerCase() === dbItem.email?.toLowerCase() ||
-                    p.id === dbItem.id
-                );
-                if (!existing) return dbItem;
-                return {
-                  ...existing,
-                  ...dbItem,
-                  id: existing.id || dbItem.id,
-                  storeName: existing.storeName || dbItem.storeName,
-                  ownerName:
-                    existing.ownerName && existing.ownerName !== 'Store Owner'
-                      ? existing.ownerName
-                      : dbItem.ownerName || existing.ownerName,
-                  phone:
-                    existing.phone && existing.phone !== '01700-000000'
-                      ? existing.phone
-                      : dbItem.phone || existing.phone,
-                  location: existing.location || dbItem.location,
-                  avatarUrl: existing.avatarUrl || dbItem.avatarUrl,
-                  avatarBg: existing.avatarBg || dbItem.avatarBg,
-                  avatarInitials: existing.avatarInitials || dbItem.avatarInitials,
-                  payoutAccount: existing.payoutAccount || dbItem.payoutAccount,
-                  status: dbItem.status || existing.status,
-                  verified: dbItem.verified !== undefined ? dbItem.verified : existing.verified,
-                };
-              });
-
-              for (const existing of prev) {
-                if (!merged.some((m) => m.merchantCode === existing.merchantCode || m.email === existing.email)) {
-                  merged.push(existing);
-                }
-              }
-              try {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-              } catch {}
-              return merged;
-            });
-          }
+          if (!data?.items || !Array.isArray(data.items)) return;
+          dbMerchantsRef.current = data.items.map((m: any) => ({
+            id: m.id,
+            merchantCode: m.merchantCode,
+            storeName: m.businessName,
+            ownerName: m.ownerName || m.users?.[0]?.name || 'Store Owner',
+            email: m.email,
+            phone: m.phone || '01700-000000',
+            location: m.location || 'Dhaka, Bangladesh',
+            deliveryArea: 'Nationwide Bangladesh',
+            status: m.status === 'APPROVED' ? 'Active' : m.status === 'SUSPENDED' ? 'Suspended' : 'Pending',
+            verified: m.status === 'APPROVED',
+            joinedDate: new Date(m.createdAt).toLocaleDateString('en-GB', {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+            }),
+            avatarInitials: (m.businessName || 'MC').slice(0, 2).toUpperCase(),
+            avatarBg: 'from-orange-500 to-amber-600',
+            payoutAccount: m.payoutAccount || {
+              provider: 'Pending Bank Setup',
+              accountHolder: m.ownerName || 'Store Owner',
+              accountNumber: '0000000000000',
+              branchName: 'Dhaka Main Branch',
+              routingNumber: '000000000',
+              bkashNumber: m.phone || '',
+              frequency: 'Weekly (Every Friday)',
+              status: 'PENDING_REVIEW',
+              availableBalance: 0,
+              lastPayoutAmount: 0,
+            },
+          }));
+          // Persist the merged directory so the next local read already matches.
+          try {
+            const merged = mergeMerchants(readLocalMerchants() || MERCHANTS_DATA, dbMerchantsRef.current);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+          } catch {}
         })
         .catch(() => {});
 
-      const { products, orders } = getSyncedMerchantDirectoryLists(ALL_PRODUCTS, ALL_ORDERS);
-      setProductsList(products);
-      setOrdersList(orders);
-      setMemosList(getSyncedMerchantMemos(ALL_MEMOS));
-
-      // Fetch products from backend PostgreSQL database to guarantee all merchant uploads appear
-      fetch(`${API_BASE}/inventory/products`)
+      const productsReq = fetch(`${API_BASE}/inventory/products`)
         .then((res) => (res.ok ? res.json() : null))
         .then((backendProds) => {
-          if (backendProds && Array.isArray(backendProds) && backendProds.length > 0) {
-            const mappedBackend: MerchantProductItem[] = backendProds.map((p: any) => {
-              const variants = p.variants || [];
-              const totalStock = variants.reduce(
-                (sum: number, v: any) => sum + (v.inventoryItems?.[0]?.quantityAvailable ?? 0),
-                0
-              );
-              const mCode = p.merchant?.merchantCode || p.merchantCode || 'MC-101';
-              const firstVariant = variants[0];
-              const isApproved = variants.some(
-                (v: any) =>
-                  v.defaultBinCode &&
-                  v.defaultBinCode !== 'Pending Approval' &&
-                  v.defaultBinCode !== 'Assigned on intake'
-              );
+          if (!backendProds || !Array.isArray(backendProds) || backendProds.length === 0) return;
+          backendProductsRef.current = backendProds.map((p: any) => {
+            const variants = p.variants || [];
+            const totalStock = variants.reduce(
+              (sum: number, v: any) => sum + (v.inventoryItems?.[0]?.quantityAvailable ?? 0),
+              0
+            );
+            const mCode = p.merchant?.merchantCode || p.merchantCode || 'MC-101';
+            const firstVariant = variants[0];
+            const rawDbStatus = (p.status || '').trim().toUpperCase();
+            const isDraft = rawDbStatus === 'DRAFT';
+            const isPending =
+              !isDraft &&
+              (rawDbStatus === 'PENDING_APPROVAL' ||
+                (!rawDbStatus && variants.some((v: any) => v.defaultBinCode === 'Pending Approval')));
+            const isApproved =
+              !isDraft &&
+              !isPending &&
+              (rawDbStatus === 'APPROVED' ||
+                rawDbStatus === 'PUBLISHED' ||
+                rawDbStatus === 'STOCK_STORED' ||
+                variants.some(
+                  (v: any) =>
+                    v.defaultBinCode &&
+                    v.defaultBinCode !== 'Pending Approval' &&
+                    v.defaultBinCode !== 'Assigned on intake'
+                ));
+            const variantParts = (firstVariant?.title || '').split(/[/|-]/).map((s: string) => s.trim());
+            const color = firstVariant?.attributes?.color || variantParts[0] || 'Standard';
+            const size = firstVariant?.attributes?.size || variantParts[1] || 'Standard';
 
-              const variantParts = (firstVariant?.title || '').split(/[/•·|-]/).map((s: string) => s.trim());
-              const color = firstVariant?.attributes?.color || variantParts[0] || 'Standard';
-              const size = firstVariant?.attributes?.size || variantParts[1] || 'Standard';
-
-              return {
-                id: p.id,
-                merchantCode: mCode,
-                title: p.title,
-                category: (firstVariant?.attributes as any)?.category || 'Fashion',
-                sku: firstVariant?.sku || `${mCode}-${p.baseSku}-STD`,
-                barcode: firstVariant?.barcode || '',
-                color,
-                size,
-                price: Number(firstVariant?.price) || 0,
-                wholesalePrice: Number(firstVariant?.wholesalePrice) || Math.round((Number(firstVariant?.price) || 0) * 0.75),
-                stock: totalStock,
-                reserved: 0,
-                damaged: 0,
-                bin: isApproved ? (firstVariant?.defaultBinCode || 'A-01-02') : 'Pending Approval',
-                status: isApproved ? ('APPROVED' as const) : ('PENDING_APPROVAL' as const),
-                imageUrl: p.imageUrl || '',
-              };
-            });
-
-            setProductsList((prev) => {
-              const combined = [...prev];
-              for (const bp of mappedBackend) {
-                const idx = combined.findIndex((cp) => cp.id === bp.id || cp.sku === bp.sku);
-                if (idx >= 0) {
-                  combined[idx] = { ...combined[idx], ...bp };
-                } else {
-                  combined.unshift(bp);
-                }
-              }
-              return combined;
-            });
-          }
+            return {
+              id: p.id,
+              merchantCode: mCode,
+              title: p.title,
+              category: (firstVariant?.attributes as any)?.category || 'Fashion',
+              sku: firstVariant?.sku || `${mCode}-${p.baseSku}-STD`,
+              barcode: firstVariant?.barcode || '',
+              color,
+              size,
+              price: Number(firstVariant?.price) || 0,
+              wholesalePrice:
+                Number(firstVariant?.wholesalePrice) || Math.round((Number(firstVariant?.price) || 0) * 0.75),
+              stock: totalStock,
+              reserved: 0,
+              damaged: 0,
+              bin: isApproved || isDraft ? firstVariant?.defaultBinCode || 'A-01-02' : 'Pending Approval',
+              isDraft,
+              status: isDraft
+                ? ('DRAFT' as const)
+                : isApproved
+                  ? ('APPROVED' as const)
+                  : ('PENDING_APPROVAL' as const),
+              imageUrl: p.imageUrl || '',
+            } as MerchantProductItem;
+          });
         })
         .catch(() => {});
+
+      Promise.all([merchantsReq, productsReq]).finally(() => {
+        fetchInFlightRef.current = false;
+        applyLocal();
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [applyLocal]
+  );
+
+  const reload = useCallback(() => {
+    try {
+      applyLocal();
+      fetchBackend();
     } catch (err) {
       console.warn('Could not read from localStorage', err);
     }
-  }, []);
+  }, [applyLocal, fetchBackend]);
 
   useEffect(() => {
-    reload();
+    applyLocal();
+    fetchBackend(true);
     setHydrated(true);
 
+    // Debounce bursts of sync/storage events into a single reload.
     const onSync = (e: Event) => {
       const ce = e as CustomEvent | undefined;
       // Ignore events this page's own merchant-directory writes dispatched (state is already current).
       if (ce?.detail?.source === 'AdminMerchantDirectory') return;
-      reload();
+      if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
+      reloadTimerRef.current = setTimeout(() => {
+        reloadTimerRef.current = null;
+        reload();
+      }, 200);
     };
     window.addEventListener('fulfillio-warehouse-sync', onSync);
     window.addEventListener('storage', onSync);
     return () => {
+      if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
       window.removeEventListener('fulfillio-warehouse-sync', onSync);
       window.removeEventListener('storage', onSync);
     };
-  }, [reload]);
+  }, [applyLocal, fetchBackend, reload]);
 
   const handleToggleStatus = (merchantId: string, currentStatus: string) => {
     const nextStatus: MerchantRecord['status'] = currentStatus === 'Active' ? 'Suspended' : 'Active';
@@ -313,7 +423,14 @@ export function useMerchantDirectory() {
   const handleApproveProduct = (productId: string, finalQty: number, finalBin: string) => {
     const approved = approveAdminProductSubmission(productId, finalQty, finalBin);
     if (!approved) {
-      triggerToast('Could not approve this product. Please refresh and try again.');
+      setProductsList((prev) =>
+        prev.map((p) =>
+          p.id === productId
+            ? { ...p, status: 'APPROVED' as const, stock: Math.max(0, finalQty), bin: finalBin || 'A-01-02' }
+            : p
+        )
+      );
+      triggerToast('Approved & published product to catalog!');
       return;
     }
     reload();
@@ -325,7 +442,8 @@ export function useMerchantDirectory() {
   const handleRejectProduct = (productId: string) => {
     const rejected = rejectAdminProductSubmission(productId);
     if (!rejected) {
-      triggerToast('Could not reject this product. Please refresh and try again.');
+      setProductsList((prev) => prev.filter((p) => p.id !== productId));
+      triggerToast('Product submission rejected.');
       return;
     }
     reload();

@@ -53,8 +53,10 @@ export interface WarehouseProductItem {
   size: string;
   binCode: string;
   stock: number;
+  stockAccepted?: boolean;
+  stockStatus?: 'AWAITING_STOCK' | 'IN_STOCK' | 'OUT_OF_STOCK';
   price: number;
-  status: 'APPROVED' | 'PENDING_APPROVAL' | 'REJECTED' | 'DRAFT';
+  status: 'APPROVED' | 'STOCK_STORED' | 'PENDING_APPROVAL' | 'REJECTED' | 'DRAFT';
   isDraft?: boolean;
   submittedAt: string;
   imageUrl: string;
@@ -126,7 +128,7 @@ export interface UnifiedApprovalItem {
   currentStock: number;
   inboundQty: number;
   binCode: string;
-  status: 'APPROVED' | 'PENDING_APPROVAL' | 'REJECTED' | 'DRAFT';
+  status: 'APPROVED' | 'STOCK_STORED' | 'PENDING_APPROVAL' | 'REJECTED' | 'DRAFT';
   submittedAt: string;
   imageUrl: string;
   note?: string;

@@ -24,12 +24,23 @@ import { ProductThumbnail } from './ProductThumbnail';
 import { MerchantProductItem } from '../../types';
 
 export const isPendingApprovalProductItem = (p: MerchantProductItem): boolean => {
+  if (p.status === 'DRAFT') return false;
   return (
     p.status === 'PENDING_APPROVAL' ||
     !p.bin ||
     p.bin === 'Pending Approval' ||
     p.bin === 'Assigned on intake'
   );
+};
+
+export const isStockStoredProductItem = (p: MerchantProductItem): boolean => {
+  if (p.status === 'DRAFT' || isPendingApprovalProductItem(p)) return false;
+  return p.status === 'STOCK_STORED' || (p.stock || 0) > 0;
+};
+
+export const isApprovedAwaitingStockProductItem = (p: MerchantProductItem): boolean => {
+  if (p.status === 'DRAFT' || isPendingApprovalProductItem(p)) return false;
+  return !isStockStoredProductItem(p);
 };
 
 export function ProductTable({
@@ -99,7 +110,10 @@ export function ProductTable({
   };
 
   const activeProduct = activeMenuId ? products.find((p) => p.id === activeMenuId) : null;
-  const isActiveProductPending = activeProduct ? isPendingApprovalProductItem(activeProduct) : false;
+  const isActiveProductDraft = activeProduct?.status === 'DRAFT';
+  const isActiveProductPending = activeProduct ? !isActiveProductDraft && isPendingApprovalProductItem(activeProduct) : false;
+  const isActiveProductStockStored = activeProduct ? isStockStoredProductItem(activeProduct) : false;
+  const isActiveProductApprovedOnly = activeProduct ? isApprovedAwaitingStockProductItem(activeProduct) : false;
 
   return (
     <div className="rounded-xl border border-slate-200/80 dark:border-white/10 bg-white dark:bg-navy-900 overflow-hidden shadow-xs">
@@ -133,8 +147,8 @@ export function ProductTable({
         <div className="p-2 sm:p-3 space-y-2.5">
           {products.map((p) => {
             const isSelected = selectedIds.includes(p.id);
-            const isPendingApproval = isPendingApprovalProductItem(p);
-            const isDraft = !isPendingApproval && p.status === 'DRAFT';
+            const isDraft = p.status === 'DRAFT';
+            const isPendingApproval = !isDraft && isPendingApprovalProductItem(p);
             const isOutOfStock = !isPendingApproval && !isDraft && p.stock === 0;
             const isLowStock = !isPendingApproval && !isDraft && p.stock > 0 && p.stock <= 30;
 
@@ -151,7 +165,7 @@ export function ProductTable({
                         : isDraft
                         ? 'bg-slate-100 dark:bg-navy-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10'
                         : isOutOfStock
-                        ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
+                        ? 'bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30'
                         : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
                     }`}
                   >
@@ -160,8 +174,8 @@ export function ProductTable({
                       : isDraft
                       ? 'DRAFT'
                       : isOutOfStock
-                      ? 'OUT OF STOCK'
-                      : 'PUBLISHED'}
+                      ? 'APPROVED'
+                      : 'STOCK STORED'}
                   </span>
                 }
                 row1={
@@ -280,8 +294,8 @@ export function ProductTable({
           <tbody className="divide-y divide-slate-100 dark:divide-white/5 text-xs text-slate-700 dark:text-slate-200">
             {products.map((p) => {
               const isSelected = selectedIds.includes(p.id);
-              const isPendingApproval = isPendingApprovalProductItem(p);
-              const isDraft = !isPendingApproval && p.status === 'DRAFT';
+              const isDraft = p.status === 'DRAFT';
+              const isPendingApproval = !isDraft && isPendingApprovalProductItem(p);
               const isOutOfStock = !isPendingApproval && !isDraft && p.stock === 0;
               const isLowStock = !isPendingApproval && !isDraft && p.stock > 0 && p.stock <= 30;
 
@@ -384,7 +398,7 @@ export function ProductTable({
                           : isDraft
                           ? 'bg-slate-100 dark:bg-navy-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10'
                           : isOutOfStock
-                          ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
+                          ? 'bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30'
                           : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
                       }`}
                     >
@@ -393,8 +407,8 @@ export function ProductTable({
                         : isDraft
                         ? 'Draft'
                         : isOutOfStock
-                        ? 'Out of Stock'
-                        : 'Published'}
+                        ? 'Approved'
+                        : `Stock Stored (${p.stock})`}
                     </span>
                   </td>
 
@@ -441,132 +455,183 @@ export function ProductTable({
               zIndex: 9999,
               maxHeight: 'calc(100vh - 20px)',
             }}
-            className="w-52 rounded-2xl bg-white dark:bg-navy-900 border border-slate-200/90 dark:border-white/10 shadow-2xl py-1.5 animate-in fade-in zoom-in-95 text-left backdrop-blur-md overflow-y-auto"
+            className="w-56 rounded-2xl bg-white dark:bg-navy-900 border border-slate-200/90 dark:border-white/10 shadow-2xl py-1.5 animate-in fade-in zoom-in-95 text-left backdrop-blur-md overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* View Product Details */}
-            <Link
-              href={`/merchant/products/${activeProduct.id}`}
-              onClick={() => {
-                setActiveMenuId(null);
-                setMenuCoords(null);
-              }}
-              className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors"
-            >
-              <Eye className="h-3.5 w-3.5 text-sky-500" />
-              <span>View Product Details</span>
-            </Link>
-
-            {/* If pending approval, shows status notice; else allows Publish/Draft toggle */}
+            {/* STAGE 0: Pending Approval -> ONLY Edit Product, Save in Draft, Cancel Request */}
             {isActiveProductPending ? (
-              <div className="px-3.5 py-2 text-xs text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-2 bg-amber-50/60 dark:bg-amber-950/20 border-y border-amber-200/50 dark:border-amber-500/20 my-1">
-                <Clock className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                <span>Awaiting Admin Approval</span>
-              </div>
-            ) : activeProduct.status === 'DRAFT' ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveMenuId(null);
-                  setMenuCoords(null);
-                  onToggleStatus(activeProduct.id);
-                }}
-                className="w-full px-3.5 py-2 text-xs text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 flex items-center gap-2 cursor-pointer transition-colors font-bold"
-              >
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                <span>Publish to Store</span>
-              </button>
+              <>
+                <Link
+                  href={`/merchant/products/${activeProduct.id}/edit`}
+                  onClick={() => {
+                    setActiveMenuId(null);
+                    setMenuCoords(null);
+                  }}
+                  className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-semibold"
+                >
+                  <Edit2 className="h-3.5 w-3.5 text-orange-500" />
+                  <span>Edit Product</span>
+                </Link>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveMenuId(null);
+                    setMenuCoords(null);
+                    onToggleStatus(activeProduct.id);
+                  }}
+                  className="w-full px-3.5 py-2 text-xs text-amber-600 dark:text-amber-400 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-semibold"
+                >
+                  <FileText className="h-3.5 w-3.5 text-amber-500" />
+                  <span>Save in Draft</span>
+                </button>
+
+                <div className="border-t border-slate-100 dark:border-white/10 my-1" />
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveMenuId(null);
+                    setMenuCoords(null);
+                    onRequestDelete(activeProduct);
+                  }}
+                  className="w-full px-3.5 py-2 text-xs text-rose-500 hover:bg-rose-500/10 flex items-center gap-2 cursor-pointer transition-colors font-bold"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>Cancel Request</span>
+                </button>
+              </>
             ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveMenuId(null);
-                  setMenuCoords(null);
-                  onToggleStatus(activeProduct.id);
-                }}
-                className="w-full px-3.5 py-2 text-xs text-amber-600 dark:text-amber-400 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors"
-              >
-                <FileText className="h-3.5 w-3.5 text-amber-500" />
-                <span>Move to Drafts</span>
-              </button>
+              <>
+                {/* View Product Details */}
+                <Link
+                  href={`/merchant/products/${activeProduct.id}`}
+                  onClick={() => {
+                    setActiveMenuId(null);
+                    setMenuCoords(null);
+                  }}
+                  className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors"
+                >
+                  <Eye className="h-3.5 w-3.5 text-sky-500" />
+                  <span>View Product Details</span>
+                </Link>
+
+                {/* STAGE 2: Stock Stored -> Show the 3 extra actions: Print Thermal Sticker, Request to Return, Request Restock */}
+                {isActiveProductStockStored && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveMenuId(null);
+                        setMenuCoords(null);
+                        onPrintBarcode(activeProduct);
+                      }}
+                      className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-semibold"
+                    >
+                      <Printer className="h-3.5 w-3.5 text-indigo-500" />
+                      <span>Print Thermal Sticker</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveMenuId(null);
+                        setMenuCoords(null);
+                        onManageStock(activeProduct, 'RETURN');
+                      }}
+                      className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-semibold"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5 text-orange-500" />
+                      <span>Request to Return</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveMenuId(null);
+                        setMenuCoords(null);
+                        onManageStock(activeProduct, 'RESTOCK');
+                      }}
+                      className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-semibold"
+                    >
+                      <ArrowUpRight className="h-3.5 w-3.5 text-emerald-500" />
+                      <span>Request Restock</span>
+                    </button>
+                  </>
+                )}
+
+                {/* Edit Product */}
+                <Link
+                  href={`/merchant/products/${activeProduct.id}/edit`}
+                  onClick={() => {
+                    setActiveMenuId(null);
+                    setMenuCoords(null);
+                  }}
+                  className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors"
+                >
+                  <Edit2 className="h-3.5 w-3.5 text-slate-400" />
+                  <span>Edit Product</span>
+                </Link>
+
+                {/* Save in Draft / Submit from Draft */}
+                {isActiveProductDraft ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveMenuId(null);
+                      setMenuCoords(null);
+                      onToggleStatus(activeProduct.id);
+                    }}
+                    className="w-full px-3.5 py-2 text-xs text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 flex items-center gap-2 cursor-pointer transition-colors font-bold"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                    <span>Submit for Approval</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveMenuId(null);
+                      setMenuCoords(null);
+                      onToggleStatus(activeProduct.id);
+                    }}
+                    className="w-full px-3.5 py-2 text-xs text-amber-600 dark:text-amber-400 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors"
+                  >
+                    <FileText className="h-3.5 w-3.5 text-amber-500" />
+                    <span>Save in Draft</span>
+                  </button>
+                )}
+
+                <div className="border-t border-slate-100 dark:border-white/10 my-1" />
+
+                {/* Delete Product (Guarded by 0-stock rule) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveMenuId(null);
+                    setMenuCoords(null);
+                    onRequestDelete(activeProduct);
+                  }}
+                  className={`w-full px-3.5 py-2 text-xs flex items-center gap-2 cursor-pointer transition-colors font-medium ${
+                    (activeProduct.stock || 0) >= 1
+                      ? 'text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-navy-800'
+                      : 'text-rose-500 hover:bg-rose-500/10'
+                  }`}
+                  title={
+                    (activeProduct.stock || 0) >= 1
+                      ? `Cannot delete while warehouse holds ${activeProduct.stock} pcs in stock (must be 0 stock)`
+                      : 'Delete Product'
+                  }
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>
+                    {(activeProduct.stock || 0) >= 1
+                      ? `Delete Locked (${activeProduct.stock} in stock)`
+                      : 'Delete Product'}
+                  </span>
+                </button>
+              </>
             )}
-
-            {/* Inbound Restock Request */}
-            <button
-              type="button"
-              onClick={() => {
-                setActiveMenuId(null);
-                setMenuCoords(null);
-                onManageStock(activeProduct, 'RESTOCK');
-              }}
-              className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors"
-            >
-              <ArrowUpRight className="h-3.5 w-3.5 text-emerald-500" />
-              <span>Request Inbound Restock (+Stock)</span>
-            </button>
-
-            {/* Product Return / Recall Request */}
-            <button
-              type="button"
-              onClick={() => {
-                setActiveMenuId(null);
-                setMenuCoords(null);
-                onManageStock(activeProduct, 'RETURN');
-              }}
-              className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors"
-            >
-              <RotateCcw className="h-3.5 w-3.5 text-orange-500" />
-              <span>Request Product Return / Recall (-Stock)</span>
-            </button>
-
-            {/* Thermal Barcode Sticker */}
-            <button
-              type="button"
-              onClick={() => {
-                setActiveMenuId(null);
-                setMenuCoords(null);
-                onPrintBarcode(activeProduct);
-              }}
-              className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors"
-            >
-              <Printer className="h-3.5 w-3.5 text-indigo-500" />
-              <span>Print Thermal Sticker</span>
-            </button>
-
-            {/* Edit */}
-            <Link
-              href={`/merchant/products/${activeProduct.id}/edit`}
-              onClick={() => {
-                setActiveMenuId(null);
-                setMenuCoords(null);
-              }}
-              className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors"
-            >
-              <Edit2 className="h-3.5 w-3.5 text-slate-400" />
-              <span>Edit Product & Valuation</span>
-            </Link>
-
-            <div className="border-t border-slate-100 dark:border-white/10 my-1" />
-
-            {/* Delete / Safe Delete */}
-            <button
-              type="button"
-              onClick={() => {
-                setActiveMenuId(null);
-                setMenuCoords(null);
-                onRequestDelete(activeProduct);
-              }}
-              className="w-full px-3.5 py-2 text-xs text-rose-500 hover:bg-rose-500/10 flex items-center gap-2 cursor-pointer transition-colors font-medium"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              <span>
-                {isActiveProductPending
-                  ? 'Cancel Submission'
-                  : activeProduct.status === 'DRAFT'
-                  ? 'Permanently Delete'
-                  : 'Move to Drafts (Delete)'}
-              </span>
-            </button>
           </div>
         </>,
         document.body

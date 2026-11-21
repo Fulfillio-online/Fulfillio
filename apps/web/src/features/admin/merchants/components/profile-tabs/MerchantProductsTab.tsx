@@ -1,25 +1,34 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
+'use client';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  Package,
-  Search,
-  Plus,
-  CheckCircle2,
-  Clock,
-  X,
-  List,
-  LayoutGrid,
-  RotateCcw,
-  MoreVertical,
-  Check,
-  Hourglass,
-} from 'lucide-react';
-import { Modal } from '@/components/admin/AdminModal';
-import { MerchantRecord, MerchantProductItem } from '../../types';
-import { makeMerchantProductThumbnail } from '../../mockData';
+  WarehouseBin,
+  WarehouseProductItem,
+} from '@/features/admin/products/types';
+import {
+  INITIAL_BINS,
+  INITIAL_PRODUCTS,
+  STORAGE_KEY_BINS,
+  STORAGE_KEY_PRODUCTS,
+  cleanBinCode,
+} from '@/features/admin/products/mockData';
+import { ProductsStatsOverview } from '@/features/admin/products/components/ProductsStatsOverview';
+import { ProductsCatalogTab } from '@/features/admin/products/components/tabs/ProductsCatalogTab';
+import { StockAdjustModal, VariantStockItemDraft } from '@/features/admin/products/components/modals/StockAdjustModal';
 import { ApprovalActionModal } from '@/features/admin/products/components/modals/ApprovalActionModal';
-import { INITIAL_BINS, STORAGE_KEY_BINS, cleanBinCode } from '@/features/admin/products/mockData';
-import type { WarehouseBin, WarehouseProductItem } from '@/features/admin/products/types';
+import { AcceptStockModal } from '@/features/admin/products/components/modals/AcceptStockModal';
+import { AddProductModal } from '@/features/admin/products/components/modals/AddProductModal';
+import { BulkSlotAssignment } from '@/features/admin/products/components/modals/BulkApprovalModal';
+import {
+  reconcileAdminProductsWithMerchant,
+  syncAdminProductsToMerchant,
+  approveProductInDatabase,
+  acceptStockInDatabase,
+  deleteProductFromDatabase,
+} from '@/lib/warehouseSync';
+import { MerchantRecord, MerchantProductItem } from '../../types';
 
 export interface MerchantProductsTabProps {
   merchant: MerchantRecord;
@@ -31,115 +40,6 @@ export interface MerchantProductsTabProps {
   onNavigateSubTab?: (tab: any) => void;
 }
 
-/** Pure text status badge (never a button): Published / Out of Stock / Pending Approval. */
-function ProductStatusBadge({ prod }: { prod: MerchantProductItem }) {
-  if (prod.status === 'PENDING_APPROVAL') {
-    return (
-      <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full border bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30">
-        Pending Approval
-      </span>
-    );
-  }
-  if (prod.stock === 0) {
-    return (
-      <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full border bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30">
-        Out of Stock
-      </span>
-    );
-  }
-  return (
-    <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full border bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
-      Published
-    </span>
-  );
-}
-
-/** 3-dots row menu, rendered in a body portal with viewport clamping so it never clips the table. */
-function PendingActionsMenu({
-  onApprove,
-  onReject,
-}: {
-  onApprove: () => void;
-  onReject: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState({ top: 0, left: 0 });
-  const btnRef = useRef<HTMLButtonElement>(null);
-
-  const toggle = () => {
-    if (!open && btnRef.current) {
-      const r = btnRef.current.getBoundingClientRect();
-      const menuW = 208;
-      const menuH = 96;
-      const left = Math.min(Math.max(8, r.right - menuW), window.innerWidth - menuW - 8);
-      const top =
-        r.bottom + menuH + 8 > window.innerHeight ? Math.max(8, r.top - menuH - 4) : r.bottom + 4;
-      setPos({ top, left });
-    }
-    setOpen((o) => !o);
-  };
-
-  useEffect(() => {
-    if (!open) return;
-    const close = () => setOpen(false);
-    window.addEventListener('scroll', close, true);
-    window.addEventListener('resize', close);
-    return () => {
-      window.removeEventListener('scroll', close, true);
-      window.removeEventListener('resize', close);
-    };
-  }, [open]);
-
-  return (
-    <>
-      <button
-        ref={btnRef}
-        type="button"
-        onClick={toggle}
-        aria-label="Product actions"
-        title="Actions"
-        className="p-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-navy-900 hover:bg-slate-100 dark:hover:bg-navy-800 text-slate-600 dark:text-slate-300 cursor-pointer transition-colors"
-      >
-        <MoreVertical className="w-4 h-4" />
-      </button>
-      {open &&
-        createPortal(
-          <>
-            <div className="fixed inset-0 z-[110]" onClick={() => setOpen(false)} />
-            <div
-              className="fixed z-[120] w-52 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-2xl py-1.5 text-xs text-left"
-              style={{ top: pos.top, left: pos.left }}
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  setOpen(false);
-                  onApprove();
-                }}
-                className="w-full px-3.5 py-2 text-left font-semibold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 flex items-center gap-2.5 cursor-pointer"
-              >
-                <Check className="w-4 h-4 shrink-0" />
-                <span>Approve &amp; Publish</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setOpen(false);
-                  onReject();
-                }}
-                className="w-full px-3.5 py-2 text-left font-semibold text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center gap-2.5 cursor-pointer border-t border-slate-200/80 dark:border-white/10"
-              >
-                <X className="w-4 h-4 shrink-0" />
-                <span>Reject Submission</span>
-              </button>
-            </div>
-          </>,
-          document.body,
-        )}
-    </>
-  );
-}
-
 export function MerchantProductsTab({
   merchant,
   productsList,
@@ -149,751 +49,699 @@ export function MerchantProductsTab({
   onRejectProduct,
   onNavigateSubTab,
 }: MerchantProductsTabProps) {
-  const [productSearch, setProductSearch] = useState('');
-  const [productCategory, setProductCategory] = useState<'ALL' | 'Apparel' | 'Footwear' | 'Electronics' | 'Beauty'>('ALL');
-  const [productStockFilter, setProductStockFilter] = useState<
-    'ALL' | 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK' | 'PENDING'
-  >('ALL');
+  // Load bins
+  const [bins, setBins] = useState<WarehouseBin[]>(INITIAL_BINS);
 
-  // Approve / Reject pending submissions (reuses the warehouse approval modal)
-  const [approvalData, setApprovalData] = useState<{
+  // Load products from warehouse storage
+  const [products, setProducts] = useState<WarehouseProductItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY_PRODUCTS);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return reconcileAdminProductsWithMerchant(parsed);
+          }
+        }
+      } catch {}
+    }
+    return reconcileAdminProductsWithMerchant(INITIAL_PRODUCTS);
+  });
+
+  // Modal states (identically matched to /admin/products)
+  const [stockAdjustProduct, setStockAdjustProduct] = useState<WarehouseProductItem | null>(null);
+  const [acceptStockProduct, setAcceptStockProduct] = useState<WarehouseProductItem | null>(null);
+  const [approvalModalData, setApprovalModalData] = useState<{
     mode: 'APPROVE' | 'REJECT';
     product: WarehouseProductItem;
     selectedBin: string;
   } | null>(null);
-  const [bins, setBins] = useState<WarehouseBin[]>(INITIAL_BINS);
+  const [addProductModalOpen, setAddProductModalOpen] = useState(false);
 
-  useEffect(() => {
+  // Reload handler from storage (with draft-preserving healing identical to ProductsManager)
+  const reloadFromStorage = useCallback(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY_BINS);
-      if (raw) {
-        const parsed = JSON.parse(raw);
+      const rawBins = localStorage.getItem(STORAGE_KEY_BINS);
+      if (rawBins) {
+        const parsed = JSON.parse(rawBins);
         if (Array.isArray(parsed) && parsed.length > 0) {
           setBins(parsed.map((b: WarehouseBin) => ({ ...b, code: cleanBinCode(b.code) })));
         }
       }
-    } catch {
-      // ignore
-    }
+
+      const stored = localStorage.getItem(STORAGE_KEY_PRODUCTS);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const healed = parsed.map((p: any) => {
+            const init = INITIAL_PRODUCTS.find((ip) => ip.id === p.id || ip.fullSku === p.fullSku);
+            const isDraft = p.status === 'DRAFT' || Boolean(p.isDraft);
+            const isPending = !isDraft && p.status === 'PENDING_APPROVAL';
+            const isRejected = !isDraft && p.status === 'REJECTED';
+            const cleanedBin = isPending
+              ? p.binCode || 'Pending Approval'
+              : cleanBinCode(p.binCode) || (init ? cleanBinCode(init.binCode) : 'A-01-02');
+            const safeStock =
+              typeof p.stock === 'number' && !isNaN(p.stock) ? p.stock : (init?.stock ?? 100);
+            const safeStatus = isDraft
+              ? ('DRAFT' as const)
+              : isPending
+                ? ('PENDING_APPROVAL' as const)
+                : isRejected
+                  ? ('REJECTED' as const)
+                  : ('APPROVED' as const);
+            return {
+              ...p,
+              binCode: cleanedBin,
+              stock: safeStock,
+              status: safeStatus,
+              isDraft,
+            };
+          });
+          const reconciled = reconcileAdminProductsWithMerchant(healed);
+          setProducts((prev) =>
+            JSON.stringify(prev) === JSON.stringify(reconciled) ? prev : reconciled
+          );
+        }
+      }
+    } catch {}
   }, []);
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
 
-  // Add Product Modal Form States
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [newTitle, setNewTitle] = useState('');
-  const [newCategory, setNewCategory] = useState<'Apparel' | 'Footwear' | 'Electronics' | 'Beauty'>('Apparel');
-  const [newBaseSku, setNewBaseSku] = useState('');
-  const [newColor, setNewColor] = useState('');
-  const [newSize, setNewSize] = useState('');
-  const [newPrice, setNewPrice] = useState('');
-  const [newStock, setNewStock] = useState('25');
-  const [newBin, setNewBin] = useState('A-01-02');
+  useEffect(() => {
+    reloadFromStorage();
 
-  // Scoped Products for this merchant
-  const scopedProducts = useMemo(() => {
-    return productsList.filter((p) => p.merchantCode === merchant.merchantCode);
-  }, [productsList, merchant.merchantCode]);
+    // Fetch products directly from PostgreSQL backend to stay in sync with /admin/products
+    fetch(`${API_BASE}/inventory/products`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((backendProds) => {
+        if (backendProds && Array.isArray(backendProds) && backendProds.length > 0) {
+          const mappedBackend: WarehouseProductItem[] = backendProds.map((p: any) => {
+            const variants = p.variants || [];
+            const totalStock = variants.reduce(
+              (sum: number, v: any) => sum + (v.inventoryItems?.[0]?.quantityAvailable ?? 0),
+              0
+            );
+            const mCode = p.merchant?.merchantCode || p.merchantCode || 'MC-101';
+            const mName = p.merchant?.businessName || `Merchant (${mCode})`;
+            const firstVariant = variants[0];
+            const rawDbStatus = (p.status || '').trim().toUpperCase();
+            const isDraft = rawDbStatus === 'DRAFT';
+            const isPending =
+              !isDraft &&
+              (rawDbStatus === 'PENDING_APPROVAL' ||
+                (!rawDbStatus && variants.some((v: any) => v.defaultBinCode === 'Pending Approval')));
+            const isApproved =
+              !isDraft &&
+              !isPending &&
+              (rawDbStatus === 'APPROVED' ||
+                rawDbStatus === 'PUBLISHED' ||
+                rawDbStatus === 'STOCK_STORED' ||
+                variants.some(
+                  (v: any) =>
+                    v.defaultBinCode &&
+                    v.defaultBinCode !== 'Pending Approval' &&
+                    v.defaultBinCode !== 'Assigned on intake'
+                ));
 
-  // Live (approved / published) catalog items
-  const allMerchantProducts = useMemo(
-    () => scopedProducts.filter((p) => p.status !== 'PENDING_APPROVAL'),
-    [scopedProducts],
-  );
+            const computedStatus = isDraft
+              ? ('DRAFT' as const)
+              : isPending
+                ? ('PENDING_APPROVAL' as const)
+                : ('APPROVED' as const);
 
-  // Submissions awaiting admin approval
-  const pendingProducts = useMemo(
-    () => scopedProducts.filter((p) => p.status === 'PENDING_APPROVAL'),
-    [scopedProducts],
-  );
+            const assignedBin = isApproved || isDraft
+              ? firstVariant?.defaultBinCode &&
+                firstVariant.defaultBinCode !== 'Pending Approval' &&
+                firstVariant.defaultBinCode !== 'Assigned on intake'
+                ? firstVariant.defaultBinCode
+                : 'A-01-02'
+              : 'Pending Approval';
 
-  const openApproval = (prod: MerchantProductItem, mode: 'APPROVE' | 'REJECT') => {
-    const warehouseProduct: WarehouseProductItem = {
-      id: prod.id,
-      title: prod.title,
-      category: prod.category === 'Beauty' ? 'Accessories' : prod.category,
-      merchantCode: merchant.merchantCode,
-      merchantName: merchant.storeName,
-      shortSku: prod.sku.startsWith(`${merchant.merchantCode}-`)
-        ? prod.sku.slice(merchant.merchantCode.length + 1)
-        : prod.sku,
-      fullSku: prod.sku,
-      color: prod.color,
-      size: prod.size,
-      binCode: prod.bin,
-      stock: prod.stock,
-      price: prod.price,
-      status: 'PENDING_APPROVAL',
-      submittedAt: '',
-      imageUrl:
-        prod.imageUrl || makeMerchantProductThumbnail('PR', '#064e3b', '#0f172a', '#34d399'),
+            const stockAccepted = isApproved && totalStock > 0;
+            const stockStatus = isApproved
+              ? totalStock > 0
+                ? ('IN_STOCK' as const)
+                : ('AWAITING_STOCK' as const)
+              : undefined;
+
+            const variantParts = (firstVariant?.title || '').split(/[/|-]/).map((s: string) => s.trim());
+            const color = firstVariant?.attributes?.color || variantParts[0] || 'Standard';
+            const size = firstVariant?.attributes?.size || variantParts[1] || 'Standard';
+
+            return {
+              id: p.id,
+              title: p.title,
+              category: (firstVariant?.attributes as any)?.category || 'Fashion',
+              merchantCode: mCode,
+              merchantName: mName,
+              shortSku: p.baseSku,
+              fullSku: firstVariant?.sku || `${mCode}-${p.baseSku}-STD`,
+              color,
+              size,
+              binCode: assignedBin,
+              stock: totalStock,
+              stockAccepted,
+              stockStatus,
+              price: Number(firstVariant?.price) || 0,
+              status: computedStatus,
+              isDraft,
+              submittedAt: new Date(p.createdAt || Date.now()).toLocaleDateString('en-GB', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+              }),
+              imageUrl: p.imageUrl || '',
+              images: p.images || [],
+              barcode: firstVariant?.barcode || '',
+              description: p.description,
+              colors: (firstVariant?.attributes as any)?.allColors || [],
+              sizes: (firstVariant?.attributes as any)?.sizes || [],
+              variantsList: variants.map((v: any) => ({
+                id: v.id,
+                sku: v.sku,
+                color: v.attributes?.color || v.title?.split('/')[0]?.trim() || '',
+                size: v.attributes?.size || v.title?.split('/')[1]?.trim() || '',
+                stock: v.inventoryItems?.[0]?.quantityAvailable ?? 0,
+                imageUrl: v.imageUrl || p.imageUrl || '',
+              })),
+            };
+          });
+
+          setProducts((prev) => {
+            const combined = [...prev];
+            for (const bp of mappedBackend) {
+              const idx = combined.findIndex(
+                (cp) =>
+                  cp.id === bp.id ||
+                  cp.fullSku === bp.fullSku ||
+                  (cp.merchantCode === bp.merchantCode &&
+                    cp.shortSku &&
+                    bp.shortSku &&
+                    cp.shortSku.toUpperCase() === bp.shortSku.toUpperCase())
+              );
+              if (idx >= 0) {
+                combined[idx] = {
+                  ...combined[idx],
+                  ...bp,
+                  status: bp.status,
+                  isDraft: bp.isDraft,
+                };
+              } else {
+                combined.unshift(bp);
+              }
+            }
+            if (JSON.stringify(prev) === JSON.stringify(combined)) return prev;
+            try {
+              localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(combined));
+            } catch {}
+            return combined;
+          });
+        }
+      })
+      .catch(() => {});
+
+    const handleSync = (e: Event) => {
+      const ce = e as CustomEvent | undefined;
+      if (ce?.detail?.source === 'AdminMerchantProductsTab') return;
+      reloadFromStorage();
     };
-    setApprovalData({
-      mode,
-      product: warehouseProduct,
-      selectedBin: bins[0]?.code || 'A-01-02',
+    window.addEventListener('fulfillio-warehouse-sync', handleSync);
+    window.addEventListener('storage', handleSync);
+    return () => {
+      window.removeEventListener('fulfillio-warehouse-sync', handleSync);
+      window.removeEventListener('storage', handleSync);
+    };
+  }, [reloadFromStorage]);
+
+  // Use the single canonical warehouse products list (same source of truth as /admin/products)
+  const allMerchantWarehouseProducts = useMemo(() => {
+    const list = [...products];
+    const hasAnyForMerchant = list.some((wp) => wp.merchantCode === merchant.merchantCode);
+
+    // Only fall back to seed productsList if this merchant has zero products in the warehouse store
+    if (!hasAnyForMerchant) {
+      productsList
+        .filter((p) => p.merchantCode === merchant.merchantCode)
+        .forEach((mp) => {
+          const shortSku = mp.sku.startsWith(`${mp.merchantCode}-`)
+            ? mp.sku.slice(mp.merchantCode.length + 1)
+            : mp.sku;
+          const isDraft = mp.status === 'DRAFT' || Boolean(mp.isDraft);
+          list.unshift({
+            id: mp.id,
+            title: mp.title,
+            category: mp.category,
+            merchantCode: mp.merchantCode,
+            merchantName: merchant.storeName,
+            shortSku,
+            fullSku: mp.sku,
+            color: mp.color,
+            size: mp.size,
+            binCode: mp.bin && mp.bin !== 'Pending Approval' ? mp.bin : 'A-01-02',
+            stock: mp.stock,
+            price: mp.price,
+            status: isDraft
+              ? 'DRAFT'
+              : mp.status === 'PENDING_APPROVAL'
+                ? 'PENDING_APPROVAL'
+                : 'APPROVED',
+            isDraft,
+            submittedAt: 'Recently added',
+            imageUrl: mp.imageUrl || '',
+          });
+        });
+    }
+
+    return list;
+  }, [products, productsList, merchant.merchantCode, merchant.storeName]);
+
+  // Scoped strictly to this merchant for overview statistics
+  const merchantOnlyProducts = useMemo(() => {
+    return allMerchantWarehouseProducts.filter((p) => p.merchantCode === merchant.merchantCode);
+  }, [allMerchantWarehouseProducts, merchant.merchantCode]);
+
+  // 1. Stock Adjustment
+  const handleAdjustStock = (productId: string, delta: number) => {
+    onAdjustStock(productId, delta);
+    setProducts((prev) => {
+      const next = prev.map((p) =>
+        p.id === productId ? { ...p, stock: Math.max(0, (p.stock || 0) + delta) } : p
+      );
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
+      } catch {}
+      return next;
     });
   };
 
-  // Filtered Products
-  const filteredProducts = useMemo(() => {
-    const source = productStockFilter === 'PENDING' ? pendingProducts : allMerchantProducts;
-    return source.filter((p) => {
-      const q = productSearch.toLowerCase().trim();
-      const matchesSearch =
-        !q ||
-        p.title.toLowerCase().includes(q) ||
-        p.sku.toLowerCase().includes(q) ||
-        p.barcode.includes(q) ||
-        p.color.toLowerCase().includes(q);
-
-      const matchesCat = productCategory === 'ALL' || p.category === productCategory;
-
-      const matchesStock =
-        productStockFilter === 'ALL' || productStockFilter === 'PENDING'
-          ? true
-          : productStockFilter === 'OUT_OF_STOCK'
-            ? p.stock === 0
-            : productStockFilter === 'LOW_STOCK'
-              ? p.stock > 0 && p.stock <= 10
-              : p.stock > 10;
-
-      return matchesSearch && matchesCat && matchesStock;
+  const handleSaveVariantStocks = (
+    productId: string,
+    updatedVariants: VariantStockItemDraft[],
+    totalStock: number
+  ) => {
+    setProducts((prev) => {
+      const next = prev.map((p) =>
+        p.id === productId ? { ...p, stock: totalStock } : p
+      );
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
+      } catch {}
+      return next;
     });
-  }, [allMerchantProducts, pendingProducts, productSearch, productCategory, productStockFilter]);
+    setStockAdjustProduct(null);
+  };
 
-  const handleCreateSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTitle.trim()) return;
+  // 2. Change Bin
+  const handleChangeProductBin = (productId: string, nextBinCode: string) => {
+    setProducts((prev) => {
+      const next = prev.map((p) => (p.id === productId ? { ...p, binCode: nextBinCode } : p));
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
+      } catch {}
+      return next;
+    });
+    const prod = products.find((p) => p.id === productId);
+    if (prod) {
+      approveProductInDatabase(productId, nextBinCode, prod.stock || 0, (prod.stock || 0) > 0);
+    }
+  };
 
-    const cleanBase = (newBaseSku.trim() || newTitle.trim().split(' ')[0] || 'ITEM')
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, '');
-    const cleanColor = (newColor.trim() || 'STD')
-      .toUpperCase()
-      .slice(0, 3)
-      .replace(/[^A-Z0-9]/g, '');
-    const cleanSize = (newSize.trim() || 'OS').toUpperCase().replace(/[^A-Z0-9]/g, '');
-    const generatedSku = `${merchant.merchantCode}-${cleanBase}-${cleanColor}-${cleanSize}`;
+  // 3. Confirm Approval (from ApprovalActionModal)
+  const handleConfirmApproval = (
+    mode: 'APPROVE' | 'REJECT',
+    product: WarehouseProductItem,
+    finalQty: number,
+    finalBin: string,
+    acceptStockNow?: boolean
+  ) => {
+    setApprovalModalData(null);
 
-    const created: MerchantProductItem = {
-      id: `p-${Date.now()}`,
-      merchantCode: merchant.merchantCode,
-      title: newTitle.trim(),
-      category: newCategory,
-      sku: generatedSku,
-      barcode: `894${Math.floor(1000000000 + Math.random() * 8999999999)}`,
-      color: newColor.trim() || 'Standard',
-      size: newSize.trim() || 'OS',
-      price: Math.max(0, Number(newPrice) || 950),
-      wholesalePrice: Math.round(Math.max(0, Number(newPrice) || 950) * 0.7),
-      stock: Math.max(0, Number(newStock) || 0),
+    if (mode === 'APPROVE') {
+      const isStockAccepted = acceptStockNow ?? finalQty > 0;
+      const actualStock = isStockAccepted ? finalQty : 0;
+
+      onApproveProduct(product.id, actualStock, finalBin);
+
+      setProducts((prev) => {
+        const next = prev.map((p) =>
+          p.id === product.id
+            ? {
+                ...p,
+                status: 'APPROVED' as const,
+                binCode: finalBin,
+                stock: actualStock,
+                isDraft: false,
+                submittedAt: 'Approved just now',
+              }
+            : p
+        );
+        try {
+          localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+          syncAdminProductsToMerchant(next);
+        } catch {}
+        return next;
+      });
+
+      approveProductInDatabase(product.id, finalBin, actualStock, isStockAccepted);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'AdminMerchantProductsTab' } })
+        );
+      }
+    } else {
+      onRejectProduct(product.id);
+      setProducts((prev) => {
+        const next = prev.filter((p) => p.id !== product.id);
+        try {
+          localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+          syncAdminProductsToMerchant(next, [product]);
+        } catch {}
+        return next;
+      });
+      deleteProductFromDatabase(product.id, product.merchantCode);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'AdminMerchantProductsTab' } })
+        );
+      }
+    }
+  };
+
+  // 4. Accept Physical Stock Intake
+  const handleAcceptStock = (
+    productId: string,
+    quantity: number,
+    binCode: string,
+    challanOrTracking?: string,
+    note?: string
+  ) => {
+    setAcceptStockProduct(null);
+
+    setProducts((prev) => {
+      const next = prev.map((p) => {
+        if (p.id === productId) {
+          const newTotal = (p.stock || 0) + quantity;
+          return {
+            ...p,
+            stock: newTotal,
+            binCode: binCode || p.binCode,
+            status: 'APPROVED' as const,
+          };
+        }
+        return p;
+      });
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
+      } catch {}
+      return next;
+    });
+
+    acceptStockInDatabase(productId, quantity, binCode, challanOrTracking, note);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'AdminMerchantProductsTab' } })
+      );
+    }
+  };
+
+  // 5. Bulk Approvals
+  const handleBulkApproveProducts = (productIds: string[]) => {
+    const idSet = new Set(productIds);
+    const defaultBin = bins[0]?.code || 'A-01-02';
+
+    productIds.forEach((pid) => {
+      const prod = products.find((p) => p.id === pid);
+      onApproveProduct(pid, prod?.stock || 0, defaultBin);
+      approveProductInDatabase(pid, defaultBin, prod?.stock || 0, (prod?.stock || 0) > 0);
+    });
+
+    setProducts((prev) => {
+      const next = prev.map((p) => {
+        if (!idSet.has(p.id)) return p;
+        return {
+          ...p,
+          status: 'APPROVED' as const,
+          isDraft: false,
+          binCode: p.binCode && p.binCode !== 'Pending Approval' ? p.binCode : defaultBin,
+          submittedAt: 'Approved just now',
+        };
+      });
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
+      } catch {}
+      return next;
+    });
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'AdminMerchantProductsTab' } })
+      );
+    }
+  };
+
+  const handleBulkApproveWithSlots = (assignments: BulkSlotAssignment[]) => {
+    const slotMap = new Map<string, BulkSlotAssignment>();
+    assignments.forEach((a) => slotMap.set(a.productId, a));
+
+    assignments.forEach((a) => {
+      onApproveProduct(a.productId, a.qty, a.binCode);
+      approveProductInDatabase(a.productId, a.binCode, a.qty, a.qty > 0);
+    });
+
+    setProducts((prev) => {
+      const next = prev.map((p) => {
+        const slot = slotMap.get(p.id);
+        if (!slot) return p;
+        return {
+          ...p,
+          status: 'APPROVED' as const,
+          isDraft: false,
+          binCode: slot.binCode,
+          stock: slot.qty,
+          submittedAt: 'Approved just now',
+        };
+      });
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
+      } catch {}
+      return next;
+    });
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'AdminMerchantProductsTab' } })
+      );
+    }
+  };
+
+  // 6. Bulk Rejections
+  const handleBulkRejectProducts = (productIds: string[]) => {
+    const idSet = new Set(productIds);
+    const rejectedProducts = products.filter((p) => idSet.has(p.id));
+
+    productIds.forEach((pid) => {
+      onRejectProduct(pid);
+      const prod = products.find((p) => p.id === pid);
+      if (prod) {
+        deleteProductFromDatabase(pid, prod.merchantCode);
+      }
+    });
+
+    setProducts((prev) => {
+      const next = prev.filter((p) => !idSet.has(p.id));
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next, rejectedProducts);
+      } catch {}
+      return next;
+    });
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'AdminMerchantProductsTab' } })
+      );
+    }
+  };
+
+  // 7. Draft / Restore / Delete
+  const handleMoveToDraft = (productId: string) => {
+    setProducts((prev) => {
+      const next = prev.map((p) =>
+        p.id === productId ? { ...p, status: 'DRAFT' as const, isDraft: true } : p
+      );
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
+      } catch {}
+      return next;
+    });
+
+    fetch(`${API_BASE}/inventory/products/${encodeURIComponent(productId)}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'DRAFT' }),
+    }).catch(() => {});
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'AdminMerchantProductsTab' } })
+      );
+    }
+  };
+
+  const handleRestoreProduct = (productId: string) => {
+    setProducts((prev) => {
+      const next = prev.map((p) =>
+        p.id === productId ? { ...p, status: 'PENDING_APPROVAL' as const, isDraft: false } : p
+      );
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
+      } catch {}
+      return next;
+    });
+
+    fetch(`${API_BASE}/inventory/products/${encodeURIComponent(productId)}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'PENDING_APPROVAL' }),
+    }).catch(() => {});
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'AdminMerchantProductsTab' } })
+      );
+    }
+  };
+
+  const handleDeleteProduct = (productId: string) => {
+    const target = products.find((p) => p.id === productId);
+    setProducts((prev) => {
+      const next = prev.filter((p) => p.id !== productId);
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        if (target) syncAdminProductsToMerchant(next, [target]);
+      } catch {}
+      return next;
+    });
+    if (target) {
+      deleteProductFromDatabase(productId, target.merchantCode);
+    }
+  };
+
+  const handleDeleteProducts = (productIds: string[]) => {
+    const idSet = new Set(productIds);
+    const deleted = products.filter((p) => idSet.has(p.id));
+    setProducts((prev) => {
+      const next = prev.filter((p) => !idSet.has(p.id));
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next, deleted);
+      } catch {}
+      return next;
+    });
+    deleted.forEach((p) => deleteProductFromDatabase(p.id, p.merchantCode));
+  };
+
+  // 8. Add Product
+  const handleAddProduct = (newProduct: WarehouseProductItem) => {
+    setProducts((prev) => [newProduct, ...prev]);
+    onAddProduct({
+      id: newProduct.id,
+      merchantCode: newProduct.merchantCode,
+      title: newProduct.title,
+      category: newProduct.category as any,
+      sku: newProduct.fullSku,
+      barcode: '',
+      color: newProduct.color,
+      size: newProduct.size,
+      price: newProduct.price,
+      wholesalePrice: Math.round(newProduct.price * 0.7),
+      stock: newProduct.stock,
       reserved: 0,
       damaged: 0,
-      bin: newBin || 'A-01-02',
-      imageUrl: makeMerchantProductThumbnail(
-        cleanBase.slice(0, 2) || 'PR',
-        '#064e3b',
-        '#0f172a',
-        '#34d399',
-      ),
-    };
-
-    onAddProduct(created);
-    setNewTitle('');
-    setNewBaseSku('');
-    setNewColor('');
-    setNewSize('');
-    setNewPrice('');
-    setNewStock('25');
-    setIsAddModalOpen(false);
+      bin: newProduct.binCode,
+      status: newProduct.status === 'PENDING_APPROVAL' ? 'PENDING_APPROVAL' : 'APPROVED',
+      imageUrl: newProduct.imageUrl,
+    });
+    setAddProductModalOpen(false);
   };
 
   return (
-    <div className="space-y-5">
-      {onNavigateSubTab && (
-        <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-orange-500/10 border border-orange-500/20 text-xs">
-          <span className="text-slate-600 dark:text-slate-300">
-            Need audit documentation for previous stock intakes, restocks or recalls?
-          </span>
-          <button
-            type="button"
-            onClick={() => onNavigateSubTab('ledger')}
-            className="font-bold text-orange-600 dark:text-orange-400 hover:underline cursor-pointer flex items-center gap-1"
-          >
-            <span>View Digital Proof Ledger →</span>
-          </button>
-        </div>
-      )}
-      {pendingProducts.length > 0 && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs">
-          <span className="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-semibold">
-            <Hourglass className="w-4 h-4 shrink-0" />
-            {pendingProducts.length} product{pendingProducts.length > 1 ? 's' : ''} submitted by{' '}
-            {merchant.storeName} {pendingProducts.length > 1 ? 'are' : 'is'} awaiting your approval.
-          </span>
-          {productStockFilter !== 'PENDING' && (
-            <button
-              type="button"
-              onClick={() => setProductStockFilter('PENDING')}
-              className="font-bold text-amber-700 dark:text-amber-300 hover:underline cursor-pointer text-left"
-            >
-              Review pending products →
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Interactive Product Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <button
-          type="button"
-          onClick={() => setProductStockFilter('ALL')}
-          className={`text-left rounded-2xl border p-4 transition-all cursor-pointer ${
-            productStockFilter === 'ALL'
-              ? 'border-emerald-500/60 bg-emerald-50 dark:bg-emerald-950/20 shadow-md'
-              : 'border-slate-200 dark:border-white/10 bg-white/80 dark:bg-navy-900/80 hover:border-slate-300 dark:hover:border-white/15'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Total Products</span>
-            <Package className="w-4 h-4 text-orange-600 dark:text-orange-400" />
-          </div>
-          <div className="text-2xl font-extrabold text-navy-800 dark:text-white mt-1.5 tabular-nums">
-            {allMerchantProducts.length} SKUs
-          </div>
-          <span className="text-xs text-slate-600 dark:text-slate-300 mt-1 block">
-            {allMerchantProducts.reduce((sum, p) => sum + p.stock, 0)} total units
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setProductStockFilter('IN_STOCK')}
-          className={`text-left rounded-2xl border p-4 transition-all cursor-pointer ${
-            productStockFilter === 'IN_STOCK'
-              ? 'border-emerald-500/60 bg-emerald-50 dark:bg-emerald-950/20 shadow-md'
-              : 'border-slate-200 dark:border-white/10 bg-white/80 dark:bg-navy-900/80 hover:border-slate-300 dark:hover:border-white/15'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">In Stock (&gt;10)</span>
-            <CheckCircle2 className="w-4 h-4 text-orange-600 dark:text-orange-400" />
-          </div>
-          <div className="text-2xl font-extrabold text-orange-600 dark:text-orange-400 mt-1.5 tabular-nums">
-            {allMerchantProducts.filter((p) => p.stock > 10).length}
-          </div>
-          <span className="text-xs text-slate-600 dark:text-slate-300 mt-1 block">Ready for pick</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setProductStockFilter('LOW_STOCK')}
-          className={`text-left rounded-2xl border p-4 transition-all cursor-pointer ${
-            productStockFilter === 'LOW_STOCK'
-              ? 'border-amber-500/60 bg-amber-50 dark:bg-amber-950/20 shadow-md'
-              : 'border-slate-200 dark:border-white/10 bg-white/80 dark:bg-navy-900/80 hover:border-slate-300 dark:hover:border-white/15'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Low Stock (1–10)</span>
-            <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-          </div>
-          <div className="text-2xl font-extrabold text-amber-600 dark:text-amber-400 mt-1.5 tabular-nums">
-            {allMerchantProducts.filter((p) => p.stock > 0 && p.stock <= 10).length}
-          </div>
-          <span className="text-xs text-slate-600 dark:text-slate-300 mt-1 block">Needs restock soon</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setProductStockFilter('OUT_OF_STOCK')}
-          className={`text-left rounded-2xl border p-4 transition-all cursor-pointer ${
-            productStockFilter === 'OUT_OF_STOCK'
-              ? 'border-rose-500/60 bg-rose-50 dark:bg-rose-950/20 shadow-md'
-              : 'border-slate-200 dark:border-white/10 bg-white/80 dark:bg-navy-900/80 hover:border-slate-300 dark:hover:border-white/15'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Stock Out (0)</span>
-            <X className="w-4 h-4 text-rose-600 dark:text-rose-400" />
-          </div>
-          <div className="text-2xl font-extrabold text-rose-600 dark:text-rose-400 mt-1.5 tabular-nums">
-            {allMerchantProducts.filter((p) => p.stock === 0).length}
-          </div>
-          <span className="text-xs text-slate-600 dark:text-slate-300 mt-1 block">Unavailable</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setProductStockFilter('PENDING')}
-          className={`text-left rounded-2xl border p-4 transition-all cursor-pointer ${
-            productStockFilter === 'PENDING'
-              ? 'border-amber-500/60 bg-amber-50 dark:bg-amber-950/20 shadow-md'
-              : 'border-slate-200 dark:border-white/10 bg-white/80 dark:bg-navy-900/80 hover:border-slate-300 dark:hover:border-white/15'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Pending Approval</span>
-            <Hourglass className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-          </div>
-          <div className="text-2xl font-extrabold text-amber-600 dark:text-amber-400 mt-1.5 tabular-nums">
-            {pendingProducts.length}
-          </div>
-          <span className="text-xs text-slate-600 dark:text-slate-300 mt-1 block">Awaiting admin review</span>
-        </button>
-      </div>
-
-      {/* Filter & Action Controls Bar */}
-      <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-navy-900/90 p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4 shadow-lg">
-        <div className="flex flex-wrap items-center gap-2.5 flex-1">
-          {/* Search */}
-          <div className="relative flex-1 min-w-[200px] max-w-sm">
-            <Search className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 absolute left-3 top-2.5" />
-            <input
-              type="text"
-              value={productSearch}
-              onChange={(e) => setProductSearch(e.target.value)}
-              placeholder={`Search ${merchant.merchantCode} products or SKU...`}
-              className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs text-navy-800 dark:text-white placeholder-slate-500 dark:placeholder-slate-400 focus:outline-none focus:border-orange-500 tabular-nums"
-            />
-          </div>
-
-          {/* Category Pills */}
-          <div className="inline-flex items-center gap-1 rounded-xl bg-slate-50 dark:bg-navy-950 p-1 border border-slate-200 dark:border-white/10">
-            {(['ALL', 'Apparel', 'Footwear', 'Electronics'] as const).map((cat) => (
-              <button
-                key={cat}
-                type="button"
-                onClick={() => setProductCategory(cat)}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  productCategory === cat
-                    ? 'bg-orange-600 text-white shadow'
-                    : 'text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-slate-100'
-                }`}
-              >
-                {cat === 'ALL' ? 'All' : cat}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* View Switcher & Add Product Action */}
-        <div className="flex items-center gap-2.5">
-          <div className="inline-flex items-center rounded-xl bg-slate-50 dark:bg-navy-950 p-1 border border-slate-200 dark:border-white/10">
-            <button
-              type="button"
-              onClick={() => setViewMode('list')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                viewMode === 'list'
-                  ? 'bg-orange-600 text-white shadow'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-slate-100'
-              }`}
-            >
-              <List className="w-3.5 h-3.5" />
-              <span>Table</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('grid')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                viewMode === 'grid'
-                  ? 'bg-orange-600 text-white shadow'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-slate-100'
-              }`}
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              <span>Cards</span>
-            </button>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setIsAddModalOpen(true)}
-            className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-xs font-bold text-white flex items-center gap-1.5 shadow-lg shadow-orange-500/25 transition-all cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add Product</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Products Content */}
-      {filteredProducts.length === 0 ? (
-        <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/50 dark:bg-navy-900/50 p-12 text-center space-y-3">
-          <Package className="w-8 h-8 text-slate-500 dark:text-slate-400 mx-auto" />
-          <h4 className="text-sm font-bold text-navy-800 dark:text-white">
-            No products match your filter for {merchant.storeName}
-          </h4>
-          <button
-            type="button"
-            onClick={() => {
-              setProductSearch('');
-              setProductCategory('ALL');
-              setProductStockFilter('ALL');
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-semibold text-orange-600 dark:text-orange-400 cursor-pointer"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset Filters</span>
-          </button>
-        </div>
-      ) : viewMode === 'list' ? (
-        /* TABLE VIEW */
-        <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-navy-900 overflow-hidden shadow-xl">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50/90 dark:bg-navy-950/90 text-slate-600 dark:text-slate-300 uppercase tracking-wider font-bold border-b border-slate-200 dark:border-white/10 text-xs">
-                <tr>
-                  <th className="p-4">Product &amp; Image</th>
-                  <th className="p-4">2-Part System SKU</th>
-                  <th className="p-4">Bin Location</th>
-                  <th className="p-4">Variant (Color / Size)</th>
-                  <th className="p-4 text-right">Unit Price</th>
-                  <th className="p-4 text-center">Status</th>
-                  <th className="p-4 text-right">Stock Adjust</th>
-                  <th className="p-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200/80 dark:divide-white/10">
-                {filteredProducts.map((prod) => (
-                  <tr key={prod.id} className="hover:bg-slate-100/40 dark:hover:bg-navy-800/40 transition-colors">
-                    <td className="p-4">
-                      <div className="flex items-center gap-3">
-                        {prod.imageUrl ? (
-                          <img
-                            src={prod.imageUrl}
-                            alt={prod.title}
-                            className="h-10 w-10 rounded-xl object-cover border border-slate-300 dark:border-white/15 shadow-sm shrink-0 bg-slate-50 dark:bg-navy-950"
-                          />
-                        ) : (
-                          <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
-                            <Package className="w-5 h-5" />
-                          </div>
-                        )}
-                        <div>
-                          <div className="font-bold text-navy-800 dark:text-white">{prod.title}</div>
-                          <span className="text-xs text-slate-600 dark:text-slate-300">{prod.category}</span>
-                        </div>
-                      </div>
-                    </td>
-
-                    <td className="p-4">
-                      <span className="tabular-nums text-xs font-bold px-2 py-0.5 rounded bg-slate-50 dark:bg-navy-950 text-orange-600 dark:text-orange-400 border border-slate-200 dark:border-white/10">
-                        {prod.sku}
-                      </span>
-                    </td>
-
-                    <td className="p-4">
-                      <span className="tabular-nums text-xs font-bold px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30">
-                        Bin: {prod.bin}
-                      </span>
-                    </td>
-
-                    <td className="p-4">
-                      <div className="inline-flex items-center gap-1.5 text-xs text-navy-800 dark:text-slate-100">
-                        <span className="px-2 py-0.5 rounded bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10">
-                          {prod.color}
-                        </span>
-                        <span className="px-2 py-0.5 rounded bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 font-bold text-navy-800 dark:text-white">
-                          {prod.size}
-                        </span>
-                      </div>
-                    </td>
-
-                    <td className="p-4 text-right tabular-nums font-bold text-navy-800 dark:text-white">
-                      ৳{prod.price.toLocaleString()}
-                    </td>
-
-                    <td className="p-4 text-center">
-                      <ProductStatusBadge prod={prod} />
-                    </td>
-
-                    <td className="p-4 text-right">
-                      {prod.status === 'PENDING_APPROVAL' ? (
-                        <span className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
-                          {prod.stock} pcs submitted
-                        </span>
-                      ) : (
-                      <div className="inline-flex items-center gap-1.5 rounded-xl bg-slate-50 dark:bg-navy-950 p-1 border border-slate-200 dark:border-white/10">
-                        <button
-                          type="button"
-                          onClick={() => onAdjustStock(prod.id, -1)}
-                          className="h-7 w-7 rounded-lg bg-white dark:bg-navy-900 hover:bg-slate-100 dark:hover:bg-navy-800 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center justify-center transition-colors cursor-pointer"
-                          title="Decrease Stock (-1)"
-                        >
-                          -
-                        </button>
-                        <span className="w-10 text-center tabular-nums text-xs font-extrabold text-navy-800 dark:text-white">
-                          {prod.stock}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => onAdjustStock(prod.id, 1)}
-                          className="h-7 w-7 rounded-lg bg-orange-500/20 hover:bg-orange-500/30 text-orange-600 dark:text-orange-400 border border-orange-500/30 font-bold text-xs flex items-center justify-center transition-colors cursor-pointer"
-                          title="Increase Stock (+1)"
-                        >
-                          +
-                        </button>
-                      </div>
-                      )}
-                    </td>
-
-                    <td className="p-4 text-right">
-                      {prod.status === 'PENDING_APPROVAL' ? (
-                        <PendingActionsMenu
-                          onApprove={() => openApproval(prod, 'APPROVE')}
-                          onReject={() => openApproval(prod, 'REJECT')}
-                        />
-                      ) : (
-                        <span className="text-slate-400 dark:text-slate-600">—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ) : (
-        /* CARD GRID VIEW */
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredProducts.map((prod) => (
-            <div
-              key={prod.id}
-              className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-navy-900/90 hover:border-orange-500/40 p-5 flex flex-col justify-between gap-4 shadow-lg transition-all"
-            >
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="tabular-nums text-xs font-bold px-2 py-0.5 rounded bg-slate-50 dark:bg-navy-950 text-orange-600 dark:text-orange-400 border border-slate-200 dark:border-white/10">
-                    {prod.sku}
-                  </span>
-                  <ProductStatusBadge prod={prod} />
-                </div>
-
-                <div className="flex items-start gap-3">
-                  {prod.imageUrl ? (
-                    <img
-                      src={prod.imageUrl}
-                      alt={prod.title}
-                      className="h-12 w-12 rounded-xl object-cover border border-slate-300 dark:border-white/15 shrink-0 bg-slate-50 dark:bg-navy-950"
-                    />
-                  ) : (
-                    <div className="h-12 w-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
-                      <Package className="w-5 h-5" />
-                    </div>
-                  )}
-                  <div>
-                    <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-                      {prod.category} • <span className="tabular-nums text-indigo-700 dark:text-indigo-300">Bin {prod.bin}</span>
-                    </span>
-                    <h4 className="text-sm font-bold text-navy-800 dark:text-white mt-0.5">{prod.title}</h4>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="px-2 py-0.5 rounded bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200">
-                    Color: <strong className="text-navy-800 dark:text-white">{prod.color}</strong>
-                  </span>
-                  <span className="px-2 py-0.5 rounded bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200">
-                    Size: <strong className="text-navy-800 dark:text-white">{prod.size}</strong>
-                  </span>
-                </div>
-              </div>
-
-              <div className="pt-3 border-t border-slate-200 dark:border-white/10 flex items-center justify-between">
-                <div>
-                  <span className="text-[11px] uppercase text-slate-500 dark:text-slate-400 font-semibold block">
-                    Unit Price
-                  </span>
-                  <span className="text-base font-extrabold text-navy-800 dark:text-white tabular-nums">
-                    ৳{prod.price.toLocaleString()}
-                  </span>
-                </div>
-
-                {prod.status === 'PENDING_APPROVAL' ? (
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => openApproval(prod, 'APPROVE')}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
-                    >
-                      <Check className="w-3.5 h-3.5" />
-                      <span>Approve</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => openApproval(prod, 'REJECT')}
-                      className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs font-bold cursor-pointer"
-                    >
-                      Reject
-                    </button>
-                  </div>
-                ) : (
-                <div className="inline-flex items-center gap-1.5 rounded-xl bg-slate-50 dark:bg-navy-950 p-1 border border-slate-200 dark:border-white/10">
-                  <button
-                    type="button"
-                    onClick={() => onAdjustStock(prod.id, -1)}
-                    className="h-7 w-7 rounded-lg bg-white dark:bg-navy-900 hover:bg-slate-100 dark:hover:bg-navy-800 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center justify-center cursor-pointer"
-                  >
-                    -
-                  </button>
-                  <span className="w-10 text-center tabular-nums text-xs font-extrabold text-navy-800 dark:text-white">
-                    {prod.stock}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => onAdjustStock(prod.id, 1)}
-                    className="h-7 w-7 rounded-lg bg-orange-500/20 hover:bg-orange-500/30 text-orange-600 dark:text-orange-400 border border-orange-500/30 font-bold text-xs flex items-center justify-center cursor-pointer"
-                  >
-                    +
-                  </button>
-                </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Approve / Reject pending product submission */}
-      <ApprovalActionModal
-        isOpen={approvalData !== null}
-        onClose={() => setApprovalData(null)}
-        approvalData={approvalData}
+    <div className="space-y-6">
+      {/* 1. Summary Stats Cards (Same to Same as /admin/products, Display-Only StatCards) */}
+      <ProductsStatsOverview
+        products={merchantOnlyProducts}
         bins={bins}
-        onConfirm={(mode, product, finalQty, finalBin) => {
-          if (mode === 'APPROVE') {
-            onApproveProduct(product.id, finalQty, finalBin);
-          } else {
-            onRejectProduct(product.id);
-          }
-          setApprovalData(null);
-        }}
+        pendingRestockCount={0}
       />
 
-      {/* Add Product Modal */}
-      <Modal
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        title={`Add Product for ${merchant.storeName}`}
-        subtitle={`Generates 2-part SKU with prefix ${merchant.merchantCode}`}
-        size="md"
-      >
-        <form onSubmit={handleCreateSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
-              Product Title *
-            </label>
-            <input
-              type="text"
-              required
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              placeholder="e.g. Heavyweight Fleece Hoodie"
-              className="w-full rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 px-3.5 py-2 text-xs text-navy-800 dark:text-white focus:outline-none focus:border-orange-500"
-            />
-          </div>
+      {/* 2. The Single Master Products Table & Approvals (Same to Same as /admin/products) */}
+      <ProductsCatalogTab
+        products={allMerchantWarehouseProducts}
+        bins={bins}
+        fixedMerchantCode={merchant.merchantCode}
+        hideMerchantFilter={true}
+        onAdjustStock={handleAdjustStock}
+        onOpenStockAdjustModal={(prod) => setStockAdjustProduct(prod)}
+        onChangeProductBin={handleChangeProductBin}
+        onOpenAddProduct={() => setAddProductModalOpen(true)}
+        onOpenAcceptStockModal={(prod) => setAcceptStockProduct(prod)}
+        onOpenApprovalModal={(mode, product, selectedBin) =>
+          setApprovalModalData({ mode, product, selectedBin })
+        }
+        onBulkApproveProductsWithSlots={handleBulkApproveWithSlots}
+        onBulkApproveProducts={handleBulkApproveProducts}
+        onBulkRejectProducts={handleBulkRejectProducts}
+        onMoveToDraft={handleMoveToDraft}
+        onRestoreProduct={handleRestoreProduct}
+        onPermanentDelete={handleDeleteProduct}
+        onBulkMoveToDraft={(ids) => ids.forEach((id) => handleMoveToDraft(id))}
+        onBulkRestore={(ids) => ids.forEach((id) => handleRestoreProduct(id))}
+        onBulkPermanentDelete={handleDeleteProducts}
+        onDeleteProduct={handleDeleteProduct}
+        onDeleteProducts={handleDeleteProducts}
+      />
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">Category</label>
-              <select
-                value={newCategory}
-                onChange={(e) => setNewCategory(e.target.value as any)}
-                className="w-full rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 px-3 py-2 text-xs text-navy-800 dark:text-white focus:outline-none focus:border-orange-500"
-              >
-                <option value="Apparel">Apparel</option>
-                <option value="Footwear">Footwear</option>
-                <option value="Electronics">Electronics</option>
-                <option value="Beauty">Beauty</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
-                Short SKU Code
-              </label>
-              <input
-                type="text"
-                value={newBaseSku}
-                onChange={(e) => setNewBaseSku(e.target.value.toUpperCase())}
-                placeholder="e.g. HOODIE"
-                className="w-full rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 px-3.5 py-2 text-xs text-navy-800 dark:text-white tabular-nums uppercase focus:outline-none focus:border-orange-500"
-              />
-            </div>
-          </div>
+      {/* 3. Modals (Matching /admin/products) */}
+      <StockAdjustModal
+        isOpen={Boolean(stockAdjustProduct)}
+        onClose={() => setStockAdjustProduct(null)}
+        product={stockAdjustProduct}
+        onAdjustStock={(id, delta) => handleAdjustStock(id, delta)}
+        onSaveVariantStocks={handleSaveVariantStocks}
+      />
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">Color</label>
-              <input
-                type="text"
-                value={newColor}
-                onChange={(e) => setNewColor(e.target.value)}
-                placeholder="e.g. Black"
-                className="w-full rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 px-3.5 py-2 text-xs text-navy-800 dark:text-white focus:outline-none focus:border-orange-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">Size</label>
-              <input
-                type="text"
-                value={newSize}
-                onChange={(e) => setNewSize(e.target.value)}
-                placeholder="e.g. XL"
-                className="w-full rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 px-3.5 py-2 text-xs text-navy-800 dark:text-white focus:outline-none focus:border-orange-500"
-              />
-            </div>
-          </div>
+      <ApprovalActionModal
+        isOpen={Boolean(approvalModalData)}
+        onClose={() => setApprovalModalData(null)}
+        approvalData={approvalModalData}
+        bins={bins}
+        onConfirm={handleConfirmApproval}
+      />
 
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">Price (৳)</label>
-              <input
-                type="number"
-                value={newPrice}
-                onChange={(e) => setNewPrice(e.target.value)}
-                placeholder="1650"
-                className="w-full rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 px-3.5 py-2 text-xs text-navy-800 dark:text-white tabular-nums focus:outline-none focus:border-orange-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">Stock</label>
-              <input
-                type="number"
-                value={newStock}
-                onChange={(e) => setNewStock(e.target.value)}
-                className="w-full rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 px-3.5 py-2 text-xs text-navy-800 dark:text-white tabular-nums focus:outline-none focus:border-orange-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">Bin</label>
-              <input
-                type="text"
-                value={newBin}
-                onChange={(e) => setNewBin(e.target.value.toUpperCase())}
-                placeholder="A-01-02"
-                className="w-full rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 px-3.5 py-2 text-xs text-navy-800 dark:text-white tabular-nums uppercase focus:outline-none focus:border-orange-500"
-              />
-            </div>
-          </div>
+      <AcceptStockModal
+        isOpen={Boolean(acceptStockProduct)}
+        onClose={() => setAcceptStockProduct(null)}
+        product={acceptStockProduct}
+        bins={bins}
+        onConfirm={handleAcceptStock}
+      />
 
-          <div className="pt-2 flex justify-end gap-2.5">
-            <button
-              type="button"
-              onClick={() => setIsAddModalOpen(false)}
-              className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-semibold text-slate-700 dark:text-slate-200"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-xs font-bold text-white shadow-lg shadow-orange-500/25"
-            >
-              Save Product
-            </button>
-          </div>
-        </form>
-      </Modal>
+      <AddProductModal
+        isOpen={addProductModalOpen}
+        onClose={() => setAddProductModalOpen(false)}
+        bins={bins}
+        onAddProduct={handleAddProduct}
+      />
     </div>
   );
 }
+
+export default MerchantProductsTab;

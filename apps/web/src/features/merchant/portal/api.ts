@@ -183,16 +183,33 @@ export const merchantApi = {
         const profit = price - costPrice;
         const profitMargin = price > 0 ? Math.round((profit / price) * 100) : 0;
 
-        const rawBin = (variants[0]?.attributes as any)?.bin || (firstVariant?.attributes as any)?.bin || firstVariant?.defaultBinCode;
-        const rawStatus = (variants[0]?.attributes as any)?.status || (firstVariant?.attributes as any)?.status;
-        const isPending =
-          rawStatus === 'PENDING_APPROVAL' ||
-          !rawBin ||
-          rawBin === 'Pending Approval' ||
-          rawBin === 'Assigned on intake';
+        const dbStatus = (p.status || '').trim().toUpperCase();
+        const rawBin =
+          firstVariant?.defaultBinCode &&
+          firstVariant.defaultBinCode !== 'Pending Approval' &&
+          firstVariant.defaultBinCode !== 'Assigned on intake'
+            ? firstVariant.defaultBinCode
+            : (variants[0]?.attributes as any)?.bin || (firstVariant?.attributes as any)?.bin;
 
-        const resolvedBin = isPending ? 'Pending Approval' : (rawBin || 'Pending Approval');
-        const resolvedStatus = isPending ? ('PENDING_APPROVAL' as const) : (rawStatus === 'DRAFT' ? ('DRAFT' as const) : ('PUBLISHED' as const));
+        const isDraft = dbStatus === 'DRAFT';
+        const isPending =
+          !isDraft &&
+          (dbStatus === 'PENDING_APPROVAL' ||
+            (!dbStatus && (!rawBin || rawBin === 'Pending Approval' || rawBin === 'Assigned on intake')));
+        const isStockStored =
+          !isDraft &&
+          !isPending &&
+          (dbStatus === 'STOCK_STORED' || (dbStatus === 'PUBLISHED' && totalStock > 0) || totalStock > 0);
+        const isApproved = !isDraft && !isPending;
+
+        const resolvedBin = isApproved ? (rawBin || 'A-01-02') : 'Pending Approval';
+        const resolvedStatus = isDraft
+          ? ('DRAFT' as const)
+          : isPending
+            ? ('PENDING_APPROVAL' as const)
+            : isStockStored
+              ? ('STOCK_STORED' as const)
+              : ('APPROVED' as const);
 
         return {
           id: p.id,
@@ -465,6 +482,7 @@ export const merchantApi = {
       baseSku: cleanBaseSku || `PROD-${Date.now().toString().slice(-4)}`,
       imageUrl: product.imageUrl || allDistinctImages[0],
       images: allDistinctImages,
+      status: 'PENDING_APPROVAL',
       variants: (product.variantsList && product.variantsList.length > 0)
         ? product.variantsList.map((v, vIdx) => {
             const matchingColor = (product.colors || []).find(
@@ -576,9 +594,15 @@ export const merchantApi = {
       baseSku: cleanBaseSku,
       imageUrl: product.imageUrl !== undefined ? product.imageUrl : allDistinctImages[0],
       images: product.images !== undefined ? product.images : allDistinctImages,
+      ...(product.status ? { status: product.status } : {}),
     };
 
     if (product.variantsList && product.variantsList.length > 0) {
+      const isPendingProd =
+        product.status === 'PENDING_APPROVAL' ||
+        !product.bin ||
+        product.bin === 'Pending Approval' ||
+        product.bin === 'Assigned on intake';
       payload.variants = product.variantsList.map((v) => {
         const matchingColor = (product.colors || []).find(
           (c) => (c.name || '').trim().toLowerCase() === (v.color || '').trim().toLowerCase()
@@ -590,8 +614,8 @@ export const merchantApi = {
           title: `${v.color || 'Standard'} / ${v.size || 'Standard'}`,
           variantCode: `${(v.color || 'STD').slice(0, 3)}-${(v.size || 'STD').slice(0, 3)}`.toUpperCase(),
           price: Number(product.price) || 0,
-          defaultBinCode: 'A-01-01',
-          initialStock: Math.max(0, Number(v.stock) || 0),
+          defaultBinCode: isPendingProd ? 'Pending Approval' : (product.bin || 'A-01-01'),
+          initialStock: isPendingProd ? 0 : Math.max(0, Number(v.stock) || 0),
           imageUrl: colorImg,
           attributes: {
             color: v.color,
@@ -634,6 +658,62 @@ export const merchantApi = {
 
       const data = await res.json();
       return { ok: true, data };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Network request failed' };
+    }
+  },
+
+  async updateProductStatus(
+    productId: string,
+    status: 'PUBLISHED' | 'STOCK_STORED' | 'APPROVED' | 'DRAFT' | 'PENDING_APPROVAL'
+  ): Promise<{ ok: boolean; data?: any; error?: string }> {
+    const session = typeof window !== 'undefined' ? getActiveMerchantSession() : null;
+    const code = session?.merchantCode || 'MC-101';
+    try {
+      const res = await fetch(`${API_BASE}/inventory/products/${encodeURIComponent(productId)}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-merchant-code': code,
+          ...getAuthHeader(),
+        },
+        body: JSON.stringify({ status }),
+      });
+
+      if (!res.ok) {
+        return await this.updateProduct(productId, { status });
+      }
+
+      const data = await res.json();
+      return { ok: true, data };
+    } catch {
+      return await this.updateProduct(productId, { status });
+    }
+  },
+
+  async deleteProduct(productId: string): Promise<{ ok: boolean; error?: string }> {
+    const session = typeof window !== 'undefined' ? getActiveMerchantSession() : null;
+    const code = session?.merchantCode || 'MC-101';
+    try {
+      const res = await fetch(`${API_BASE}/inventory/products/${encodeURIComponent(productId)}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-merchant-code': code,
+          ...getAuthHeader(),
+        },
+      });
+      if (!res.ok) {
+        let errMessage = `HTTP ${res.status}`;
+        try {
+          const errData = await res.json();
+          if (errData?.message) {
+            errMessage = Array.isArray(errData.message) ? errData.message.join(', ') : errData.message;
+          }
+        } catch {}
+        return { ok: false, error: errMessage };
+      }
+      return { ok: true };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Network request failed' };
     }

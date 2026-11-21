@@ -27,12 +27,19 @@ export function RestockIntakeModal({
   const [receivedQty, setReceivedQty] = useState<number | ''>(50);
   const [selectedBin, setSelectedBin] = useState<string>('A-01-02');
 
+  const initializedRef = React.useRef<string | null>(null);
+
   useEffect(() => {
-    if (replenishment) {
-      setReceivedQty(replenishment.requestedQty || 50);
-      setSelectedBin(replenishment.binCode || bins[0]?.code || 'A-01-02');
+    if (isOpen && replenishment) {
+      if (initializedRef.current !== replenishment.id) {
+        initializedRef.current = replenishment.id;
+        setReceivedQty(replenishment.requestedQty || 50);
+        setSelectedBin(replenishment.binCode || bins[0]?.code || 'A-01-02');
+      }
+    } else if (!isOpen) {
+      initializedRef.current = null;
     }
-  }, [replenishment, bins]);
+  }, [isOpen, replenishment?.id]);
 
   if (!replenishment) return null;
 

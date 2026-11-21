@@ -38,8 +38,9 @@ export interface MerchantProductItem {
   damaged: number;
   bin: string;
   imageUrl?: string;
-  /** Catalog lifecycle: absent/APPROVED = live (published); PENDING_APPROVAL = awaiting admin review. */
-  status?: 'APPROVED' | 'PENDING_APPROVAL';
+  /** Catalog lifecycle: absent/APPROVED = live (published); PENDING_APPROVAL = awaiting admin review; DRAFT = unpublished draft. */
+  status?: 'APPROVED' | 'PENDING_APPROVAL' | 'DRAFT';
+  isDraft?: boolean;
 }
 
 export interface MerchantOrderItem {

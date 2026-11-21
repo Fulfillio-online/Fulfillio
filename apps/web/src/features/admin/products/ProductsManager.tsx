@@ -35,6 +35,7 @@ import { WarehouseBinsTab } from './components/tabs/WarehouseBinsTab';
 import { WarehouseStockLedgerTab } from './components/tabs/WarehouseStockLedgerTab';
 import { StockAdjustModal } from './components/modals/StockAdjustModal';
 import { ApprovalActionModal } from './components/modals/ApprovalActionModal';
+import { AcceptStockModal } from './components/modals/AcceptStockModal';
 import { RestockIntakeModal } from './components/modals/RestockIntakeModal';
 import { BulkSlotAssignment } from './components/modals/BulkApprovalModal';
 import { AddProductModal } from './components/modals/AddProductModal';
@@ -42,6 +43,10 @@ import { CreateBinModal } from './components/modals/CreateBinModal';
 import {
   reconcileAdminProductsWithMerchant,
   syncAdminProductsToMerchant,
+  approveProductInDatabase,
+  acceptStockInDatabase,
+  syncProductStatusToDatabase,
+  deleteProductFromDatabase,
 } from '@/lib/warehouseSync';
 
 export interface ProductsManagerProps {
@@ -100,6 +105,11 @@ export function ProductsManager({
       return next;
     });
     triggerToast(`Approved & published ${productIds.length} product(s).`);
+    productIds.forEach((pid) => {
+      const prod = products.find((p) => p.id === pid);
+      const validBin = prod?.binCode && prod.binCode !== 'Pending Approval' ? prod.binCode : bins[0]?.code || 'A-01-02';
+      approveProductInDatabase(pid, validBin, prod?.stock || 0, (prod?.stock || 0) > 0);
+    });
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
@@ -132,6 +142,7 @@ export function ProductsManager({
     });
 
     assignments.forEach((a) => {
+      approveProductInDatabase(a.productId, a.binCode, a.qty, a.qty > 0);
       const prod = products.find((p) => p.id === a.productId);
       if (prod) {
         appendStockMovement({
@@ -257,6 +268,9 @@ export function ProductsManager({
       } catch {}
       return next;
     });
+    rejectedProducts.forEach((p) => {
+      deleteProductFromDatabase(p.id, p.merchantCode);
+    });
     triggerToast(`Rejected ${productIds.length} product submission(s).`);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
@@ -288,6 +302,7 @@ export function ProductsManager({
 
   // Modals
   const [stockAdjustProduct, setStockAdjustProduct] = useState<WarehouseProductItem | null>(null);
+  const [acceptStockProduct, setAcceptStockProduct] = useState<WarehouseProductItem | null>(null);
   const [approvalModalData, setApprovalModalData] = useState<{
     mode: 'APPROVE' | 'REJECT';
     product: WarehouseProductItem;
@@ -308,13 +323,16 @@ export function ProductsManager({
           if (Array.isArray(parsed) && parsed.length > 0) {
             const healed = parsed.map((p: any) => {
               const init = INITIAL_PRODUCTS.find((ip) => ip.id === p.id || ip.fullSku === p.fullSku);
-              const isPending = p.status === 'PENDING_APPROVAL';
-              const isRejected = p.status === 'REJECTED';
+              const isDraft = p.status === 'DRAFT' || Boolean(p.isDraft);
+              const isPending = !isDraft && p.status === 'PENDING_APPROVAL';
+              const isRejected = !isDraft && p.status === 'REJECTED';
               const cleanedBin = isPending
                 ? p.binCode || 'Pending Approval'
                 : cleanBinCode(p.binCode) || (init ? cleanBinCode(init.binCode) : 'A-01-02');
               const safeStock = typeof p.stock === 'number' && !isNaN(p.stock) ? p.stock : (init?.stock ?? 100);
-              const safeStatus = isPending
+              const safeStatus = isDraft
+                ? ('DRAFT' as const)
+                : isPending
                 ? ('PENDING_APPROVAL' as const)
                 : isRejected
                 ? ('REJECTED' as const)
@@ -324,6 +342,7 @@ export function ProductsManager({
                 binCode: cleanedBin,
                 stock: safeStock,
                 status: safeStatus,
+                isDraft,
               };
             });
             baseProds = healed;
@@ -348,12 +367,43 @@ export function ProductsManager({
                 const mCode = p.merchant?.merchantCode || p.merchantCode || 'MC-101';
                 const mName = p.merchant?.businessName || `Merchant (${mCode})`;
                 const firstVariant = variants[0];
-                const isApproved = variants.some(
-                  (v: any) =>
-                    v.defaultBinCode &&
-                    v.defaultBinCode !== 'Pending Approval' &&
-                    v.defaultBinCode !== 'Assigned on intake'
-                );
+                const rawDbStatus = (p.status || '').trim().toUpperCase();
+                const isDraft = rawDbStatus === 'DRAFT';
+                const isPending =
+                  rawDbStatus === 'PENDING_APPROVAL' ||
+                  (!rawDbStatus && variants.some((v: any) => v.defaultBinCode === 'Pending Approval'));
+                const isApproved =
+                  !isDraft &&
+                  !isPending &&
+                  (rawDbStatus === 'APPROVED' ||
+                    rawDbStatus === 'PUBLISHED' ||
+                    variants.some(
+                      (v: any) =>
+                        v.defaultBinCode &&
+                        v.defaultBinCode !== 'Pending Approval' &&
+                        v.defaultBinCode !== 'Assigned on intake'
+                    ));
+
+                const computedStatus = isDraft
+                  ? ('DRAFT' as const)
+                  : isPending
+                    ? ('PENDING_APPROVAL' as const)
+                    : ('APPROVED' as const);
+
+                const assignedBin = isApproved
+                  ? (firstVariant?.defaultBinCode &&
+                     firstVariant.defaultBinCode !== 'Pending Approval' &&
+                     firstVariant.defaultBinCode !== 'Assigned on intake'
+                      ? firstVariant.defaultBinCode
+                      : 'A-01-02')
+                  : 'Pending Approval';
+
+                const stockAccepted = isApproved && totalStock > 0;
+                const stockStatus = isApproved
+                  ? totalStock > 0
+                    ? ('IN_STOCK' as const)
+                    : ('AWAITING_STOCK' as const)
+                  : undefined;
 
                 const variantParts = (firstVariant?.title || '').split(/[/•·|-]/).map((s: string) => s.trim());
                 const color = firstVariant?.attributes?.color || variantParts[0] || 'Standard';
@@ -369,10 +419,13 @@ export function ProductsManager({
                   fullSku: firstVariant?.sku || `${mCode}-${p.baseSku}-STD`,
                   color,
                   size,
-                  binCode: isApproved ? (firstVariant?.defaultBinCode || 'A-01-02') : 'Pending Approval',
+                  binCode: assignedBin,
                   stock: totalStock,
+                  stockAccepted,
+                  stockStatus,
                   price: Number(firstVariant?.price) || 0,
-                  status: isApproved ? ('APPROVED' as const) : ('PENDING_APPROVAL' as const),
+                  status: computedStatus,
+                  isDraft,
                   submittedAt: new Date(p.createdAt || Date.now()).toLocaleDateString('en-GB', {
                     day: '2-digit',
                     month: 'short',
@@ -400,7 +453,7 @@ export function ProductsManager({
                 for (const bp of mappedBackend) {
                   const idx = combined.findIndex((cp) => cp.id === bp.id || cp.fullSku === bp.fullSku);
                   if (idx >= 0) {
-                    combined[idx] = { ...combined[idx], ...bp };
+                    combined[idx] = { ...combined[idx], ...bp, status: bp.status, isDraft: bp.isDraft };
                   } else {
                     combined.unshift(bp);
                   }
@@ -684,6 +737,7 @@ export function ProductsManager({
     const prod = products.find((p) => p.id === productId);
     if (prod) {
       triggerToast(`Updated bin location for ${prod.fullSku} to ${nextBinCode}`);
+      approveProductInDatabase(productId, nextBinCode, prod.stock || 0, (prod.stock || 0) > 0);
     }
   };
 
@@ -692,9 +746,15 @@ export function ProductsManager({
     mode: 'APPROVE' | 'REJECT',
     product: WarehouseProductItem,
     finalQty: number,
-    finalBin: string
+    finalBin: string,
+    acceptStockNow?: boolean
   ) => {
+    setApprovalModalData(null);
+
     if (mode === 'APPROVE') {
+      const isStockAccepted = acceptStockNow ?? finalQty > 0;
+      const actualStock = isStockAccepted ? finalQty : 0;
+
       setProducts((prev) => {
         const next = prev.map((p) =>
           p.id === product.id
@@ -702,7 +762,9 @@ export function ProductsManager({
                 ...p,
                 status: 'APPROVED' as const,
                 binCode: finalBin,
-                stock: finalQty,
+                stock: actualStock,
+                stockAccepted: isStockAccepted,
+                stockStatus: isStockAccepted ? ('IN_STOCK' as const) : ('AWAITING_STOCK' as const),
                 submittedAt: 'Approved just now',
               }
             : p
@@ -716,33 +778,42 @@ export function ProductsManager({
         return next;
       });
 
+      // Persist directly to PostgreSQL database
+      approveProductInDatabase(product.id, finalBin, actualStock, isStockAccepted);
+
       if (typeof window !== 'undefined') {
         window.dispatchEvent(
           new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
         );
       }
 
-      appendStockMovement({
-        type: 'INITIAL_INTAKE',
-        merchantCode: product.merchantCode,
-        merchantName: product.merchantName,
-        productId: product.id,
-        productTitle: product.title,
-        sku: product.fullSku,
-        deltaQty: finalQty,
-        previousStock: 0,
-        newStock: finalQty,
-        binCode: finalBin,
-        referenceDocType: 'INWARD_CHALLAN',
-        referenceNumber: `CHL-${Date.now().toString().slice(-6)}`,
-        operator: 'Warehouse Receiving Officer',
-        carrierOrCourier: 'Initial Catalog Intake Consignment',
-        notes: `Catalog submission approved. Slotted ${finalQty} units into Bin ${finalBin}.`,
-      });
+      if (isStockAccepted && actualStock > 0) {
+        appendStockMovement({
+          type: 'INITIAL_INTAKE',
+          merchantCode: product.merchantCode,
+          merchantName: product.merchantName,
+          productId: product.id,
+          productTitle: product.title,
+          sku: product.fullSku,
+          deltaQty: actualStock,
+          previousStock: 0,
+          newStock: actualStock,
+          binCode: finalBin,
+          referenceDocType: 'INWARD_CHALLAN',
+          referenceNumber: `CHL-${Date.now().toString().slice(-6)}`,
+          operator: 'Warehouse Receiving Officer',
+          carrierOrCourier: 'Initial Catalog Intake Consignment',
+          notes: `Catalog submission approved and stock accepted. Slotted ${actualStock} units into Bin ${finalBin}.`,
+        });
 
-      triggerToast(
-        `Approved "${product.title}" (${product.fullSku}) under ${product.merchantCode} with ${finalQty} units in Bin ${finalBin}.`
-      );
+        triggerToast(
+          `Approved and accepted ${actualStock} units of "${product.title}" in Bin ${finalBin}. Ready for orders.`
+        );
+      } else {
+        triggerToast(
+          `Approved catalog specification for "${product.title}". Awaiting merchant physical stock shipment (0 units in warehouse).`
+        );
+      }
     } else {
       setProducts((prev) => {
         const next = prev.filter((p) => p.id !== product.id);
@@ -754,12 +825,82 @@ export function ProductsManager({
         }
         return next;
       });
+      deleteProductFromDatabase(product.id, product.merchantCode);
       triggerToast(`Rejected product submission "${product.title}" (${product.fullSku}).`);
       if (typeof window !== 'undefined') {
         window.dispatchEvent(
           new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
         );
       }
+    }
+  };
+
+  // Dedicated Stock Inbound Acceptance ("Accept Stock / Store Stock")
+  const handleAcceptStock = (
+    productId: string,
+    quantity: number,
+    binCode: string,
+    challanOrTracking?: string,
+    note?: string
+  ) => {
+    setAcceptStockProduct(null);
+    let targetProduct: WarehouseProductItem | undefined;
+    let newStockTotal = 0;
+
+    setProducts((prev) => {
+      const next = prev.map((p) => {
+        if (p.id === productId) {
+          targetProduct = p;
+          newStockTotal = (p.stock || 0) + quantity;
+          return {
+            ...p,
+            stock: newStockTotal,
+            binCode: binCode || p.binCode,
+            status: 'APPROVED' as const,
+            stockAccepted: true,
+            stockStatus: 'IN_STOCK' as const,
+          };
+        }
+        return p;
+      });
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
+      } catch {}
+      return next;
+    });
+
+    // Persist stock intake directly to PostgreSQL database
+    acceptStockInDatabase(productId, quantity, binCode, challanOrTracking, note);
+
+    if (targetProduct) {
+      appendStockMovement({
+        type: 'INITIAL_INTAKE',
+        merchantCode: targetProduct.merchantCode,
+        merchantName: targetProduct.merchantName,
+        productId: targetProduct.id,
+        productTitle: targetProduct.title,
+        sku: targetProduct.fullSku,
+        deltaQty: quantity,
+        previousStock: targetProduct.stock || 0,
+        newStock: newStockTotal,
+        binCode: binCode || targetProduct.binCode,
+        referenceDocType: 'INWARD_CHALLAN',
+        referenceNumber: challanOrTracking || `INW-${Date.now().toString().slice(-6)}`,
+        operator: 'Warehouse Inbound Officer',
+        carrierOrCourier: 'Direct Merchant Inbound Consignment',
+        notes: note || `Stock accepted and stored into Bin ${binCode}. Ready for merchant orders.`,
+      });
+
+      triggerToast(
+        `Accepted +${quantity} units for "${targetProduct.title}" into Bin ${binCode}. Total stock: ${newStockTotal} pcs. Merchant can now create orders.`
+      );
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
+      );
     }
 
     setApprovalModalData(null);
@@ -1263,11 +1404,20 @@ syncAdminProductsToMerchant(next);
       );
       try {
         localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
       } catch {
         // ignore
       }
       return next;
     });
+
+    // Sync to PostgreSQL (pgAdmin) database
+    fetch(`${API_BASE}/inventory/products/${encodeURIComponent(productId)}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'DRAFT' }),
+    }).catch(() => {});
+
     if (prod) {
       triggerToast(`Product "${prod.title}" moved to Draft. You can restore it anytime.`);
     }
@@ -1282,17 +1432,26 @@ syncAdminProductsToMerchant(next);
     const prod = products.find((p) => p.id === productId);
     setProducts((prev) => {
       const next = prev.map((p) =>
-        p.id === productId ? { ...p, status: 'APPROVED' as const, isDraft: false } : p
+        p.id === productId ? { ...p, status: 'PENDING_APPROVAL' as const, isDraft: false } : p
       );
       try {
         localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
       } catch {
         // ignore
       }
       return next;
     });
+
+    // Sync to PostgreSQL (pgAdmin) database — requires Admin Approval again
+    fetch(`${API_BASE}/inventory/products/${encodeURIComponent(productId)}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'PENDING_APPROVAL' }),
+    }).catch(() => {});
+
     if (prod) {
-      triggerToast(`Product "${prod.title}" restored to active catalog.`);
+      triggerToast(`Product "${prod.title}" moved to Product Approval queue for review.`);
     }
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
@@ -1309,11 +1468,22 @@ syncAdminProductsToMerchant(next);
       );
       try {
         localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
       } catch {
         // ignore
       }
       return next;
     });
+
+    // Sync each to PostgreSQL (pgAdmin) database
+    productIds.forEach((id) => {
+      fetch(`${API_BASE}/inventory/products/${encodeURIComponent(id)}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'DRAFT' }),
+      }).catch(() => {});
+    });
+
     triggerToast(`Moved ${productIds.length} products to Draft.`);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
@@ -1326,16 +1496,27 @@ syncAdminProductsToMerchant(next);
     const idSet = new Set(productIds);
     setProducts((prev) => {
       const next = prev.map((p) =>
-        idSet.has(p.id) ? { ...p, status: 'APPROVED' as const, isDraft: false } : p
+        idSet.has(p.id) ? { ...p, status: 'PENDING_APPROVAL' as const, isDraft: false } : p
       );
       try {
         localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
       } catch {
         // ignore
       }
       return next;
     });
-    triggerToast(`Restored ${productIds.length} products to active catalog.`);
+
+    // Sync each to PostgreSQL (pgAdmin) database — requires Admin Approval again
+    productIds.forEach((id) => {
+      fetch(`${API_BASE}/inventory/products/${encodeURIComponent(id)}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'PENDING_APPROVAL' }),
+      }).catch(() => {});
+    });
+
+    triggerToast(`Moved ${productIds.length} products to Product Approval queue.`);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
@@ -1345,6 +1526,13 @@ syncAdminProductsToMerchant(next);
 
   const handleDeleteProduct = (productId: string) => {
     const prod = products.find((p) => p.id === productId);
+    if (prod && (prod.stock || 0) >= 1) {
+      triggerToast(
+        `Cannot delete "${prod.title}": Warehouse currently holds ${prod.stock} pcs in stock. Product stock must be 0 before deleting.`
+      );
+      return;
+    }
+
     setProducts((prev) => {
       const removed = prev.filter((p) => p.id === productId);
       const next = prev.filter((p) => p.id !== productId);
@@ -1356,8 +1544,9 @@ syncAdminProductsToMerchant(next);
       }
       return next;
     });
+    deleteProductFromDatabase(productId, prod?.merchantCode);
     if (prod) {
-      triggerToast(`Product "${prod.title}" (${prod.fullSku}) deleted successfully.`);
+      triggerToast(`Product "${prod.title}" (${prod.fullSku}) deleted from database.`);
     }
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
@@ -1368,10 +1557,21 @@ syncAdminProductsToMerchant(next);
 
   const handleDeleteProducts = (productIds: string[]) => {
     const idSet = new Set(productIds);
-    const count = productIds.length;
+    const selected = products.filter((p) => idSet.has(p.id));
+    const withStock = selected.filter((p) => (p.stock || 0) >= 1);
+    const deletable = selected.filter((p) => (p.stock || 0) === 0);
+
+    if (withStock.length > 0 && deletable.length === 0) {
+      triggerToast(
+        `Cannot delete: ${withStock.length} selected product(s) have stock in the warehouse (> 0 pcs). Stock must be 0 to delete.`
+      );
+      return;
+    }
+
+    const deletableIds = new Set(deletable.map((p) => p.id));
     setProducts((prev) => {
-      const removed = prev.filter((p) => idSet.has(p.id));
-      const next = prev.filter((p) => !idSet.has(p.id));
+      const removed = prev.filter((p) => deletableIds.has(p.id));
+      const next = prev.filter((p) => !deletableIds.has(p.id));
       try {
         localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
         syncAdminProductsToMerchant(next, removed);
@@ -1380,7 +1580,16 @@ syncAdminProductsToMerchant(next);
       }
       return next;
     });
-    triggerToast(`Successfully deleted ${count} products.`);
+    deletable.forEach((p) => {
+      deleteProductFromDatabase(p.id, p.merchantCode);
+    });
+    if (withStock.length > 0) {
+      triggerToast(
+        `Deleted ${deletable.length} product(s) with 0 stock. Skipped ${withStock.length} product(s) that have warehouse stock.`
+      );
+    } else {
+      triggerToast(`Successfully deleted ${deletable.length} product(s) from database.`);
+    }
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
@@ -1473,6 +1682,7 @@ syncAdminProductsToMerchant(next);
         onOpenStockAdjustModal={(prod) => setStockAdjustProduct(prod)}
         onChangeProductBin={handleChangeProductBin}
         onOpenAddProduct={() => setAddProductModalOpen(true)}
+        onOpenAcceptStockModal={(prod) => setAcceptStockProduct(prod)}
         onOpenApprovalModal={(mode, product, selectedBin) =>
           setApprovalModalData({ mode, product, selectedBin })
         }
@@ -1504,6 +1714,14 @@ syncAdminProductsToMerchant(next);
         approvalData={approvalModalData}
         bins={bins}
         onConfirm={handleConfirmApproval}
+      />
+
+      <AcceptStockModal
+        isOpen={Boolean(acceptStockProduct)}
+        onClose={() => setAcceptStockProduct(null)}
+        product={acceptStockProduct}
+        bins={bins}
+        onConfirm={handleAcceptStock}
       />
 
       <RestockIntakeModal

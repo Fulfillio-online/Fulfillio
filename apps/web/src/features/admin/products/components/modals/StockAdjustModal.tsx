@@ -53,9 +53,17 @@ export function StockAdjustModal({
   const [draftStocks, setDraftStocks] = useState<Record<string, number>>({});
   const [reason, setReason] = useState<string>('Physical Cycle Count Correction');
 
+  const initializedRef = React.useRef<string | null>(null);
+
   // Load and construct variants whenever product opens
   useEffect(() => {
-    if (!product || !isOpen) return;
+    if (!product || !isOpen) {
+      initializedRef.current = null;
+      return;
+    }
+
+    if (initializedRef.current === product.id) return;
+    initializedRef.current = product.id;
 
     let initialList: VariantStockItemDraft[] = [];
 

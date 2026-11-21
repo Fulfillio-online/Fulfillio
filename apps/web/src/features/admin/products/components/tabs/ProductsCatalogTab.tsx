@@ -20,6 +20,7 @@ import {
   MapPin,
   CheckCircle2,
   XCircle,
+  PackageCheck,
 } from 'lucide-react';
 import { SearchInput } from '@/components/ui';
 import { Modal } from '@/components/admin/AdminModal';
@@ -40,12 +41,15 @@ export type ProductCatalogFilterTab =
 export interface ProductsCatalogTabProps {
   products: WarehouseProductItem[];
   bins: WarehouseBin[];
+  fixedMerchantCode?: string;
+  hideMerchantFilter?: boolean;
   initialFilterTab?: ProductCatalogFilterTab;
   onFilterTabChange?: (tab: ProductCatalogFilterTab) => void;
   onAdjustStock: (productId: string, delta: number) => void;
   onOpenStockAdjustModal: (product: WarehouseProductItem) => void;
   onChangeProductBin: (productId: string, nextBinCode: string) => void;
-  onOpenAddProduct: () => void;
+  onOpenAddProduct?: () => void;
+  onOpenAcceptStockModal?: (product: WarehouseProductItem) => void;
   onOpenApprovalModal?: (
     mode: 'APPROVE' | 'REJECT',
     product: WarehouseProductItem,
@@ -67,12 +71,15 @@ export interface ProductsCatalogTabProps {
 export function ProductsCatalogTab({
   products,
   bins,
+  fixedMerchantCode,
+  hideMerchantFilter,
   initialFilterTab = 'ALL',
   onFilterTabChange,
   onAdjustStock,
   onOpenStockAdjustModal,
   onChangeProductBin,
   onOpenAddProduct,
+  onOpenAcceptStockModal,
   onOpenApprovalModal,
   onBulkApproveProductsWithSlots,
   onBulkApproveProducts,
@@ -91,7 +98,7 @@ export function ProductsCatalogTab({
 
   useEffect(() => {
     if (initialFilterTab) {
-      setActiveCatalogTab(initialFilterTab);
+      setActiveCatalogTab((prev) => (prev !== initialFilterTab ? initialFilterTab : prev));
     }
   }, [initialFilterTab]);
 
@@ -105,9 +112,15 @@ export function ProductsCatalogTab({
 
   // Search & Secondary Filters
   const [searchQuery, setSearchQuery] = useState('');
-  const [merchantFilter, setMerchantFilter] = useState<string>('ALL');
+  const [merchantFilter, setMerchantFilter] = useState<string>(fixedMerchantCode || 'ALL');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [binFilter, setBinFilter] = useState<string>('ALL');
+
+  useEffect(() => {
+    if (fixedMerchantCode) {
+      setMerchantFilter((prev) => (prev !== fixedMerchantCode ? fixedMerchantCode : prev));
+    }
+  }, [fixedMerchantCode]);
 
   // Pagination
   const [pageSize, setPageSize] = useState<number>(10);
@@ -153,23 +166,29 @@ export function ProductsCatalogTab({
     return cat;
   };
 
+  // Base Pool (scoped by merchant if fixedMerchantCode is provided)
+  const basePool = useMemo(() => {
+    if (!fixedMerchantCode) return products;
+    return products.filter((p) => p.merchantCode === fixedMerchantCode);
+  }, [products, fixedMerchantCode]);
+
   // 1. Tab Counts
   const catalogCounts = useMemo(() => {
-    const allCount = products.length;
-    const approvalCount = products.filter((p) => p.status === 'PENDING_APPROVAL').length;
-    const publicCount = products.filter(
-      (p) => p.status === 'APPROVED' && !p.isDraft && p.stock > 0
+    const allCount = basePool.length;
+    const approvalCount = basePool.filter((p) => p.status === 'PENDING_APPROVAL' && !p.isDraft).length;
+    const publicCount = basePool.filter(
+      (p) => (p.status === 'STOCK_STORED' || p.status === 'APPROVED') && !p.isDraft && p.stock > 0
     ).length;
-    const outOfStockCount = products.filter(
-      (p) => p.status === 'APPROVED' && !p.isDraft && p.stock === 0
+    const outOfStockCount = basePool.filter(
+      (p) => (p.status === 'APPROVED' || p.status === 'STOCK_STORED') && !p.isDraft && p.stock === 0
     ).length;
-    const draftCount = products.filter((p) => p.status === 'DRAFT' || p.isDraft).length;
+    const draftCount = basePool.filter((p) => p.status === 'DRAFT' || p.isDraft).length;
     return { allCount, approvalCount, publicCount, outOfStockCount, draftCount };
-  }, [products]);
+  }, [basePool]);
 
   // 2. Tab Filtering
   const tabFilteredProducts = useMemo(() => {
-    return products.filter((p) => {
+    return basePool.filter((p) => {
       const isDraft = p.status === 'DRAFT' || Boolean(p.isDraft);
       const isPending = p.status === 'PENDING_APPROVAL';
       const isOutOfStock = !isDraft && !isPending && p.stock === 0;
@@ -181,7 +200,7 @@ export function ProductsCatalogTab({
       if (activeCatalogTab === 'DRAFT') return isDraft;
       return true; // 'ALL' shows all
     });
-  }, [products, activeCatalogTab]);
+  }, [basePool, activeCatalogTab]);
 
   // 3. Search and Dropdown Filtering
   const filteredProducts = useMemo(() => {
@@ -314,7 +333,12 @@ export function ProductsCatalogTab({
   const handleConfirmSingleDelete = () => {
     if (!productToDelete) return;
     const prodId = productToDelete.id;
-    if (isPermanentDeleteMode || productToDelete.status === 'DRAFT' || productToDelete.isDraft) {
+    if (isPermanentDeleteMode) {
+      if ((productToDelete.stock || 0) >= 1) {
+        setProductToDelete(null);
+        setIsPermanentDeleteMode(false);
+        return;
+      }
       if (onPermanentDelete) onPermanentDelete(prodId);
       else onDeleteProduct?.(prodId);
     } else {
@@ -332,12 +356,8 @@ export function ProductsCatalogTab({
 
   const handleConfirmBulkDelete = () => {
     const ids = Array.from(selectedProductIds);
-    if (activeCatalogTab === 'DRAFT') {
-      if (onBulkPermanentDelete) onBulkPermanentDelete(ids);
-      else onDeleteProducts?.(ids);
-    } else {
-      onBulkMoveToDraft?.(ids);
-    }
+    if (onBulkPermanentDelete) onBulkPermanentDelete(ids);
+    else onDeleteProducts?.(ids);
     setSelectedProductIds(new Set());
     setBulkDeleteModalOpen(false);
     setBulkAction('');
@@ -345,7 +365,7 @@ export function ProductsCatalogTab({
 
   const handleResetFilters = () => {
     setSearchQuery('');
-    setMerchantFilter('ALL');
+    setMerchantFilter(fixedMerchantCode || 'ALL');
     setCategoryFilter('ALL');
     setBinFilter('ALL');
     setActiveCatalogTab('ALL');
@@ -357,7 +377,7 @@ export function ProductsCatalogTab({
 
   const hasActiveFilters =
     searchQuery !== '' ||
-    merchantFilter !== 'ALL' ||
+    (!fixedMerchantCode && merchantFilter !== 'ALL') ||
     categoryFilter !== 'ALL' ||
     binFilter !== 'ALL' ||
     activeCatalogTab !== 'ALL';
@@ -381,8 +401,19 @@ export function ProductsCatalogTab({
 
         {/* ROW 2: Action Controls on Left, Filters on Right */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-1">
-          {/* Left: Bulk Action Selector + Apply Button */}
-          <div className="flex items-center gap-2">
+          {/* Left: Add Product Button + Bulk Action Selector + Apply Button */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {onOpenAddProduct && (
+              <button
+                type="button"
+                onClick={onOpenAddProduct}
+                className="px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-95"
+              >
+                <Plus className="w-3.5 h-3.5 pointer-events-none" />
+                <span>Add Product</span>
+              </button>
+            )}
+
             <select
               value={bulkAction}
               onChange={(e) => setBulkAction(e.target.value)}
@@ -399,7 +430,7 @@ export function ProductsCatalogTab({
                 </>
               ) : activeCatalogTab === 'DRAFT' ? (
                 <>
-                  <option value="RESTORE">Restore Selected</option>
+                  <option value="RESTORE">Send Selected for Approval</option>
                   <option value="DELETE">Permanent Delete</option>
                 </>
               ) : (
@@ -429,23 +460,25 @@ export function ProductsCatalogTab({
 
           {/* Right: Secondary Filter Dropdowns & Reset Button */}
           <div className="flex flex-wrap items-center gap-2">
-            {/* Merchant Filter */}
-            <select
-              value={merchantFilter}
-              onChange={(e) => {
-                setMerchantFilter(e.target.value);
-                setCurrentPage(1);
-              }}
-              aria-label="Filter by Merchant"
-              className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs font-semibold text-navy-800 dark:text-slate-100 focus:outline-none focus:border-orange-500 cursor-pointer shadow-2xs"
-            >
-              <option value="ALL">All Merchants</option>
-              {MERCHANTS.map((m) => (
-                <option key={m.code} value={m.code}>
-                  {m.code} — {m.name}
-                </option>
-              ))}
-            </select>
+            {/* Merchant Filter: hidden if fixed to a single merchant */}
+            {!fixedMerchantCode && !hideMerchantFilter && (
+              <select
+                value={merchantFilter}
+                onChange={(e) => {
+                  setMerchantFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                aria-label="Filter by Merchant"
+                className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs font-semibold text-navy-800 dark:text-slate-100 focus:outline-none focus:border-orange-500 cursor-pointer shadow-2xs"
+              >
+                <option value="ALL">All Merchants</option>
+                {MERCHANTS.map((m) => (
+                  <option key={m.code} value={m.code}>
+                    {m.code} — {m.name}
+                  </option>
+                ))}
+              </select>
+            )}
 
             {/* Category Filter (Fashion, Footwear, Electronics, Accessories) */}
             <select
@@ -797,7 +830,7 @@ export function ProductsCatalogTab({
                         {isPending ? (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
                             <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                            Product Approval
+                            Pending Approval
                           </span>
                         ) : isDraft ? (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-500/30">
@@ -805,14 +838,14 @@ export function ProductsCatalogTab({
                             Draft
                           </span>
                         ) : isOutOfStock ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30">
-                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                            Out of Stock
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30">
+                            <Clock className="w-3.5 h-3.5 text-sky-500" />
+                            Approved
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            Public
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            Stock Stored ({p.stock} pcs)
                           </span>
                         )}
                       </td>
@@ -844,7 +877,7 @@ export function ProductsCatalogTab({
                                 isNearBottom ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
                               } w-56 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-2xl py-1.5 z-[100] text-left font-sans text-xs pointer-events-auto`}
                             >
-                              {/* Option A: For Pending New Product Submission */}
+                              {/* STAGE 0: Pending Approval -> Accept, Reject, and View */}
                               {isPending && (
                                 <>
                                   <button
@@ -860,7 +893,7 @@ export function ProductsCatalogTab({
                                     className="w-full px-3.5 py-2 text-left text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 flex items-center gap-2.5 font-bold cursor-pointer"
                                   >
                                     <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                                    <span>Approve &amp; Slot to Bin</span>
+                                    <span>Accept</span>
                                   </button>
 
                                   <button
@@ -876,77 +909,43 @@ export function ProductsCatalogTab({
                                     className="w-full px-3.5 py-2 text-left text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex items-center gap-2.5 font-semibold cursor-pointer border-b border-slate-200/60 dark:border-white/10"
                                   >
                                     <XCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
-                                    <span>Reject Submission</span>
+                                    <span>Reject</span>
                                   </button>
+
+                                  <Link
+                                    href={`/admin/products/${p.id}`}
+                                    onClick={() => setActiveMenuId(null)}
+                                    className="w-full px-3.5 py-2 text-left text-orange-600 dark:text-orange-400 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2.5 font-bold cursor-pointer"
+                                  >
+                                    <Eye className="w-4 h-4 shrink-0" />
+                                    <span>View</span>
+                                  </Link>
                                 </>
                               )}
 
-                              {/* Universal Option: View Product Details */}
-                              <Link
-                                href={`/admin/products/${p.id}`}
-                                onClick={() => setActiveMenuId(null)}
-                                className="w-full px-3.5 py-2 text-left text-orange-600 dark:text-orange-400 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2.5 font-bold cursor-pointer"
-                              >
-                                <Eye className="w-4 h-4 shrink-0" />
-                                <span>View Product Details</span>
-                              </Link>
-
-                              {/* Option B: For Public & Out of Stock */}
-                              {!isPending && !isDraft && (
+                              {/* STAGE 1: Approved (Awaiting Physical Stock) -> Product Stock, View, and Delete (0 stock) */}
+                              {!isPending && !isDraft && isOutOfStock && (
                                 <>
                                   <button
                                     type="button"
                                     onClick={() => {
                                       setActiveMenuId(null);
-                                      onOpenStockAdjustModal(p);
+                                      onOpenAcceptStockModal?.(p);
                                     }}
-                                    className="w-full px-3.5 py-2 text-left text-navy-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2.5 font-semibold cursor-pointer"
+                                    className="w-full px-3.5 py-2 text-left text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/30 flex items-center gap-2.5 font-bold cursor-pointer"
                                   >
-                                    <SlidersHorizontal className="w-4 h-4 shrink-0 text-orange-600 dark:text-orange-400" />
-                                    <span>Manage Stock (Color &amp; Size)</span>
+                                    <PackageCheck className="w-4 h-4 shrink-0 text-orange-600 dark:text-orange-400" />
+                                    <span>Product Stock</span>
                                   </button>
 
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setActiveMenuId(null);
-                                      onMoveToDraft?.(p.id);
-                                    }}
-                                    className="w-full px-3.5 py-2 text-left text-navy-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2.5 font-semibold cursor-pointer"
+                                  <Link
+                                    href={`/admin/products/${p.id}`}
+                                    onClick={() => setActiveMenuId(null)}
+                                    className="w-full px-3.5 py-2 text-left text-navy-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2.5 font-bold cursor-pointer"
                                   >
-                                    <Archive className="w-4 h-4 shrink-0 text-amber-500" />
-                                    <span>Move to Draft</span>
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setActiveMenuId(null);
-                                      setProductToDelete(p);
-                                      setIsPermanentDeleteMode(false);
-                                    }}
-                                    className="w-full px-3.5 py-2 text-left text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex items-center gap-2.5 font-semibold cursor-pointer border-t border-slate-200/60 dark:border-white/10"
-                                  >
-                                    <Trash2 className="w-4 h-4 shrink-0" />
-                                    <span>Delete Product</span>
-                                  </button>
-                                </>
-                              )}
-
-                              {/* Option C: For Draft */}
-                              {isDraft && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setActiveMenuId(null);
-                                      onRestoreProduct?.(p.id);
-                                    }}
-                                    className="w-full px-3.5 py-2 text-left text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 flex items-center gap-2.5 font-semibold cursor-pointer"
-                                  >
-                                    <RotateCcw className="w-4 h-4 shrink-0" />
-                                    <span>Restore to Catalog</span>
-                                  </button>
+                                    <Eye className="w-4 h-4 shrink-0 text-orange-600 dark:text-orange-400" />
+                                    <span>View</span>
+                                  </Link>
 
                                   <button
                                     type="button"
@@ -958,7 +957,94 @@ export function ProductsCatalogTab({
                                     className="w-full px-3.5 py-2 text-left text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex items-center gap-2.5 font-semibold cursor-pointer border-t border-slate-200/60 dark:border-white/10"
                                   >
                                     <Trash2 className="w-4 h-4 shrink-0" />
-                                    <span>Permanent Delete</span>
+                                    <span>Delete Product</span>
+                                  </button>
+                                </>
+                              )}
+
+                              {/* STAGE 2: Stock Stored -> View and Draft Product */}
+                              {!isPending && !isDraft && !isOutOfStock && (
+                                <>
+                                  <Link
+                                    href={`/admin/products/${p.id}`}
+                                    onClick={() => setActiveMenuId(null)}
+                                    className="w-full px-3.5 py-2 text-left text-orange-600 dark:text-orange-400 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2.5 font-bold cursor-pointer"
+                                  >
+                                    <Eye className="w-4 h-4 shrink-0" />
+                                    <span>View</span>
+                                  </Link>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveMenuId(null);
+                                      onMoveToDraft?.(p.id);
+                                    }}
+                                    className="w-full px-3.5 py-2 text-left text-navy-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2.5 font-semibold cursor-pointer"
+                                  >
+                                    <Archive className="w-4 h-4 shrink-0 text-amber-500" />
+                                    <span>Draft Product</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveMenuId(null);
+                                      setProductToDelete(p);
+                                      setIsPermanentDeleteMode(true);
+                                    }}
+                                    className="w-full px-3.5 py-2 text-left text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2.5 font-semibold cursor-pointer border-t border-slate-200/60 dark:border-white/10"
+                                    title="Cannot delete while warehouse stock > 0"
+                                  >
+                                    <Trash2 className="w-4 h-4 shrink-0" />
+                                    <span>Delete Locked ({p.stock} pcs)</span>
+                                  </button>
+                                </>
+                              )}
+
+                              {/* STAGE 3: Draft -> View, Restore, and Delete (only if 0 stock) */}
+                              {isDraft && (
+                                <>
+                                  <Link
+                                    href={`/admin/products/${p.id}`}
+                                    onClick={() => setActiveMenuId(null)}
+                                    className="w-full px-3.5 py-2 text-left text-orange-600 dark:text-orange-400 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2.5 font-bold cursor-pointer"
+                                  >
+                                    <Eye className="w-4 h-4 shrink-0" />
+                                    <span>View</span>
+                                  </Link>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveMenuId(null);
+                                      onRestoreProduct?.(p.id);
+                                    }}
+                                    className="w-full px-3.5 py-2 text-left text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 flex items-center gap-2.5 font-semibold cursor-pointer"
+                                  >
+                                    <RotateCcw className="w-4 h-4 shrink-0" />
+                                    <span>Send for Approval</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveMenuId(null);
+                                      setProductToDelete(p);
+                                      setIsPermanentDeleteMode(true);
+                                    }}
+                                    className={`w-full px-3.5 py-2 text-left flex items-center gap-2.5 font-semibold cursor-pointer border-t border-slate-200/60 dark:border-white/10 ${
+                                      (p.stock || 0) >= 1
+                                        ? 'text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-navy-800'
+                                        : 'text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30'
+                                    }`}
+                                  >
+                                    <Trash2 className="w-4 h-4 shrink-0" />
+                                    <span>
+                                      {(p.stock || 0) >= 1
+                                        ? `Delete Locked (${p.stock} pcs)`
+                                        : 'Permanent Delete'}
+                                    </span>
                                   </button>
                                 </>
                               )}
@@ -1055,12 +1141,12 @@ export function ProductsCatalogTab({
                               Draft
                             </span>
                           ) : isOutOfStock ? (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-700 dark:text-rose-400">
-                              Out of Stock
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/15 text-sky-700 dark:text-sky-400">
+                              Approved
                             </span>
                           ) : (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
-                              Public
+                              Stock Stored ({p.stock})
                             </span>
                           )}
                         </div>
@@ -1143,17 +1229,35 @@ export function ProductsCatalogTab({
       <Modal
         isOpen={Boolean(productToDelete)}
         onClose={() => setProductToDelete(null)}
-        title={isPermanentDeleteMode ? 'Permanently Delete Product?' : 'Move Product to Draft?'}
+        title={
+          isPermanentDeleteMode && (productToDelete?.stock || 0) >= 1
+            ? 'Deletion Blocked — Warehouse Stock Exists'
+            : isPermanentDeleteMode
+              ? 'Permanently Delete Product?'
+              : 'Move Product to Draft?'
+        }
       >
         <div className="space-y-4">
           <p className="text-sm text-slate-600 dark:text-slate-300">
-            {isPermanentDeleteMode ? (
+            {isPermanentDeleteMode && (productToDelete?.stock || 0) >= 1 ? (
+              <>
+                Cannot delete{' '}
+                <strong className="text-navy-900 dark:text-white">
+                  &quot;{productToDelete?.title}&quot;
+                </strong>{' '}
+                because the warehouse currently holds{' '}
+                <strong className="text-rose-600 dark:text-rose-400">
+                  {productToDelete?.stock} pcs
+                </strong>{' '}
+                in stock. Even if 1 single unit exists in the warehouse, the product cannot be deleted. Product stock must be 0 before deleting.
+              </>
+            ) : isPermanentDeleteMode ? (
               <>
                 Are you sure you want to permanently delete{' '}
                 <strong className="text-navy-900 dark:text-white">
                   &quot;{productToDelete?.title}&quot;
-                </strong>
-                ? This action cannot be undone.
+                </strong>{' '}
+                (0 stock in warehouse)? This will permanently delete it from the PostgreSQL database.
               </>
             ) : (
               <>
@@ -1172,15 +1276,17 @@ export function ProductsCatalogTab({
               onClick={() => setProductToDelete(null)}
               className="px-4 py-2 rounded-xl text-xs font-semibold border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-navy-800 text-slate-700 dark:text-slate-300 cursor-pointer"
             >
-              Cancel
+              {isPermanentDeleteMode && (productToDelete?.stock || 0) >= 1 ? 'Close' : 'Cancel'}
             </button>
-            <button
-              type="button"
-              onClick={handleConfirmSingleDelete}
-              className="px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white cursor-pointer shadow-sm"
-            >
-              {isPermanentDeleteMode ? 'Delete Forever' : 'Move to Draft'}
-            </button>
+            {(!isPermanentDeleteMode || (productToDelete?.stock || 0) === 0) && (
+              <button
+                type="button"
+                onClick={handleConfirmSingleDelete}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white cursor-pointer shadow-sm"
+              >
+                {isPermanentDeleteMode ? 'Delete Forever' : 'Move to Draft'}
+              </button>
+            )}
           </div>
         </div>
       </Modal>

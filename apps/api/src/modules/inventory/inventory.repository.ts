@@ -46,7 +46,8 @@ export class InventoryRepository {
     if (this.prisma.isOffline()) return;
     try {
       await this.prisma.$executeRawUnsafe(
-        `ALTER TABLE IF EXISTS "products" ADD COLUMN IF NOT EXISTS "images" text[] DEFAULT ARRAY[]::text[];`
+        `ALTER TABLE IF EXISTS "products" ADD COLUMN IF NOT EXISTS "images" text[] DEFAULT ARRAY[]::text[];
+         ALTER TABLE IF EXISTS "products" ADD COLUMN IF NOT EXISTS "status" text DEFAULT 'PUBLISHED';`
       );
     } catch {
       // ignore
@@ -169,6 +170,7 @@ export class InventoryRepository {
     baseSku: string;
     imageUrl?: string;
     images?: string[];
+    status?: string;
     defaultLocationId: string;
     variants: Array<{
       sku: string;
@@ -191,8 +193,18 @@ export class InventoryRepository {
       ? data.imageUrl.replace(/\0/g, '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
       : null;
 
+    const rawStatus = (data.status || 'PENDING_APPROVAL').toUpperCase();
+    const cleanStatus =
+      rawStatus === 'DRAFT'
+        ? 'DRAFT'
+        : rawStatus === 'APPROVED'
+          ? 'APPROVED'
+          : rawStatus === 'STOCK_STORED' || rawStatus === 'PUBLISHED'
+            ? 'STOCK_STORED'
+            : 'PENDING_APPROVAL';
+    const isStockStoredInitially = cleanStatus === 'STOCK_STORED';
     try {
-      return await this.prisma.product.create({
+      return await (this.prisma.product as any).create({
         data: {
           merchantId: data.merchantId,
           title: data.title,
@@ -200,20 +212,24 @@ export class InventoryRepository {
           baseSku: data.baseSku,
           imageUrl: sanitizedImageUrl,
           images: data.images || (sanitizedImageUrl ? [sanitizedImageUrl] : []),
-        variants: {
+          status: cleanStatus,
+          variants: {
           create: data.variants.map((v) => ({
             sku: v.sku,
             barcode: v.barcode,
             title: v.title,
             price: v.price,
             wholesalePrice: v.wholesalePrice,
-            defaultBinCode: v.defaultBinCode || 'A-01-01',
+            defaultBinCode: cleanStatus === 'PENDING_APPROVAL' ? 'Pending Approval' : (v.defaultBinCode || 'A-01-01'),
             imageUrl: v.imageUrl,
-            attributes: v.attributes || {},
+            attributes: {
+              ...(v.attributes || {}),
+              declaredStock: Math.max(0, Number(v.initialStock) || 0),
+            },
             inventoryItems: {
               create: {
                 locationId: data.defaultLocationId,
-                quantityAvailable: Math.max(0, Number(v.initialStock) || 0),
+                quantityAvailable: isStockStoredInitially ? Math.max(0, Number(v.initialStock) || 0) : 0,
                 quantityReserved: 0,
                 quantityDamaged: 0,
               },
@@ -231,7 +247,7 @@ export class InventoryRepository {
       if (err?.code === 'P2022') {
         await this.ensureProductImagesColumn();
         try {
-          return await this.prisma.product.create({
+          return await (this.prisma.product as any).create({
             data: {
               merchantId: data.merchantId,
               title: data.title,
@@ -239,6 +255,7 @@ export class InventoryRepository {
               baseSku: data.baseSku,
               imageUrl: sanitizedImageUrl,
               images: data.images || (sanitizedImageUrl ? [sanitizedImageUrl] : []),
+              status: cleanStatus,
               variants: {
                 create: data.variants.map((v) => ({
                   sku: v.sku,
@@ -277,7 +294,7 @@ export class InventoryRepository {
             sku: `${v.sku}-${Math.floor(100 + Math.random() * 900)}`,
             barcode: `894${Date.now().toString().slice(-7)}${i}${Math.floor(10 + Math.random() * 90)}`,
           }));
-          return await this.prisma.product.create({
+          return await (this.prisma.product as any).create({
             data: {
               merchantId: data.merchantId,
               title: data.title,
@@ -285,6 +302,7 @@ export class InventoryRepository {
               baseSku: `${data.baseSku}-${Date.now().toString().slice(-3)}`,
               imageUrl: sanitizedImageUrl,
               images: data.images || (sanitizedImageUrl ? [sanitizedImageUrl] : []),
+              status: cleanStatus,
               variants: {
                 create: saltedVariants.map((v) => ({
                   sku: v.sku,
@@ -334,6 +352,7 @@ export class InventoryRepository {
       baseSku?: string;
       imageUrl?: string;
       images?: string[];
+      status?: string;
       defaultLocationId: string;
       variants?: Array<{
         id?: string;
@@ -402,8 +421,19 @@ export class InventoryRepository {
     }
 
     // Update Product scalar fields
+    const rawUpdateStatus = data.status !== undefined ? data.status.toUpperCase() : (existing as any).status;
+    const updatedStatus =
+      rawUpdateStatus === 'DRAFT'
+        ? 'DRAFT'
+        : rawUpdateStatus === 'PENDING_APPROVAL'
+          ? 'PENDING_APPROVAL'
+          : rawUpdateStatus === 'APPROVED'
+            ? 'APPROVED'
+            : rawUpdateStatus === 'STOCK_STORED' || rawUpdateStatus === 'PUBLISHED'
+              ? 'STOCK_STORED'
+              : (existing as any).status || 'PENDING_APPROVAL';
     try {
-      await this.prisma.product.update({
+      await (this.prisma.product as any).update({
         where: { id: existing.id },
         data: {
           title: data.title ?? existing.title,
@@ -411,12 +441,13 @@ export class InventoryRepository {
           baseSku: data.baseSku ?? existing.baseSku,
           imageUrl: data.imageUrl !== undefined ? data.imageUrl : existing.imageUrl,
           images: data.images !== undefined ? data.images : existing.images,
+          status: updatedStatus,
         },
       });
     } catch (err: any) {
       if (err?.code === 'P2022') {
         await this.ensureProductImagesColumn();
-        await this.prisma.product.update({
+        await (this.prisma.product as any).update({
           where: { id: existing.id },
           data: {
             title: data.title ?? existing.title,
@@ -424,6 +455,7 @@ export class InventoryRepository {
             baseSku: data.baseSku ?? existing.baseSku,
             imageUrl: data.imageUrl !== undefined ? data.imageUrl : existing.imageUrl,
             images: data.images !== undefined ? data.images : existing.images,
+            status: updatedStatus,
           },
         });
       } else {
@@ -520,6 +552,421 @@ export class InventoryRepository {
     }
 
     return this.findProductById(existing.id);
+  }
+
+  async updateProductStatus(productId: string, status: string) {
+    const rawStatus = (status || '').trim().toUpperCase();
+    const initialCleanStatus =
+      rawStatus === 'DRAFT'
+        ? 'DRAFT'
+        : rawStatus === 'PENDING_APPROVAL'
+          ? 'PENDING_APPROVAL'
+          : rawStatus === 'APPROVED'
+            ? 'APPROVED'
+            : rawStatus === 'STOCK_STORED'
+              ? 'STOCK_STORED'
+              : 'PUBLISHED';
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.updateProductWithVariants(productId, 'MC-101', { status: initialCleanStatus }) as any;
+    }
+    await this.ensureProductImagesColumn();
+
+    const searchConditions: any[] = [
+      { id: productId },
+      { baseSku: productId },
+    ];
+
+    let existing = await this.prisma.product.findFirst({
+      where: { OR: searchConditions },
+      include: {
+        variants: {
+          include: { inventoryItems: true },
+        },
+      },
+    });
+
+    if (!existing) {
+      const variant = await this.prisma.productVariant.findFirst({
+        where: { OR: [{ id: productId }, { sku: productId }] },
+        include: {
+          product: {
+            include: {
+              variants: {
+                include: { inventoryItems: true },
+              },
+            },
+          },
+        },
+      });
+      if (variant?.product) {
+        existing = variant.product;
+      }
+    }
+
+    if (!existing) {
+      throw new BadRequestException(`Product with ID '${productId}' not found.`);
+    }
+
+    let finalStatus = initialCleanStatus;
+    if (initialCleanStatus === 'PUBLISHED') {
+      const existingStatus = ((existing as any).status || '').trim().toUpperCase();
+      if (existingStatus === 'DRAFT') {
+        finalStatus = 'PENDING_APPROVAL';
+      } else {
+        const totalStock = (existing.variants || []).reduce(
+          (sum: number, v: any) =>
+            sum + (v.inventoryItems || []).reduce((s: number, it: any) => s + (it.quantityAvailable || 0), 0),
+          0,
+        );
+        const hasApprovedBin = (existing.variants || []).some(
+          (v: any) =>
+            v.defaultBinCode &&
+            v.defaultBinCode !== 'Pending Approval' &&
+            v.defaultBinCode !== 'Assigned on intake',
+        );
+        finalStatus = totalStock > 0 ? 'STOCK_STORED' : hasApprovedBin ? 'APPROVED' : 'PENDING_APPROVAL';
+      }
+    }
+
+    await (this.prisma.product as any).update({
+      where: { id: existing.id },
+      data: { status: finalStatus },
+    });
+
+    return this.findProductById(existing.id);
+  }
+
+  /**
+   * Step 1: Admin Approves Merchant Product Catalog Spec / Store Request
+   * Sets status to APPROVED (when catalog only / awaiting physical stock arrival)
+   * or STOCK_STORED (when stock is accepted immediately).
+   */
+  async approveProduct(
+    productId: string,
+    data: {
+      binCode?: string;
+      finalQty?: number;
+      acceptStockNow?: boolean;
+    },
+  ) {
+    const binCode = (data.binCode || 'A-01-02').trim().toUpperCase();
+    const isStockAccepted = data.acceptStockNow ?? (typeof data.finalQty === 'number' && data.finalQty > 0);
+    const finalStock = isStockAccepted ? Math.max(0, Number(data.finalQty) || 0) : 0;
+    const nextStatus = isStockAccepted && finalStock > 0 ? 'STOCK_STORED' : 'APPROVED';
+
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.approveProduct(productId, {
+        binCode,
+        finalQty: finalStock,
+        acceptStockNow: isStockAccepted,
+      }) as any;
+    }
+
+    await this.ensureProductImagesColumn();
+
+    const searchConditions: any[] = [
+      { id: productId },
+      { baseSku: productId },
+    ];
+
+    let existing = await this.prisma.product.findFirst({
+      where: { OR: searchConditions },
+      include: {
+        variants: {
+          include: {
+            inventoryItems: true,
+          },
+        },
+      },
+    });
+
+    if (!existing) {
+      const variant = await this.prisma.productVariant.findFirst({
+        where: { OR: [{ id: productId }, { sku: productId }] },
+        include: {
+          product: {
+            include: {
+              variants: {
+                include: { inventoryItems: true },
+              },
+            },
+          },
+        },
+      });
+      if (variant?.product) {
+        existing = variant.product;
+      }
+    }
+
+    if (!existing) {
+      throw new BadRequestException(`Product with ID '${productId}' not found.`);
+    }
+
+    // Ensure bin location exists in InventoryLocation
+    const binParts = binCode.split('-');
+    const defaultLocation = await this.upsertLocation({
+      zone: binParts[0] || 'A',
+      aisle: binParts[1] || '01',
+      rack: binParts[2] || '01',
+      shelf: binParts[3] || '01',
+      binCode,
+    });
+
+    // 1. Update Product status to APPROVED (or STOCK_STORED if stock accepted now)
+    await (this.prisma.product as any).update({
+      where: { id: existing.id },
+      data: { status: nextStatus },
+    });
+
+    // 2. Update all variants with binCode & stock
+    for (const v of existing.variants) {
+      await this.prisma.productVariant.update({
+        where: { id: v.id },
+        data: { defaultBinCode: binCode },
+      });
+
+      const defaultItem = v.inventoryItems[0];
+      if (defaultItem) {
+        await this.prisma.inventoryItem.update({
+          where: { id: defaultItem.id },
+          data: {
+            quantityAvailable: finalStock,
+            locationId: defaultLocation.id,
+          },
+        });
+      } else {
+        await this.prisma.inventoryItem.create({
+          data: {
+            variantId: v.id,
+            locationId: defaultLocation.id,
+            quantityAvailable: finalStock,
+            quantityReserved: 0,
+            quantityDamaged: 0,
+          },
+        });
+      }
+
+      if (isStockAccepted && finalStock > 0) {
+        try {
+          await this.prisma.inventoryAuditLog.create({
+            data: {
+              merchantId: existing.merchantId,
+              variantId: v.id,
+              quantityDelta: finalStock,
+              reason: StockMovementReason.INBOUND_ASN,
+              notes: `Catalog approved & initial stock accepted into Bin ${binCode} (${finalStock} pcs)`,
+            },
+          });
+        } catch {}
+      }
+    }
+
+    return this.findProductById(existing.id);
+  }
+
+  /**
+   * Step 2: Accept Physical Stock into Warehouse (Store Done -> STOCK_STORED)
+   * When physical items arrive at warehouse dock, warehouse receives goods,
+   * counts quantity, slots into bin, and activates merchant order fulfillment.
+   */
+  async acceptStock(
+    productId: string,
+    data: {
+      quantity: number;
+      binCode?: string;
+      challanOrTracking?: string;
+      note?: string;
+    },
+  ) {
+    const intakeQty = Math.max(1, Number(data.quantity) || 1);
+    const binCode = (data.binCode || 'A-01-02').trim().toUpperCase();
+
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.acceptStock(productId, {
+        quantity: intakeQty,
+        binCode,
+        challanOrTracking: data.challanOrTracking,
+        note: data.note,
+      }) as any;
+    }
+
+    await this.ensureProductImagesColumn();
+
+    const searchConditions: any[] = [
+      { id: productId },
+      { baseSku: productId },
+    ];
+
+    let existing = await this.prisma.product.findFirst({
+      where: { OR: searchConditions },
+      include: {
+        variants: {
+          include: {
+            inventoryItems: true,
+          },
+        },
+      },
+    });
+
+    if (!existing) {
+      const variant = await this.prisma.productVariant.findFirst({
+        where: { OR: [{ id: productId }, { sku: productId }] },
+        include: {
+          product: {
+            include: {
+              variants: {
+                include: { inventoryItems: true },
+              },
+            },
+          },
+        },
+      });
+      if (variant?.product) {
+        existing = variant.product;
+      }
+    }
+
+    if (!existing) {
+      throw new BadRequestException(`Product with ID '${productId}' not found.`);
+    }
+
+    // Ensure bin location exists in InventoryLocation
+    const binParts = binCode.split('-');
+    const targetLocation = await this.upsertLocation({
+      zone: binParts[0] || 'A',
+      aisle: binParts[1] || '01',
+      rack: binParts[2] || '01',
+      shelf: binParts[3] || '01',
+      binCode,
+    });
+
+    // Update product status to STOCK_STORED
+    await (this.prisma.product as any).update({
+      where: { id: existing.id },
+      data: { status: 'STOCK_STORED' },
+    });
+
+    // Update variants: update defaultBinCode and increment stock in inventory item
+    for (const v of existing.variants) {
+      await this.prisma.productVariant.update({
+        where: { id: v.id },
+        data: { defaultBinCode: binCode },
+      });
+
+      const defaultItem = v.inventoryItems[0];
+      if (defaultItem) {
+        await this.prisma.inventoryItem.update({
+          where: { id: defaultItem.id },
+          data: {
+            quantityAvailable: { increment: intakeQty },
+            locationId: targetLocation.id,
+          },
+        });
+      } else {
+        await this.prisma.inventoryItem.create({
+          data: {
+            variantId: v.id,
+            locationId: targetLocation.id,
+            quantityAvailable: intakeQty,
+            quantityReserved: 0,
+            quantityDamaged: 0,
+          },
+        });
+      }
+
+      try {
+        await this.prisma.inventoryAuditLog.create({
+          data: {
+            merchantId: existing.merchantId,
+            variantId: v.id,
+            quantityDelta: intakeQty,
+            reason: StockMovementReason.INBOUND_ASN,
+            notes: data.note || `Physical stock accepted into warehouse Bin ${binCode}. Challan: ${data.challanOrTracking || 'N/A'}`,
+          },
+        });
+      } catch {}
+    }
+
+    return this.findProductById(existing.id);
+  }
+
+  /**
+   * Delete a product from PostgreSQL ONLY if warehouse stock is 0.
+   * If even 1 unit exists in warehouse stock, deletion is strictly rejected.
+   */
+  async deleteProduct(productId: string) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.deleteProduct(productId) as any;
+    }
+
+    const searchConditions: any[] = [
+      { id: productId },
+      { baseSku: productId },
+    ];
+
+    let existing = await this.prisma.product.findFirst({
+      where: { OR: searchConditions },
+      include: {
+        variants: {
+          include: {
+            inventoryItems: true,
+          },
+        },
+      },
+    });
+
+    if (!existing) {
+      const variant = await this.prisma.productVariant.findFirst({
+        where: { OR: [{ id: productId }, { sku: productId }] },
+        include: {
+          product: {
+            include: {
+              variants: {
+                include: { inventoryItems: true },
+              },
+            },
+          },
+        },
+      });
+      if (variant?.product) {
+        existing = variant.product;
+      }
+    }
+
+    if (!existing) {
+      return { deleted: true, id: productId };
+    }
+
+    const totalStock = (existing.variants || []).reduce(
+      (sum: number, v: any) =>
+        sum +
+        (v.inventoryItems || []).reduce(
+          (s: number, it: any) => s + (it.quantityAvailable || 0) + (it.quantityReserved || 0),
+          0,
+        ),
+      0,
+    );
+
+    if (totalStock >= 1) {
+      throw new BadRequestException(
+        `Cannot delete product "${existing.title}": Warehouse currently holds ${totalStock} pcs in stock. Product stock must be 0 before deleting.`,
+      );
+    }
+
+    const variantIds = (existing.variants || []).map((v: any) => v.id);
+    if (variantIds.length > 0) {
+      try {
+        await this.prisma.inventoryAuditLog.deleteMany({
+          where: { variantId: { in: variantIds } },
+        });
+      } catch {}
+    }
+
+    await this.prisma.product.delete({
+      where: { id: existing.id },
+    });
+
+    return { deleted: true, id: existing.id };
   }
 
   async findProducts(merchantId?: string) {

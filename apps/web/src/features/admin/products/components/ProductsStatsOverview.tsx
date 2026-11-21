@@ -16,8 +16,12 @@ export function ProductsStatsOverview({
   bins,
   pendingRestockCount = 0,
 }: ProductsStatsOverviewProps) {
-  const approvedProducts = products.filter((p) => p.status === 'APPROVED');
-  const pendingProducts = products.filter((p) => p.status === 'PENDING_APPROVAL');
+  const approvedProducts = products.filter(
+    (p) => (p.status === 'APPROVED' || p.status === 'STOCK_STORED') && !p.isDraft
+  );
+  const pendingProducts = products.filter(
+    (p) => p.status === 'PENDING_APPROVAL' && !p.isDraft
+  );
   const totalPendingInbound = pendingProducts.length + pendingRestockCount;
 
   const totalInStockUnits = approvedProducts.reduce((acc, p) => acc + p.stock, 0);

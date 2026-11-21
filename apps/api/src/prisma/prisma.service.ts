@@ -27,10 +27,12 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
   async runSelfHealingMigrations() {
     try {
-      // Ensure products table has images column if it was created on an older schema
+      // Ensure products table has images and status columns if it was created on an older schema
       await this.$executeRawUnsafe(`
         ALTER TABLE IF EXISTS "products" 
         ADD COLUMN IF NOT EXISTS "images" text[] DEFAULT ARRAY[]::text[];
+        ALTER TABLE IF EXISTS "products" 
+        ADD COLUMN IF NOT EXISTS "status" text DEFAULT 'PUBLISHED';
       `);
     } catch (err: any) {
       console.warn('[Prisma] Self-healing migration notice:', err?.message || err);

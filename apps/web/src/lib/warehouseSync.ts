@@ -992,6 +992,7 @@ export function convertMerchantProductToWarehouse(
     stock: item.stock,
     price: item.price,
     status,
+    isDraft: status === 'DRAFT',
     submittedAt: 'Just now',
     imageUrl: item.imageUrl || item.colors?.[0]?.imageUrl || PRESET_THUMBNAILS[0].url,
     images: item.images,
@@ -1170,6 +1171,19 @@ export function syncMerchantProductUpdatedToAdmin(
         variantParts[1] ||
         ap.size;
 
+      const isDraftStatus = updatedItem.status === 'DRAFT';
+      const isPendingStatus = updatedItem.status === 'PENDING_APPROVAL' || (!isDraftStatus && ap.status === 'PENDING_APPROVAL');
+      const isStockStoredStatus =
+        updatedItem.status === 'STOCK_STORED' ||
+        ((updatedItem.status === 'PUBLISHED' || updatedItem.status === 'APPROVED') && updatedItem.stock > 0);
+      const nextAdminStatus = isDraftStatus
+        ? ('DRAFT' as const)
+        : isPendingStatus
+          ? ('PENDING_APPROVAL' as const)
+          : isStockStoredStatus
+            ? ('STOCK_STORED' as const)
+            : ('APPROVED' as const);
+
       return {
         ...ap,
         title: updatedItem.title,
@@ -1179,6 +1193,8 @@ export function syncMerchantProductUpdatedToAdmin(
         size,
         stock: updatedItem.stock,
         price: updatedItem.price,
+        status: nextAdminStatus,
+        isDraft: isDraftStatus,
         imageUrl: updatedItem.imageUrl !== undefined ? updatedItem.imageUrl : ap.imageUrl,
         images: updatedItem.images !== undefined ? updatedItem.images : (ap.images || []),
         barcode: updatedItem.barcode || ap.barcode,
@@ -1190,8 +1206,13 @@ export function syncMerchantProductUpdatedToAdmin(
     });
 
     if (!matched) {
+      const fallbackStatus = updatedItem.status === 'DRAFT'
+        ? 'DRAFT'
+        : updatedItem.status === 'PUBLISHED'
+          ? 'APPROVED'
+          : 'PENDING_APPROVAL';
       nextAdmin.unshift(
-        convertMerchantProductToWarehouse(updatedItem, profile, 'PENDING_APPROVAL')
+        convertMerchantProductToWarehouse(updatedItem, profile, fallbackStatus)
       );
     }
 
@@ -1271,6 +1292,8 @@ export function syncAdminProductsToMerchant(
           ...mp,
           title: matchedAdmin.title,
           stock: matchedAdmin.stock,
+          stockAccepted: matchedAdmin.stockAccepted ?? (matchedAdmin.stock > 0),
+          stockStatus: matchedAdmin.stockStatus ?? (matchedAdmin.stock > 0 ? 'IN_STOCK' : 'AWAITING_STOCK'),
           price: matchedAdmin.price,
           imageUrl: matchedAdmin.imageUrl !== undefined ? (matchedAdmin.imageUrl || mp.imageUrl) : mp.imageUrl,
           images: (matchedAdmin.images && matchedAdmin.images.length > 0) ? matchedAdmin.images : mp.images,
@@ -1278,16 +1301,20 @@ export function syncAdminProductsToMerchant(
           sizes: matchedAdmin.sizes ?? mp.sizes,
           variantsList: matchedAdmin.variantsList ?? mp.variantsList,
           description: matchedAdmin.description ?? mp.description,
-          bin: matchedAdmin.status === 'APPROVED' ? matchedAdmin.binCode : 'Pending Approval',
-          // Admin approval publishes a pending product; a merchant-made DRAFT is preserved.
+          bin:
+            matchedAdmin.status === 'APPROVED' || matchedAdmin.status === 'STOCK_STORED'
+              ? matchedAdmin.binCode
+              : 'Pending Approval',
+          // Synchronize status accurately between Admin and Merchant
           status:
-            matchedAdmin.status === 'APPROVED'
-              ? mp.status === 'DRAFT'
-                ? ('DRAFT' as const)
-                : ('PUBLISHED' as const)
-              : matchedAdmin.status === 'DRAFT' || matchedAdmin.isDraft
-                ? ('DRAFT' as const)
-                : ('PENDING_APPROVAL' as const),
+            matchedAdmin.status === 'DRAFT' || matchedAdmin.isDraft
+              ? ('DRAFT' as const)
+              : matchedAdmin.status === 'STOCK_STORED' ||
+                  (matchedAdmin.status === 'APPROVED' && (matchedAdmin.stockAccepted || matchedAdmin.stock > 0))
+                ? ('STOCK_STORED' as const)
+                : matchedAdmin.status === 'APPROVED'
+                  ? ('APPROVED' as const)
+                  : ('PENDING_APPROVAL' as const),
         };
       });
 
@@ -1295,7 +1322,7 @@ export function syncAdminProductsToMerchant(
       const newFromAdmin = adminProducts.filter(
         (ap) =>
           ap.merchantCode.toUpperCase() === code &&
-          ap.status === 'APPROVED' &&
+          (ap.status === 'APPROVED' || ap.status === 'STOCK_STORED' || ap.status === 'PENDING_APPROVAL') &&
           !INITIAL_PRODUCTS.some((seed) => seed.id === ap.id) &&
           !merchantProducts.some((mp) => isMatchingProduct(mp, ap))
       );
@@ -1338,6 +1365,18 @@ export function reconcileAdminProductsWithMerchant(
 ): WarehouseProductItem[] {
   if (typeof window === 'undefined') return adminProducts;
   try {
+    // Self-heal any record where isDraft is true but status was overwritten to APPROVED
+    let didHealDraft = false;
+    const normalizedAdmin = adminProducts.map((ap) => {
+      if (ap.status === 'DRAFT' || ap.isDraft) {
+        if (ap.status !== 'DRAFT' || ap.isDraft !== true) {
+          didHealDraft = true;
+          return { ...ap, status: 'DRAFT' as const, isDraft: true };
+        }
+      }
+      return ap;
+    });
+
     const directory = getStoredMerchantDirectory();
     const merchantCodes = new Set<string>([
       'MC-101',
@@ -1356,7 +1395,7 @@ export function reconcileAdminProductsWithMerchant(
       const customMerchantItems = merchantProducts.filter(
         (mp) =>
           (code !== 'MC-101' || !DEFAULT_SEED_MERCHANT_PRODUCT_IDS.has(mp.id)) &&
-          !adminProducts.some((ap) => isMatchingProduct(mp, ap)) &&
+          !normalizedAdmin.some((ap) => isMatchingProduct(mp, ap)) &&
           !newlyConverted.some((ap) => isMatchingProduct(mp, ap))
       );
 
@@ -1365,15 +1404,24 @@ export function reconcileAdminProductsWithMerchant(
           convertMerchantProductToWarehouse(
             mp,
             profile,
-            mp.status === 'PUBLISHED' ? 'APPROVED' : 'PENDING_APPROVAL'
+            mp.status === 'DRAFT'
+              ? 'DRAFT'
+              : mp.status === 'PUBLISHED'
+                ? 'APPROVED'
+                : 'PENDING_APPROVAL'
           )
         );
       }
     }
 
-    if (newlyConverted.length === 0) return adminProducts;
+    if (newlyConverted.length === 0) {
+      if (didHealDraft) {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(normalizedAdmin));
+      }
+      return normalizedAdmin;
+    }
 
-    const merged = [...newlyConverted, ...adminProducts];
+    const merged = [...newlyConverted, ...normalizedAdmin];
     localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(merged));
     return merged;
   } catch {
@@ -1826,37 +1874,62 @@ export function getSyncedMerchantDirectoryLists(
     const adminProds = reconcileAdminProductsWithMerchant(getStoredAdminProducts());
     const adminOrders = reconcileAdminOrdersWithMerchant(getStoredAdminOrders());
 
-    // Approved AND pending-approval products are both visible under their merchant.
+    // Approved, pending-approval, and draft products are synced with their true status.
     const extraProds: import('@/features/admin/merchants/types').MerchantProductItem[] = adminProds
       .filter(
         (ap) =>
-          (ap.status === 'APPROVED' || ap.status === 'PENDING_APPROVAL') &&
+          (ap.status === 'APPROVED' ||
+            ap.status === 'STOCK_STORED' ||
+            ap.status === 'PENDING_APPROVAL' ||
+            ap.status === 'DRAFT' ||
+            ap.isDraft) &&
           !baseProducts.some((bp) => bp.sku === ap.fullSku || bp.id === ap.id)
       )
-      .map((ap) => ({
-        id: ap.id,
-        merchantCode: ap.merchantCode,
-        title: ap.title,
-        category: ap.category as any,
-        sku: ap.fullSku,
-        barcode: ap.barcode || `890${Math.floor(1000000000 + Math.random() * 9000000000)}`,
-        color: ap.color,
-        size: ap.size,
-        price: ap.price,
-        wholesalePrice: Math.round(ap.price * 0.75),
-        stock: ap.stock,
-        reserved: 0,
-        damaged: 0,
-        bin: ap.status === 'PENDING_APPROVAL' ? 'Pending Approval' : ap.binCode,
-        imageUrl: ap.imageUrl,
-        status: ap.status === 'PENDING_APPROVAL' ? ('PENDING_APPROVAL' as const) : ('APPROVED' as const),
-      }));
+      .map((ap) => {
+        const isDraft = ap.status === 'DRAFT' || Boolean(ap.isDraft);
+        return {
+          id: ap.id,
+          merchantCode: ap.merchantCode,
+          title: ap.title,
+          category: ap.category as any,
+          sku: ap.fullSku,
+          barcode: ap.barcode || '8900000000000',
+          color: ap.color,
+          size: ap.size,
+          price: ap.price,
+          wholesalePrice: Math.round(ap.price * 0.75),
+          stock: ap.stock,
+          reserved: 0,
+          damaged: 0,
+          bin: ap.status === 'PENDING_APPROVAL' ? 'Pending Approval' : ap.binCode,
+          imageUrl: ap.imageUrl,
+          isDraft,
+          status: isDraft
+            ? ('DRAFT' as const)
+            : ap.status === 'PENDING_APPROVAL'
+              ? ('PENDING_APPROVAL' as const)
+              : ('APPROVED' as const),
+        };
+      });
 
     const syncedProds = [
       ...extraProds,
       ...baseProducts.map((bp) => {
         const match = adminProds.find((ap) => ap.fullSku === bp.sku || ap.id === bp.id);
-        return match ? { ...bp, stock: match.stock, bin: match.binCode, price: match.price } : bp;
+        if (!match) return bp;
+        const isDraft = match.status === 'DRAFT' || Boolean(match.isDraft);
+        return {
+          ...bp,
+          stock: match.stock,
+          bin: match.binCode,
+          price: match.price,
+          isDraft,
+          status: isDraft
+            ? ('DRAFT' as const)
+            : match.status === 'PENDING_APPROVAL'
+              ? ('PENDING_APPROVAL' as const)
+              : ('APPROVED' as const),
+        };
       }),
     ];
 
@@ -2667,6 +2740,118 @@ export function rejectAdminStockWithdrawal(withdrawalId: string): boolean {
     emitWarehouseSync('AdminStockWithdrawal');
     return true;
   } catch {
+    return false;
+  }
+}
+
+/**
+ * Sync product draft/published status directly to PostgreSQL (pgAdmin) database
+ */
+export async function syncProductStatusToDatabase(
+  productId: string,
+  status: 'PUBLISHED' | 'STOCK_STORED' | 'APPROVED' | 'DRAFT' | 'PENDING_APPROVAL',
+  merchantCode?: string
+): Promise<boolean> {
+  if (!productId) return false;
+  try {
+    const res = await fetch(`${API_BASE}/inventory/products/${encodeURIComponent(productId)}/status`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(merchantCode ? { 'x-merchant-code': merchantCode } : {}),
+      },
+      body: JSON.stringify({ status }),
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn('[Sync] Failed to update product status in PostgreSQL:', err);
+    return false;
+  }
+}
+
+/**
+ * Permanently delete a product from PostgreSQL (pgAdmin) database (only allowed when stock === 0)
+ */
+export async function deleteProductFromDatabase(
+  productId: string,
+  merchantCode?: string
+): Promise<{ ok: boolean; error?: string }> {
+  if (!productId) return { ok: false, error: 'Missing product ID' };
+  try {
+    const res = await fetch(`${API_BASE}/inventory/products/${encodeURIComponent(productId)}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(merchantCode ? { 'x-merchant-code': merchantCode } : {}),
+      },
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return { ok: false, error: data?.message || 'Failed to delete product from database' };
+    }
+    return { ok: true };
+  } catch (err: any) {
+    console.warn('[Sync] Failed to delete product from PostgreSQL:', err);
+    return { ok: false, error: err?.message };
+  }
+}
+
+/**
+ * Step 1: Sync catalog approval & slotting to PostgreSQL (pgAdmin) database
+ */
+export async function approveProductInDatabase(
+  productId: string,
+  binCode: string,
+  finalQty: number,
+  acceptStockNow: boolean
+): Promise<boolean> {
+  if (!productId) return false;
+  try {
+    const res = await fetch(`${API_BASE}/inventory/products/${encodeURIComponent(productId)}/approve`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        binCode,
+        finalQty,
+        acceptStockNow,
+      }),
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn('[Sync] Failed to approve product in PostgreSQL:', err);
+    return false;
+  }
+}
+
+/**
+ * Step 2: Sync physical stock acceptance into warehouse bin (Store Done) to PostgreSQL
+ */
+export async function acceptStockInDatabase(
+  productId: string,
+  quantity: number,
+  binCode: string,
+  challanOrTracking?: string,
+  note?: string
+): Promise<boolean> {
+  if (!productId) return false;
+  try {
+    const res = await fetch(`${API_BASE}/inventory/products/${encodeURIComponent(productId)}/accept-stock`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        quantity,
+        binCode,
+        challanOrTracking,
+        note,
+      }),
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn('[Sync] Failed to accept stock in PostgreSQL:', err);
     return false;
   }
 }

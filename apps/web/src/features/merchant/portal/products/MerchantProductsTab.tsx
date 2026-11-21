@@ -27,6 +27,7 @@ import { DeleteConfirmModal } from './modals/DeleteConfirmModal';
 import { PrintBarcodeModal } from '../components/modals/PrintBarcodeModal';
 
 const isPendingApprovalProduct = (p: MerchantProductItem): boolean => {
+  if (p.status === 'DRAFT') return false;
   if (p.status === 'PENDING_APPROVAL') return true;
   if (!p.bin || p.bin === 'Pending Approval' || p.bin === 'Assigned on intake') return true;
   return false;
@@ -127,7 +128,7 @@ export function MerchantProductsTab({
   const stats: ProductStats = useMemo(() => {
     const approvedProducts = products.filter((p) => !isPendingApprovalProduct(p));
     const published = approvedProducts.filter(
-      (p) => p.status === 'PUBLISHED' || (!p.status && p.stock > 0)
+      (p) => p.status === 'STOCK_STORED' || p.status === 'PUBLISHED' || p.stock > 0
     ).length;
     const lowStock = approvedProducts.filter((p) => p.stock > 0 && p.stock <= 30).length;
     const totalOrders =
@@ -146,16 +147,21 @@ export function MerchantProductsTab({
 
   // Tab counts
   const counts = useMemo(() => {
-    const approvedProducts = products.filter((p) => !isPendingApprovalProduct(p));
-    const pendingApprovalProducts = products.filter((p) => isPendingApprovalProduct(p));
+    const draftProducts = products.filter((p) => p.status === 'DRAFT');
+    const pendingApprovalProducts = products.filter(
+      (p) => p.status !== 'DRAFT' && isPendingApprovalProduct(p)
+    );
+    const approvedProducts = products.filter(
+      (p) => p.status !== 'DRAFT' && !isPendingApprovalProduct(p)
+    );
 
     return {
       all: products.length,
       published: approvedProducts.filter(
-        (p) => p.status === 'PUBLISHED' || (!p.status && p.stock > 0)
+        (p) => p.status === 'STOCK_STORED' || (p.status === 'PUBLISHED' && p.stock > 0) || p.stock > 0
       ).length,
       pendingApproval: pendingApprovalProducts.length,
-      draft: approvedProducts.filter((p) => p.status === 'DRAFT').length,
+      draft: draftProducts.length,
       outOfStock: approvedProducts.filter((p) => p.stock === 0).length,
       stockRequests: stockRequests.filter((r) => r.status === 'PENDING_APPROVAL').length,
     };
@@ -165,21 +171,24 @@ export function MerchantProductsTab({
   const filteredProducts = useMemo(() => {
     return products
       .filter((p) => {
+        const isDraft = p.status === 'DRAFT';
         const isPendingApproval = isPendingApprovalProduct(p);
+        const isPublished =
+          !isDraft &&
+          !isPendingApproval &&
+          (p.status === 'STOCK_STORED' || (p.status === 'PUBLISHED' && p.stock > 0) || p.stock > 0);
+        const isOutOfStock = !isDraft && !isPendingApproval && p.stock === 0;
 
-        if (activeTab === 'PENDING_APPROVAL') {
-          if (!isPendingApproval) return false;
+        if (activeTab === 'DRAFT') {
+          if (!isDraft) return false;
+        } else if (activeTab === 'PENDING_APPROVAL') {
+          if (!isPendingApproval || isDraft) return false;
         } else if (activeTab === 'PUBLISHED') {
-          if (isPendingApproval) return false;
-          const isPublished = p.status === 'PUBLISHED' || (!p.status && p.stock > 0);
           if (!isPublished) return false;
-        } else if (activeTab === 'DRAFT') {
-          if (isPendingApproval) return false;
-          if (p.status !== 'DRAFT') return false;
         } else if (activeTab === 'OUT_OF_STOCK') {
-          if (isPendingApproval) return false;
-          if (p.stock !== 0) return false;
+          if (!isOutOfStock) return false;
         }
+        // When activeTab === 'ALL', show ALL products (pending, draft, published, and out of stock)
 
         // Category Filter
         if (selectedCategory !== 'ALL' && p.category !== selectedCategory) {
@@ -303,10 +312,18 @@ export function MerchantProductsTab({
           <button
             type="button"
             onClick={() => {
-              if (products.length > 0) {
-                handleOpenManageStock(products[0], 'RESTOCK');
+              const storedProd = products.find(
+                (p) =>
+                  p.status !== 'DRAFT' &&
+                  !isPendingApprovalProduct(p) &&
+                  (p.status === 'STOCK_STORED' || p.stock > 0)
+              );
+              if (storedProd) {
+                handleOpenManageStock(storedProd, 'RESTOCK');
               } else {
-                onTriggerToast('Please add products first before requesting restock or returns.');
+                onTriggerToast(
+                  'Restock or Return requests are only available after a product reaches Stock Stored stage.'
+                );
               }
             }}
             className="px-4 py-2.5 bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-navy-900 dark:text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 border border-slate-200/80 dark:border-white/10 transition-all cursor-pointer shadow-xs active:scale-95"

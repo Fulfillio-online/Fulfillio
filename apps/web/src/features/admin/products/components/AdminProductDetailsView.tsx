@@ -25,9 +25,11 @@ import {
   Palette,
   Maximize2,
   Filter,
+  PackageCheck,
 } from 'lucide-react';
 import { StatusBadge } from '@/components/ui';
 import { Modal } from '@/components/admin/AdminModal';
+import { AcceptStockModal } from './modals/AcceptStockModal';
 import { WarehouseProductItem, WarehouseBin } from '../types';
 import {
   INITIAL_PRODUCTS,
@@ -40,6 +42,7 @@ import {
   getRealOrdersForAdminProduct,
   reconcileAdminProductsWithMerchant,
   syncAdminProductsToMerchant,
+  acceptStockInDatabase,
 } from '@/lib/warehouseSync';
 import { WarehousePipelineOrder } from '@/features/admin/orders/types';
 
@@ -108,6 +111,7 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
   const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
   const [draftVariantStocks, setDraftVariantStocks] = useState<Record<string, number>>({});
   const [adjustReason, setAdjustReason] = useState('Stock audit cycle recount');
+  const [isAcceptStockOpen, setIsAcceptStockOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -427,6 +431,56 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
     setIsAdjustModalOpen(false);
   };
 
+  const handleAcceptStockInDetails = (
+    _pid: string,
+    quantity: number,
+    binCode: string,
+    _challan?: string,
+    _note?: string
+  ) => {
+    if (!product) return;
+    const newTotal = (product.stock || 0) + quantity;
+    const updatedProd: WarehouseProductItem = {
+      ...product,
+      stock: newTotal,
+      binCode: binCode || product.binCode,
+      status: 'APPROVED',
+      stockAccepted: true,
+      stockStatus: 'IN_STOCK',
+    };
+    setProduct(updatedProd);
+
+    // Also update variant stock proportionally or on first variant
+    if (variants.length > 0) {
+      const perVariant = Math.floor(quantity / variants.length);
+      const remainder = quantity % variants.length;
+      const updatedVars = variants.map((v, i) => ({
+        ...v,
+        stock: v.stock + perVariant + (i === 0 ? remainder : 0),
+        available: v.available + perVariant + (i === 0 ? remainder : 0),
+      }));
+      setVariants(updatedVars);
+      try {
+        localStorage.setItem(`fulfillio_variants_${product.id}`, JSON.stringify(updatedVars));
+      } catch {}
+    }
+
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_PRODUCTS);
+      const all: WarehouseProductItem[] = stored ? JSON.parse(stored) : INITIAL_PRODUCTS;
+      const next = all.map((p) => (p.id === product.id ? updatedProd : p));
+      localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+      syncAdminProductsToMerchant(next);
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'AdminProductDetails' } })
+      );
+    } catch {}
+
+    acceptStockInDatabase(product.id, quantity, binCode, _challan, _note);
+    showToast(`Accepted and stored +${quantity} units into Bin ${binCode}. Status changed to Stock Stored.`);
+    setIsAcceptStockOpen(false);
+  };
+
   // Find assigned bin info
   const assignedBin = useMemo(() => {
     if (!product) return null;
@@ -579,6 +633,15 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
         </div>
 
         <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => setIsAcceptStockOpen(true)}
+            className="px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold flex items-center gap-2 shadow-md shadow-orange-500/25 transition-all cursor-pointer active:scale-95"
+            title="Accept physical consignment into warehouse bin"
+          >
+            <PackageCheck className="w-4 h-4 stroke-[2.5]" />
+            <span>Accept &amp; Store Stock</span>
+          </button>
           <button
             type="button"
             onClick={handleOpenAdjustModal}
@@ -1245,6 +1308,14 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
           </div>
         </div>
       </Modal>
+
+      <AcceptStockModal
+        isOpen={isAcceptStockOpen}
+        onClose={() => setIsAcceptStockOpen(false)}
+        product={product}
+        bins={bins}
+        onConfirm={handleAcceptStockInDetails}
+      />
     </div>
   );
 }

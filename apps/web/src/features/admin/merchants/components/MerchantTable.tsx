@@ -101,9 +101,15 @@ export function MerchantTable({
     });
   }, [merchants, searchQuery, statusFilter]);
 
-  // Calculate product count per merchant
+  // Calculate active product count per merchant (exclude pending approval & draft)
   const getProductCount = (code: string) => {
-    return productsList.filter((p) => p.merchantCode === code).length;
+    return productsList.filter(
+      (p) =>
+        p.merchantCode === code &&
+        p.status !== 'PENDING_APPROVAL' &&
+        p.status !== 'DRAFT' &&
+        !p.isDraft
+    ).length;
   };
 
   // Selection helpers

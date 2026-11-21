@@ -13,6 +13,7 @@ import {
   CheckCircle,
   AlertCircle,
   Tag,
+  FileText,
 } from 'lucide-react';
 import { MerchantProductItem, ResellerMemo, MerchantOrderItem } from '../../types';
 import { useMerchant } from '../../MerchantContext';
@@ -103,6 +104,13 @@ export function ProductOrderListSection({
   // Cart state
   const [cartItems, setCartItems] = useState<OrderCartItem[]>([]);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [selectedMemoCode, setSelectedMemoCode] = useState<string>(() => {
+    if (effectiveMemos && effectiveMemos.length > 0) {
+      const def = effectiveMemos.find((m) => m.isDefault);
+      return def ? def.code : effectiveMemos[0].code;
+    }
+    return 'MEMO-DEFAULT';
+  });
 
   // Load and listen to cart changes
   useEffect(() => {
@@ -141,10 +149,23 @@ export function ProductOrderListSection({
     return `${product.sku}-${cCode}-${sCode}`;
   }, [product.sku, matchedVariant, selectedColor, selectedSize]);
 
-  const maxStock = matchedVariant?.stock ?? product.stock ?? 50;
+  const maxStock = matchedVariant?.stock ?? product.stock ?? 0;
+  const isStockStored =
+    product.status !== 'DRAFT' &&
+    product.status !== 'PENDING_APPROVAL' &&
+    Boolean(product.bin) &&
+    product.bin !== 'Pending Approval' &&
+    product.bin !== 'Assigned on intake' &&
+    (product.status === 'STOCK_STORED' || (product.stock || 0) > 0);
 
   // Add to Order List handler
   const handleAddToOrderList = () => {
+    if (!isStockStored || maxStock <= 0) {
+      effectiveToast(
+        'Cannot create order before Stock Stored stage. Warehouse must accept and store physical product stock first.'
+      );
+      return;
+    }
     if (selectedQty <= 0) return;
 
     const matchedColorObj = availableColors.find((c) => c.name === selectedColor);
@@ -452,7 +473,7 @@ export function ProductOrderListSection({
             </div>
 
             {/* Bottom Summary Bar and Place Order Button */}
-            <div className="p-4 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200/80 dark:border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200/80 dark:border-white/10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-slate-500">Total Order Value:</span>
@@ -464,6 +485,27 @@ export function ProductOrderListSection({
                   {cartTotalQty} item{cartTotalQty !== 1 ? 's' : ''} ready to dispatch (+ courier shipping fee)
                 </p>
               </div>
+
+              {/* Memo Selection Option directly in Current Order List section */}
+              {effectiveMemos.length > 0 && (
+                <div className="flex items-center gap-2 bg-white dark:bg-navy-900 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-white/10 shadow-2xs">
+                  <FileText className="h-4 w-4 text-orange-500 shrink-0" />
+                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 shrink-0">
+                    Invoice Memo:
+                  </span>
+                  <select
+                    value={selectedMemoCode}
+                    onChange={(e) => setSelectedMemoCode(e.target.value)}
+                    className="bg-transparent text-xs font-bold text-orange-600 dark:text-orange-400 focus:outline-none cursor-pointer max-w-[200px] truncate"
+                  >
+                    {effectiveMemos.map((m) => (
+                      <option key={m.code} value={m.code} className="text-navy-900 dark:text-white bg-white dark:bg-navy-900">
+                        {m.code} — {m.resellerName || m.name || effectiveStoreName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="flex items-center gap-3">
                 <Link
@@ -496,6 +538,7 @@ export function ProductOrderListSection({
         memos={effectiveMemos}
         merchantStoreName={effectiveStoreName}
         merchantCode={effectiveMerchantCode}
+        initialMemoCode={selectedMemoCode}
         onOrderPlaced={(newOrder, itemsToDeduct) => {
           effectiveCreateOrder(newOrder, itemsToDeduct);
           clearOrderCart();

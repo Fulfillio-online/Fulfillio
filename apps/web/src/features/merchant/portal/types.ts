@@ -155,6 +155,8 @@ export interface MerchantProductItem {
   sku: string;
   barcode: string;
   stock: number;
+  stockAccepted?: boolean;
+  stockStatus?: 'AWAITING_STOCK' | 'IN_STOCK' | 'OUT_OF_STOCK';
   reserved: number;
   price: number;
   costPrice?: number;
@@ -182,7 +184,7 @@ export interface MerchantProductItem {
   }[];
   imageUrl?: string;
   images?: string[];
-  status?: 'PUBLISHED' | 'DRAFT' | 'ARCHIVED' | 'PENDING_APPROVAL';
+  status?: 'PUBLISHED' | 'STOCK_STORED' | 'APPROVED' | 'DRAFT' | 'ARCHIVED' | 'PENDING_APPROVAL';
   totalOrders?: number;
 }
 

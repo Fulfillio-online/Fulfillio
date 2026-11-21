@@ -39,7 +39,7 @@ export function ProductStatusTabs({
       icon: 'clock',
     },
     { id: 'DRAFT', label: 'Drafts', count: counts.draft },
-    { id: 'OUT_OF_STOCK', label: 'Out of Stock', count: counts.outOfStock },
+    { id: 'OUT_OF_STOCK', label: 'Awaiting Stock', count: counts.outOfStock },
     {
       id: 'STOCK_REQUESTS',
       label: 'Stock Requests',

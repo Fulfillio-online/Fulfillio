@@ -156,21 +156,44 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
           const reconciled = serverProds.map((sp) => {
             const localMatch = localProds.find((lp) => lp.id === sp.id || lp.sku === sp.sku);
             if (localMatch) {
-              const isApproved =
-                (localMatch.status === 'PUBLISHED' || sp.status === 'PUBLISHED') &&
-                localMatch.bin !== 'Pending Approval' &&
-                localMatch.bin !== 'Assigned on intake' &&
+              const serverApproved =
+                (sp.status === 'PUBLISHED' || sp.status === 'STOCK_STORED' || sp.status === 'APPROVED') &&
+                sp.bin &&
                 sp.bin !== 'Pending Approval' &&
                 sp.bin !== 'Assigned on intake';
 
-              const finalStatus = isApproved ? ('PUBLISHED' as const) : ('PENDING_APPROVAL' as const);
-              const finalBin = isApproved ? (localMatch.bin || sp.bin) : 'Pending Approval';
+              const localApproved =
+                (localMatch.status === 'PUBLISHED' || localMatch.status === 'STOCK_STORED' || localMatch.status === 'APPROVED') &&
+                localMatch.bin &&
+                localMatch.bin !== 'Pending Approval' &&
+                localMatch.bin !== 'Assigned on intake';
+
+              const isApproved = serverApproved || localApproved;
+              const isDraft =
+                sp.status === 'DRAFT' ||
+                (localMatch.status === 'DRAFT' && sp.status !== 'STOCK_STORED' && sp.status !== 'APPROVED');
+              const effectiveStock = sp.stock !== undefined ? sp.stock : localMatch.stock;
+              const isStockStored =
+                !isDraft &&
+                isApproved &&
+                (sp.status === 'STOCK_STORED' || localMatch.status === 'STOCK_STORED' || effectiveStock > 0);
+              const finalStatus = isDraft
+                ? ('DRAFT' as const)
+                : isStockStored
+                  ? ('STOCK_STORED' as const)
+                  : isApproved
+                    ? ('APPROVED' as const)
+                    : ('PENDING_APPROVAL' as const);
+              const finalBin = isApproved
+                ? (serverApproved ? sp.bin : localMatch.bin)
+                : 'Pending Approval';
 
               return {
-                ...sp,
                 ...localMatch,
+                ...sp,
                 status: finalStatus,
                 bin: finalBin,
+                stock: sp.stock !== undefined ? sp.stock : localMatch.stock,
                 imageUrl: (sp.imageUrl && sp.imageUrl.trim()) ? sp.imageUrl : localMatch.imageUrl,
                 images: (sp.images && sp.images.length > 0) ? sp.images : (localMatch.images || []),
                 colors: (sp.colors && sp.colors.some((c) => c.imageUrl)) ? sp.colors : (localMatch.colors || sp.colors),
@@ -264,20 +287,15 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     const target = products.find((p) => p.id === id);
     if (!target) return;
 
-    // Step 1: If product is not in DRAFT, move it to DRAFT first
-    if (target.status !== 'DRAFT') {
-      setProducts((prev) => {
-        const next = prev.map((p) => (p.id === id ? { ...p, status: 'DRAFT' as const } : p));
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
-        }
-        return next;
-      });
-      showToast(`"${target.title}" প্রোডাক্টটি Drafts-এ পাঠানো হয়েছে। স্থায়ীভাবে মুছে ফেলতে Drafts ট্যাব থেকে ডিলিট করুন।`);
+    // Strict 0-Stock Rule: If warehouse has even 1 single unit in stock, product CANNOT be deleted!
+    if ((target.stock || 0) >= 1) {
+      showToast(
+        `Cannot delete "${target.title}": Warehouse currently holds ${target.stock} pcs in stock. Product must have 0 stock before it can be deleted.`
+      );
       return;
     }
 
-    // Step 2: If already in DRAFT, permanently delete from catalog
+    // When stock === 0, permanently delete from catalog and PostgreSQL database
     setProducts((prev) => {
       const deleted = prev.filter((p) => p.id === id);
       const next = prev.filter((p) => p.id !== id);
@@ -287,7 +305,13 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       }
       return next;
     });
-    showToast(`"${target.title}" স্থায়ীভাবে ক্যাটালগ থেকে মুছে ফেলা হয়েছে।`);
+
+    merchantApi.deleteProduct(id).catch(() => {});
+    showToast(
+      target.status === 'PENDING_APPROVAL'
+        ? `Store request for "${target.title}" cancelled and removed.`
+        : `"${target.title}" has been permanently deleted from the database.`
+    );
   };
 
   const addProducts = async (newItems: MerchantProductItem[]): Promise<{ ok: boolean; error?: string }> => {
@@ -413,17 +437,25 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       let updatedTarget: MerchantProductItem | null = null;
       const next = prev.map((p) => {
         if (p.id !== id && p.sku !== id) return p;
+        const wasDraft = p.status === 'DRAFT';
+        const isSavingAsDraft = updated.status === 'DRAFT';
         const isPendingApproval =
-          p.status === 'PENDING_APPROVAL' ||
-          !p.bin ||
-          p.bin === 'Pending Approval' ||
-          p.bin === 'Assigned on intake';
+          !isSavingAsDraft &&
+          (wasDraft ||
+            p.status === 'PENDING_APPROVAL' ||
+            !p.bin ||
+            p.bin === 'Pending Approval' ||
+            p.bin === 'Assigned on intake');
         updatedTarget = {
           ...p,
           ...updated,
           imageUrl: updated.imageUrl !== undefined ? updated.imageUrl : p.imageUrl,
           images: updated.images !== undefined ? updated.images : (p.images || []),
-          status: isPendingApproval ? 'PENDING_APPROVAL' : updated.status ?? p.status,
+          status: isSavingAsDraft
+            ? 'DRAFT'
+            : isPendingApproval
+              ? 'PENDING_APPROVAL'
+              : updated.status ?? p.status,
         };
         return updatedTarget;
       });
@@ -448,66 +480,107 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
   const toggleProductStatus = (id: string) => {
     const target = products.find((p) => p.id === id);
     if (!target) return;
-    const isPendingApproval =
-      target.status !== 'PUBLISHED' &&
-      (!target.bin || target.bin === 'Pending Approval' || target.bin === 'Assigned on intake');
-    if (isPendingApproval) {
-      showToast(
-        'এই প্রোডাক্টটি এখনো Admin Approval-এর অপেক্ষায় আছে। Admin Panel থেকে Approve করার পর এটি স্বয়ংক্রিয়ভাবে Published হবে।'
-      );
-      return;
+
+    let newStatus: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'STOCK_STORED';
+    if (target.status !== 'DRAFT') {
+      // Merchant can save in draft from Pending Approval, Approved, or Stock Stored
+      newStatus = 'DRAFT';
+    } else {
+      // Any product sent to Draft requires Admin Approval again before it can be published
+      newStatus = 'PENDING_APPROVAL';
     }
 
+    const updatedTarget: MerchantProductItem = { ...target, status: newStatus };
+
+    setProducts((prev) => {
+      const next = prev.map((p) => (p.id === id ? updatedTarget : p));
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
+      }
+      return next;
+    });
+
+    syncMerchantProductUpdatedToAdmin(updatedTarget, profile);
+    merchantApi.updateProductStatus(id, newStatus).catch(() => {});
+    showToast(
+      newStatus === 'DRAFT'
+        ? `"${target.title}" saved in Draft.`
+        : `"${target.title}" submitted for Admin Approval.`
+    );
+  };
+
+  const bulkUpdateStatus = (ids: string[], status: 'PUBLISHED' | 'DRAFT') => {
+    const idSet = new Set(ids);
     setProducts((prev) => {
       const next = prev.map((p) => {
-        if (p.id !== id) return p;
-        const newStatus = p.status === 'DRAFT' ? ('PUBLISHED' as const) : ('DRAFT' as const);
-        return { ...p, status: newStatus };
+        if (!idSet.has(p.id)) return p;
+        let nextStage: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'STOCK_STORED' = 'DRAFT';
+        if (status !== 'DRAFT') {
+          if (p.status === 'DRAFT') {
+            nextStage = 'PENDING_APPROVAL';
+          } else {
+            const hasApprovedBin =
+              Boolean(p.bin) &&
+              p.bin !== 'Pending Approval' &&
+              p.bin !== 'Assigned on intake';
+            nextStage = (p.stock || 0) > 0 && hasApprovedBin
+              ? 'STOCK_STORED'
+              : hasApprovedBin
+                ? 'APPROVED'
+                : 'PENDING_APPROVAL';
+          }
+        }
+        const updated: MerchantProductItem = { ...p, status: nextStage };
+        syncMerchantProductUpdatedToAdmin(updated, profile);
+        merchantApi.updateProductStatus(p.id, nextStage).catch(() => {});
+        return updated;
       });
       if (typeof window !== 'undefined') {
         localStorage.setItem(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
       }
       return next;
     });
-    showToast('Product status updated.');
-  };
-
-  const bulkUpdateStatus = (ids: string[], status: 'PUBLISHED' | 'DRAFT') => {
-    if (status === 'PUBLISHED') {
-      const hasUnapproved = products.some(
-        (p) =>
-          ids.includes(p.id) &&
-          p.status !== 'PUBLISHED' &&
-          (!p.bin || p.bin === 'Pending Approval' || p.bin === 'Assigned on intake')
-      );
-      if (hasUnapproved) {
-        showToast(
-          'Pending Approval প্রোডাক্টগুলো Admin Panel থেকে Approve না হওয়া পর্যন্ত Publish করা যাবে না।'
-        );
-        return;
-      }
-    }
-    setProducts((prev) => {
-      const next = prev.map((p) => (ids.includes(p.id) ? { ...p, status } : p));
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
-      }
-      return next;
-    });
-    showToast(`Updated ${ids.length} products to ${status.toLowerCase()}.`);
+    showToast(
+      status === 'DRAFT'
+        ? `Moved ${ids.length} product(s) to Draft.`
+        : `Submitted ${ids.length} product(s) for Admin Approval.`
+    );
   };
 
   const bulkDeleteProducts = (ids: string[]) => {
+    const selected = products.filter((p) => ids.includes(p.id));
+    const withStock = selected.filter((p) => (p.stock || 0) >= 1);
+    const deletable = selected.filter((p) => (p.stock || 0) === 0);
+
+    if (withStock.length > 0 && deletable.length === 0) {
+      showToast(
+        `Cannot delete: ${withStock.length} product(s) still have warehouse stock (> 0 pcs). Stock must be 0 to delete.`
+      );
+      return;
+    }
+
+    const deletableIds = new Set(deletable.map((p) => p.id));
     setProducts((prev) => {
-      const deleted = prev.filter((p) => ids.includes(p.id));
-      const next = prev.filter((p) => !ids.includes(p.id));
+      const deleted = prev.filter((p) => deletableIds.has(p.id));
+      const next = prev.filter((p) => !deletableIds.has(p.id));
       if (typeof window !== 'undefined') {
         localStorage.setItem(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
         syncMerchantProductsDeletedToAdmin(deleted);
       }
       return next;
     });
-    showToast(`Removed ${ids.length} products.`);
+
+    deletable.forEach((p) => {
+      merchantApi.deleteProduct(p.id).catch(() => {});
+    });
+
+    if (withStock.length > 0) {
+      showToast(
+        `Deleted ${deletable.length} product(s) with 0 stock. Skipped ${withStock.length} product(s) that have warehouse stock.`
+      );
+    } else {
+      showToast(`Deleted ${deletable.length} product(s) from database.`);
+    }
   };
 
   const requestStockOperation = (payload: import("./products/modals/ManageStockModal").SubmitStockRequestPayload) => {
@@ -668,6 +741,28 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       });
     } else if (order.productId) {
       itemsToDeduct.push({ productId: order.productId, qty: order.qty || 1 });
+    }
+
+    // Strict Business Logic: Orders can only be placed for approved products with verified stored stock
+    for (const it of itemsToDeduct) {
+      const prod = products.find((p) => p.id === it.productId);
+      if (prod) {
+        const isApproved =
+          (prod.status === 'PUBLISHED' || (prod.status as any) === 'APPROVED') &&
+          prod.bin &&
+          prod.bin !== 'Pending Approval' &&
+          prod.bin !== 'Assigned on intake';
+        if (!isApproved) {
+          const err = `Cannot create order: "${prod.title}" is pending warehouse admin approval. Orders can only be created after the warehouse approves the product and accepts stock.`;
+          showToast(err);
+          return { ok: false, error: err };
+        }
+        if ((prod.stock || 0) < it.qty) {
+          const err = `Cannot create order: "${prod.title}" has insufficient warehouse stock (Available: ${prod.stock || 0}, Requested: ${it.qty}). Please wait for stock intake.`;
+          showToast(err);
+          return { ok: false, error: err };
+        }
+      }
     }
 
     let latestProducts = products;

@@ -18,6 +18,7 @@ export class InventoryService {
       baseSku: string;
       imageUrl?: string;
       images?: string[];
+      status?: string;
       variants: Array<{
         title: string;
         variantCode: string; // e.g., BLK-XL
@@ -101,6 +102,7 @@ export class InventoryService {
       baseSku: finalBaseSku,
       imageUrl: sanitizedImage || allImages[0],
       images: allImages,
+      status: payload.status,
       defaultLocationId: defaultLocation.id,
       variants: formattedVariants,
     });
@@ -118,6 +120,7 @@ export class InventoryService {
       baseSku?: string;
       imageUrl?: string;
       images?: string[];
+      status?: string;
       variants?: Array<{
         id?: string;
         sku?: string;
@@ -188,9 +191,55 @@ export class InventoryService {
       baseSku: payload.baseSku ? cleanBaseSku : undefined,
       imageUrl: payload.imageUrl || allImages[0],
       images: allImages,
+      status: payload.status,
       defaultLocationId: defaultLocation.id,
       variants: formattedVariants.length > 0 ? formattedVariants : undefined,
     });
+  }
+
+  /**
+   * Update product status (e.g., 'DRAFT' or 'PUBLISHED')
+   */
+  async updateProductStatus(productId: string, status: string) {
+    return this.inventoryRepo.updateProductStatus(productId, status);
+  }
+
+  /**
+   * Approve a product submission (Step 1):
+   * Sets status to PUBLISHED/APPROVED, assigns binCode, sets initial stock (0 for catalog only)
+   */
+  async approveProduct(
+    productId: string,
+    data: {
+      binCode?: string;
+      finalQty?: number;
+      acceptStockNow?: boolean;
+    },
+  ) {
+    return this.inventoryRepo.approveProduct(productId, data);
+  }
+
+  /**
+   * Accept physical stock intake (Step 2 - Store Done):
+   * Adds received quantity into warehouse bin and updates product stock
+   */
+  async acceptStock(
+    productId: string,
+    data: {
+      quantity: number;
+      binCode?: string;
+      challanOrTracking?: string;
+      note?: string;
+    },
+  ) {
+    return this.inventoryRepo.acceptStock(productId, data);
+  }
+
+  /**
+   * Delete a product from PostgreSQL (only allowed if warehouse stock === 0)
+   */
+  async deleteProduct(productId: string) {
+    return this.inventoryRepo.deleteProduct(productId);
   }
 
 /**

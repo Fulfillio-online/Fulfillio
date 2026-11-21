@@ -1,30 +1,30 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
   Package,
   UploadCloud,
   Check,
-  Tag,
-  ShieldAlert,
   Plus,
   Trash2,
-  Sparkles,
-  Shirt,
-  Smartphone,
-  Sparkle,
-  Apple,
-  Box,
   ExternalLink,
   AlertCircle,
   X,
   Star,
   Link as LinkIcon,
-  Image as ImageIcon,
+  Shirt,
+  Smartphone,
+  Sparkle,
+  Apple,
+  Box,
+  RefreshCw,
+  Copy,
+  ChevronDown,
+  Info,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { SAMPLE_PRODUCT_PRESETS } from '../utils/imageCompressor';
 import { MerchantProductItem } from '../../types';
@@ -36,7 +36,7 @@ import {
 import { compressImage, compressThumbnail } from '../utils/imageCompressor';
 import { ColorPickerInput } from './ColorPickerInput';
 import { useMerchant } from '@/features/merchant/portal/MerchantContext';
-import { MerchantCategoryItem, MerchantSubcategoryItem } from '../../types';
+import { MerchantCategoryItem } from '../../types';
 
 interface ProductFormProps {
   initialProduct?: MerchantProductItem | null;
@@ -55,12 +55,14 @@ export function ProductForm({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [copiedSku, setCopiedSku] = useState(false);
 
   const mainImageInputRef = useRef<HTMLInputElement>(null);
   const colorFileInputRef = useRef<HTMLInputElement>(null);
+  const galleryFileInputRef = useRef<HTMLInputElement>(null);
   const [activeColorUploadId, setActiveColorUploadId] = useState<string | null>(null);
 
-  // 1. Basic Information
+  // 1. Core Identification
   const [title, setTitle] = useState(initialProduct?.title || '');
   const [masterSku, setMasterSku] = useState(
     initialProduct?.sku || `${merchantCode}-PRD-${Math.floor(100 + Math.random() * 900)}`
@@ -69,41 +71,26 @@ export function ProductForm({
   const [subcategory, setSubcategory] = useState(initialProduct?.subcategory || 'Hoodie');
   const [description, setDescription] = useState(initialProduct?.description || '');
 
+  // 2. Valuation & Commercials
+  const [declaredValue, setDeclaredValue] = useState(String(initialProduct?.price || 850));
+  const [costPrice, setCostPrice] = useState(String(initialProduct?.costPrice || 600));
 
-  const currentCategoryObj = useMemo(() => {
-    return (
-      categories.find((c: MerchantCategoryItem) => c.name.toLowerCase() === category.toLowerCase()) ||
-      categories.find((c: MerchantCategoryItem) => c.slug.toLowerCase() === category.toLowerCase()) ||
-      null
-    );
-  }, [categories, category]);
-
-  const subcategoryList = useMemo(() => {
-    return currentCategoryObj?.subcategories || [];
-  }, [currentCategoryObj]);
-
-  // 2. Declared Value
-  const [declaredValue, setDeclaredValue] = useState(
-    String(initialProduct?.price || 850)
-  );
-
-  // 3. Product Type (placed right after Declared Value as requested)
+  // 3. Archetype
   const [productType, setProductType] = useState<ProductType>(
     initialProduct?.productType || 'FASHION'
   );
 
-  // 4. Type-specific variant configs
-  // A. Fashion: Colors & Sizes
+  // 4. Variants: Colors & Sizes
   const [colors, setColors] = useState<ColorSwatch[]>(
     initialProduct?.colors && initialProduct.colors.length > 0
       ? initialProduct.colors
       : [
           {
             id: 'c-1',
-            name: 'Black',
+            name: 'Jet Black',
             hex: '#111827',
             imageUrl: '',
-            sizes: ['S', 'M', 'L', 'XL', 'XXL', '3XL'],
+            sizes: ['S', 'M', 'L', 'XL', 'XXL'],
           },
         ]
   );
@@ -118,31 +105,19 @@ export function ProductForm({
   });
   const [customSizeInputs, setCustomSizeInputs] = useState<Record<string, string>>({});
 
-  // B. Electronics: Storages & Gadget Colors
-  const [electronicStorages, setElectronicStorages] = useState<string[]>([
-    '64GB',
-    '128GB',
-    '256GB',
-  ]);
+  const [electronicStorages, setElectronicStorages] = useState<string[]>(['64GB', '128GB', '256GB']);
   const [newStorageInput, setNewStorageInput] = useState('');
 
-  // C. Beauty: Volumes & Shades
-  const [beautyVolumes, setBeautyVolumes] = useState<string[]>([
-    '30ml',
-    '50ml',
-    '100ml',
-  ]);
+  const [beautyVolumes, setBeautyVolumes] = useState<string[]>(['30ml', '50ml', '100ml']);
   const [newVolumeInput, setNewVolumeInput] = useState('');
 
-  // D. Grocery: Pack sizes
-  const [groceryPacks, setGroceryPacks] = useState<string[]>([
-    '500g',
-    '1kg',
-    '2kg',
-  ]);
+  const [groceryPacks, setGroceryPacks] = useState<string[]>(['500g', '1kg', '2kg']);
   const [newPackInput, setNewPackInput] = useState('');
 
-  // E. Variant stock map: variantId -> stock quantity
+  // Bulk Stock Setter
+  const [bulkStockValue, setBulkStockValue] = useState<string>('20');
+
+  // Variant Stock Map
   const [variantStockMap, setVariantStockMap] = useState<Record<string, number>>(() => {
     const initialMap: Record<string, number> = {};
     if (initialProduct?.variantsList && initialProduct.variantsList.length > 0) {
@@ -152,15 +127,10 @@ export function ProductForm({
     }
     return initialMap;
   });
-
   const [excludedVariantIds, setExcludedVariantIds] = useState<string[]>([]);
+  const [standardStock, setStandardStock] = useState(String(initialProduct?.stock || 30));
 
-  // Simple stock for STANDARD type
-  const [standardStock, setStandardStock] = useState(
-    String(initialProduct?.stock || 30)
-  );
-
-  // 5. Main Image & Gallery
+  // 5. Visual Media
   const [imageUrl, setImageUrl] = useState(initialProduct?.imageUrl || '');
   const [galleryImages, setGalleryImages] = useState<string[]>(() => {
     if (initialProduct?.images && initialProduct.images.length > 0) {
@@ -172,9 +142,44 @@ export function ProductForm({
   const [imageInputMode, setImageInputMode] = useState<'UPLOAD' | 'URL' | 'PRESET'>('UPLOAD');
   const [urlInput, setUrlInput] = useState('');
   const [urlError, setUrlError] = useState<string | null>(null);
-  const galleryFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Synchronize state whenever initialProduct changes (e.g. on edit reload)
+  // 6. Features & Highlights
+  const [features, setFeatures] = useState<string[]>(
+    initialProduct?.keyFeatures && initialProduct.keyFeatures.length > 0
+      ? initialProduct.keyFeatures
+      : [
+          'Heavyweight cotton-blend fleece',
+          'Tailored oversized relaxed fit',
+          'Preshrunk brushed interior',
+        ]
+  );
+  const [newFeatureText, setNewFeatureText] = useState('');
+
+  // 7. Logistics & Fulfillment Options
+  const [deliveryTime, setDeliveryTime] = useState('2-3 business days');
+  const [enableCod, setEnableCod] = useState(true);
+  const [enableReturns, setEnableReturns] = useState(true);
+  const [enableFragile, setEnableFragile] = useState(false);
+
+  // 8. Visibility Status
+  const [status, setStatus] = useState<'PUBLISHED' | 'DRAFT'>(
+    initialProduct?.status === 'PUBLISHED' ? 'PUBLISHED' : 'DRAFT'
+  );
+
+  // Categories helper
+  const currentCategoryObj = useMemo(() => {
+    return (
+      categories.find((c: MerchantCategoryItem) => c.name.toLowerCase() === category.toLowerCase()) ||
+      categories.find((c: MerchantCategoryItem) => c.slug.toLowerCase() === category.toLowerCase()) ||
+      null
+    );
+  }, [categories, category]);
+
+  const subcategoryList = useMemo(() => {
+    return currentCategoryObj?.subcategories || [];
+  }, [currentCategoryObj]);
+
+  // Sync state when initialProduct updates
   useEffect(() => {
     if (!initialProduct) return;
     setTitle(initialProduct.title || '');
@@ -183,6 +188,7 @@ export function ProductForm({
     setSubcategory(initialProduct.subcategory || 'Hoodie');
     setDescription(initialProduct.description || '');
     setDeclaredValue(String(initialProduct.price || 850));
+    setCostPrice(String(initialProduct.costPrice || Math.round((initialProduct.price || 850) * 0.7)));
     setProductType(initialProduct.productType || 'FASHION');
     setImageUrl(initialProduct.imageUrl || '');
     if (initialProduct.images && initialProduct.images.length > 0) {
@@ -206,24 +212,7 @@ export function ProductForm({
     setStatus(initialProduct.status === 'PUBLISHED' ? 'PUBLISHED' : 'DRAFT');
   }, [initialProduct]);
 
-  // 6. Key Features
-  const [features, setFeatures] = useState<string[]>(
-    initialProduct?.keyFeatures && initialProduct.keyFeatures.length > 0
-      ? initialProduct.keyFeatures
-      : [
-          'Premium cotton-blend fabric',
-          'Oversized relaxed fit',
-          'Soft and comfortable interior',
-        ]
-  );
-  const [newFeatureText, setNewFeatureText] = useState('');
-
-  // 7. Status (New products start as DRAFT / Pending Admin Approval)
-  const [status, setStatus] = useState<'PUBLISHED' | 'DRAFT'>(
-    initialProduct?.status === 'PUBLISHED' ? 'PUBLISHED' : 'DRAFT'
-  );
-
-  // Sync category with productType
+  // Archetype change handler
   const handleProductTypeChange = (type: ProductType) => {
     setProductType(type);
     if (!isEdit) {
@@ -246,7 +235,7 @@ export function ProductForm({
     }
   };
 
-  // Generate dynamic variants pairings based on active ProductType
+  // Generate dynamic variants
   const generatedVariants: ProductVariantConfig[] = useMemo(() => {
     const baseSkuClean = masterSku.trim() || 'SKU';
 
@@ -267,7 +256,7 @@ export function ProductForm({
           const id = `${c.id}-${s.toLowerCase()}`;
           if (excludedVariantIds.includes(id)) return;
           const variantSku = `${baseSkuClean}-${colorCode}-${s}`;
-          const stock = variantStockMap[id] ?? 10;
+          const stock = variantStockMap[id] ?? 15;
           list.push({
             id,
             variantSku,
@@ -310,7 +299,7 @@ export function ProductForm({
           const id = `${vol.toLowerCase()}-${c.name.toLowerCase().replace(/\s+/g, '-')}`;
           if (excludedVariantIds.includes(id)) return;
           const variantSku = `${baseSkuClean}-${vol}-${c.name.substring(0, 3).toUpperCase()}`;
-          const stock = variantStockMap[id] ?? 10;
+          const stock = variantStockMap[id] ?? 15;
           list.push({
             id,
             variantSku,
@@ -331,7 +320,7 @@ export function ProductForm({
         const id = `pack-${pack.toLowerCase()}`;
         if (excludedVariantIds.includes(id)) return;
         const variantSku = `${baseSkuClean}-${pack}`;
-        const stock = variantStockMap[id] ?? 20;
+        const stock = variantStockMap[id] ?? 25;
         list.push({
           id,
           variantSku,
@@ -343,7 +332,6 @@ export function ProductForm({
       return list;
     }
 
-    // STANDARD
     return [];
   }, [
     productType,
@@ -357,7 +345,7 @@ export function ProductForm({
     excludedVariantIds,
   ]);
 
-  // Total stock calculation: sum of variants or standard stock
+  // Total stock calculation
   const computedTotalStock = useMemo(() => {
     if (productType === 'STANDARD' || generatedVariants.length === 0) {
       return Math.max(0, Number(standardStock) || 0);
@@ -372,6 +360,15 @@ export function ProductForm({
     }));
   };
 
+  const handleBulkApplyStock = () => {
+    const val = Math.max(0, parseInt(bulkStockValue, 10) || 0);
+    const updated: Record<string, number> = { ...variantStockMap };
+    generatedVariants.forEach((v) => {
+      updated[v.id] = val;
+    });
+    setVariantStockMap(updated);
+  };
+
   const handleMainImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -379,16 +376,13 @@ export function ProductForm({
     try {
       const compressed = await compressImage(file);
       setImageUrl(compressed);
-      // Auto-assign to first color swatch if empty
       setColors((prev) =>
         prev.map((c, idx) => (idx === 0 && !c.imageUrl ? { ...c, imageUrl: compressed } : c))
       );
     } catch (err) {
       console.error('Failed to compress image:', err);
     } finally {
-      if (mainImageInputRef.current) {
-        mainImageInputRef.current.value = '';
-      }
+      if (mainImageInputRef.current) mainImageInputRef.current.value = '';
     }
   };
 
@@ -411,9 +405,7 @@ export function ProductForm({
     } catch (err) {
       console.error('Failed to compress gallery image:', err);
     } finally {
-      if (galleryFileInputRef.current) {
-        galleryFileInputRef.current.value = '';
-      }
+      if (galleryFileInputRef.current) galleryFileInputRef.current.value = '';
     }
   };
 
@@ -424,7 +416,7 @@ export function ProductForm({
       return;
     }
     if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://') && !trimmed.startsWith('data:')) {
-      setUrlError('URL must start with http://, https://, or data:');
+      setUrlError('URL must start with http:// or https://');
       return;
     }
     setUrlError(null);
@@ -483,29 +475,24 @@ export function ProductForm({
       setColors((prev) =>
         prev.map((c) => (c.id === activeColorUploadId ? { ...c, imageUrl: compressed } : c))
       );
-      if (!imageUrl) {
-        setImageUrl(compressed);
-      }
+      if (!imageUrl) setImageUrl(compressed);
     } catch (err) {
       console.error('Image compression error:', err);
     } finally {
       setActiveColorUploadId(null);
-      if (colorFileInputRef.current) {
-        colorFileInputRef.current.value = '';
-      }
+      if (colorFileInputRef.current) colorFileInputRef.current.value = '';
     }
   };
 
   const handleAddColor = () => {
     const newId = `c-${Date.now()}`;
     const palette = [
-      { name: 'White', hex: '#FFFFFF' },
+      { name: 'Pure White', hex: '#FFFFFF' },
       { name: 'Navy Blue', hex: '#1E3A8A' },
-      { name: 'Red', hex: '#DC2626' },
+      { name: 'Charcoal Grey', hex: '#374151' },
       { name: 'Olive Green', hex: '#4D7C0F' },
-      { name: 'Charcoal Grey', hex: '#4B5563' },
-      { name: 'Maroon', hex: '#881337' },
-      { name: 'Beige', hex: '#F5F5DC' },
+      { name: 'Crimson Red', hex: '#DC2626' },
+      { name: 'Warm Beige', hex: '#F5F5DC' },
     ];
     const fallbackChoice = palette[(colors.length - 1) % palette.length] || {
       name: `Color ${colors.length + 1}`,
@@ -554,16 +541,6 @@ export function ProductForm({
     setCustomSizeInputs((prev) => ({ ...prev, [colorId]: '' }));
   };
 
-  const handleRemoveCustomSize = (sizeToRemove: string) => {
-    setAllSizes((prev) => prev.filter((s) => s !== sizeToRemove));
-    setColors((prev) =>
-      prev.map((c) => ({
-        ...c,
-        sizes: (c.sizes || []).filter((s) => s !== sizeToRemove),
-      }))
-    );
-  };
-
   const handleRemoveVariant = (variantId: string) => {
     setExcludedVariantIds((prev) => [...prev, variantId]);
   };
@@ -583,16 +560,45 @@ export function ProductForm({
     setFeatures(features.filter((_, i) => i !== idx));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleGenerateNewSku = () => {
+    const rand = Math.floor(100 + Math.random() * 900);
+    setMasterSku(`${merchantCode}-PRD-${rand}`);
+  };
+
+  const handleCopySku = () => {
+    if (typeof navigator !== 'undefined') {
+      navigator.clipboard.writeText(masterSku);
+      setCopiedSku(true);
+      setTimeout(() => setCopiedSku(false), 2000);
+    }
+  };
+
+  // Gross Margin & Profit
+  const calculatedProfit = useMemo(() => {
+    const val = Number(declaredValue) || 0;
+    const cost = Number(costPrice) || 0;
+    const profit = Math.max(0, val - cost);
+    const margin = val > 0 ? Math.round((profit / val) * 100) : 0;
+    return { profit, margin };
+  }, [declaredValue, costPrice]);
+
+  const activeBarcodeString = useMemo(() => {
+    return initialProduct?.barcode || `890${Math.floor(1000000000 + Math.random() * 9000000000)}`;
+  }, [initialProduct?.barcode]);
+
+  // Submit Handler
+  const handleSubmit = useCallback(async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (isSubmitting) return;
 
     if (!title.trim()) {
-      setSubmitError('অনুগ্রহ করে প্রোডাক্টের নাম (Product Name) লিখুন।');
+      setSubmitError('Product name is required. Please provide a title.');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
     if (!masterSku.trim()) {
-      setSubmitError('প্রোডাক্টের SKU আবশ্যক।');
+      setSubmitError('Product SKU is required for warehouse inventory tracking.');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
@@ -600,6 +606,7 @@ export function ProductForm({
     setIsSubmitting(true);
 
     const numValue = Number(declaredValue) || 850;
+    const numCost = Number(costPrice) || Math.round(numValue * 0.7);
     const allActiveSizes = Array.from(
       new Set(colors.flatMap((c) => (c.sizes && c.sizes.length > 0 ? c.sizes : allSizes)))
     );
@@ -610,7 +617,8 @@ export function ProductForm({
       initialProduct?.bin &&
       initialProduct.bin !== 'Pending Approval' &&
       initialProduct.bin !== 'Assigned on intake' &&
-      initialProduct.status !== 'PENDING_APPROVAL';
+      initialProduct.status !== 'PENDING_APPROVAL' &&
+      initialProduct.status !== 'DRAFT';
 
     const allActiveImages = Array.from(
       new Set(
@@ -622,9 +630,10 @@ export function ProductForm({
       )
     );
 
-    // Clean variants so they reference color or primary image without duplicating megabytes of base64
     const cleanedVariants = generatedVariants.map((v) => {
-      const matchColor = colors.find((c) => (c.name || '').trim().toLowerCase() === (v.color || '').trim().toLowerCase());
+      const matchColor = colors.find(
+        (c) => (c.name || '').trim().toLowerCase() === (v.color || '').trim().toLowerCase()
+      );
       const varImg = matchColor?.imageUrl || primaryImage;
       return {
         ...v,
@@ -637,18 +646,18 @@ export function ProductForm({
       title: title.trim(),
       variantLabel: initialProduct?.variantLabel || 'Standard',
       sku: masterSku.trim(),
-      barcode: initialProduct?.barcode || `890${Math.floor(1000000000 + Math.random() * 9000000000)}`,
+      barcode: activeBarcodeString,
       bin: isApprovedByAdmin ? initialProduct.bin : 'Pending Approval',
       category,
       subcategory,
       productType,
       description,
       price: numValue,
-      costPrice: numValue,
+      costPrice: numCost,
       stock: computedTotalStock,
       reserved: initialProduct?.reserved || 0,
-      status: isApprovedByAdmin ? status : 'PENDING_APPROVAL',
-      imageUrl: primaryImage, // Explicitly saved (empty string if removed, never undefined!)
+      status: status === 'DRAFT' ? 'DRAFT' : isApprovedByAdmin ? status : 'PENDING_APPROVAL',
+      imageUrl: primaryImage,
       images: allActiveImages,
       keyFeatures: features,
       colors: colors.map((c) => ({
@@ -675,247 +684,360 @@ export function ProductForm({
       setSubmitError(err?.message || 'Failed to save product in database.');
       setIsSubmitting(false);
     }
-  };
+  }, [
+    isSubmitting,
+    title,
+    masterSku,
+    declaredValue,
+    costPrice,
+    colors,
+    allSizes,
+    imageUrl,
+    galleryImages,
+    isEdit,
+    initialProduct,
+    generatedVariants,
+    category,
+    subcategory,
+    productType,
+    description,
+    computedTotalStock,
+    status,
+    features,
+    activeBarcodeString,
+    onSave,
+    router,
+  ]);
+
+  // Keyboard shortcut: Cmd/Ctrl + S
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault();
+        handleSubmit();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleSubmit]);
+
+  const isApprovedByAdmin =
+    isEdit &&
+    initialProduct?.bin &&
+    initialProduct.bin !== 'Pending Approval' &&
+    initialProduct.bin !== 'Assigned on intake' &&
+    initialProduct.status !== 'PENDING_APPROVAL';
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-16">
-      {/* Top Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-white/10 pb-4">
-        <div>
-          <Link
-            href="/merchant/products"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors mb-1.5"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <span>Back to products</span>
-          </Link>
-          <h1 className="text-xl sm:text-2xl font-extrabold text-navy-900 dark:text-white tracking-tight">
-            {isEdit ? 'Edit Product' : 'Create New Product'}
-          </h1>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Configure master info, product type, custom variant stock & photos.
-          </p>
-        </div>
+    <div className="max-w-4xl mx-auto pb-32">
+      {/* 1. Sticky Frosted Header */}
+      <header className="sticky top-0 z-30 -mx-4 sm:-mx-6 px-4 sm:px-6 py-4 bg-white/95 dark:bg-navy-950/95 backdrop-blur-md border-b border-slate-200/80 dark:border-white/10 mb-8 transition-all">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <Link
+              href="/merchant/products"
+              className="h-9 w-9 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-navy-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-navy-800 flex items-center justify-center transition-all shrink-0 shadow-xs"
+              title="Return to products"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
 
-        <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
-          <Link
-            href="/merchant/products"
-            className="flex-1 sm:flex-initial text-center px-4 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
-          >
-            Cancel
-          </Link>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2.5">
+                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-slate-900 dark:text-white truncate">
+                  {isEdit ? (title || 'Edit Product') : 'Add New Product'}
+                </h1>
+                <span
+                  className={`inline-flex items-center text-[10px] uppercase font-bold tracking-wider px-2.5 py-0.5 rounded-full border ${
+                    !isApprovedByAdmin
+                      ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20'
+                      : status === 'PUBLISHED'
+                      ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20'
+                      : 'bg-slate-100 dark:bg-navy-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-white/10'
+                  }`}
+                >
+                  {!isApprovedByAdmin ? 'Pending Approval' : status}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-mono">
+                {masterSku} · {merchantCode}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 shrink-0">
+            <Link
+              href="/merchant/products"
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-navy-900 hover:bg-slate-200/80 dark:hover:bg-navy-800 transition-all cursor-pointer"
+            >
+              Discard
+            </Link>
+
+            <button
+              type="button"
+              onClick={() => handleSubmit()}
+              disabled={isSubmitting}
+              className="px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white text-xs font-bold shadow-[0_1px_2px_rgba(242,107,29,0.25)] transition-all flex items-center gap-2 cursor-pointer active:scale-[0.98]"
+            >
+              {isSubmitting ? (
+                <>
+                  <div className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <Check className="h-4 w-4 stroke-[2.5]" />
+                  <span>{isEdit ? 'Save Changes' : 'Publish Product'}</span>
+                  <span className="hidden md:inline-block text-[10px] opacity-75 font-mono ml-0.5">
+                    ⌘S
+                  </span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Validation Error Banner */}
+      {submitError && (
+        <div className="mb-8 p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-500/30 text-rose-700 dark:text-rose-400 text-xs flex items-center gap-3 shadow-xs">
+          <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
+          <div className="flex-1 font-semibold">{submitError}</div>
           <button
             type="button"
-            onClick={handleSubmit}
-            disabled={isSubmitting}
-            className="flex-1 sm:flex-initial justify-center px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-60 text-white text-xs font-bold transition-colors cursor-pointer shadow-md shadow-orange-500/20 flex items-center gap-1.5"
+            onClick={() => setSubmitError(null)}
+            className="text-rose-400 hover:text-rose-600 p-1 cursor-pointer"
           >
-            {isSubmitting ? (
-              <>
-                <div className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                <span>Saving to Database...</span>
-              </>
-            ) : (
-              <>
-                <Check className="h-4 w-4" />
-                <span>{isEdit ? 'Save Changes' : 'Publish Product'}</span>
-              </>
-            )}
+            <X className="h-3.5 w-3.5" />
           </button>
-        </div>
-      </div>
-
-      {submitError && (
-        <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center gap-3">
-          <AlertCircle className="h-5 w-5 shrink-0" />
-          <div>
-            <p className="font-bold">PostgreSQL Save Error:</p>
-            <p className="text-[11px] text-rose-300 mt-0.5">{submitError}</p>
-          </div>
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Section 1: Basic Information */}
-        <div className="space-y-4 p-4 sm:p-5 rounded-2xl bg-white dark:bg-navy-900/80 border border-slate-200 dark:border-white/10 shadow-sm">
-          <div className="flex items-center gap-2 text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider">
-            <Tag className="h-4 w-4 text-emerald-400" />
-            <span>Basic Information</span>
+      {/* Form Body: Immaculate Single-Column Clean Surface Stack */}
+      <form onSubmit={handleSubmit} className="space-y-8">
+        {/* Section 1: Product Core Details */}
+        <section className="bg-white dark:bg-navy-900/90 rounded-2xl border border-slate-200/80 dark:border-white/10 p-6 sm:p-8 shadow-[0_1px_3px_rgba(0,0,0,0.04)] space-y-6">
+          <div className="border-b border-slate-100 dark:border-white/5 pb-4">
+            <h2 className="text-base font-bold text-slate-900 dark:text-white">
+              Basic Information
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Specify your product title, master SKU code, and category classification.
+            </p>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-navy-900 dark:text-slate-200 mb-1">
-              PRODUCT NAME <span className="text-rose-400">*</span>
-            </label>
-            <input
-              type="text"
-              required
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Mens Heavyweight Half Zip Hoodie"
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="space-y-5">
+            {/* Title */}
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                MASTER SKU <span className="text-rose-400">*</span>
+              <label className="block text-xs font-semibold text-slate-800 dark:text-slate-200 mb-2">
+                Product Name <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
                 required
-                value={masterSku}
-                onChange={(e) => setMasterSku(e.target.value.toUpperCase())}
-                placeholder="e.g. HOD-HMZ-001"
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-mono text-emerald-400 font-bold focus:outline-none focus:border-orange-500"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g. Mens Heavyweight Half Zip Fleece Hoodie"
+                className="w-full px-4 py-3 bg-white dark:bg-navy-950/60 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-medium text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all shadow-xs"
               />
             </div>
 
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  CATEGORY
-                </label>
-                <Link
-                  href="/merchant/categories"
-                  target="_blank"
-                  className="text-[11px] font-bold text-orange-600 dark:text-orange-400 hover:underline flex items-center gap-1"
-                  title="Create or manage product categories"
-                >
-                  <span>+ Manage Categories</span>
-                  <ExternalLink className="h-2.5 w-2.5" />
-                </Link>
-              </div>
-              <select
-                value={category}
-                onChange={(e) => {
-                  const newCat = e.target.value;
-                  setCategory(newCat);
-                  const catObj = categories.find((c: any) => c.name.toLowerCase() === newCat.toLowerCase());
-                  if (catObj && catObj.subcategories.length > 0) {
-                    setSubcategory(catObj.subcategories[0].name);
-                  } else {
-                    setSubcategory('');
-                  }
-                }}
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-medium text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer"
-              >
-                {categories.map((cat: any) => (
-                  <option key={cat.id} value={cat.name}>
-                    {cat.name} ({cat.subcategories.length} sub-categories)
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  SUBCATEGORY
-                </label>
-                {subcategoryList.length === 0 && (
-                  <span className="text-[10px] text-slate-400">Custom input</span>
-                )}
-              </div>
-              {subcategoryList.length > 0 ? (
-                <select
-                  value={subcategory}
-                  onChange={(e) => setSubcategory(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-medium text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer"
-                >
-                  {subcategoryList.map((sub: any) => (
-                    <option key={sub.id} value={sub.name}>
-                      {sub.name}
-                    </option>
-                  ))}
-                </select>
-              ) : (
+            {/* SKU and Barcode Row */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-semibold text-slate-800 dark:text-slate-200">
+                    Master SKU <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={handleCopySku}
+                      className="text-xs text-slate-500 hover:text-orange-600 flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      {copiedSku ? (
+                        <Check className="h-3 w-3 text-emerald-500" />
+                      ) : (
+                        <Copy className="h-3 w-3" />
+                      )}
+                      <span>{copiedSku ? 'Copied' : 'Copy'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleGenerateNewSku}
+                      className="text-xs text-slate-500 hover:text-orange-600 flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                      <span>Generate</span>
+                    </button>
+                  </div>
+                </div>
                 <input
                   type="text"
-                  value={subcategory}
-                  onChange={(e) => setSubcategory(e.target.value)}
-                  placeholder="e.g. Standard item"
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
+                  required
+                  value={masterSku}
+                  onChange={(e) => setMasterSku(e.target.value.toUpperCase())}
+                  placeholder="e.g. MC-101-PRD-820"
+                  className="w-full px-4 py-3 bg-white dark:bg-navy-950/60 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-mono font-bold text-slate-900 dark:text-white tracking-wider focus:outline-none focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all shadow-xs"
                 />
-              )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-800 dark:text-slate-200 mb-2">
+                  Barcode (EAN-13 / Code128)
+                </label>
+                <div className="flex items-center justify-between px-4 py-3 bg-slate-50/80 dark:bg-navy-950/40 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-mono font-semibold text-slate-700 dark:text-slate-300">
+                  <span>{activeBarcodeString}</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-0.5 rounded bg-white dark:bg-navy-900 border border-slate-200/60 dark:border-white/10">
+                    Auto Generated
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Category and Subcategory Row */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-semibold text-slate-800 dark:text-slate-200">
+                    Category
+                  </label>
+                  <Link
+                    href="/merchant/categories"
+                    target="_blank"
+                    className="text-xs font-semibold text-orange-600 dark:text-orange-400 hover:underline flex items-center gap-1"
+                  >
+                    <span>Manage Categories</span>
+                    <ExternalLink className="h-3 w-3" />
+                  </Link>
+                </div>
+                <div className="relative">
+                  <select
+                    value={category}
+                    onChange={(e) => {
+                      const newCat = e.target.value;
+                      setCategory(newCat);
+                      const catObj = categories.find((c: any) => c.name.toLowerCase() === newCat.toLowerCase());
+                      if (catObj && catObj.subcategories.length > 0) {
+                        setSubcategory(catObj.subcategories[0].name);
+                      } else {
+                        setSubcategory('');
+                      }
+                    }}
+                    className="w-full appearance-none px-4 py-3 bg-white dark:bg-navy-950/60 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all shadow-xs cursor-pointer pr-10"
+                  >
+                    {categories.map((cat: any) => (
+                      <option key={cat.id} value={cat.name}>
+                        {cat.name} ({cat.subcategories.length} sub-items)
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3.5 top-3.5 h-4 w-4 text-slate-400 pointer-events-none" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-800 dark:text-slate-200 mb-2">
+                  Subcategory
+                </label>
+                {subcategoryList.length > 0 ? (
+                  <div className="relative">
+                    <select
+                      value={subcategory}
+                      onChange={(e) => setSubcategory(e.target.value)}
+                      className="w-full appearance-none px-4 py-3 bg-white dark:bg-navy-950/60 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all shadow-xs cursor-pointer pr-10"
+                    >
+                      {subcategoryList.map((sub: any) => (
+                        <option key={sub.id} value={sub.name}>
+                          {sub.name}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-3.5 top-3.5 h-4 w-4 text-slate-400 pointer-events-none" />
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    value={subcategory}
+                    onChange={(e) => setSubcategory(e.target.value)}
+                    placeholder="e.g. Standard item"
+                    className="w-full px-4 py-3 bg-white dark:bg-navy-950/60 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all shadow-xs"
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* Description */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-800 dark:text-slate-200 mb-2">
+                Product Description
+              </label>
+              <textarea
+                rows={3}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Describe fabric materials, fit specifications, care instructions, or warranty details..."
+                className="w-full px-4 py-3 bg-white dark:bg-navy-950/60 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-medium text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all shadow-xs leading-relaxed"
+              />
             </div>
           </div>
+        </section>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
-              DESCRIPTION
-            </label>
-            <textarea
-              rows={3}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describe the product specifications, materials, and details..."
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
-            />
-          </div>
-        </div>
-
-        {/* Product Photos & Media Gallery Section */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-navy-900/80 border border-slate-200 dark:border-white/10 shadow-sm space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-100 dark:border-white/5">
+        {/* Section 2: Media & Product Images */}
+        <section className="bg-white dark:bg-navy-900/90 rounded-2xl border border-slate-200/80 dark:border-white/10 p-6 sm:p-8 shadow-[0_1px_3px_rgba(0,0,0,0.04)] space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-white/5 pb-4">
             <div>
-              <div className="flex items-center gap-2 text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider">
-                <UploadCloud className="h-4 w-4 text-orange-500" />
-                <span>Product Photos & Media Gallery</span>
-              </div>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                Upload device photos, paste web links, or pick instant presets. The primary photo appears in catalog tables, invoices and shipping labels.
+              <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                Photos &amp; Media Gallery
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                The primary photo appears on packing slips, order tables, and invoice headers.
               </p>
             </div>
 
-            {/* Input Mode Selector Tabs */}
-            <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-navy-950 rounded-xl border border-slate-200 dark:border-white/5 shrink-0">
+            <div className="inline-flex items-center p-1 bg-slate-100 dark:bg-navy-950 rounded-xl border border-slate-200/80 dark:border-white/5 self-start sm:self-auto">
               <button
                 type="button"
                 onClick={() => setImageInputMode('UPLOAD')}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   imageInputMode === 'UPLOAD'
                     ? 'bg-white dark:bg-navy-800 text-orange-600 dark:text-orange-400 shadow-xs'
-                    : 'text-slate-500 hover:text-navy-900 dark:hover:text-white'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                <UploadCloud className="h-3.5 w-3.5" />
-                <span>Upload</span>
+                Upload File
               </button>
               <button
                 type="button"
                 onClick={() => setImageInputMode('URL')}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   imageInputMode === 'URL'
                     ? 'bg-white dark:bg-navy-800 text-orange-600 dark:text-orange-400 shadow-xs'
-                    : 'text-slate-500 hover:text-navy-900 dark:hover:text-white'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                <LinkIcon className="h-3.5 w-3.5" />
-                <span>Image Link</span>
+                Image URL
               </button>
               <button
                 type="button"
                 onClick={() => setImageInputMode('PRESET')}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   imageInputMode === 'PRESET'
                     ? 'bg-white dark:bg-navy-800 text-orange-600 dark:text-orange-400 shadow-xs'
-                    : 'text-slate-500 hover:text-navy-900 dark:hover:text-white'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                <Sparkles className="h-3.5 w-3.5" />
-                <span>Sample Presets</span>
+                Presets
               </button>
             </div>
           </div>
 
-          {/* Mode 1: URL Input Drawer */}
+          {/* URL Input Drawer */}
           {imageInputMode === 'URL' && (
-            <div className="p-3.5 rounded-xl bg-orange-50/50 dark:bg-orange-950/20 border border-orange-200/60 dark:border-orange-500/20 space-y-2">
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-navy-950/60 border border-slate-200/80 dark:border-white/10 space-y-2">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
                 <div className="relative flex-1">
-                  <LinkIcon className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                  <LinkIcon className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" />
                   <input
                     type="url"
                     value={urlInput}
@@ -923,29 +1045,29 @@ export function ProductForm({
                       setUrlInput(e.target.value);
                       setUrlError(null);
                     }}
-                    placeholder="Paste direct image URL: https://images.unsplash.com/... or CDN link"
-                    className="w-full pl-9 pr-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
+                    placeholder="https://images.unsplash.com/... or direct image CDN URL"
+                    className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-medium text-slate-900 dark:text-white focus:outline-none focus:border-orange-500 shadow-xs"
                   />
                 </div>
                 <button
                   type="button"
                   onClick={handleAddUrlImage}
-                  className="px-4 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold transition-colors cursor-pointer shrink-0 shadow-xs"
+                  className="px-5 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold shadow-xs shrink-0 cursor-pointer"
                 >
-                  Add Photo
+                  Add URL
                 </button>
               </div>
-              {urlError && <p className="text-[11px] text-rose-500 font-medium">{urlError}</p>}
+              {urlError && <p className="text-xs text-rose-500 font-medium">{urlError}</p>}
             </div>
           )}
 
-          {/* Mode 2: Sample Presets Drawer */}
+          {/* Presets Grid */}
           {imageInputMode === 'PRESET' && (
-            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 space-y-2">
-              <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                Click any sample photo to test instantly:
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-navy-950/60 border border-slate-200/80 dark:border-white/10 space-y-3">
+              <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                Click a sample preset image to populate instantly:
               </p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
                 {SAMPLE_PRODUCT_PRESETS.map((preset, pIdx) => (
                   <button
                     key={pIdx}
@@ -953,11 +1075,15 @@ export function ProductForm({
                     onClick={() => handleApplyPreset(preset.url)}
                     className="group flex flex-col items-center gap-1.5 p-2 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 hover:border-orange-500 transition-all text-left cursor-pointer"
                   >
-                    <div className="h-14 w-full rounded-lg overflow-hidden bg-slate-100 dark:bg-navy-950 relative">
+                    <div className="h-16 w-full rounded-lg overflow-hidden bg-slate-100 dark:bg-navy-950 relative">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={preset.url} alt={preset.name} className="h-full w-full object-cover group-hover:scale-105 transition-transform" />
+                      <img
+                        src={preset.url}
+                        alt={preset.name}
+                        className="h-full w-full object-cover group-hover:scale-105 transition-transform"
+                      />
                     </div>
-                    <span className="text-[10px] font-semibold text-navy-900 dark:text-slate-200 truncate w-full text-center">
+                    <span className="text-[11px] font-semibold text-slate-800 dark:text-slate-200 truncate w-full text-center">
                       {preset.name}
                     </span>
                   </button>
@@ -966,239 +1092,152 @@ export function ProductForm({
             </div>
           )}
 
-          {/* Gallery View: Primary Photo + Additional Gallery Photos */}
-          <div className="space-y-3 pt-1">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {/* Card 1: Primary / Featured Photo */}
-              <div className="relative group rounded-2xl bg-slate-50 dark:bg-navy-950 border-2 border-orange-500/50 p-2.5 flex flex-col justify-between shadow-xs">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-orange-600 text-white text-[10px] font-bold tracking-wide">
-                    <Star className="h-2.5 w-2.5 fill-current" />
-                    Primary Display Photo
-                  </span>
-                  {imageUrl && (
-                    <button
-                      type="button"
-                      onClick={() => handleRemovePhoto(imageUrl)}
-                      className="p-1 rounded-full bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white transition-colors cursor-pointer"
-                      title="Remove primary photo"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  )}
-                </div>
-
-                <div className="h-36 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 overflow-hidden flex items-center justify-center relative">
-                  {imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={imageUrl} alt="Primary" className="h-full w-full object-cover" />
-                  ) : (
-                    <div
-                      onClick={() => mainImageInputRef.current?.click()}
-                      className="h-full w-full flex flex-col items-center justify-center text-slate-400 hover:text-orange-500 cursor-pointer transition-colors"
-                    >
-                      <Package className="h-8 w-8 mb-1 opacity-50" />
-                      <span className="text-[11px] font-semibold">No Primary Photo</span>
-                      <span className="text-[9px] text-slate-400">Click to upload or choose</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2 mt-2.5">
+          {/* Photos Matrix */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+            {/* Primary Featured Photo */}
+            <div className="relative group rounded-2xl bg-slate-50/70 dark:bg-navy-950/50 border-2 border-orange-500/40 p-2.5 flex flex-col justify-between shadow-xs">
+              <div className="flex items-center justify-between mb-2">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-orange-600 text-white text-[10px] font-bold">
+                  <Star className="h-2.5 w-2.5 fill-current" />
+                  Primary Photo
+                </span>
+                {imageUrl && (
                   <button
                     type="button"
-                    onClick={() => mainImageInputRef.current?.click()}
-                    className="flex-1 py-1.5 px-2 rounded-lg bg-slate-200/80 dark:bg-navy-800 hover:bg-slate-300 dark:hover:bg-navy-700 text-navy-900 dark:text-slate-200 text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    onClick={() => handleRemovePhoto(imageUrl)}
+                    className="p-1 rounded-md text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-navy-900 transition-colors cursor-pointer"
+                    title="Remove"
                   >
-                    <UploadCloud className="h-3 w-3 text-orange-500" />
-                    <span>{imageUrl ? 'Change' : 'Upload'}</span>
+                    <Trash2 className="h-3.5 w-3.5" />
                   </button>
-                  {imageUrl && (
-                    <button
-                      type="button"
-                      onClick={() => handleRemovePhoto(imageUrl)}
-                      className="py-1.5 px-2.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-[11px] font-bold transition-colors cursor-pointer"
-                    >
-                      Remove
-                    </button>
-                  )}
-                </div>
+                )}
               </div>
 
-              {/* Additional Gallery Photos */}
-              {galleryImages.map((gUrl, gIdx) => (
-                <div
-                  key={gIdx}
-                  className="relative group rounded-2xl bg-white dark:bg-navy-900/60 border border-slate-200 dark:border-white/10 p-2.5 flex flex-col justify-between hover:border-slate-300 dark:hover:border-white/20 transition-all shadow-xs"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                      Gallery #{gIdx + 1}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleRemovePhoto(gUrl)}
-                      className="p-1 rounded-full bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white transition-colors cursor-pointer"
-                      title="Remove from gallery"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
+              <div className="h-36 rounded-xl bg-white dark:bg-navy-900 border border-slate-200/80 dark:border-white/10 overflow-hidden flex items-center justify-center">
+                {imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={imageUrl} alt="Primary" className="h-full w-full object-cover" />
+                ) : (
+                  <div
+                    onClick={() => mainImageInputRef.current?.click()}
+                    className="h-full w-full flex flex-col items-center justify-center text-slate-400 hover:text-orange-500 cursor-pointer transition-colors p-4 text-center"
+                  >
+                    <UploadCloud className="h-8 w-8 mb-1.5 opacity-60" />
+                    <span className="text-xs font-semibold">Upload Photo</span>
                   </div>
+                )}
+              </div>
 
-                  <div className="h-36 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 overflow-hidden flex items-center justify-center">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={gUrl} alt={`Gallery ${gIdx + 1}`} className="h-full w-full object-cover" />
-                  </div>
+              <button
+                type="button"
+                onClick={() => mainImageInputRef.current?.click()}
+                className="mt-2.5 w-full py-2 px-3 rounded-xl bg-white dark:bg-navy-800 hover:bg-slate-100 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-slate-200 dark:border-white/10 shadow-xs"
+              >
+                <UploadCloud className="h-3.5 w-3.5 text-orange-500" />
+                <span>{imageUrl ? 'Replace' : 'Upload'}</span>
+              </button>
+            </div>
 
-                  <div className="flex items-center gap-2 mt-2.5">
-                    <button
-                      type="button"
-                      onClick={() => handleSetAsMainPhoto(gUrl)}
-                      className="flex-1 py-1.5 px-2 rounded-lg bg-orange-500/10 hover:bg-orange-500/20 text-orange-600 dark:text-orange-400 text-[11px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
-                      title="Set this photo as the primary product image"
-                    >
-                      <Star className="h-3 w-3" />
-                      <span>Set as Main</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleRemovePhoto(gUrl)}
-                      className="py-1.5 px-2 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-rose-500/10 text-slate-400 hover:text-rose-500 text-[11px] font-semibold transition-colors cursor-pointer"
-                      title="Delete photo"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-
-              {/* Add New Gallery Photo Dropzone Tile */}
-              {galleryImages.length < 8 && (
-                <div
-                  onClick={() => {
-                    if (imageInputMode === 'URL') {
-                      window.scrollTo({ top: 350, behavior: 'smooth' });
-                    } else {
-                      galleryFileInputRef.current?.click();
-                    }
-                  }}
-                  className="h-full min-h-[220px] rounded-2xl border-2 border-dashed border-slate-200 dark:border-white/10 hover:border-orange-500/50 bg-slate-50/50 dark:bg-navy-950/40 hover:bg-orange-50/20 flex flex-col items-center justify-center text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 cursor-pointer transition-all p-4 text-center group"
-                >
-                  <div className="h-10 w-10 rounded-full bg-slate-100 dark:bg-navy-900 group-hover:bg-orange-500/10 flex items-center justify-center mb-2 transition-colors">
-                    <Plus className="h-5 w-5 group-hover:text-orange-500" />
-                  </div>
-                  <span className="text-xs font-bold text-navy-900 dark:text-slate-200 group-hover:text-orange-600 dark:group-hover:text-orange-400">
-                    Add Gallery Photo
+            {/* Gallery Photos */}
+            {galleryImages.map((gUrl, gIdx) => (
+              <div
+                key={gIdx}
+                className="relative group rounded-2xl bg-white dark:bg-navy-900/60 border border-slate-200/80 dark:border-white/10 p-2.5 flex flex-col justify-between hover:border-slate-300 transition-all shadow-xs"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-semibold text-slate-400">
+                    Photo #{gIdx + 2}
                   </span>
-                  <span className="text-[10px] text-slate-400 mt-0.5">
-                    Click to add angle or detail shots
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemovePhoto(gUrl)}
+                    className="p-1 rounded-md text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-navy-900 transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
                 </div>
-              )}
-            </div>
-          </div>
-        </div>
 
-        {/* Section 2: Declared Product Value */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-navy-900/80 border border-slate-200 dark:border-white/10 shadow-sm space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-            <div className="flex items-center gap-2 text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider">
-              <ShieldAlert className="h-4 w-4 text-emerald-400" />
-              <span>Product Declared Value (৳ BDT)</span>
-            </div>
-            <span className="text-[11px] text-slate-400">
-              For loss/damage replacement valuation
-            </span>
-          </div>
+                <div className="h-36 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200/80 dark:border-white/10 overflow-hidden flex items-center justify-center">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={gUrl} alt={`Gallery ${gIdx + 2}`} className="h-full w-full object-cover" />
+                </div>
 
-          <div className="max-w-xs">
-            <div className="relative">
-              <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">
-                ৳
-              </span>
-              <input
-                type="number"
-                min="0"
-                required
-                value={declaredValue}
-                onChange={(e) => setDeclaredValue(e.target.value)}
-                placeholder="850"
-                className="w-full pl-8 pr-4 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-sm font-bold text-emerald-400 focus:outline-none focus:border-orange-500"
-              />
-            </div>
-          </div>
-          <p className="text-[11px] text-slate-500 leading-relaxed">
-            ℹ️ Used for warehouse declared inventory value & insurance claims in case of loss or transit damage. Sale price is assigned per order.
-          </p>
-        </div>
+                <button
+                  type="button"
+                  onClick={() => handleSetAsMainPhoto(gUrl)}
+                  className="mt-2.5 w-full py-2 px-3 rounded-xl bg-orange-500/10 hover:bg-orange-500/20 text-orange-600 dark:text-orange-400 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Star className="h-3.5 w-3.5" />
+                  <span>Set as Main</span>
+                </button>
+              </div>
+            ))}
 
-        {/* Section 3: Product Type & Dynamic Variant Attributes (Placed right after Declared Value!) */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-navy-900/80 border border-slate-200 dark:border-white/10 shadow-sm space-y-5">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider">
-              <Sparkles className="h-4 w-4 text-emerald-400" />
-              <span>Product Type & Variant Configurations</span>
-            </div>
-            <p className="text-xs text-slate-400 mt-1">
-              Select product archetype to reveal tailored variant options (e.g. Apparel gets Color+Size, Electronics gets Storage+Color, Beauty gets Volume+Shade).
+            {/* Add More Dropzone */}
+            {galleryImages.length < 8 && (
+              <div
+                onClick={() => galleryFileInputRef.current?.click()}
+                className="h-full min-h-[210px] rounded-2xl border-2 border-dashed border-slate-200 dark:border-white/10 hover:border-orange-500 bg-slate-50/50 dark:bg-navy-950/40 hover:bg-orange-50/20 flex flex-col items-center justify-center text-slate-400 hover:text-orange-600 cursor-pointer transition-all p-4 text-center group"
+              >
+                <div className="h-10 w-10 rounded-full bg-slate-100 dark:bg-navy-900 group-hover:bg-orange-500/10 flex items-center justify-center mb-2 transition-colors">
+                  <Plus className="h-5 w-5 group-hover:text-orange-500" />
+                </div>
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-300 group-hover:text-orange-600">
+                  Add Photo
+                </span>
+                <span className="text-[11px] text-slate-400 mt-0.5">
+                  Angles &amp; details
+                </span>
+              </div>
+            )}
+          </div>
+        </section>
+
+       
+
+        {/* Section 3: Product Archetype & Variants */}
+        <section className="bg-white dark:bg-navy-900/90 rounded-2xl border border-slate-200/80 dark:border-white/10 p-6 sm:p-8 shadow-[0_1px_3px_rgba(0,0,0,0.04)] space-y-6">
+          <div className="border-b border-slate-100 dark:border-white/5 pb-4">
+            <h2 className="text-base font-bold text-slate-900 dark:text-white">
+              Product Archetype &amp; Variants
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Select product classification to unlock dynamic color, size, storage, or volume combinations.
             </p>
           </div>
 
-          {/* Product Type Cards Selector */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
+          {/* Archetype Selector */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             {[
-              {
-                id: 'FASHION' as const,
-                label: 'Fashion & Apparel',
-                sub: 'Color + Size Matrix',
-                icon: <Shirt className="h-4 w-4" />,
-              },
-              {
-                id: 'ELECTRONICS' as const,
-                label: 'Electronics & Gadgets',
-                sub: 'Storage + Color',
-                icon: <Smartphone className="h-4 w-4" />,
-              },
-              {
-                id: 'BEAUTY' as const,
-                label: 'Beauty & Skincare',
-                sub: 'Volume + Shade',
-                icon: <Sparkle className="h-4 w-4" />,
-              },
-              {
-                id: 'GROCERY' as const,
-                label: 'Food & Grocery',
-                sub: 'Pack Size / Weight',
-                icon: <Apple className="h-4 w-4" />,
-              },
-              {
-                id: 'STANDARD' as const,
-                label: 'Standard / General',
-                sub: 'Single SKU item',
-                icon: <Box className="h-4 w-4" />,
-              },
+              { id: 'FASHION' as const, label: 'Fashion', desc: 'Color + Size Matrix', icon: Shirt },
+              { id: 'ELECTRONICS' as const, label: 'Electronics', desc: 'Storage + Color', icon: Smartphone },
+              { id: 'BEAUTY' as const, label: 'Beauty', desc: 'Volume + Shade', icon: Sparkle },
+              { id: 'GROCERY' as const, label: 'Grocery', desc: 'Pack / Weight', icon: Apple },
+              { id: 'STANDARD' as const, label: 'Standard', desc: 'Single SKU item', icon: Box },
             ].map((t) => {
               const isSelected = productType === t.id;
+              const Icon = t.icon;
               return (
                 <button
                   key={t.id}
                   type="button"
                   onClick={() => handleProductTypeChange(t.id)}
-                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-2 ${
+                  className={`p-4 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-3 ${
                     isSelected
-                      ? 'bg-emerald-600/15 border-emerald-500 text-emerald-300 ring-2 ring-emerald-500/20'
-                      : 'bg-slate-50 dark:bg-navy-950 border-slate-200 dark:border-white/10 text-slate-400 hover:border-slate-200 dark:border-white/10 hover:text-navy-900 dark:text-slate-200'
+                      ? 'bg-orange-500/10 border-orange-500 text-orange-600 dark:text-orange-400 ring-2 ring-orange-500/20 font-semibold shadow-xs'
+                      : 'bg-white dark:bg-navy-950/60 border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:border-slate-300'
                   }`}
                 >
-                  <div className="h-7 w-7 rounded-lg bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 flex items-center justify-center text-emerald-400 shrink-0">
-                    {t.icon}
+                  <div className="flex items-center justify-between">
+                    <Icon className={`h-5 w-5 ${isSelected ? 'text-orange-600 dark:text-orange-400' : 'text-slate-400'}`} />
+                    {isSelected && <Check className="h-4 w-4 text-orange-600 stroke-[3]" />}
                   </div>
                   <div>
-                    <span className="text-xs font-bold block leading-tight text-navy-900 dark:text-white">
+                    <span className="text-xs font-bold block text-slate-900 dark:text-white leading-tight">
                       {t.label}
                     </span>
-                    <span className="text-[10px] text-slate-500 block mt-0.5">
-                      {t.sub}
+                    <span className="text-[11px] text-slate-400 block mt-0.5">
+                      {t.desc}
                     </span>
                   </div>
                 </button>
@@ -1206,507 +1245,376 @@ export function ProductForm({
             })}
           </div>
 
-          {/* DYNAMIC ATTRIBUTES AREA BASED ON SELECTED PRODUCT TYPE */}
-
-          {/* 1. FASHION & APPAREL: Colors & Sizes */}
+          {/* FASHION Colors & Sizes */}
           {productType === 'FASHION' && (
-            <div className="space-y-5 pt-3 border-t border-slate-200 dark:border-white/10">
-              {/* Color Swatches */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider block">
-                      Color Swatches & Photos ({colors.length} {colors.length === 1 ? 'Color' : 'Colors'})
-                    </span>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
-                      Configure color variants, images and available sizes for each color.
-                    </p>
-                  </div>
-                </div>
+            <div className="space-y-5 pt-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-900 dark:text-white">
+                  Color Swatches &amp; Associated Sizes ({colors.length})
+                </span>
+                <button
+                  type="button"
+                  onClick={handleAddColor}
+                  className="text-xs font-bold text-orange-600 dark:text-orange-400 hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Add Another Color</span>
+                </button>
+              </div>
 
-                <div className="space-y-3">
-                  {colors.map((c) => {
-                    const activeSizes = c.sizes && c.sizes.length > 0 ? c.sizes : allSizes;
-                    return (
-                      <div
-                        key={c.id}
-                        className="p-3 sm:p-3.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 space-y-3"
-                      >
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3">
-                          {/* Row 1 on mobile: Color picker & Color name */}
-                          <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                            <ColorPickerInput
-                              colorHex={c.hex}
-                              colorName={c.name}
-                              onChange={(hex: string, suggestedName?: string) => {
-                                setColors(
-                                  colors.map((item) =>
-                                    item.id === c.id
-                                      ? {
-                                          ...item,
-                                          hex,
-                                          name:
-                                            !item.name ||
-                                            item.name === 'New Color' ||
-                                            item.name === 'Color'
-                                              ? (suggestedName || item.name)
-                                              : item.name,
-                                        }
-                                      : item
-                                  )
-                                );
-                              }}
-                            />
-                            <input
-                              type="text"
-                              value={c.name}
-                              onChange={(e) => {
-                                const name = e.target.value;
-                                setColors(colors.map((item) => (item.id === c.id ? { ...item, name } : item)));
-                              }}
-                              placeholder="Color Name (e.g. Black)"
-                              className="flex-1 px-3 py-1.5 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
-                            />
-                            {colors.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveColor(c.id)}
-                                className="sm:hidden p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-white dark:bg-navy-900 transition-colors cursor-pointer shrink-0"
-                                title="Delete color"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
+              <div className="space-y-4">
+                {colors.map((c) => {
+                  const activeSizes = c.sizes && c.sizes.length > 0 ? c.sizes : allSizes;
+                  return (
+                    <div
+                      key={c.id}
+                      className="p-4 sm:p-5 rounded-2xl bg-slate-50/70 dark:bg-navy-950/50 border border-slate-200/80 dark:border-white/10 space-y-4"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <ColorPickerInput
+                            colorHex={c.hex}
+                            colorName={c.name}
+                            onChange={(hex: string, suggestedName?: string) => {
+                              setColors(
+                                colors.map((item) =>
+                                  item.id === c.id
+                                    ? {
+                                        ...item,
+                                        hex,
+                                        name:
+                                          !item.name || item.name === 'New Color'
+                                            ? (suggestedName || item.name)
+                                            : item.name,
+                                      }
+                                    : item
+                                )
+                              );
+                            }}
+                          />
+                          <input
+                            type="text"
+                            value={c.name}
+                            onChange={(e) => {
+                              const name = e.target.value;
+                              setColors(
+                                colors.map((item) => (item.id === c.id ? { ...item, name } : item))
+                              );
+                            }}
+                            placeholder="Color name (e.g. Jet Black)"
+                            className="flex-1 max-w-sm px-4 py-2.5 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-orange-500 shadow-xs"
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-2.5 shrink-0">
+                          <div
+                            onClick={() => {
+                              setActiveColorUploadId(c.id);
+                              colorFileInputRef.current?.click();
+                            }}
+                            className="relative h-9 w-9 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 overflow-hidden flex items-center justify-center cursor-pointer hover:border-orange-500 transition-colors shadow-xs"
+                            title="Upload swatch photo"
+                          >
+                            {(c.imageUrl || imageUrl) ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={c.imageUrl || imageUrl}
+                                alt={c.name}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <Package className="h-4 w-4 text-slate-400" />
                             )}
                           </div>
 
-                          {/* Row 2 on mobile: Photo Preview & Swatch Photo Actions */}
-                          <div className="flex items-center gap-2 w-full sm:w-auto">
-                            <div
-                              onClick={() => {
-                                setActiveColorUploadId(c.id);
-                                colorFileInputRef.current?.click();
-                              }}
-                              className="relative h-9 w-9 rounded-lg bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 overflow-hidden shrink-0 flex items-center justify-center cursor-pointer hover:border-orange-500 transition-colors group"
-                              title="Click to upload or change image for this color"
-                            >
-                              {(c.imageUrl || imageUrl) ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  src={c.imageUrl || imageUrl}
-                                  alt={c.name}
-                                  className="h-full w-full object-cover group-hover:opacity-80 transition-opacity"
-                                />
-                              ) : (
-                                <Package className="h-4 w-4 text-slate-600 group-hover:text-orange-500 transition-colors" />
-                              )}
-                            </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveColorUploadId(c.id);
+                              colorFileInputRef.current?.click();
+                            }}
+                            className="px-3 py-2 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-navy-900 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 transition-colors cursor-pointer shadow-xs"
+                          >
+                            Upload Photo
+                          </button>
 
+                          {colors.length > 1 && (
                             <button
                               type="button"
-                              onClick={() => {
-                                setActiveColorUploadId(c.id);
-                                colorFileInputRef.current?.click();
-                              }}
-                              className="flex-1 sm:flex-initial justify-center px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-navy-900 dark:text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-200 dark:border-white/10"
+                              onClick={() => handleRemoveColor(c.id)}
+                              className="p-2 rounded-xl text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-navy-900 transition-colors cursor-pointer"
+                              title="Delete color"
                             >
-                              <UploadCloud className="h-3.5 w-3.5 text-orange-500" />
-                              <span>{c.imageUrl ? 'Change' : 'Upload'}</span>
+                              <Trash2 className="h-4 w-4" />
                             </button>
-
-                            {/* Quick use primary photo if swatch photo is empty */}
-                            {!c.imageUrl && imageUrl && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setColors(colors.map((item) => (item.id === c.id ? { ...item, imageUrl } : item)));
-                                }}
-                                className="px-2.5 py-1.5 rounded-lg bg-orange-500/10 hover:bg-orange-500/20 text-orange-600 dark:text-orange-400 text-[11px] font-semibold border border-orange-500/20 transition-colors cursor-pointer shrink-0"
-                                title="Use the product primary photo for this color"
-                              >
-                                Use Main
-                              </button>
-                            )}
-
-                            {c.imageUrl && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setColors(colors.map((item) => (item.id === c.id ? { ...item, imageUrl: '' } : item)));
-                                }}
-                                className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-xs font-semibold border border-rose-500/20 transition-colors cursor-pointer shrink-0"
-                                title="Remove this color photo (will use main photo)"
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </button>
-                            )}
-
-                            {colors.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveColor(c.id)}
-                                className="hidden sm:inline-flex p-1.5 rounded-lg text-slate-500 hover:text-rose-400 transition-colors cursor-pointer shrink-0"
-                                title="Delete color"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Per-color sizes customization with custom size adder */}
-                        <div className="pt-3 border-t border-slate-900 space-y-2.5">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                            <div className="text-[11px] text-slate-400">
-                              Available Sizes for <strong className="text-navy-900 dark:text-slate-200">{c.name || 'this color'}</strong>:
-                            </div>
-
-                            {/* Custom size input */}
-                            <div className="flex items-center gap-1.5 w-full sm:w-auto">
-                              <input
-                                type="text"
-                                placeholder="+ Custom Size (e.g. 4XL)"
-                                value={customSizeInputs[c.id] || ''}
-                                onChange={(e) =>
-                                  setCustomSizeInputs({ ...customSizeInputs, [c.id]: e.target.value })
-                                }
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    handleAddCustomSizeToColor(c.id);
-                                  }
-                                }}
-                                className="px-2.5 py-1.5 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-orange-500 flex-1 sm:w-44"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => handleAddCustomSizeToColor(c.id)}
-                                className="px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors shrink-0"
-                              >
-                                <Plus className="h-3 w-3" />
-                                <span>Add Size</span>
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Size buttons */}
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            {allSizes.map((sz) => {
-                              const isSzActive = activeSizes.includes(sz);
-                              const isDefault = ['S', 'M', 'L', 'XL', 'XXL', '3XL'].includes(sz);
-                              return (
-                                <div key={sz} className="inline-flex items-center">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleToggleColorSize(c.id, sz)}
-                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
-                                      isSzActive
-                                        ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/50 shadow-sm'
-                                        : 'bg-white dark:bg-navy-900 text-slate-500 border-slate-200 dark:border-white/10 hover:text-slate-300 hover:border-slate-200 dark:border-white/10'
-                                    }`}
-                                  >
-                                    <span>{sz}</span>
-                                    {isSzActive && <span className="ml-1 text-emerald-400 font-bold">✓</span>}
-                                  </button>
-                                  {!isDefault && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleRemoveCustomSize(sz)}
-                                      title={`Delete custom size ${sz}`}
-                                      className="ml-1 p-0.5 text-slate-500 hover:text-rose-400 text-xs cursor-pointer"
-                                    >
-                                      ×
-                                    </button>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
+                          )}
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
 
-                {/* Add Another Color Button placed at the bottom below all swatches */}
-                <div className="pt-1">
-                  <button
-                    type="button"
-                    onClick={handleAddColor}
-                    className="w-full py-3 px-4 rounded-xl border-2 border-dashed border-orange-500/30 hover:border-orange-500 bg-orange-500/5 hover:bg-orange-500/10 text-orange-600 dark:text-orange-400 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer group shadow-sm hover:shadow"
-                  >
-                    <Plus className="h-4 w-4 transition-transform group-hover:scale-125" />
-                    <span>+ Add Another Color Variant</span>
-                  </button>
-                </div>
+                      {/* Active sizes chips */}
+                      <div className="pt-3 border-t border-slate-200/60 dark:border-white/5 flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 mr-1">
+                          Available Sizes:
+                        </span>
+                        {allSizes.map((sz) => {
+                          const isSzActive = activeSizes.includes(sz);
+                          return (
+                            <button
+                              key={sz}
+                              type="button"
+                              onClick={() => handleToggleColorSize(c.id, sz)}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                                isSzActive
+                                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-transparent shadow-xs'
+                                  : 'bg-white dark:bg-navy-900 text-slate-500 border-slate-200 dark:border-white/10 hover:border-slate-300'
+                              }`}
+                            >
+                              {sz}
+                            </button>
+                          );
+                        })}
+
+                        {/* Custom size adder */}
+                        <div className="inline-flex items-center gap-1.5 ml-2">
+                          <input
+                            type="text"
+                            placeholder="+ Size"
+                            value={customSizeInputs[c.id] || ''}
+                            onChange={(e) =>
+                              setCustomSizeInputs({ ...customSizeInputs, [c.id]: e.target.value })
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleAddCustomSizeToColor(c.id);
+                              }
+                            }}
+                            className="w-20 px-3 py-1.5 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:border-orange-500 shadow-xs"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleAddCustomSizeToColor(c.id)}
+                            className="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-navy-800 text-slate-800 dark:text-slate-200 text-xs font-bold cursor-pointer"
+                          >
+                            Add
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
 
-          {/* 2. ELECTRONICS & GADGETS: Storage & Colors */}
+          {/* ELECTRONICS */}
           {productType === 'ELECTRONICS' && (
-            <div className="space-y-5 pt-3 border-t border-slate-200 dark:border-white/10">
-              <div className="space-y-3">
-                <span className="text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider block">
-                  Storage / Model Configurations
-                </span>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {electronicStorages.map((storage) => (
-                    <span
-                      key={storage}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs font-mono font-bold text-navy-900 dark:text-slate-200"
-                    >
-                      <span>{storage}</span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setElectronicStorages(electronicStorages.filter((s) => s !== storage))
-                        }
-                        className="text-slate-500 hover:text-rose-400"
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                </div>
-                <div className="flex gap-2 max-w-xs">
-                  <input
-                    type="text"
-                    value={newStorageInput}
-                    onChange={(e) => setNewStorageInput(e.target.value)}
-                    placeholder="e.g. 512GB"
-                    className="flex-1 px-3 py-1.5 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (newStorageInput.trim()) {
-                        setElectronicStorages([...electronicStorages, newStorageInput.trim()]);
-                        setNewStorageInput('');
+            <div className="space-y-4 pt-2">
+              <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                Storage Configurations
+              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                {electronicStorages.map((storage) => (
+                  <span
+                    key={storage}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs font-mono font-bold text-slate-800 dark:text-slate-200"
+                  >
+                    <span>{storage}</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setElectronicStorages(electronicStorages.filter((s) => s !== storage))
                       }
-                    }}
-                    className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs text-navy-900 dark:text-slate-200 font-semibold"
-                  >
-                    Add
-                  </button>
-                </div>
-              </div>
-
-              {/* Color variants for electronics */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider">
-                    Device Colors
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleAddColor}
-                    className="text-xs font-semibold text-orange-600 dark:text-orange-400 hover:text-emerald-300 flex items-center gap-1 cursor-pointer"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    <span>Add Color</span>
-                  </button>
-                </div>
-                <div className="flex gap-2 flex-wrap">
-                  {colors.map((c) => (
-                    <span
-                      key={c.id}
-                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs text-navy-900 dark:text-slate-200 font-medium"
+                      className="text-slate-400 hover:text-rose-500 ml-1 cursor-pointer"
                     >
-                      <span
-                        className="h-3 w-3 rounded-full border border-slate-200 dark:border-white/10"
-                        style={{ backgroundColor: c.hex }}
-                      />
-                      <span>{c.name}</span>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* 3. BEAUTY & SKINCARE: Volumes & Shades */}
-          {productType === 'BEAUTY' && (
-            <div className="space-y-5 pt-3 border-t border-slate-200 dark:border-white/10">
-              <div className="space-y-3">
-                <span className="text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider block">
-                  Volume / Container Sizes
-                </span>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {beautyVolumes.map((vol) => (
-                    <span
-                      key={vol}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs font-mono font-bold text-navy-900 dark:text-slate-200"
-                    >
-                      <span>{vol}</span>
-                      <button
-                        type="button"
-                        onClick={() => setBeautyVolumes(beautyVolumes.filter((v) => v !== vol))}
-                        className="text-slate-500 hover:text-rose-400"
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                </div>
-                <div className="flex gap-2 max-w-xs">
-                  <input
-                    type="text"
-                    value={newVolumeInput}
-                    onChange={(e) => setNewVolumeInput(e.target.value)}
-                    placeholder="e.g. 150ml"
-                    className="flex-1 px-3 py-1.5 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (newVolumeInput.trim()) {
-                        setBeautyVolumes([...beautyVolumes, newVolumeInput.trim()]);
-                        setNewVolumeInput('');
-                      }
-                    }}
-                    className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs text-navy-900 dark:text-slate-200 font-semibold"
-                  >
-                    Add
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* 4. FOOD & GROCERY: Pack sizes */}
-          {productType === 'GROCERY' && (
-            <div className="space-y-5 pt-3 border-t border-slate-200 dark:border-white/10">
-              <div className="space-y-3">
-                <span className="text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider block">
-                  Pack Sizes / Net Weight
-                </span>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {groceryPacks.map((pack) => (
-                    <span
-                      key={pack}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs font-mono font-bold text-navy-900 dark:text-slate-200"
-                    >
-                      <span>{pack}</span>
-                      <button
-                        type="button"
-                        onClick={() => setGroceryPacks(groceryPacks.filter((p) => p !== pack))}
-                        className="text-slate-500 hover:text-rose-400"
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                </div>
-                <div className="flex gap-2 w-full sm:max-w-xs">
-                  <input
-                    type="text"
-                    value={newPackInput}
-                    onChange={(e) => setNewPackInput(e.target.value)}
-                    placeholder="e.g. 5kg"
-                    className="flex-1 px-3 py-1.5 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (newPackInput.trim()) {
-                        setGroceryPacks([...groceryPacks, newPackInput.trim()]);
-                        setNewPackInput('');
-                      }
-                    }}
-                    className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs text-navy-900 dark:text-slate-200 font-semibold"
-                  >
-                    Add
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* 5. VARIANT INVENTORY GRID: Custom Stock per Variant pairing (From Image 1 & 4) */}
-          {productType !== 'STANDARD' && generatedVariants.length > 0 && (
-            <div className="space-y-3 pt-3 border-t border-slate-200 dark:border-white/10">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                  <span className="text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider block">
-                    Variant Inventory Grid
+                      ×
+                    </button>
                   </span>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    Configure initial stock count for each Color, Size, and Specification pairing.
-                  </p>
-                </div>
-                <div className="text-left sm:text-right">
-                  <span className="text-xs text-slate-400">Total Computed Stock:</span>
-                  <span className="ml-1.5 font-mono text-emerald-400 font-extrabold text-sm">
-                    {computedTotalStock} units
-                  </span>
-                </div>
-              </div>
-
-              {/* Mobile Card List for Variants */}
-              <div className="block sm:hidden space-y-2.5">
-                {generatedVariants.map((v) => (
-                  <div
-                    key={v.id}
-                    className="p-3 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 space-y-2 text-xs"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-emerald-400 font-mono font-semibold text-[11px]">
-                        {v.variantSku}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-slate-300">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-slate-400 font-sans">
-                          {v.color || v.attributeName || 'Standard'}
-                        </span>
-                        <span className="text-slate-600">•</span>
-                        <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-navy-850 text-navy-900 dark:text-slate-200 border border-slate-200/80 dark:border-white/10 font-mono text-[11px]">
-                          {v.size || v.attributeValue || 'Default'}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] text-slate-500 font-medium">Stock:</span>
-                        <input
-                          type="number"
-                          min="0"
-                          value={v.stock}
-                          onChange={(e) =>
-                            handleStockChange(v.id, Number(e.target.value) || 0)
-                          }
-                          className="w-20 px-2.5 py-1 text-right bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-bold text-navy-900 dark:text-white focus:outline-none focus:border-orange-500"
-                        />
-                      </div>
-                    </div>
-                  </div>
                 ))}
               </div>
+              <div className="flex gap-2 max-w-xs">
+                <input
+                  type="text"
+                  value={newStorageInput}
+                  onChange={(e) => setNewStorageInput(e.target.value)}
+                  placeholder="e.g. 512GB"
+                  className="flex-1 px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-medium focus:outline-none focus:border-orange-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (newStorageInput.trim()) {
+                      setElectronicStorages([...electronicStorages, newStorageInput.trim()]);
+                      setNewStorageInput('');
+                    }
+                  }}
+                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 text-xs font-semibold text-slate-800 dark:text-slate-200 cursor-pointer"
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+          )}
 
-              {/* Desktop Table View */}
-              <div className="hidden sm:block rounded-xl border border-slate-200 dark:border-white/10 overflow-x-auto bg-slate-50 dark:bg-navy-950">
-                <table className="w-full text-left text-xs min-w-[500px]">
-                  <thead className="bg-white dark:bg-navy-900 text-slate-400 font-semibold border-b border-slate-200 dark:border-white/10 uppercase text-[10px]">
+          {/* BEAUTY */}
+          {productType === 'BEAUTY' && (
+            <div className="space-y-4 pt-2">
+              <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                Volume / Container Sizes
+              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                {beautyVolumes.map((vol) => (
+                  <span
+                    key={vol}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs font-mono font-bold text-slate-800 dark:text-slate-200"
+                  >
+                    <span>{vol}</span>
+                    <button
+                      type="button"
+                      onClick={() => setBeautyVolumes(beautyVolumes.filter((v) => v !== vol))}
+                      className="text-slate-400 hover:text-rose-500 ml-1 cursor-pointer"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <div className="flex gap-2 max-w-xs">
+                <input
+                  type="text"
+                  value={newVolumeInput}
+                  onChange={(e) => setNewVolumeInput(e.target.value)}
+                  placeholder="e.g. 150ml"
+                  className="flex-1 px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-medium focus:outline-none focus:border-orange-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (newVolumeInput.trim()) {
+                      setBeautyVolumes([...beautyVolumes, newVolumeInput.trim()]);
+                      setNewVolumeInput('');
+                    }
+                  }}
+                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 text-xs font-semibold text-slate-800 dark:text-slate-200 cursor-pointer"
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* GROCERY */}
+          {productType === 'GROCERY' && (
+            <div className="space-y-4 pt-2">
+              <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                Pack Sizes / Net Weight
+              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                {groceryPacks.map((pack) => (
+                  <span
+                    key={pack}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs font-mono font-bold text-slate-800 dark:text-slate-200"
+                  >
+                    <span>{pack}</span>
+                    <button
+                      type="button"
+                      onClick={() => setGroceryPacks(groceryPacks.filter((p) => p !== pack))}
+                      className="text-slate-400 hover:text-rose-500 ml-1 cursor-pointer"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <div className="flex gap-2 max-w-xs">
+                <input
+                  type="text"
+                  value={newPackInput}
+                  onChange={(e) => setNewPackInput(e.target.value)}
+                  placeholder="e.g. 5kg"
+                  className="flex-1 px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-medium focus:outline-none focus:border-orange-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (newPackInput.trim()) {
+                      setGroceryPacks([...groceryPacks, newPackInput.trim()]);
+                      setNewPackInput('');
+                    }
+                  }}
+                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 text-xs font-semibold text-slate-800 dark:text-slate-200 cursor-pointer"
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* VARIANT INVENTORY MATRIX TABLE */}
+          {productType !== 'STANDARD' && generatedVariants.length > 0 && (
+            <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-white/5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Variant Stock Matrix
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    {generatedVariants.length} Active Variant{generatedVariants.length === 1 ? '' : 's'} · Total:{' '}
+                    <strong className="text-slate-900 dark:text-white font-mono">
+                      {computedTotalStock} units
+                    </strong>
+                  </p>
+                </div>
+
+                {/* Bulk Stock Setter */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                    Bulk fill:
+                  </span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={bulkStockValue}
+                    onChange={(e) => setBulkStockValue(e.target.value)}
+                    className="w-20 px-3 py-1.5 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-mono font-bold text-center focus:outline-none focus:border-orange-500 shadow-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleBulkApplyStock}
+                    className="px-3.5 py-1.5 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 text-xs font-bold text-slate-800 dark:text-slate-200 transition-colors cursor-pointer shadow-xs"
+                  >
+                    Apply All
+                  </button>
+                </div>
+              </div>
+
+              {/* Table */}
+              <div className="rounded-2xl border border-slate-200/80 dark:border-white/10 overflow-hidden bg-white dark:bg-navy-900 shadow-xs">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50/80 dark:bg-navy-950 text-slate-600 dark:text-slate-400 font-semibold border-b border-slate-200/80 dark:border-white/10 text-[11px]">
                     <tr>
-                      <th className="p-3">Variant SKU</th>
-                      <th className="p-3">Color / Attribute</th>
-                      <th className="p-3">Size / Spec</th>
-                      <th className="p-3 text-right">Initial Stock</th>
+                      <th className="py-3 px-4">Variant SKU</th>
+                      <th className="py-3 px-4">Color / Attribute</th>
+                      <th className="py-3 px-4">Size / Spec</th>
+                      <th className="py-3 px-4 text-right">Warehouse Stock</th>
+                      <th className="py-3 px-4 w-10"></th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-white/5 font-mono">
+                  <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                     {generatedVariants.map((v) => (
-                      <tr key={v.id} className="hover:bg-white dark:bg-navy-900/40">
-                        <td className="p-3 text-emerald-400 font-semibold text-[11px]">
+                      <tr key={v.id} className="hover:bg-slate-50/50 dark:hover:bg-navy-950/40 transition-colors">
+                        <td className="py-3 px-4 font-mono font-bold text-slate-800 dark:text-slate-200 text-xs">
                           {v.variantSku}
                         </td>
-                        <td className="p-3 text-slate-300 font-sans">
+                        <td className="py-3 px-4 text-slate-700 dark:text-slate-300 font-medium">
                           {v.color || v.attributeName || 'Standard'}
                         </td>
-                        <td className="p-3 text-slate-400">
-                          <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-navy-850 text-navy-900 dark:text-slate-200 border border-slate-200/80 dark:border-white/10">
+                        <td className="py-3 px-4">
+                          <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-navy-800 text-slate-800 dark:text-slate-200 text-xs font-mono font-bold">
                             {v.size || v.attributeValue || 'Default'}
                           </span>
                         </td>
-                        <td className="p-3 text-right">
+                        <td className="py-3 px-4 text-right">
                           <input
                             type="number"
                             min="0"
@@ -1714,8 +1622,18 @@ export function ProductForm({
                             onChange={(e) =>
                               handleStockChange(v.id, Number(e.target.value) || 0)
                             }
-                            className="w-20 px-2.5 py-1 text-right bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-bold text-navy-900 dark:text-white focus:outline-none focus:border-orange-500"
+                            className="w-24 px-3 py-1.5 text-right bg-slate-50/60 dark:bg-navy-950/60 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-mono font-bold text-slate-900 dark:text-white focus:outline-none focus:border-orange-500 shadow-xs"
                           />
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveVariant(v.id)}
+                            className="text-slate-400 hover:text-rose-500 p-1 cursor-pointer"
+                            title="Exclude variant from stock"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -1725,10 +1643,10 @@ export function ProductForm({
             </div>
           )}
 
-          {/* STANDARD PRODUCT STOCK INPUT */}
+          {/* Standard Item Stock */}
           {productType === 'STANDARD' && (
-            <div className="pt-3 border-t border-slate-200 dark:border-white/10">
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
+            <div className="pt-3 border-t border-slate-100 dark:border-white/5">
+              <label className="block text-xs font-semibold text-slate-800 dark:text-slate-200 mb-2">
                 Initial Warehouse Stock Units
               </label>
               <input
@@ -1736,19 +1654,25 @@ export function ProductForm({
                 min="0"
                 value={standardStock}
                 onChange={(e) => setStandardStock(e.target.value)}
-                placeholder="50"
-                className="w-full sm:w-48 px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-bold text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
+                placeholder="30"
+                className="w-48 px-4 py-2.5 bg-white dark:bg-navy-950/60 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:border-orange-500 shadow-xs"
               />
             </div>
           )}
-        </div>
+        </section>
 
-        {/* Section 4: Key Features (Bullet points) */}
-        <div className="space-y-3 p-4 sm:p-5 rounded-2xl bg-white dark:bg-navy-900/80 border border-slate-200 dark:border-white/10 shadow-sm">
-          <span className="text-xs font-bold text-navy-900 dark:text-slate-200 uppercase tracking-wider block">
-            Key Features
-          </span>
-          <div className="flex flex-col sm:flex-row gap-2">
+        {/* Section 4: Key Features & Bullet Highlights */}
+        <section className="bg-white dark:bg-navy-900/90 rounded-2xl border border-slate-200/80 dark:border-white/10 p-6 sm:p-8 shadow-[0_1px_3px_rgba(0,0,0,0.04)] space-y-6">
+          <div className="border-b border-slate-100 dark:border-white/5 pb-4">
+            <h2 className="text-base font-bold text-slate-900 dark:text-white">
+              Key Highlights &amp; Features
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Concise bullet points printed on invoices and product memos.
+            </p>
+          </div>
+
+          <div className="flex gap-2.5">
             <input
               type="text"
               value={newFeatureText}
@@ -1759,61 +1683,59 @@ export function ProductForm({
                   handleAddFeature();
                 }
               }}
-              placeholder="e.g. Premium heavy cotton-blend fleece"
-              className="flex-1 px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500"
+              placeholder="e.g. 100% Pre-shrunk combed cotton"
+              className="flex-1 px-4 py-3 bg-white dark:bg-navy-950/60 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-medium text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all shadow-xs"
             />
             <button
               type="button"
               onClick={handleAddFeature}
-              className="w-full sm:w-auto px-4 py-2 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-semibold text-navy-900 dark:text-slate-200 transition-colors cursor-pointer text-center"
+              className="px-5 py-3 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 text-xs font-bold text-slate-800 dark:text-slate-200 transition-colors cursor-pointer shadow-xs"
             >
-              Add Feature
+              Add Bullet
             </button>
           </div>
 
-          <div className="space-y-1.5 pt-1">
+          <div className="space-y-2 pt-1">
             {features.map((feat, idx) => (
               <div
                 key={idx}
-                className="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-navy-950 border border-slate-200/80 dark:border-white/10 text-xs"
+                className="flex items-center justify-between p-3 rounded-xl bg-slate-50/60 dark:bg-navy-950/40 border border-slate-200/60 dark:border-white/5 text-xs font-medium text-slate-800 dark:text-slate-200"
               >
-                <span className="text-slate-300">• {feat}</span>
+                <span>• {feat}</span>
                 <button
                   type="button"
                   onClick={() => handleRemoveFeature(idx)}
-                  className="text-rose-400 hover:text-rose-300 text-[11px] font-medium transition-colors cursor-pointer"
+                  className="text-slate-400 hover:text-rose-500 p-1 transition-colors cursor-pointer"
                 >
-                  Remove
+                  <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
             ))}
           </div>
-        </div>
+        </section>
 
-        {/* Section 6: Visibility Status */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-navy-900/80 border border-slate-200 dark:border-white/10 shadow-sm space-y-2">
-          <label className="block text-xs font-semibold text-slate-300">
-            Storefront &amp; Warehouse Visibility
-          </label>
-          {!isEdit ||
-          !initialProduct?.bin ||
-          initialProduct.bin === 'Pending Approval' ||
-          initialProduct.bin === 'Assigned on intake' ? (
-            <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs font-medium flex items-center gap-2">
-              <ShieldAlert className="h-4 w-4 text-amber-400 shrink-0" />
-              <span>
-                নতুন প্রোডাক্ট আপলোড করার পর এটি <strong>Pending Admin Approval</strong> হিসেবে থাকবে। Admin Panel থেকে Bin অ্যাসাইন ও Approve করার পর স্বয়ংক্রিয়ভাবে <strong>Published</strong> হয়ে যাবে।
-              </span>
+        {/* Section 7: Storefront Visibility Status */}
+        <section className="bg-white dark:bg-navy-900/90 rounded-2xl border border-slate-200/80 dark:border-white/10 p-6 sm:p-8 shadow-[0_1px_3px_rgba(0,0,0,0.04)] space-y-4">
+          <h2 className="text-base font-bold text-slate-900 dark:text-white">
+            Publishing Status
+          </h2>
+
+          {!isApprovedByAdmin ? (
+            <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-xs text-amber-800 dark:text-amber-300 space-y-1">
+              <p className="font-bold">Pending Warehouse Intake QA Approval</p>
+              <p className="text-[11px] text-amber-700 dark:text-amber-400/90 leading-relaxed">
+                When physical stock is delivered to the warehouse dock, an intake manager will assign your rack/shelf bin and automatically move this product to Published status.
+              </p>
             </div>
           ) : (
-            <div className="flex gap-2.5 sm:gap-3 w-full sm:max-w-xs">
+            <div className="grid grid-cols-2 gap-3 max-w-xs">
               <button
                 type="button"
                 onClick={() => setStatus('PUBLISHED')}
-                className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                className={`py-2.5 px-4 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                   status === 'PUBLISHED'
-                    ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/50'
-                    : 'bg-slate-50 dark:bg-navy-950 text-slate-400 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:bg-navy-800'
+                    ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 ring-2 ring-emerald-500/20'
+                    : 'bg-slate-50 dark:bg-navy-950 text-slate-500 border-slate-200 dark:border-white/10 hover:border-slate-300'
                 }`}
               >
                 Published
@@ -1821,39 +1743,39 @@ export function ProductForm({
               <button
                 type="button"
                 onClick={() => setStatus('DRAFT')}
-                className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                className={`py-2.5 px-4 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                   status === 'DRAFT'
-                    ? 'bg-slate-100 dark:bg-navy-800 text-navy-900 dark:text-slate-200 border-slate-600'
-                    : 'bg-slate-50 dark:bg-navy-950 text-slate-400 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:bg-navy-800'
+                    ? 'bg-slate-100 dark:bg-navy-800 text-slate-800 dark:text-slate-200 border-slate-300 dark:border-white/20'
+                    : 'bg-slate-50 dark:bg-navy-950 text-slate-500 border-slate-200 dark:border-white/10 hover:border-slate-300'
                 }`}
               >
                 Draft
               </button>
             </div>
           )}
-        </div>
+        </section>
 
         {/* Bottom Actions */}
-        <div className="pt-4 border-t border-slate-200 dark:border-white/10 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5 sm:gap-3">
+        <div className="flex items-center justify-end gap-3 pt-4">
           <Link
             href="/merchant/products"
-            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer text-center"
+            className="px-5 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 transition-colors"
           >
-            Cancel
+            Discard
           </Link>
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-60 text-white text-xs font-bold transition-colors cursor-pointer shadow-md flex items-center justify-center gap-1.5"
+            className="px-6 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white text-xs font-bold shadow-[0_1px_2px_rgba(242,107,29,0.25)] transition-all flex items-center gap-2 cursor-pointer active:scale-[0.98]"
           >
             {isSubmitting ? (
               <>
                 <div className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                <span>Saving to PostgreSQL Database...</span>
+                <span>Saving...</span>
               </>
             ) : (
               <>
-                <Check className="h-4 w-4" />
+                <Check className="h-4 w-4 stroke-[2.5]" />
                 <span>{isEdit ? 'Save Changes' : 'Publish Product'}</span>
               </>
             )}
@@ -1861,7 +1783,7 @@ export function ProductForm({
         </div>
       </form>
 
-      {/* Hidden file input for main product photo */}
+      {/* Hidden file inputs */}
       <input
         type="file"
         ref={mainImageInputRef}
@@ -1869,8 +1791,6 @@ export function ProductForm({
         accept="image/*"
         className="hidden"
       />
-
-      {/* Hidden file input for color swatches */}
       <input
         type="file"
         ref={colorFileInputRef}
@@ -1878,8 +1798,6 @@ export function ProductForm({
         accept="image/*"
         className="hidden"
       />
-
-      {/* Hidden file input for additional gallery photos */}
       <input
         type="file"
         ref={galleryFileInputRef}

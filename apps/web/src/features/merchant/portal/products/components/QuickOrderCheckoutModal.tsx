@@ -26,6 +26,7 @@ interface QuickOrderCheckoutModalProps {
   memos: ResellerMemo[];
   merchantStoreName: string;
   merchantCode: string;
+  initialMemoCode?: string;
   onOrderPlaced: (
     newOrder: MerchantOrderItem,
     itemsToDeduct: { productId: string; qty: number; variantSku?: string }[]
@@ -40,6 +41,7 @@ export function QuickOrderCheckoutModal({
   memos,
   merchantStoreName,
   merchantCode,
+  initialMemoCode,
   onOrderPlaced,
   onTriggerToast,
 }: QuickOrderCheckoutModalProps) {
@@ -49,7 +51,7 @@ export function QuickOrderCheckoutModal({
   const [customerAddress, setCustomerAddress] = useState('');
   const [city, setCity] = useState<'Dhaka' | 'Chattogram' | 'Sylhet' | 'Rajshahi' | 'Khulna' | 'Other'>('Dhaka');
   const [courier, setCourier] = useState('Steadfast');
-  const [memoCode, setMemoCode] = useState(memos[0]?.code || 'MEMO-DEFAULT');
+  const [memoCode, setMemoCode] = useState(initialMemoCode || memos[0]?.code || 'MEMO-DEFAULT');
   const [deliveryFee, setDeliveryFee] = useState(80);
   const [discount, setDiscount] = useState(0);
   const [advancePayment, setAdvancePayment] = useState(0);
@@ -61,6 +63,12 @@ export function QuickOrderCheckoutModal({
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (initialMemoCode) {
+      setMemoCode(initialMemoCode);
+    }
+  }, [initialMemoCode]);
 
   useEffect(() => {
     // Auto-update delivery fee when city changes
@@ -97,6 +105,14 @@ export function QuickOrderCheckoutModal({
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       return;
+    }
+
+    // Business check: Every item must have accepted warehouse stock
+    for (const it of cartItems) {
+      if ((it.maxStock || 0) <= 0 || it.qty <= 0) {
+        onTriggerToast(`Cannot create order: "${it.title}" has 0 stock stored in warehouse bins.`);
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -364,27 +380,35 @@ export function QuickOrderCheckoutModal({
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Branded Memo Template
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <FileText className="h-3.5 w-3.5 text-orange-500" />
+                  <span>Branded Memo / Slip Template *</span>
+                </span>
+                <span className="text-[10px] text-orange-600 dark:text-orange-400 font-normal">
+                  Required for print
+                </span>
               </label>
               <div className="relative">
-                <FileText className="h-3.5 w-3.5 absolute left-3 top-3 text-slate-400" />
                 <select
                   value={memoCode}
                   onChange={(e) => setMemoCode(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-navy-900 dark:text-white focus:outline-none focus:border-orange-500 cursor-pointer"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-navy-900 dark:text-white focus:outline-none focus:border-orange-500 cursor-pointer font-medium"
                 >
                   {memos && memos.length > 0 ? (
                     memos.map((m) => (
                       <option key={m.code} value={m.code}>
-                        {m.code} - {m.resellerName || merchantStoreName}
+                        {m.code} — {m.resellerName || m.name || merchantStoreName}
                       </option>
                     ))
                   ) : (
-                    <option value="MEMO-DEFAULT">MEMO-DEFAULT (Standard)</option>
+                    <option value="MEMO-DEFAULT">MEMO-DEFAULT (Standard Warehouse Slip)</option>
                   )}
                 </select>
               </div>
+              <p className="text-[10px] text-slate-400 mt-1">
+                The warehouse packing station will print this custom template when packing.
+              </p>
             </div>
           </div>
 

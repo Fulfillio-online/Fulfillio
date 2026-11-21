@@ -80,11 +80,19 @@ export function MerchantProfileDrawer({
     (p) => p.merchantCode === merchant.merchantCode
   );
   const merchantPendingCount = merchantAllProducts.filter(
-    (p) => p.status === 'PENDING_APPROVAL'
+    (p) => p.status === 'PENDING_APPROVAL' && !p.isDraft
   ).length;
-  const merchantProductsCount = merchantAllProducts.length - merchantPendingCount;
-  // Overview metrics should only count live (approved / published) catalog items.
-  const liveProductsList = productsList.filter((p) => p.status !== 'PENDING_APPROVAL');
+  const merchantDraftCount = merchantAllProducts.filter(
+    (p) => p.status === 'DRAFT' || Boolean(p.isDraft)
+  ).length;
+  const merchantProductsCount = Math.max(
+    0,
+    merchantAllProducts.length - merchantPendingCount - merchantDraftCount
+  );
+  // Overview metrics should only count live (approved / published) catalog items (exclude pending & draft).
+  const liveProductsList = productsList.filter(
+    (p) => p.status !== 'PENDING_APPROVAL' && p.status !== 'DRAFT' && !p.isDraft
+  );
 
   return (
     <div className="space-y-6">
@@ -300,18 +308,27 @@ export function MerchantProfileDrawer({
           {[
             { id: 'overview' as const, label: 'Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
             { id: 'profile' as const, label: 'Store Profile', icon: <Store className="w-4 h-4" /> },
-            { id: 'orders' as const, label: 'Orders', icon: <ShoppingCart className="w-4 h-4" /> },
+            {
+              id: 'orders' as const,
+              label: 'Orders',
+              icon: <ShoppingCart className="w-4 h-4" />,
+              count: allOrders.filter((o) => o.merchantCode === merchant.merchantCode).length,
+            },
             {
               id: 'products' as const,
-              label:
-                merchantPendingCount > 0
-                  ? `Products (${merchantProductsCount}) · ${merchantPendingCount} Pending`
-                  : `Products (${merchantProductsCount})`,
+              label: 'Products',
               icon: <Package className="w-4 h-4" />,
+              count: merchantProductsCount,
+              pendingCount: merchantPendingCount,
             },
             { id: 'payout' as const, label: 'Payout Info', icon: <CreditCard className="w-4 h-4" /> },
             { id: 'ledger' as const, label: 'Stock Proof Ledger', icon: <ShieldCheck className="w-4 h-4" /> },
-            { id: 'memo' as const, label: 'Reseller Memos', icon: <Printer className="w-4 h-4" /> },
+            {
+              id: 'memo' as const,
+              label: 'Reseller Memos',
+              icon: <Printer className="w-4 h-4" />,
+              count: memosList.filter((m) => m.merchantCode === merchant.merchantCode).length,
+            },
           ].map((tab) => {
             const isActive = activeTab === tab.id;
             return (
@@ -321,12 +338,28 @@ export function MerchantProfileDrawer({
                 onClick={() => setActiveTab(tab.id)}
                 className={`py-3.5 px-4 text-xs font-bold border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap cursor-pointer ${
                   isActive
-                    ? 'border-orange-400 text-orange-600 dark:text-orange-400 font-extrabold'
+                    ? 'border-orange-500 text-orange-600 dark:text-orange-400 font-extrabold'
                     : 'border-transparent text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-slate-100'
                 }`}
               >
                 {tab.icon}
                 <span>{tab.label}</span>
+                {tab.count !== undefined && (
+                  <span
+                    className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold tabular-nums ${
+                      isActive
+                        ? 'bg-orange-500/20 text-orange-600 dark:text-orange-400'
+                        : 'bg-slate-200/80 dark:bg-navy-800 text-slate-600 dark:text-slate-300'
+                    }`}
+                  >
+                    {tab.count}
+                  </span>
+                )}
+                {tab.pendingCount && tab.pendingCount > 0 ? (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500 text-slate-950">
+                    {tab.pendingCount} Pending
+                  </span>
+                ) : null}
               </button>
             );
           })}

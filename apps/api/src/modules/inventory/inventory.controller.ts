@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Put, Patch, Param, Body, Query, Request } from '@nestjs/common';
+import { Controller, Post, Get, Put, Patch, Delete, Param, Body, Query, Request } from '@nestjs/common';
 import { InventoryService } from './inventory.service';
 import { UserRole } from '@fulfillio/contracts';
 
@@ -21,6 +21,7 @@ export class InventoryController {
       baseSku: string;
       imageUrl?: string;
       images?: string[];
+      status?: string;
       variants: Array<{
         title: string;
         variantCode: string;
@@ -73,6 +74,107 @@ export class InventoryController {
       req.headers['x-merchant-code'] ||
       'MC-101';
     return this.inventoryService.updateProductWithVariants(id, effectiveMerchant, body);
+  }
+
+  /**
+   * Dedicated endpoint to update product status (DRAFT vs PUBLISHED/APPROVED)
+   */
+  @Patch('products/:id/status')
+  async patchProductStatus(
+    @Param('id') id: string,
+    @Body() body: { status: string },
+  ) {
+    return this.inventoryService.updateProductStatus(id, body.status);
+  }
+
+  @Put('products/:id/status')
+  async putProductStatus(
+    @Param('id') id: string,
+    @Body() body: { status: string },
+  ) {
+    return this.inventoryService.updateProductStatus(id, body.status);
+  }
+
+  /**
+   * Step 1: Approve product specification / store request
+   */
+  @Post('products/:id/approve')
+  async approveProduct(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      binCode?: string;
+      finalQty?: number;
+      acceptStockNow?: boolean;
+    },
+  ) {
+    return this.inventoryService.approveProduct(id, body);
+  }
+
+  @Patch('products/:id/approve')
+  async patchApproveProduct(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      binCode?: string;
+      finalQty?: number;
+      acceptStockNow?: boolean;
+    },
+  ) {
+    return this.inventoryService.approveProduct(id, body);
+  }
+
+  /**
+   * Step 2: Accept physical stock into warehouse bin (Store Done)
+   */
+  @Post('products/:id/accept-stock')
+  async acceptStock(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      quantity: number;
+      binCode?: string;
+      challanOrTracking?: string;
+      note?: string;
+    },
+  ) {
+    return this.inventoryService.acceptStock(id, body);
+  }
+
+  @Patch('products/:id/accept-stock')
+  async patchAcceptStock(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      quantity: number;
+      binCode?: string;
+      challanOrTracking?: string;
+      note?: string;
+    },
+  ) {
+    return this.inventoryService.acceptStock(id, body);
+  }
+
+  @Post('products/:id/intake')
+  async intakeStock(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      quantity: number;
+      binCode?: string;
+      challanOrTracking?: string;
+      note?: string;
+    },
+  ) {
+    return this.inventoryService.acceptStock(id, body);
+  }
+
+  /**
+   * Delete a product from PostgreSQL (only allowed if warehouse stock === 0)
+   */
+  @Delete('products/:id')
+  async deleteProduct(@Param('id') id: string) {
+    return this.inventoryService.deleteProduct(id);
   }
 
   /**

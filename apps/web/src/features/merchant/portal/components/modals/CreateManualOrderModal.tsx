@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import Image from 'next/image';
 import {
@@ -223,7 +223,7 @@ export function resolveVariantConfig(
     return {
       sku: matchedVariant.variantSku,
       variantLabel: label,
-      maxStock: matchedVariant.stock > 0 ? matchedVariant.stock : (p.stock > 0 ? p.stock : 25),
+      maxStock: matchedVariant.stock > 0 ? matchedVariant.stock : (p.stock > 0 ? p.stock : 0),
       imageUrl: resolvedImage,
       selectedColor: resolvedColor,
       selectedSize: resolvedSize,
@@ -237,7 +237,7 @@ export function resolveVariantConfig(
   const derivedSku = `${p.sku}-${colorCode}-${sizeCode}`;
   const label = `${resolvedColor} / ${resolvedSize}`;
 
-  const stock = p.stock && p.stock > 0 ? p.stock : 45;
+  const stock = typeof p.stock === 'number' && p.stock > 0 ? p.stock : 0;
 
   return {
     sku: derivedSku,
@@ -247,6 +247,20 @@ export function resolveVariantConfig(
     selectedColor: resolvedColor,
     selectedSize: resolvedSize,
   };
+}
+
+export function isEligibleProductForOrder(p?: MerchantProductItem | null): boolean {
+  if (!p) return false;
+  if (p.status === 'DRAFT' || p.status === 'PENDING_APPROVAL') return false;
+  const hasApprovedBin =
+    Boolean(p.bin) &&
+    p.bin !== 'Pending Approval' &&
+    p.bin !== 'Assigned on intake';
+  const hasStoredStock = typeof p.stock === 'number' && p.stock > 0;
+  const isStockStoredStage =
+    p.status === 'STOCK_STORED' ||
+    ((p.status === 'PUBLISHED' || p.status === 'APPROVED') && hasStoredStock);
+  return Boolean(hasApprovedBin && hasStoredStock && isStockStoredStage);
 }
 
 export function CreateManualOrderModal({
@@ -289,9 +303,13 @@ export function CreateManualOrderModal({
     memoList[0]?.code || 'MEMO-DEFAULT'
   );
 
+  const eligibleProducts = useMemo(() => {
+    return products.filter(isEligibleProductForOrder);
+  }, [products]);
+
   // 2. Multi-Product Line Items
   const [items, setItems] = useState<OrderLineItemDraft[]>(() => {
-    const p = products[0];
+    const p = products.find(isEligibleProductForOrder) || products[0];
     if (!p) return [];
     const cfg = resolveVariantConfig(p);
     return [
@@ -317,7 +335,7 @@ export function CreateManualOrderModal({
     if (isOpen) {
       setItems((prev) => {
         if (prev.length === 0) {
-          const p = products[0];
+          const p = products.find(isEligibleProductForOrder) || products[0];
           if (!p) return [];
           const cfg = resolveVariantConfig(p);
           return [
@@ -543,17 +561,30 @@ export function CreateManualOrderModal({
       return;
     }
 
-    // Stock validation
+    // Business rule validation: Product must be approved and physical stock accepted into warehouse
     for (const item of items) {
+      const prod = products.find((p) => p.id === item.productId);
+      if (!isEligibleProductForOrder(prod)) {
+        const isPending =
+          prod?.status === 'PENDING_APPROVAL' ||
+          !prod?.bin ||
+          prod?.bin === 'Pending Approval' ||
+          prod?.bin === 'Assigned on intake';
+        const msg = isPending
+          ? `Cannot create order: "${item.title}" is pending warehouse admin approval. You can only create orders after admin approves the product.`
+          : `Cannot create order: "${item.title}" has no accepted physical stock stored in warehouse bins. Please wait for warehouse intake to accept your shipment.`;
+        onTriggerToast(msg);
+        return;
+      }
       if (item.maxStock <= 0 || item.qty <= 0) {
         onTriggerToast(
-          `"${item.title} (${item.variantLabel})" এর কোনো স্টক নেই! অনুগ্রহ করে অন্য কালার/সাইজ নির্বাচন করুন।`
+          `Cannot create order: "${item.title} (${item.variantLabel})" has 0 stored stock in warehouse.`
         );
         return;
       }
       if (item.qty > item.maxStock) {
         onTriggerToast(
-          `"${item.title} (${item.variantLabel})" এর পর্যাপ্ত স্টক নেই! আপনি চেয়েছেন: ${item.qty} টি, কিন্তু ওয়্যারহাউসে আছে: ${item.maxStock} টি।`
+          `Insufficient warehouse stock for "${item.title} (${item.variantLabel})"! Requested: ${item.qty} pcs, Available: ${item.maxStock} pcs.`
         );
         return;
       }
@@ -783,6 +814,19 @@ export function CreateManualOrderModal({
             </div>
 
             <div className="space-y-3">
+              {eligibleProducts.length === 0 && (
+                <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-800 dark:text-amber-300 space-y-1.5 mb-2">
+                  <div className="flex items-center gap-2 font-bold text-amber-900 dark:text-amber-200">
+                    <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span>No Approved Warehouse Stock Available for Orders</span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-amber-700 dark:text-amber-300/90">
+                    Orders can only be created for products that have been <strong>approved by warehouse admin</strong> and have <strong>physical stock verified and stored in warehouse bins</strong>. 
+                    If your product is awaiting admin approval or your stock shipment is in transit, please wait for warehouse intake to accept your inventory.
+                  </p>
+                </div>
+              )}
+
               {items.map((item, index) => {
                 const p = products.find((prod) => prod.id === item.productId);
                 const hasColors = Boolean(p && p.colors && p.colors.length > 0);
@@ -812,11 +856,37 @@ export function CreateManualOrderModal({
                             onChange={(e) => handleProductChange(item.rowId, e.target.value)}
                             className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-semibold text-navy-900 dark:text-white focus:outline-none focus:border-orange-500 cursor-pointer shadow-2xs"
                           >
-                            {products.map((prod) => (
-                              <option key={prod.id} value={prod.id}>
-                                {prod.title} — Stock: {prod.stock} pcs (৳{prod.price})
-                              </option>
-                            ))}
+                            {eligibleProducts.length > 0 ? (
+                              <optgroup label="Available in Warehouse (Approved with Stored Stock)">
+                                {eligibleProducts.map((prod: MerchantProductItem) => (
+                                  <option key={prod.id} value={prod.id}>
+                                    {prod.title} — Stock: {prod.stock} pcs in Bin {prod.bin} (৳{prod.price})
+                                  </option>
+                                ))}
+                              </optgroup>
+                            ) : null}
+
+                            {products.some((prod) => !isEligibleProductForOrder(prod)) && (
+                              <optgroup label="Unavailable for Orders (Unapproved or Awaiting Stock)">
+                                {products
+                                  .filter((prod) => !isEligibleProductForOrder(prod))
+                                  .map((prod) => {
+                                    const isPending =
+                                      prod.status === 'PENDING_APPROVAL' ||
+                                      !prod.bin ||
+                                      prod.bin === 'Pending Approval' ||
+                                      prod.bin === 'Assigned on intake';
+                                    const reason = isPending
+                                      ? 'Pending Admin Approval'
+                                      : 'Approved · Awaiting Stock Arrival at Warehouse';
+                                    return (
+                                      <option key={prod.id} value={prod.id} disabled className="text-slate-400 bg-slate-100 dark:bg-navy-900">
+                                        {prod.title} — [{reason}]
+                                      </option>
+                                    );
+                                  })}
+                              </optgroup>
+                            )}
                           </select>
                         </div>
                       </div>
@@ -1316,10 +1386,15 @@ export function CreateManualOrderModal({
             </button>
             <button
               type="submit"
-              className="px-6 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold transition-all shadow-md shadow-orange-500/20 flex items-center gap-2 cursor-pointer active:scale-95"
+              disabled={eligibleProducts.length === 0}
+              className="px-6 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold transition-all shadow-md shadow-orange-500/20 flex items-center gap-2 cursor-pointer active:scale-95"
             >
               <Sparkles className="h-4 w-4" />
-              <span>Confirm &amp; Reserve Stock ({totalQty} Items)</span>
+              <span>
+                {eligibleProducts.length === 0
+                  ? 'Awaiting Approved Warehouse Stock'
+                  : `Confirm & Reserve Stock (${totalQty} Items)`}
+              </span>
             </button>
           </div>
         </form>

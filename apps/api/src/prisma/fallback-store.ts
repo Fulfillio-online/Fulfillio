@@ -53,6 +53,7 @@ export interface LocalProduct {
   baseSku: string;
   imageUrl?: string;
   images: string[];
+  status?: string;
   createdAt: string;
   updatedAt: string;
   merchant?: { merchantCode: string; businessName: string };
@@ -279,6 +280,7 @@ export class FallbackStore {
     baseSku: string;
     imageUrl?: string;
     images?: string[];
+    status?: string;
     defaultLocationId: string;
     variants: Array<{
       sku: string;
@@ -330,6 +332,7 @@ export class FallbackStore {
       baseSku: data.baseSku,
       imageUrl: data.imageUrl,
       images: data.images || (data.imageUrl ? [data.imageUrl] : []),
+      status: data.status || 'PUBLISHED',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       merchant: {
@@ -367,6 +370,7 @@ export class FallbackStore {
         baseSku: data.baseSku || productId,
         imageUrl: data.imageUrl,
         images: data.images,
+        status: data.status || 'PUBLISHED',
         defaultLocationId: 'loc-a01-01',
         variants: data.variants || [],
       });
@@ -377,6 +381,7 @@ export class FallbackStore {
     if (data.baseSku) existing.baseSku = data.baseSku;
     if (data.imageUrl !== undefined) existing.imageUrl = data.imageUrl;
     if (data.images !== undefined) existing.images = data.images;
+    if (data.status !== undefined) existing.status = data.status;
     existing.updatedAt = new Date().toISOString();
 
     if (data.variants && data.variants.length > 0) {
@@ -405,6 +410,109 @@ export class FallbackStore {
 
     this.saveData();
     return existing;
+  }
+
+  approveProduct(
+    productId: string,
+    data: {
+      binCode: string;
+      finalQty: number;
+      acceptStockNow: boolean;
+    }
+  ): LocalProduct {
+    let existing = this.data.products.find(
+      (p) => p.id === productId || p.baseSku === productId
+    );
+    if (!existing) {
+      for (const p of this.data.products) {
+        if (p.variants.some((v) => v.id === productId || v.sku === productId)) {
+          existing = p;
+          break;
+        }
+      }
+    }
+    if (!existing) {
+      throw new Error(`Product '${productId}' not found in fallback store`);
+    }
+    existing.status = data.acceptStockNow && data.finalQty > 0 ? 'STOCK_STORED' : 'APPROVED';
+    existing.updatedAt = new Date().toISOString();
+    for (const v of existing.variants) {
+      v.defaultBinCode = data.binCode;
+      if (v.inventoryItems && v.inventoryItems[0]) {
+        v.inventoryItems[0].quantityAvailable = data.finalQty;
+      }
+    }
+    this.saveData();
+    return existing;
+  }
+
+  acceptStock(
+    productId: string,
+    data: {
+      quantity: number;
+      binCode: string;
+      challanOrTracking?: string;
+      note?: string;
+    }
+  ): LocalProduct {
+    let existing = this.data.products.find(
+      (p) => p.id === productId || p.baseSku === productId
+    );
+    if (!existing) {
+      for (const p of this.data.products) {
+        if (p.variants.some((v) => v.id === productId || v.sku === productId)) {
+          existing = p;
+          break;
+        }
+      }
+    }
+    if (!existing) {
+      throw new Error(`Product '${productId}' not found in fallback store`);
+    }
+    existing.status = 'STOCK_STORED';
+    existing.updatedAt = new Date().toISOString();
+    for (const v of existing.variants) {
+      v.defaultBinCode = data.binCode;
+      if (v.inventoryItems && v.inventoryItems[0]) {
+        v.inventoryItems[0].quantityAvailable = (v.inventoryItems[0].quantityAvailable || 0) + data.quantity;
+      }
+    }
+    this.saveData();
+    return existing;
+  }
+
+  deleteProduct(productId: string): { deleted: boolean; id: string } {
+    let existing = this.data.products.find(
+      (p) => p.id === productId || p.baseSku === productId
+    );
+    if (!existing) {
+      for (const p of this.data.products) {
+        if (p.variants.some((v) => v.id === productId || v.sku === productId)) {
+          existing = p;
+          break;
+        }
+      }
+    }
+    if (!existing) {
+      return { deleted: true, id: productId };
+    }
+    const totalStock = (existing.variants || []).reduce(
+      (sum, v) =>
+        sum +
+        (v.inventoryItems || []).reduce(
+          (s, it) => s + (it.quantityAvailable || 0) + (it.quantityReserved || 0),
+          0
+        ),
+      0
+    );
+    if (totalStock >= 1) {
+      throw new Error(
+        `Cannot delete product "${existing.title}": Warehouse currently holds ${totalStock} pcs in stock. Product stock must be 0 before deleting.`
+      );
+    }
+    this.data.products = this.data.products.filter((p) => p.id !== existing!.id);
+    this.saveData();
+    return { deleted: true, id: existing.id };
   }
 
   findProducts(merchantId?: string): LocalProduct[] {
