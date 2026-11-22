@@ -48,6 +48,8 @@ export function ProductGrid({
             !p.bin ||
             p.bin === 'Pending Approval' ||
             p.bin === 'Assigned on intake');
+        const isFirstTimePending = isPendingApproval && (p.stock || 0) === 0;
+        const isPublishPendingFromDraft = isPendingApproval && (p.stock || 0) > 0;
         const isStockStored =
           !isDraft &&
           !isPendingApproval &&
@@ -111,7 +113,9 @@ export function ProductGrid({
               <div className="absolute top-2 right-2 z-10">
                 <span
                   className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border backdrop-blur shadow-xs select-none ${
-                    isPendingApproval
+                    isPublishPendingFromDraft
+                      ? 'bg-indigo-50 text-indigo-700 border-indigo-300 dark:bg-indigo-500/20 dark:text-indigo-300 dark:border-indigo-500/30'
+                      : isFirstTimePending
                       ? 'bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/30'
                       : !isPublished || p.status === 'DRAFT'
                       ? 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-navy-800/80 dark:text-slate-300 dark:border-white/10'
@@ -122,7 +126,9 @@ export function ProductGrid({
                 >
                   {isDraft
                     ? 'Draft'
-                    : isPendingApproval
+                    : isPublishPendingFromDraft
+                    ? 'Waiting for Publish'
+                    : isFirstTimePending
                     ? 'Pending Approval'
                     : isOutOfStock
                     ? 'Approved'
@@ -155,7 +161,7 @@ export function ProductGrid({
                   <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-navy-950 px-1.5 py-0.5 rounded border border-slate-200 dark:border-white/10">
                     {p.sku}
                   </span>
-                  {isPendingApproval ? (
+                  {isFirstTimePending ? (
                     <span className="text-[10px] font-mono text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-300 dark:border-amber-500/20">
                       Pending Admin Review
                     </span>
@@ -242,7 +248,7 @@ export function ProductGrid({
                   </button>
                 )}
 
-                {isPendingApproval && (
+                {isFirstTimePending && (
                   <Link
                     href={`/merchant/products/${p.id}/edit`}
                     className="p-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
@@ -252,14 +258,16 @@ export function ProductGrid({
                   </Link>
                 )}
 
-                <button
-                  type="button"
-                  onClick={() => onRequestDelete(p)}
-                  className="p-1.5 rounded-lg border border-rose-200 dark:border-rose-500/20 bg-rose-50 dark:bg-rose-500/10 hover:bg-rose-100 dark:hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 transition-colors cursor-pointer"
-                  title={isPendingApproval ? 'Cancel Request' : (p.stock || 0) >= 1 ? 'Cannot delete while stock > 0' : 'Delete Product'}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                {!isPublishPendingFromDraft && (
+                  <button
+                    type="button"
+                    onClick={() => onRequestDelete(p)}
+                    className="p-1.5 rounded-lg border border-rose-200 dark:border-rose-500/20 bg-rose-50 dark:bg-rose-500/10 hover:bg-rose-100 dark:hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 transition-colors cursor-pointer"
+                    title={isFirstTimePending ? 'Cancel Request' : (p.stock || 0) >= 1 ? 'Cannot delete while stock > 0' : 'Delete Product'}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
               </div>
             </div>
           </div>

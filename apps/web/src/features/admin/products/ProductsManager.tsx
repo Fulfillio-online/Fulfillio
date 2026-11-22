@@ -259,17 +259,35 @@ export function ProductsManager({
 
   const handleBulkRejectProducts = (productIds: string[]) => {
     const idSet = new Set(productIds);
-    const rejectedProducts = products.filter((p) => idSet.has(p.id));
+    const targetProducts = products.filter((p) => idSet.has(p.id));
+    const deletableRejected = targetProducts.filter((p) => (p.stock || 0) === 0);
+    const draftRestoredRejected = targetProducts.filter((p) => (p.stock || 0) > 0);
+    const deletableIdSet = new Set(deletableRejected.map((p) => p.id));
+    const draftRestoredIdSet = new Set(draftRestoredRejected.map((p) => p.id));
+
     setProducts((prev) => {
-      const next = prev.filter((p) => !idSet.has(p.id));
+      const next = prev
+        .filter((p) => !deletableIdSet.has(p.id))
+        .map((p) =>
+          draftRestoredIdSet.has(p.id)
+            ? { ...p, status: 'DRAFT' as const, isDraft: true }
+            : p
+        );
       try {
         localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
-        syncAdminProductsToMerchant(next, rejectedProducts);
+        syncAdminProductsToMerchant(next, deletableRejected);
       } catch {}
       return next;
     });
-    rejectedProducts.forEach((p) => {
+    deletableRejected.forEach((p) => {
       deleteProductFromDatabase(p.id, p.merchantCode);
+    });
+    draftRestoredRejected.forEach((p) => {
+      fetch(`${API_BASE}/inventory/products/${encodeURIComponent(p.id)}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'DRAFT' }),
+      }).catch(() => {});
     });
     triggerToast(`Rejected ${productIds.length} product submission(s).`);
     if (typeof window !== 'undefined') {
@@ -390,13 +408,16 @@ export function ProductsManager({
                     ? ('PENDING_APPROVAL' as const)
                     : ('APPROVED' as const);
 
-                const assignedBin = isApproved
-                  ? (firstVariant?.defaultBinCode &&
-                     firstVariant.defaultBinCode !== 'Pending Approval' &&
-                     firstVariant.defaultBinCode !== 'Assigned on intake'
-                      ? firstVariant.defaultBinCode
-                      : 'A-01-02')
-                  : 'Pending Approval';
+                const hasValidAssignedBin =
+                  Boolean(firstVariant?.defaultBinCode) &&
+                  firstVariant.defaultBinCode !== 'Pending Approval' &&
+                  firstVariant.defaultBinCode !== 'Assigned on intake';
+
+                const assignedBin = hasValidAssignedBin && (isApproved || isDraft || totalStock > 0)
+                  ? firstVariant.defaultBinCode
+                  : isApproved
+                    ? 'A-01-02'
+                    : 'Pending Approval';
 
                 const stockAccepted = isApproved && totalStock > 0;
                 const stockStatus = isApproved
@@ -741,7 +762,7 @@ export function ProductsManager({
     }
   };
 
-  // Confirm Approval for a New Catalog Product
+  // Confirm Approval for a New Catalog Product or Draft-to-Publish Request
   const handleConfirmApproval = (
     mode: 'APPROVE' | 'REJECT',
     product: WarehouseProductItem,
@@ -750,10 +771,17 @@ export function ProductsManager({
     acceptStockNow?: boolean
   ) => {
     setApprovalModalData(null);
+    const wasAlreadyStored = (product.stock || 0) > 0;
 
     if (mode === 'APPROVE') {
-      const isStockAccepted = acceptStockNow ?? finalQty > 0;
-      const actualStock = isStockAccepted ? finalQty : 0;
+      const isStockAccepted = wasAlreadyStored || (acceptStockNow ?? finalQty > 0);
+      const actualStock = wasAlreadyStored
+        ? finalQty > 0
+          ? finalQty
+          : product.stock
+        : isStockAccepted
+          ? finalQty
+          : 0;
 
       setProducts((prev) => {
         const next = prev.map((p) =>
@@ -761,6 +789,7 @@ export function ProductsManager({
             ? {
                 ...p,
                 status: 'APPROVED' as const,
+                isDraft: false,
                 binCode: finalBin,
                 stock: actualStock,
                 stockAccepted: isStockAccepted,
@@ -787,7 +816,11 @@ export function ProductsManager({
         );
       }
 
-      if (isStockAccepted && actualStock > 0) {
+      if (wasAlreadyStored) {
+        triggerToast(
+          `Approved publish request from Draft for "${product.title}". Restored to Stock Stored (${actualStock} units in Bin ${finalBin}).`
+        );
+      } else if (isStockAccepted && actualStock > 0) {
         appendStockMovement({
           type: 'INITIAL_INTAKE',
           merchantCode: product.merchantCode,
@@ -815,18 +848,42 @@ export function ProductsManager({
         );
       }
     } else {
-      setProducts((prev) => {
-        const next = prev.filter((p) => p.id !== product.id);
-        try {
-          localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
-          syncAdminProductsToMerchant(next, [product]);
-        } catch {
-          // ignore
-        }
-        return next;
-      });
-      deleteProductFromDatabase(product.id, product.merchantCode);
-      triggerToast(`Rejected product submission "${product.title}" (${product.fullSku}).`);
+      if (wasAlreadyStored) {
+        // Draft-to-Publish Rejection: Do NOT delete a product that already has warehouse stock; return it to Draft
+        setProducts((prev) => {
+          const next = prev.map((p) =>
+            p.id === product.id ? { ...p, status: 'DRAFT' as const, isDraft: true } : p
+          );
+          try {
+            localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+            syncAdminProductsToMerchant(next);
+          } catch {}
+          return next;
+        });
+        fetch(`${API_BASE}/inventory/products/${encodeURIComponent(product.id)}/status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'DRAFT' }),
+        }).catch(() => {});
+        triggerToast(
+          `Rejected publish request for "${product.title}". Returned to Draft (${product.stock} units remain in warehouse).`
+        );
+      } else {
+        // First-Time Product Rejection: Remove 0-stock first-time submission
+        setProducts((prev) => {
+          const next = prev.filter((p) => p.id !== product.id);
+          try {
+            localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+            syncAdminProductsToMerchant(next, [product]);
+          } catch {
+            // ignore
+          }
+          return next;
+        });
+        deleteProductFromDatabase(product.id, product.merchantCode);
+        triggerToast(`Rejected product submission "${product.title}" (${product.fullSku}).`);
+      }
+
       if (typeof window !== 'undefined') {
         window.dispatchEvent(
           new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })

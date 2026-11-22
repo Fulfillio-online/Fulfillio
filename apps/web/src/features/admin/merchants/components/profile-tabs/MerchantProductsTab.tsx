@@ -169,7 +169,7 @@ export function MerchantProductsTab({
                 ? ('PENDING_APPROVAL' as const)
                 : ('APPROVED' as const);
 
-            const assignedBin = isApproved || isDraft
+            const assignedBin = isApproved || isDraft || totalStock > 0
               ? firstVariant?.defaultBinCode &&
                 firstVariant.defaultBinCode !== 'Pending Approval' &&
                 firstVariant.defaultBinCode !== 'Assigned on intake'
@@ -378,10 +378,17 @@ export function MerchantProductsTab({
     acceptStockNow?: boolean
   ) => {
     setApprovalModalData(null);
+    const wasAlreadyStored = (product.stock || 0) > 0;
 
     if (mode === 'APPROVE') {
-      const isStockAccepted = acceptStockNow ?? finalQty > 0;
-      const actualStock = isStockAccepted ? finalQty : 0;
+      const isStockAccepted = wasAlreadyStored || (acceptStockNow ?? finalQty > 0);
+      const actualStock = wasAlreadyStored
+        ? finalQty > 0
+          ? finalQty
+          : product.stock
+        : isStockAccepted
+          ? finalQty
+          : 0;
 
       onApproveProduct(product.id, actualStock, finalBin);
 
@@ -393,6 +400,8 @@ export function MerchantProductsTab({
                 status: 'APPROVED' as const,
                 binCode: finalBin,
                 stock: actualStock,
+                stockAccepted: isStockAccepted,
+                stockStatus: isStockAccepted ? ('IN_STOCK' as const) : ('AWAITING_STOCK' as const),
                 isDraft: false,
                 submittedAt: 'Approved just now',
               }
@@ -412,16 +421,34 @@ export function MerchantProductsTab({
         );
       }
     } else {
-      onRejectProduct(product.id);
-      setProducts((prev) => {
-        const next = prev.filter((p) => p.id !== product.id);
-        try {
-          localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
-          syncAdminProductsToMerchant(next, [product]);
-        } catch {}
-        return next;
-      });
-      deleteProductFromDatabase(product.id, product.merchantCode);
+      if (wasAlreadyStored) {
+        setProducts((prev) => {
+          const next = prev.map((p) =>
+            p.id === product.id ? { ...p, status: 'DRAFT' as const, isDraft: true } : p
+          );
+          try {
+            localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+            syncAdminProductsToMerchant(next);
+          } catch {}
+          return next;
+        });
+        fetch(`${API_BASE}/inventory/products/${encodeURIComponent(product.id)}/status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'DRAFT' }),
+        }).catch(() => {});
+      } else {
+        onRejectProduct(product.id);
+        setProducts((prev) => {
+          const next = prev.filter((p) => p.id !== product.id);
+          try {
+            localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+            syncAdminProductsToMerchant(next, [product]);
+          } catch {}
+          return next;
+        });
+        deleteProductFromDatabase(product.id, product.merchantCode);
+      }
       if (typeof window !== 'undefined') {
         window.dispatchEvent(
           new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'AdminMerchantProductsTab' } })

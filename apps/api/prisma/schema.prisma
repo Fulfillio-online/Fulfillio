@@ -60,6 +60,62 @@ enum StockMovementReason {
   MANUAL_ADJUSTMENT
 }
 
+enum ProductLifecycleStatus {
+  DRAFT
+  PENDING_APPROVAL
+  AWAITING_STOCK
+  ACTIVE
+  REJECTED
+  SUSPENDED
+}
+
+enum ProductEditState {
+  NONE
+  EDIT_REQUESTED
+  EDIT_ALLOWED
+  EDIT_APPROVAL_PENDING
+}
+
+enum ApprovalRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum EditRequestType {
+  EDIT_PERMISSION
+  REVISION_APPROVAL
+}
+
+enum RestockRequestStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  PARTIALLY_RECEIVED
+  COMPLETED
+  CANCELLED
+}
+
+enum ReturnRequestStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  PARTIALLY_DISPATCHED
+  DISPATCHED
+  CANCELLED
+}
+
+enum InventoryTransactionType {
+  INITIAL_STOCK_IN
+  RESTOCK_IN
+  RETURN_TO_MERCHANT
+  MANUAL_ADJUSTMENT
+  ORDER_RESERVED
+  ORDER_FULFILLED
+  ORDER_RELEASED
+}
+
 model Merchant {
   id                String         @id @default(uuid())
   merchantCode      String         @unique @default("MC-101")
@@ -113,22 +169,42 @@ model User {
 }
 
 model Product {
-  id          String           @id @default(uuid())
-  merchantId  String
-  title       String
-  description String?
-  baseSku     String
-  imageUrl    String?
-  images      String[]         @default([])
-  status      String           @default("PUBLISHED")
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id               String                 @id @default(uuid())
+  merchantId       String
+  title            String
+  description      String?
+  baseSku          String
+  category         String?
+  brand            String?
+  purchasePrice    Decimal?               @db.Decimal(10, 2)
+  sellingPrice     Decimal?               @db.Decimal(10, 2)
+  weight           String?
+  dimensions       String?
+  imageUrl         String?
+  images           String[]               @default([])
+  status           String                 @default("PUBLISHED")
+  lifecycleStatus  ProductLifecycleStatus @default(DRAFT)
+  editState        ProductEditState       @default(NONE)
+  isSuspended      Boolean                @default(false)
+  suspendedReason  String?
+  suspendedAt      DateTime?
+  rejectionReason  String?
+  approvedById     String?
+  approvedAt       DateTime?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
 
-  merchant    Merchant         @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  variants    ProductVariant[]
+  merchant         Merchant               @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  variants         ProductVariant[]
+  approvalRequests ProductApprovalRequest[]
+  editRequests     ProductEditRequest[]
+  restockRequests  RestockRequest[]
+  returnRequests   ReturnRequest[]
+  inventoryTxns    InventoryTransaction[]
 
   @@unique([merchantId, baseSku])
   @@index([merchantId])
+  @@index([lifecycleStatus])
   @@map("products")
 }
 
@@ -393,4 +469,147 @@ model WebhookDeliveryLog {
   @@index([merchantId, isSuccess])
   @@index([createdAt])
   @@map("webhook_delivery_logs")
+}
+
+model ProductApprovalRequest {
+  id              String                @id @default(uuid())
+  productId       String
+  merchantId      String
+  requestedBy     String?
+  status          ApprovalRequestStatus @default(PENDING)
+  adminId         String?
+  rejectionReason String?
+  submittedAt     DateTime              @default(now())
+  reviewedAt      DateTime?
+
+  product         Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([merchantId, status])
+  @@map("product_approval_requests")
+}
+
+model ProductEditRequest {
+  id               String                @id @default(uuid())
+  productId        String
+  merchantId       String
+  requestType      EditRequestType       @default(EDIT_PERMISSION)
+  status           ApprovalRequestStatus @default(PENDING)
+  reason           String?
+  requestedChanges Json?                 @db.JsonB
+  originalSnapshot Json?                 @db.JsonB
+  proposedSnapshot Json?                 @db.JsonB
+  rejectionReason  String?
+  adminId          String?
+  createdAt        DateTime              @default(now())
+  reviewedAt       DateTime?
+
+  product          Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([merchantId, status])
+  @@map("product_edit_requests")
+}
+
+model RestockRequest {
+  id                    String               @id @default(uuid())
+  productId             String
+  merchantId            String
+  requestedQuantity     Int
+  approvedQuantity      Int?
+  receivedQuantity      Int                  @default(0)
+  estimatedDeliveryDate DateTime?
+  status                RestockRequestStatus @default(REQUESTED)
+  notes                 String?
+  rejectionReason       String?
+  adminId               String?
+  createdAt             DateTime             @default(now())
+  reviewedAt            DateTime?
+  completedAt           DateTime?
+
+  product               Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([merchantId, status])
+  @@map("restock_requests")
+}
+
+model ReturnRequest {
+  id                 String              @id @default(uuid())
+  productId          String
+  merchantId         String
+  requestedQuantity  Int
+  approvedQuantity   Int?
+  dispatchedQuantity Int                 @default(0)
+  status             ReturnRequestStatus @default(REQUESTED)
+  returnReason       String
+  notes              String?
+  courierName        String?
+  trackingNumber     String?
+  rejectionReason    String?
+  adminId            String?
+  createdAt          DateTime            @default(now())
+  reviewedAt         DateTime?
+  completedAt        DateTime?
+
+  product            Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([merchantId, status])
+  @@map("return_requests")
+}
+
+model InventoryTransaction {
+  id              String                   @id @default(uuid())
+  productId       String
+  merchantId      String
+  locationId      String?
+  transactionType InventoryTransactionType
+  quantity        Int
+  referenceType   String?
+  referenceId     String?
+  performedBy     String?
+  notes           String?
+  createdAt       DateTime                 @default(now())
+
+  product         Product                  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([merchantId, transactionType])
+  @@map("inventory_transactions")
+}
+
+model ActivityLog {
+  id             String   @id @default(uuid())
+  userId         String?
+  action         String
+  entityType     String
+  entityId       String
+  previousValues Json?    @db.JsonB
+  newValues      Json?    @db.JsonB
+  notes          String?
+  ipAddress      String?
+  createdAt      DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
+model InAppNotification {
+  id              String   @id @default(uuid())
+  recipientRole   UserRole
+  recipientUserId String?
+  merchantId      String?
+  title           String
+  message         String
+  type            String
+  linkUrl         String?
+  isRead          Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  @@index([recipientRole, isRead])
+  @@index([merchantId, isRead])
+  @@index([createdAt])
+  @@map("in_app_notifications")
 }

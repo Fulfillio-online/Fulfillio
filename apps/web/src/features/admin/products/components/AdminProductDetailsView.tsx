@@ -632,25 +632,34 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
-          <button
-            type="button"
-            onClick={() => setIsAcceptStockOpen(true)}
-            className="px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold flex items-center gap-2 shadow-md shadow-orange-500/25 transition-all cursor-pointer active:scale-95"
-            title="Accept physical consignment into warehouse bin"
-          >
-            <PackageCheck className="w-4 h-4 stroke-[2.5]" />
-            <span>Accept &amp; Store Stock</span>
-          </button>
-          <button
-            type="button"
-            onClick={handleOpenAdjustModal}
-            className="px-4 py-2.5 rounded-xl bg-white dark:bg-navy-900 hover:bg-slate-100 dark:hover:bg-navy-800 border border-slate-200 dark:border-white/10 text-xs font-bold text-navy-800 dark:text-slate-100 flex items-center gap-2 shadow-2xs transition-colors cursor-pointer"
-          >
-            <SlidersHorizontal className="w-4 h-4 text-orange-600 dark:text-orange-400" />
-            <span>Master Stock Adjust</span>
-          </button>
-        </div>
+        {product.status === 'DRAFT' || Boolean(product.isDraft) ? (
+          <div className="flex items-center gap-2.5">
+            <span className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-navy-800 text-slate-600 dark:text-slate-300 text-xs font-bold border border-slate-200 dark:border-white/10 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-slate-400" />
+              <span>Draft Product (View Only)</span>
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => setIsAcceptStockOpen(true)}
+              className="px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold flex items-center gap-2 shadow-md shadow-orange-500/25 transition-all cursor-pointer active:scale-95"
+              title="Accept physical consignment into warehouse bin"
+            >
+              <PackageCheck className="w-4 h-4 stroke-[2.5]" />
+              <span>Accept &amp; Store Stock</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleOpenAdjustModal}
+              className="px-4 py-2.5 rounded-xl bg-white dark:bg-navy-900 hover:bg-slate-100 dark:hover:bg-navy-800 border border-slate-200 dark:border-white/10 text-xs font-bold text-navy-800 dark:text-slate-100 flex items-center gap-2 shadow-2xs transition-colors cursor-pointer"
+            >
+              <SlidersHorizontal className="w-4 h-4 text-orange-600 dark:text-orange-400" />
+              <span>Master Stock Adjust</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* TOP KPI CARDS: Total Sold, Orders, Delivered, Pending, Stock */}

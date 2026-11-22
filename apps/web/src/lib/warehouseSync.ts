@@ -1114,7 +1114,7 @@ export function syncMerchantProductsAddedToAdmin(
   try {
     const currentAdmin = getStoredAdminProducts();
     const mappedNew = newItems
-      .filter((item) => !currentAdmin.some((ap) => isMatchingProduct(item, ap)))
+      .filter((item) => item.status !== 'DRAFT' && !currentAdmin.some((ap) => isMatchingProduct(item, ap)))
       .map((item) => convertMerchantProductToWarehouse(item, profile, 'PENDING_APPROVAL'));
 
     if (mappedNew.length === 0) return;
@@ -1302,7 +1302,12 @@ export function syncAdminProductsToMerchant(
           variantsList: matchedAdmin.variantsList ?? mp.variantsList,
           description: matchedAdmin.description ?? mp.description,
           bin:
-            matchedAdmin.status === 'APPROVED' || matchedAdmin.status === 'STOCK_STORED'
+            matchedAdmin.status === 'APPROVED' ||
+            matchedAdmin.status === 'STOCK_STORED' ||
+            (matchedAdmin.binCode &&
+              matchedAdmin.binCode !== 'Pending Approval' &&
+              matchedAdmin.binCode !== 'Assigned on intake' &&
+              (matchedAdmin.status === 'DRAFT' || matchedAdmin.isDraft || (matchedAdmin.stock || 0) > 0))
               ? matchedAdmin.binCode
               : 'Pending Approval',
           // Synchronize status accurately between Admin and Merchant
@@ -1395,6 +1400,7 @@ export function reconcileAdminProductsWithMerchant(
       const customMerchantItems = merchantProducts.filter(
         (mp) =>
           (code !== 'MC-101' || !DEFAULT_SEED_MERCHANT_PRODUCT_IDS.has(mp.id)) &&
+          mp.status !== 'DRAFT' && // DRAFTS MUST NEVER BE RECONCILED INTO ADMIN CATALOG!
           !normalizedAdmin.some((ap) => isMatchingProduct(mp, ap)) &&
           !newlyConverted.some((ap) => isMatchingProduct(mp, ap))
       );

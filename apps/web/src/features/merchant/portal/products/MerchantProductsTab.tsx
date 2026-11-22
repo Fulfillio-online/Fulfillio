@@ -25,6 +25,8 @@ import { StockRequestsTable } from './components/StockRequestsTable';
 import { ManageStockModal } from './modals/ManageStockModal';
 import { DeleteConfirmModal } from './modals/DeleteConfirmModal';
 import { PrintBarcodeModal } from '../components/modals/PrintBarcodeModal';
+import { ThermalStickerModal } from './modals/ThermalStickerModal';
+import { RequestEditModal } from './modals/RequestEditModal';
 
 const isPendingApprovalProduct = (p: MerchantProductItem): boolean => {
   if (p.status === 'DRAFT') return false;
@@ -110,6 +112,9 @@ export function MerchantProductsTab({
   const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
   const [barcodeProduct, setBarcodeProduct] = useState<MerchantProductItem | null>(null);
 
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editModalProduct, setEditModalProduct] = useState<MerchantProductItem | null>(null);
+
   const { categories: storeCategories = [] } = useMerchant();
 
   // Category options extraction
@@ -126,22 +131,44 @@ export function MerchantProductsTab({
 
   // Dynamic Statistics
   const stats: ProductStats = useMemo(() => {
-    const approvedProducts = products.filter((p) => !isPendingApprovalProduct(p));
-    const published = approvedProducts.filter(
-      (p) => p.status === 'STOCK_STORED' || p.status === 'PUBLISHED' || p.stock > 0
+    const draftProducts = products.filter((p) => p.status === 'DRAFT');
+    const pendingApproval = products.filter((p) => p.status !== 'DRAFT' && isPendingApprovalProduct(p));
+    const awaitingStock = products.filter(
+      (p) => p.status !== 'DRAFT' && !isPendingApprovalProduct(p) && p.stock === 0
+    );
+    const activeProducts = products.filter(
+      (p) => p.status !== 'DRAFT' && !isPendingApprovalProduct(p) && p.stock > 0
+    );
+    const editApprovalPending = products.filter((p) => (p as any).editState === 'EDIT_APPROVAL_PENDING');
+    const restockRequests = stockRequests.filter(
+      (r) => (r.type === 'RESTOCK' || !r.type) && r.status === 'PENDING_APPROVAL'
     ).length;
-    const lowStock = approvedProducts.filter((p) => p.stock > 0 && p.stock <= 30).length;
+    const returnRequests = stockRequests.filter(
+      (r) => r.type === 'RETURN' && r.status === 'PENDING_APPROVAL'
+    ).length;
+    const totalWarehouseStock = products.reduce((sum, p) => sum + (p.stock || 0), 0);
+    const lowStock = activeProducts.filter((p) => p.stock > 0 && p.stock <= 30).length;
     const totalOrders =
       orders.length > 0
         ? orders.length
         : products.reduce((sum, p) => sum + (p.totalOrders || 0), 0);
 
     return {
-      storeProducts: approvedProducts.length,
-      published,
+      totalProducts: products.length,
+      draftProducts: draftProducts.length,
+      pendingApproval: pendingApproval.length,
+      awaitingStock: awaitingStock.length,
+      activeProducts: activeProducts.length,
+      editApprovalPending: editApprovalPending.length,
+      restockRequests,
+      returnRequests,
+      totalWarehouseStock,
+      // Legacy aliases
+      storeProducts: activeProducts.length + awaitingStock.length,
+      published: activeProducts.length,
       totalOrders,
       lowStock,
-      pendingRequests: stockRequests.filter((r) => r.status === 'PENDING_APPROVAL').length,
+      pendingRequests: restockRequests + returnRequests,
     };
   }, [products, orders, stockRequests]);
 
@@ -151,19 +178,34 @@ export function MerchantProductsTab({
     const pendingApprovalProducts = products.filter(
       (p) => p.status !== 'DRAFT' && isPendingApprovalProduct(p)
     );
-    const approvedProducts = products.filter(
-      (p) => p.status !== 'DRAFT' && !isPendingApprovalProduct(p)
+    const awaitingStockProducts = products.filter(
+      (p) => p.status !== 'DRAFT' && !isPendingApprovalProduct(p) && p.stock === 0
+    );
+    const activeProducts = products.filter(
+      (p) => p.status !== 'DRAFT' && !isPendingApprovalProduct(p) && p.stock > 0
+    );
+    const editApprovalPendingProducts = products.filter(
+      (p) => (p as any).editState === 'EDIT_APPROVAL_PENDING'
+    );
+    const restockReqs = stockRequests.filter(
+      (r) => (r.type === 'RESTOCK' || !r.type) && r.status === 'PENDING_APPROVAL'
+    );
+    const returnReqs = stockRequests.filter(
+      (r) => r.type === 'RETURN' && r.status === 'PENDING_APPROVAL'
     );
 
     return {
       all: products.length,
-      published: approvedProducts.filter(
-        (p) => p.status === 'STOCK_STORED' || (p.status === 'PUBLISHED' && p.stock > 0) || p.stock > 0
-      ).length,
+      active: activeProducts.length,
+      published: activeProducts.length,
       pendingApproval: pendingApprovalProducts.length,
+      awaitingStock: awaitingStockProducts.length,
       draft: draftProducts.length,
-      outOfStock: approvedProducts.filter((p) => p.stock === 0).length,
-      stockRequests: stockRequests.filter((r) => r.status === 'PENDING_APPROVAL').length,
+      editApprovalPending: editApprovalPendingProducts.length,
+      restockRequests: restockReqs.length,
+      returnRequests: returnReqs.length,
+      outOfStock: awaitingStockProducts.length,
+      stockRequests: restockReqs.length + returnReqs.length,
     };
   }, [products, stockRequests]);
 
@@ -173,22 +215,27 @@ export function MerchantProductsTab({
       .filter((p) => {
         const isDraft = p.status === 'DRAFT';
         const isPendingApproval = isPendingApprovalProduct(p);
-        const isPublished =
+        const isActiveOrPublished =
           !isDraft &&
           !isPendingApproval &&
           (p.status === 'STOCK_STORED' || (p.status === 'PUBLISHED' && p.stock > 0) || p.stock > 0);
-        const isOutOfStock = !isDraft && !isPendingApproval && p.stock === 0;
+        const isAwaitingStock = !isDraft && !isPendingApproval && p.stock === 0;
+        const isEditApprovalPending = (p as any).editState === 'EDIT_APPROVAL_PENDING';
 
         if (activeTab === 'DRAFT') {
           if (!isDraft) return false;
         } else if (activeTab === 'PENDING_APPROVAL') {
           if (!isPendingApproval || isDraft) return false;
-        } else if (activeTab === 'PUBLISHED') {
-          if (!isPublished) return false;
+        } else if (activeTab === 'AWAITING_STOCK') {
+          if (!isAwaitingStock) return false;
+        } else if (activeTab === 'ACTIVE' || activeTab === 'PUBLISHED') {
+          if (!isActiveOrPublished) return false;
+        } else if (activeTab === 'EDIT_APPROVAL_PENDING') {
+          if (!isEditApprovalPending) return false;
         } else if (activeTab === 'OUT_OF_STOCK') {
-          if (!isOutOfStock) return false;
+          if (!isAwaitingStock) return false;
         }
-        // When activeTab === 'ALL', show ALL products (pending, draft, published, and out of stock)
+        // When activeTab === 'ALL', show ALL products
 
         // Category Filter
         if (selectedCategory !== 'ALL' && p.category !== selectedCategory) {
@@ -425,6 +472,10 @@ export function MerchantProductsTab({
                 onManageStock={handleOpenManageStock}
                 onViewDetails={handleViewDetails}
                 onEditProduct={handleOpenEdit}
+                onRequestEdit={(product) => {
+                  setEditModalProduct(product);
+                  setIsEditModalOpen(true);
+                }}
                 onPrintBarcode={handlePrintBarcode}
                 onRequestDelete={handleRequestDelete}
               />
@@ -588,15 +639,37 @@ export function MerchantProductsTab({
       />
 
       {/* Barcode Thermal Label Sticker Modal */}
-      <PrintBarcodeModal
+      <ThermalStickerModal
         isOpen={isBarcodeModalOpen}
         product={barcodeProduct}
-        storeName={storeName}
+        merchantCode={merchantCode || storeName}
         onClose={() => {
           setIsBarcodeModalOpen(false);
           setBarcodeProduct(null);
         }}
-        onTriggerToast={onTriggerToast}
+      />
+
+      {/* Request Product Edit Modal */}
+      <RequestEditModal
+        isOpen={isEditModalOpen}
+        product={editModalProduct}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setEditModalProduct(null);
+        }}
+        onSubmit={async (productId, reason) => {
+          try {
+            await fetch(`/api/inventory/products/${productId}/request-edit`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ reason }),
+            });
+            onTriggerToast?.('Product edit request submitted for warehouse admin review');
+          } catch (err) {
+            console.error('Failed to submit edit request:', err);
+            onTriggerToast?.('Failed to submit edit request');
+          }
+        }}
       />
     </div>
   );

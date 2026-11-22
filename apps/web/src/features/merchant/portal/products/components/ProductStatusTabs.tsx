@@ -1,7 +1,16 @@
 'use client';
 
 import React from 'react';
-import { Layers, Clock } from 'lucide-react';
+import {
+  Layers,
+  Clock,
+  PackageCheck,
+  CheckCircle2,
+  FileText,
+  Edit3,
+  ArrowUpRight,
+  RotateCcw,
+} from 'lucide-react';
 import { ProductFilterTab } from '../types';
 
 interface ProductStatusTabsProps {
@@ -9,11 +18,17 @@ interface ProductStatusTabsProps {
   onTabChange: (tab: ProductFilterTab) => void;
   counts: {
     all: number;
-    published: number;
+    active: number;
     pendingApproval: number;
+    awaitingStock: number;
     draft: number;
-    outOfStock: number;
-    stockRequests: number;
+    editApprovalPending?: number;
+    restockRequests?: number;
+    returnRequests?: number;
+    // Legacy support
+    published?: number;
+    outOfStock?: number;
+    stockRequests?: number;
   };
 }
 
@@ -22,37 +37,76 @@ export function ProductStatusTabs({
   onTabChange,
   counts,
 }: ProductStatusTabsProps) {
-  const tabs: {
+  const tabs: Array<{
     id: ProductFilterTab;
     label: string;
     count: number;
-    isSpecial?: boolean;
-    icon?: 'clock' | 'layers';
-  }[] = [
-    { id: 'ALL', label: 'All Items', count: counts.all },
-    { id: 'PUBLISHED', label: 'Published', count: counts.published },
+    icon: React.ReactNode;
+    badgeStyle?: string;
+  }> = [
+    {
+      id: 'ALL',
+      label: 'All Items',
+      count: counts.all,
+      icon: <Layers className="h-3.5 w-3.5 text-slate-400" />,
+    },
+    {
+      id: 'ACTIVE',
+      label: 'Active',
+      count: counts.active ?? counts.published ?? 0,
+      icon: <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />,
+      badgeStyle: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
+    },
     {
       id: 'PENDING_APPROVAL',
       label: 'Pending Approval',
       count: counts.pendingApproval,
-      isSpecial: true,
-      icon: 'clock',
+      icon: <Clock className="h-3.5 w-3.5 text-amber-500" />,
+      badgeStyle: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
     },
-    { id: 'DRAFT', label: 'Drafts', count: counts.draft },
-    { id: 'OUT_OF_STOCK', label: 'Awaiting Stock', count: counts.outOfStock },
     {
-      id: 'STOCK_REQUESTS',
-      label: 'Stock Requests',
-      count: counts.stockRequests,
-      isSpecial: true,
-      icon: 'layers',
+      id: 'AWAITING_STOCK',
+      label: 'Awaiting Stock',
+      count: counts.awaitingStock ?? counts.outOfStock ?? 0,
+      icon: <PackageCheck className="h-3.5 w-3.5 text-sky-500" />,
+      badgeStyle: 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20',
+    },
+    {
+      id: 'DRAFT',
+      label: 'Drafts',
+      count: counts.draft,
+      icon: <FileText className="h-3.5 w-3.5 text-slate-400" />,
+    },
+    {
+      id: 'EDIT_APPROVAL_PENDING',
+      label: 'Edit In Review',
+      count: counts.editApprovalPending ?? 0,
+      icon: <Edit3 className="h-3.5 w-3.5 text-indigo-500" />,
+      badgeStyle: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20',
+    },
+    {
+      id: 'RESTOCK_REQUESTS',
+      label: 'Restock Requests',
+      count: counts.restockRequests ?? counts.stockRequests ?? 0,
+      icon: <ArrowUpRight className="h-3.5 w-3.5 text-emerald-600" />,
+    },
+    {
+      id: 'RETURN_REQUESTS',
+      label: 'Return Requests',
+      count: counts.returnRequests ?? 0,
+      icon: <RotateCcw className="h-3.5 w-3.5 text-rose-500" />,
     },
   ];
 
   return (
     <div className="flex items-center gap-1 sm:gap-2 border-b border-slate-200 dark:border-white/10 overflow-x-auto no-scrollbar">
       {tabs.map((tab) => {
-        const isActive = activeTab === tab.id;
+        const isActive =
+          activeTab === tab.id ||
+          (tab.id === 'ACTIVE' && activeTab === 'PUBLISHED') ||
+          (tab.id === 'AWAITING_STOCK' && activeTab === 'OUT_OF_STOCK') ||
+          (tab.id === 'RESTOCK_REQUESTS' && activeTab === 'STOCK_REQUESTS');
+
         return (
           <button
             key={tab.id}
@@ -64,15 +118,14 @@ export function ProductStatusTabs({
                 : 'text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white'
             }`}
           >
-            {tab.icon === 'clock' && <Clock className="h-3.5 w-3.5 text-amber-400" />}
-            {tab.icon === 'layers' && <Layers className="h-3.5 w-3.5 text-amber-400" />}
+            {tab.icon}
             <span>{tab.label}</span>
             <span
               className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full transition-colors ${
                 isActive
-                  ? 'bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30'
-                  : tab.isSpecial && tab.count > 0
-                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold'
+                  ? 'bg-orange-500/15 text-orange-600 dark:text-orange-400 font-bold border border-orange-500/30'
+                  : tab.badgeStyle && tab.count > 0
+                  ? `${tab.badgeStyle} font-bold border`
                   : 'bg-slate-100 dark:bg-navy-800 text-slate-600 dark:text-slate-400 border border-slate-200/60 dark:border-white/10'
               }`}
             >

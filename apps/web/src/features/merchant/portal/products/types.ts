@@ -28,9 +28,14 @@ export interface ProductVariantConfig {
 
 export type ProductFilterTab =
   | 'ALL'
-  | 'PUBLISHED'
-  | 'PENDING_APPROVAL'
   | 'DRAFT'
+  | 'PENDING_APPROVAL'
+  | 'AWAITING_STOCK'
+  | 'ACTIVE'
+  | 'PUBLISHED'
+  | 'EDIT_APPROVAL_PENDING'
+  | 'RESTOCK_REQUESTS'
+  | 'RETURN_REQUESTS'
   | 'OUT_OF_STOCK'
   | 'STOCK_REQUESTS';
 
@@ -44,10 +49,20 @@ export type ProductSortOption =
 export type ProductViewMode = 'LIST' | 'GRID';
 
 export interface ProductStats {
-  storeProducts: number;
-  published: number;
-  totalOrders: number;
-  lowStock: number;
+  totalProducts: number;
+  draftProducts: number;
+  pendingApproval: number;
+  awaitingStock: number;
+  activeProducts: number;
+  editApprovalPending: number;
+  restockRequests: number;
+  returnRequests: number;
+  totalWarehouseStock: number;
+  // Legacy aliases
+  storeProducts?: number;
+  published?: number;
+  totalOrders?: number;
+  lowStock?: number;
   pendingRequests?: number;
 }
 
@@ -85,6 +100,7 @@ export interface ProductTableProps {
   onManageStock: (product: MerchantProductItem, initialMode?: StockRequestType) => void;
   onViewDetails: (product: MerchantProductItem) => void;
   onEditProduct: (product: MerchantProductItem) => void;
+  onRequestEdit?: (product: MerchantProductItem) => void;
   onPrintBarcode: (product: MerchantProductItem) => void;
   onRequestDelete: (product: MerchantProductItem) => void;
 }

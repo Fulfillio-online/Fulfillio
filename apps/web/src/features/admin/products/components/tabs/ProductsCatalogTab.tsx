@@ -774,7 +774,7 @@ export function ProductsCatalogTab({
 
                       {/* 4. Warehouse Bin (Public items show bin; new pending approval items show Unassigned) */}
                       <td className="py-3.5 px-3 align-middle" onClick={(e) => e.stopPropagation()}>
-                        {isPending ? (
+                        {isPending && (p.stock || 0) === 0 ? (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-dashed border-amber-500/40">
                             <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                             Unassigned (Pending)
@@ -782,7 +782,7 @@ export function ProductsCatalogTab({
                         ) : (
                           <div className="inline-block">
                             <select
-                              value={p.binCode || ''}
+                              value={p.binCode && p.binCode !== 'Pending Approval' ? p.binCode : bins[0]?.code || 'A-01-02'}
                               onChange={(e) => onChangeProductBin(p.id, e.target.value)}
                               aria-label={`Assigned bin for ${p.title}`}
                               className="px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/15 text-xs font-mono font-bold text-orange-700 dark:text-orange-300 focus:outline-none focus:border-orange-500 cursor-pointer"
@@ -800,9 +800,15 @@ export function ProductsCatalogTab({
                       {/* 5. Stock Level */}
                       <td className="py-3.5 px-3 align-middle">
                         {isPending ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold tabular-nums bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30">
-                            {p.stock} <span className="text-[11px] font-normal">pcs (Initial)</span>
-                          </span>
+                          (p.stock || 0) > 0 ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold tabular-nums bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30">
+                              {p.stock} <span className="text-[11px] font-normal">pcs (Stored)</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold tabular-nums bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                              {p.stock} <span className="text-[11px] font-normal">pcs (Initial)</span>
+                            </span>
+                          )
                         ) : isOutOfStock ? (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold tabular-nums bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30">
                             0 <span className="text-[11px] font-normal text-rose-500">pcs</span>
@@ -828,10 +834,17 @@ export function ProductsCatalogTab({
                       {/* 7. Status Column */}
                       <td className="py-3.5 px-3 align-middle">
                         {isPending ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                            Pending Approval
-                          </span>
+                          (p.stock || 0) > 0 ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30">
+                              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                              Waiting for Publish ({p.stock} pcs)
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                              Pending Approval
+                            </span>
+                          )
                         ) : isDraft ? (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-500/30">
                             <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
@@ -887,7 +900,9 @@ export function ProductsCatalogTab({
                                       onOpenApprovalModal?.(
                                         'APPROVE',
                                         p,
-                                        bins[0]?.code || 'A-01-02'
+                                        p.binCode && p.binCode !== 'Pending Approval'
+                                          ? p.binCode
+                                          : bins[0]?.code || 'A-01-02'
                                       );
                                     }}
                                     className="w-full px-3.5 py-2 text-left text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 flex items-center gap-2.5 font-bold cursor-pointer"
@@ -903,7 +918,9 @@ export function ProductsCatalogTab({
                                       onOpenApprovalModal?.(
                                         'REJECT',
                                         p,
-                                        bins[0]?.code || 'A-01-02'
+                                        p.binCode && p.binCode !== 'Pending Approval'
+                                          ? p.binCode
+                                          : bins[0]?.code || 'A-01-02'
                                       );
                                     }}
                                     className="w-full px-3.5 py-2 text-left text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex items-center gap-2.5 font-semibold cursor-pointer border-b border-slate-200/60 dark:border-white/10"
@@ -1002,7 +1019,7 @@ export function ProductsCatalogTab({
                                 </>
                               )}
 
-                              {/* STAGE 3: Draft -> View, Restore, and Delete (only if 0 stock) */}
+                              {/* STAGE 3: Draft -> View and Delete (strictly only if stock is 0) */}
                               {isDraft && (
                                 <>
                                   <Link
@@ -1017,33 +1034,28 @@ export function ProductsCatalogTab({
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      setActiveMenuId(null);
-                                      onRestoreProduct?.(p.id);
-                                    }}
-                                    className="w-full px-3.5 py-2 text-left text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 flex items-center gap-2.5 font-semibold cursor-pointer"
-                                  >
-                                    <RotateCcw className="w-4 h-4 shrink-0" />
-                                    <span>Send for Approval</span>
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => {
+                                      if ((p.stock || 0) >= 1) return;
                                       setActiveMenuId(null);
                                       setProductToDelete(p);
                                       setIsPermanentDeleteMode(true);
                                     }}
-                                    className={`w-full px-3.5 py-2 text-left flex items-center gap-2.5 font-semibold cursor-pointer border-t border-slate-200/60 dark:border-white/10 ${
+                                    disabled={(p.stock || 0) >= 1}
+                                    className={`w-full px-3.5 py-2 text-left flex items-center gap-2.5 font-semibold border-t border-slate-200/60 dark:border-white/10 ${
                                       (p.stock || 0) >= 1
-                                        ? 'text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-navy-800'
-                                        : 'text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30'
+                                        ? 'text-slate-400 dark:text-slate-500 cursor-not-allowed opacity-60'
+                                        : 'text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 cursor-pointer'
                                     }`}
+                                    title={
+                                      (p.stock || 0) >= 1
+                                        ? `Cannot delete while warehouse stock (${p.stock} pcs) > 0`
+                                        : 'Delete Product'
+                                    }
                                   >
                                     <Trash2 className="w-4 h-4 shrink-0" />
                                     <span>
                                       {(p.stock || 0) >= 1
                                         ? `Delete Locked (${p.stock} pcs)`
-                                        : 'Permanent Delete'}
+                                        : 'Delete Product'}
                                     </span>
                                   </button>
                                 </>

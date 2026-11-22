@@ -25,6 +25,7 @@ import {
   ChevronDown,
   Info,
   SlidersHorizontal,
+  FileText,
 } from 'lucide-react';
 import { SAMPLE_PRODUCT_PRESETS } from '../utils/imageCompressor';
 import { MerchantProductItem } from '../../types';
@@ -586,146 +587,162 @@ export function ProductForm({
     return initialProduct?.barcode || `890${Math.floor(1000000000 + Math.random() * 9000000000)}`;
   }, [initialProduct?.barcode]);
 
-  // Submit Handler
-  const handleSubmit = useCallback(async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (isSubmitting) return;
+  // Submit Handler: Supports both "Save as Draft" and "Save to Publish" (Submit for Approval)
+  const handleSubmit = useCallback(
+    async (actionType: 'DRAFT' | 'PENDING_APPROVAL' = 'PENDING_APPROVAL', e?: React.FormEvent) => {
+      if (e) e.preventDefault();
+      if (isSubmitting) return;
 
-    // Security & Inventory Integrity Guard:
-    const isInitialDraft = initialProduct?.status === 'DRAFT' || Boolean(initialProduct?.isDraft);
-    const isInitialPending =
-      !isInitialDraft &&
-      (initialProduct?.status === 'PENDING_APPROVAL' ||
-        !initialProduct?.bin ||
-        initialProduct?.bin === 'Pending Approval' ||
-        initialProduct?.bin === 'Assigned on intake');
-    const canEdit = !isEdit || isInitialPending;
+      // Security & Inventory Integrity Guard:
+      const isInitialDraft = initialProduct?.status === 'DRAFT' || Boolean(initialProduct?.isDraft);
+      const isInitialPending =
+        !isInitialDraft &&
+        (initialProduct?.status === 'PENDING_APPROVAL' ||
+          !initialProduct?.bin ||
+          initialProduct?.bin === 'Pending Approval' ||
+          initialProduct?.bin === 'Assigned on intake');
+      const isFirstTimePending = isInitialPending && (initialProduct?.stock || 0) === 0;
+      const canEdit = !isEdit || isInitialDraft || isFirstTimePending;
 
-    if (isEdit && !canEdit) {
-      setSubmitError(
-        'Merchants can strictly only edit products while under Pending Approval status.',
+      if (isEdit && !canEdit) {
+        setSubmitError(
+          (initialProduct?.stock || 0) > 0
+            ? 'This product already has stock stored in the warehouse and is waiting for publish approval from Draft. Direct editing is locked.'
+            : 'Merchants can strictly only edit products in Draft or First-Time Pending Approval status.',
+        );
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+
+      if (!title.trim()) {
+        setSubmitError('Product name is required. Please provide a title.');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      if (!masterSku.trim()) {
+        setSubmitError('Product SKU is required for warehouse inventory tracking.');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+
+      setSubmitError(null);
+      setIsSubmitting(true);
+
+      const numValue = Number(declaredValue) || 850;
+      const numCost = Number(costPrice) || Math.round(numValue * 0.7);
+      const allActiveSizes = Array.from(
+        new Set(colors.flatMap((c) => (c.sizes && c.sizes.length > 0 ? c.sizes : allSizes)))
       );
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
+      const primaryImage = (imageUrl || galleryImages[0] || '').trim();
 
-    if (!title.trim()) {
-      setSubmitError('Product name is required. Please provide a title.');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
-    if (!masterSku.trim()) {
-      setSubmitError('Product SKU is required for warehouse inventory tracking.');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
+      const isApprovedByAdmin =
+        isEdit &&
+        initialProduct?.bin &&
+        initialProduct.bin !== 'Pending Approval' &&
+        initialProduct.bin !== 'Assigned on intake' &&
+        initialProduct.status !== 'PENDING_APPROVAL' &&
+        initialProduct.status !== 'DRAFT';
 
-    setSubmitError(null);
-    setIsSubmitting(true);
-
-    const numValue = Number(declaredValue) || 850;
-    const numCost = Number(costPrice) || Math.round(numValue * 0.7);
-    const allActiveSizes = Array.from(
-      new Set(colors.flatMap((c) => (c.sizes && c.sizes.length > 0 ? c.sizes : allSizes)))
-    );
-    const primaryImage = (imageUrl || galleryImages[0] || '').trim();
-
-    const isApprovedByAdmin =
-      isEdit &&
-      initialProduct?.bin &&
-      initialProduct.bin !== 'Pending Approval' &&
-      initialProduct.bin !== 'Assigned on intake' &&
-      initialProduct.status !== 'PENDING_APPROVAL' &&
-      initialProduct.status !== 'DRAFT';
-
-    const allActiveImages = Array.from(
-      new Set(
-        [
-          primaryImage,
-          ...galleryImages,
-          ...colors.map((c) => (c.imageUrl || '').trim()),
-        ].filter((u): u is string => Boolean(u && u.trim()))
-      )
-    );
-
-    const cleanedVariants = generatedVariants.map((v) => {
-      const matchColor = colors.find(
-        (c) => (c.name || '').trim().toLowerCase() === (v.color || '').trim().toLowerCase()
+      const allActiveImages = Array.from(
+        new Set(
+          [
+            primaryImage,
+            ...galleryImages,
+            ...colors.map((c) => (c.imageUrl || '').trim()),
+          ].filter((u): u is string => Boolean(u && u.trim()))
+        )
       );
-      const varImg = matchColor?.imageUrl || primaryImage;
-      return {
-        ...v,
-        imageUrl: varImg,
+
+      const cleanedVariants = generatedVariants.map((v) => {
+        const matchColor = colors.find(
+          (c) => (c.name || '').trim().toLowerCase() === (v.color || '').trim().toLowerCase()
+        );
+        const varImg = matchColor?.imageUrl || primaryImage;
+        return {
+          ...v,
+          imageUrl: varImg,
+        };
+      });
+
+      const finalProductStatus: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'STOCK_STORED' =
+        actionType === 'DRAFT'
+          ? 'DRAFT'
+          : isApprovedByAdmin
+            ? (status === 'PUBLISHED' ? ((initialProduct?.stock || 0) > 0 ? 'STOCK_STORED' : 'APPROVED') : 'DRAFT')
+            : 'PENDING_APPROVAL';
+
+      const productPayload: MerchantProductItem = {
+        id: initialProduct?.id || `p-${Date.now()}`,
+        title: title.trim(),
+        variantLabel: initialProduct?.variantLabel || 'Standard',
+        sku: masterSku.trim(),
+        barcode: activeBarcodeString,
+        bin: finalProductStatus === 'DRAFT' || !isApprovedByAdmin ? 'Pending Approval' : initialProduct.bin,
+        category,
+        subcategory,
+        productType,
+        description,
+        price: numValue,
+        costPrice: numCost,
+        stock: computedTotalStock,
+        reserved: initialProduct?.reserved || 0,
+        status: finalProductStatus,
+        imageUrl: primaryImage,
+        images: allActiveImages,
+        keyFeatures: features,
+        colors: colors.map((c) => ({
+          ...c,
+          imageUrl: (c.imageUrl || '').trim(),
+        })),
+        sizes: allActiveSizes.length > 0 ? allActiveSizes : allSizes,
+        variantsList: cleanedVariants,
+        totalOrders: initialProduct?.totalOrders || 0,
       };
-    });
 
-    const productPayload: MerchantProductItem = {
-      id: initialProduct?.id || `p-${Date.now()}`,
-      title: title.trim(),
-      variantLabel: initialProduct?.variantLabel || 'Standard',
-      sku: masterSku.trim(),
-      barcode: activeBarcodeString,
-      bin: isApprovedByAdmin ? initialProduct.bin : 'Pending Approval',
+      try {
+        const res = await onSave(productPayload);
+        if (res && typeof res === 'object' && 'ok' in res && !res.ok) {
+          setSubmitError(res.error || 'Failed to save product in database.');
+          setIsSubmitting(false);
+          return;
+        }
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem(
+            'fulfillio_products_initial_tab',
+            finalProductStatus === 'DRAFT' ? 'DRAFT' : 'PENDING_APPROVAL'
+          );
+        }
+        router.push('/merchant/products');
+      } catch (err: any) {
+        setSubmitError(err?.message || 'Failed to save product in database.');
+        setIsSubmitting(false);
+      }
+    },
+    [
+      isSubmitting,
+      title,
+      masterSku,
+      declaredValue,
+      costPrice,
+      colors,
+      allSizes,
+      imageUrl,
+      galleryImages,
+      isEdit,
+      initialProduct,
+      generatedVariants,
       category,
       subcategory,
       productType,
       description,
-      price: numValue,
-      costPrice: numCost,
-      stock: computedTotalStock,
-      reserved: initialProduct?.reserved || 0,
-      status: status === 'DRAFT' ? 'DRAFT' : isApprovedByAdmin ? status : 'PENDING_APPROVAL',
-      imageUrl: primaryImage,
-      images: allActiveImages,
-      keyFeatures: features,
-      colors: colors.map((c) => ({
-        ...c,
-        imageUrl: (c.imageUrl || '').trim(),
-      })),
-      sizes: allActiveSizes.length > 0 ? allActiveSizes : allSizes,
-      variantsList: cleanedVariants,
-      totalOrders: initialProduct?.totalOrders || 0,
-    };
-
-    try {
-      const res = await onSave(productPayload);
-      if (res && typeof res === 'object' && 'ok' in res && !res.ok) {
-        setSubmitError(res.error || 'Failed to save product in database.');
-        setIsSubmitting(false);
-        return;
-      }
-      if (!isApprovedByAdmin && typeof window !== 'undefined') {
-        sessionStorage.setItem('fulfillio_products_initial_tab', 'PENDING_APPROVAL');
-      }
-      router.push('/merchant/products');
-    } catch (err: any) {
-      setSubmitError(err?.message || 'Failed to save product in database.');
-      setIsSubmitting(false);
-    }
-  }, [
-    isSubmitting,
-    title,
-    masterSku,
-    declaredValue,
-    costPrice,
-    colors,
-    allSizes,
-    imageUrl,
-    galleryImages,
-    isEdit,
-    initialProduct,
-    generatedVariants,
-    category,
-    subcategory,
-    productType,
-    description,
-    computedTotalStock,
-    status,
-    features,
-    activeBarcodeString,
-    onSave,
-    router,
-  ]);
+      computedTotalStock,
+      status,
+      features,
+      activeBarcodeString,
+      onSave,
+      router,
+    ]
+  );
 
   // Keyboard shortcut: Cmd/Ctrl + S
   useEffect(() => {
@@ -783,32 +800,43 @@ export function ProductForm({
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
             <Link
               href="/merchant/products"
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-navy-900 hover:bg-slate-200/80 dark:hover:bg-navy-800 transition-all cursor-pointer"
+              className="hidden sm:inline-flex px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-navy-900 hover:bg-slate-200/80 dark:hover:bg-navy-800 transition-all cursor-pointer"
             >
               Discard
             </Link>
 
+            {/* Option 1: Save as Draft */}
             <button
               type="button"
-              onClick={() => handleSubmit()}
+              onClick={() => handleSubmit('DRAFT')}
               disabled={isSubmitting}
-              className="px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white text-xs font-bold shadow-[0_1px_2px_rgba(242,107,29,0.25)] transition-all flex items-center gap-2 cursor-pointer active:scale-[0.98]"
+              className="px-3.5 sm:px-4 py-2 rounded-xl border border-slate-300 dark:border-white/15 bg-white dark:bg-navy-800 hover:bg-slate-50 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-[0.98] disabled:opacity-50"
+              title="Save as private draft (only visible in your merchant dashboard)"
+            >
+              <FileText className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+              <span>Save as Draft</span>
+            </button>
+
+            {/* Option 2: Save to Publish / Submit for Approval */}
+            <button
+              type="button"
+              onClick={() => handleSubmit('PENDING_APPROVAL')}
+              disabled={isSubmitting}
+              className="px-4 sm:px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white text-xs font-bold shadow-[0_1px_2px_rgba(242,107,29,0.25)] transition-all flex items-center gap-1.5 cursor-pointer active:scale-[0.98]"
+              title="Save and submit for warehouse admin approval"
             >
               {isSubmitting ? (
                 <>
-                  <div className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <div className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0" />
                   <span>Saving...</span>
                 </>
               ) : (
                 <>
-                  <Check className="h-4 w-4 stroke-[2.5]" />
-                  <span>{isEdit ? 'Save Changes' : 'Publish Product'}</span>
-                  <span className="hidden md:inline-block text-[10px] opacity-75 font-mono ml-0.5">
-                    ⌘S
-                  </span>
+                  <Check className="h-4 w-4 stroke-[2.5] shrink-0" />
+                  <span>{isEdit && isApprovedByAdmin ? 'Save Changes' : 'Save to Publish'}</span>
                 </>
               )}
             </button>
@@ -832,7 +860,13 @@ export function ProductForm({
       )}
 
       {/* Form Body: Immaculate Single-Column Clean Surface Stack */}
-      <form onSubmit={handleSubmit} className="space-y-8">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleSubmit('PENDING_APPROVAL', e);
+        }}
+        className="space-y-8"
+      >
         {/* Section 1: Product Core Details */}
         <section className="bg-white dark:bg-navy-900/90 rounded-2xl border border-slate-200/80 dark:border-white/10 p-6 sm:p-8 shadow-[0_1px_3px_rgba(0,0,0,0.04)] space-y-6">
           <div className="border-b border-slate-100 dark:border-white/5 pb-4">
@@ -1777,14 +1811,30 @@ export function ProductForm({
         <div className="flex items-center justify-end gap-3 pt-4">
           <Link
             href="/merchant/products"
-            className="px-5 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 transition-colors"
+            className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 transition-colors"
           >
             Discard
           </Link>
+
+          {/* Option 1: Save as Draft */}
           <button
-            type="submit"
+            type="button"
+            onClick={() => handleSubmit('DRAFT')}
+            disabled={isSubmitting}
+            className="px-5 py-2.5 rounded-xl border border-slate-300 dark:border-white/15 bg-white dark:bg-navy-800 hover:bg-slate-50 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-xs active:scale-[0.98] disabled:opacity-50"
+            title="Save as private draft (only visible in your merchant dashboard)"
+          >
+            <FileText className="h-4 w-4 text-amber-500" />
+            <span>Save as Draft</span>
+          </button>
+
+          {/* Option 2: Save to Publish / Submit for Approval */}
+          <button
+            type="button"
+            onClick={() => handleSubmit('PENDING_APPROVAL')}
             disabled={isSubmitting}
             className="px-6 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white text-xs font-bold shadow-[0_1px_2px_rgba(242,107,29,0.25)] transition-all flex items-center gap-2 cursor-pointer active:scale-[0.98]"
+            title="Save and submit for warehouse admin approval"
           >
             {isSubmitting ? (
               <>
@@ -1794,7 +1844,7 @@ export function ProductForm({
             ) : (
               <>
                 <Check className="h-4 w-4 stroke-[2.5]" />
-                <span>{isEdit ? 'Save Changes' : 'Publish Product'}</span>
+                <span>{isEdit && isApprovedByAdmin ? 'Save Changes' : 'Save to Publish'}</span>
               </>
             )}
           </button>

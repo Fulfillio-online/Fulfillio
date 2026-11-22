@@ -421,13 +421,20 @@ export class InventoryRepository {
     }
 
     // Security & Inventory Integrity Guard:
-    // Merchants can strictly only edit products while in Pending Approval status.
+    // Merchants can strictly only edit products during First-Time Pending Approval (0 stock in warehouse).
     const existingStatus = ((existing as any).status || '').trim().toUpperCase();
     const isPending = existingStatus === 'PENDING_APPROVAL';
+    const existingTotalStock = (existing.variants || []).reduce(
+      (sum: number, v: any) =>
+        sum + (v.inventoryItems || []).reduce((s: number, it: any) => s + (it.quantityAvailable || 0), 0),
+      0,
+    );
 
-    if (!isPending) {
+    if (!isPending || existingTotalStock > 0) {
       throw new BadRequestException(
-        `Cannot edit product '${existing.title}': Merchants can strictly only edit products under Pending Approval status (current status: ${existingStatus}).`,
+        existingTotalStock > 0
+          ? `Cannot edit product '${existing.title}': Product already has ${existingTotalStock} pcs stored in the warehouse and is waiting for publish approval from Draft. Editing is locked.`
+          : `Cannot edit product '${existing.title}': Merchants can strictly only edit products during First-Time Pending Approval status (current status: ${existingStatus}).`,
       );
     }
 
@@ -723,13 +730,21 @@ export class InventoryRepository {
       binCode,
     });
 
-    // 1. Update Product status to APPROVED (or STOCK_STORED if stock accepted now)
+    const existingTotalStock = (existing.variants || []).reduce(
+      (sum: number, v: any) =>
+        sum + (v.inventoryItems || []).reduce((s: number, it: any) => s + (it.quantityAvailable || 0), 0),
+      0,
+    );
+    const wasAlreadyStored = existingTotalStock > 0;
+    const effectiveNextStatus = wasAlreadyStored || (isStockAccepted && finalStock > 0) ? 'STOCK_STORED' : nextStatus;
+
+    // 1. Update Product status to APPROVED (or STOCK_STORED if stock accepted now or already stored)
     await (this.prisma.product as any).update({
       where: { id: existing.id },
-      data: { status: nextStatus },
+      data: { status: effectiveNextStatus },
     });
 
-    // 2. Update all variants with binCode & stock
+    // 2. Update all variants with binCode & stock (preserve existing stored stock on Draft-to-Publish approval)
     for (const v of existing.variants) {
       await this.prisma.productVariant.update({
         where: { id: v.id },
@@ -738,10 +753,13 @@ export class InventoryRepository {
 
       const defaultItem = v.inventoryItems[0];
       if (defaultItem) {
+        const preservedQty = wasAlreadyStored
+          ? Math.max(defaultItem.quantityAvailable || 0, finalStock)
+          : finalStock;
         await this.prisma.inventoryItem.update({
           where: { id: defaultItem.id },
           data: {
-            quantityAvailable: finalStock,
+            quantityAvailable: preservedQty,
             locationId: defaultLocation.id,
           },
         });
@@ -990,6 +1008,9 @@ export class InventoryRepository {
         { merchantId },
         { merchant: { merchantCode: merchantId.trim().toUpperCase() } },
       ];
+    } else {
+      // Admin Catalog / Approval view: Never show private merchant drafts!
+      where.status = { not: 'DRAFT' };
     }
 
     try {
@@ -1234,5 +1255,1005 @@ export class InventoryRepository {
         }
       }
     });
+  }
+
+  // ============================================================================
+  // WMS PRODUCT LIFECYCLE & APPROVAL WORKFLOW REPOSITORY METHODS
+  // ============================================================================
+
+  async submitApprovalRequest(productId: string, requestedBy?: string) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.submitApprovalRequest(productId, requestedBy);
+    }
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const product = await tx.product.findUnique({ where: { id: productId } });
+        if (!product) throw new BadRequestException(`Product '${productId}' not found`);
+
+        const updated = await tx.product.update({
+          where: { id: productId },
+          data: {
+            lifecycleStatus: 'PENDING_APPROVAL',
+            status: 'PENDING_APPROVAL',
+          },
+        });
+
+        await tx.productApprovalRequest.create({
+          data: {
+            productId,
+            merchantId: product.merchantId,
+            requestedBy,
+            status: 'PENDING',
+          },
+        });
+
+        await tx.inAppNotification.create({
+          data: {
+            recipientRole: 'SUPER_ADMIN',
+            merchantId: product.merchantId,
+            title: 'New Product Submission',
+            message: `Merchant submitted product "${product.title}" (${product.baseSku}) for admin review.`,
+            type: 'PRODUCT_SUBMITTED',
+            linkUrl: '/admin/products?tab=APPROVAL',
+          },
+        });
+
+        await tx.activityLog.create({
+          data: {
+            action: 'SUBMIT_FOR_APPROVAL',
+            entityType: 'PRODUCT',
+            entityId: productId,
+            userId: requestedBy,
+            notes: 'Product submitted for admin review',
+          },
+        });
+
+        return updated;
+      });
+    } catch (err: any) {
+      if (this.isConnectionError(err)) {
+        this.prisma.isConnected = false;
+        return this.prisma.fallbackStore.submitApprovalRequest(productId, requestedBy);
+      }
+      throw err;
+    }
+  }
+
+  async cancelApprovalRequest(productId: string, merchantId?: string) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.cancelApprovalRequest(productId, merchantId);
+    }
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const product = await tx.product.findUnique({ where: { id: productId } });
+        if (!product) throw new BadRequestException(`Product '${productId}' not found`);
+
+        const updated = await tx.product.update({
+          where: { id: productId },
+          data: {
+            lifecycleStatus: 'DRAFT',
+            status: 'DRAFT',
+          },
+        });
+
+        await tx.productApprovalRequest.updateMany({
+          where: { productId, status: 'PENDING' },
+          data: { status: 'CANCELLED', reviewedAt: new Date() },
+        });
+
+        await tx.activityLog.create({
+          data: {
+            action: 'CANCEL_APPROVAL_REQUEST',
+            entityType: 'PRODUCT',
+            entityId: productId,
+            notes: 'Merchant cancelled approval request; returned to Draft',
+          },
+        });
+
+        return updated;
+      });
+    } catch (err: any) {
+      if (this.isConnectionError(err)) {
+        this.prisma.isConnected = false;
+        return this.prisma.fallbackStore.cancelApprovalRequest(productId, merchantId);
+      }
+      throw err;
+    }
+  }
+
+  async approveSubmission(productId: string, adminId?: string, binCode?: string) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.approveSubmission(productId, adminId, binCode);
+    }
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const product = await tx.product.findUnique({
+          where: { id: productId },
+          include: { variants: true },
+        });
+        if (!product) throw new BadRequestException(`Product '${productId}' not found`);
+
+        const assignedBin = binCode || 'A-01-01';
+
+        const updated = await tx.product.update({
+          where: { id: productId },
+          data: {
+            lifecycleStatus: 'AWAITING_STOCK',
+            status: 'AWAITING_STOCK',
+            approvedById: adminId,
+            approvedAt: new Date(),
+          },
+        });
+
+        await tx.productVariant.updateMany({
+          where: { productId },
+          data: { defaultBinCode: assignedBin },
+        });
+
+        await tx.productApprovalRequest.updateMany({
+          where: { productId, status: 'PENDING' },
+          data: {
+            status: 'APPROVED',
+            adminId,
+            reviewedAt: new Date(),
+          },
+        });
+
+        await tx.inAppNotification.create({
+          data: {
+            recipientRole: 'MERCHANT',
+            merchantId: product.merchantId,
+            title: 'Product Approved',
+            message: `Your product "${product.title}" has been approved. Please deliver inventory to warehouse bin ${assignedBin}.`,
+            type: 'PRODUCT_APPROVED',
+            linkUrl: `/merchant/products/${product.id}`,
+          },
+        });
+
+        await tx.activityLog.create({
+          data: {
+            action: 'APPROVE_PRODUCT_SUBMISSION',
+            entityType: 'PRODUCT',
+            entityId: productId,
+            userId: adminId,
+            notes: `Admin approved product; awaiting physical stock delivery into bin ${assignedBin}`,
+          },
+        });
+
+        return updated;
+      });
+    } catch (err: any) {
+      if (this.isConnectionError(err)) {
+        this.prisma.isConnected = false;
+        return this.prisma.fallbackStore.approveSubmission(productId, adminId, binCode);
+      }
+      throw err;
+    }
+  }
+
+  async rejectSubmission(productId: string, adminId?: string, reason?: string) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.rejectSubmission(productId, adminId, reason);
+    }
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const product = await tx.product.findUnique({ where: { id: productId } });
+        if (!product) throw new BadRequestException(`Product '${productId}' not found`);
+
+        const updated = await tx.product.update({
+          where: { id: productId },
+          data: {
+            lifecycleStatus: 'REJECTED',
+            status: 'REJECTED',
+            rejectionReason: reason,
+          },
+        });
+
+        await tx.productApprovalRequest.updateMany({
+          where: { productId, status: 'PENDING' },
+          data: {
+            status: 'REJECTED',
+            adminId,
+            rejectionReason: reason,
+            reviewedAt: new Date(),
+          },
+        });
+
+        await tx.inAppNotification.create({
+          data: {
+            recipientRole: 'MERCHANT',
+            merchantId: product.merchantId,
+            title: 'Product Submission Rejected',
+            message: `Your product "${product.title}" was rejected: ${reason}`,
+            type: 'PRODUCT_REJECTED',
+            linkUrl: `/merchant/products/${product.id}`,
+          },
+        });
+
+        await tx.activityLog.create({
+          data: {
+            action: 'REJECT_PRODUCT_SUBMISSION',
+            entityType: 'PRODUCT',
+            entityId: productId,
+            userId: adminId,
+            notes: `Admin rejected product: ${reason}`,
+          },
+        });
+
+        return updated;
+      });
+    } catch (err: any) {
+      if (this.isConnectionError(err)) {
+        this.prisma.isConnected = false;
+        return this.prisma.fallbackStore.rejectSubmission(productId, adminId, reason);
+      }
+      throw err;
+    }
+  }
+
+  async receiveInitialStock(productId: string, data: any) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.receiveInitialStock(productId, data);
+    }
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const product = await tx.product.findUnique({
+          where: { id: productId },
+          include: { variants: true },
+        });
+        if (!product) throw new BadRequestException(`Product '${productId}' not found`);
+
+        if (product.lifecycleStatus !== 'AWAITING_STOCK' && product.lifecycleStatus !== 'ACTIVE') {
+          throw new BadRequestException(
+            `Cannot receive stock for product in status '${product.lifecycleStatus}'. Must pass Admin Approval first!`
+          );
+        }
+
+        const assignedBin = data.binCode || 'A-01-01';
+        const loc = await tx.inventoryLocation.upsert({
+          where: { binCode: assignedBin },
+          update: {},
+          create: {
+            binCode: assignedBin,
+            zone: assignedBin.split('-')[0] || 'A',
+            aisle: assignedBin.split('-')[1] || '01',
+            rack: assignedBin.split('-')[2] || '01',
+            shelf: '01',
+          },
+        });
+
+        if (data.acceptedQuantity > 0) {
+          await tx.product.update({
+            where: { id: productId },
+            data: {
+              lifecycleStatus: 'ACTIVE',
+              status: 'STOCK_STORED',
+            },
+          });
+
+          for (const v of product.variants) {
+            await tx.inventoryItem.upsert({
+              where: {
+                variantId_locationId: {
+                  variantId: v.id,
+                  locationId: loc.id,
+                },
+              },
+              update: {
+                quantityAvailable: { increment: data.acceptedQuantity },
+                quantityDamaged: { increment: data.damagedQuantity || 0 },
+              },
+              create: {
+                variantId: v.id,
+                locationId: loc.id,
+                quantityAvailable: data.acceptedQuantity,
+                quantityDamaged: data.damagedQuantity || 0,
+                quantityReserved: 0,
+              },
+            });
+          }
+
+          await tx.inventoryTransaction.create({
+            data: {
+              productId,
+              merchantId: product.merchantId,
+              locationId: loc.id,
+              transactionType: 'INITIAL_STOCK_IN',
+              quantity: data.acceptedQuantity,
+              referenceType: 'STOCK_RECEIVING',
+              performedBy: data.receivedBy,
+              notes: data.receivingNotes || `Initial intake: ${data.acceptedQuantity} pcs accepted into ${assignedBin}`,
+            },
+          });
+
+          await tx.inAppNotification.create({
+            data: {
+              recipientRole: 'MERCHANT',
+              merchantId: product.merchantId,
+              title: 'Stock Received — Product Active',
+              message: `Warehouse accepted ${data.acceptedQuantity} pcs of "${product.title}". Product is now Active!`,
+              type: 'STOCK_RECEIVED',
+              linkUrl: `/merchant/products/${productId}`,
+            },
+          });
+        }
+
+        await tx.activityLog.create({
+          data: {
+            action: 'STOCK_RECEIVED',
+            entityType: 'PRODUCT',
+            entityId: productId,
+            userId: data.receivedBy,
+            notes: `Stock intake: ${data.acceptedQuantity} accepted, ${data.damagedQuantity || 0} damaged into ${assignedBin}`,
+          },
+        });
+
+        return product;
+      });
+    } catch (err: any) {
+      if (this.isConnectionError(err)) {
+        this.prisma.isConnected = false;
+        return this.prisma.fallbackStore.receiveInitialStock(productId, data);
+      }
+      throw err;
+    }
+  }
+
+  async requestEditAccess(productId: string, merchantId?: string, reason?: string) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.requestEditAccess(productId, merchantId, reason);
+    }
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const product = await tx.product.findUnique({ where: { id: productId } });
+        if (!product) throw new BadRequestException(`Product '${productId}' not found`);
+
+        const updated = await tx.product.update({
+          where: { id: productId },
+          data: { editState: 'EDIT_REQUESTED' },
+        });
+
+        await tx.productEditRequest.create({
+          data: {
+            productId,
+            merchantId: product.merchantId,
+            requestType: 'EDIT_PERMISSION',
+            status: 'PENDING',
+            reason,
+            originalSnapshot: {
+              title: product.title,
+              description: product.description,
+              category: product.category,
+              brand: product.brand,
+              sellingPrice: product.sellingPrice ? Number(product.sellingPrice) : undefined,
+              purchasePrice: product.purchasePrice ? Number(product.purchasePrice) : undefined,
+              weight: product.weight,
+              dimensions: product.dimensions,
+              imageUrl: product.imageUrl,
+              images: product.images,
+            },
+          },
+        });
+
+        await tx.inAppNotification.create({
+          data: {
+            recipientRole: 'SUPER_ADMIN',
+            merchantId: product.merchantId,
+            title: 'Product Edit Permission Requested',
+            message: `Merchant requested edit permission for Active product "${product.title}".`,
+            type: 'EDIT_PERMISSION_REQUEST',
+            linkUrl: '/admin/products?tab=EDIT_APPROVAL',
+          },
+        });
+
+        return updated;
+      });
+    } catch (err: any) {
+      if (this.isConnectionError(err)) {
+        this.prisma.isConnected = false;
+        return this.prisma.fallbackStore.requestEditAccess(productId, merchantId, reason);
+      }
+      throw err;
+    }
+  }
+
+  async reviewEditAccess(productId: string, adminId?: string, action: 'GRANT' | 'DENY' = 'GRANT', reason?: string) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.reviewEditAccess(productId, adminId, action, reason);
+    }
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const product = await tx.product.findUnique({ where: { id: productId } });
+        if (!product) throw new BadRequestException(`Product '${productId}' not found`);
+
+        const nextState = action === 'GRANT' ? 'EDIT_ALLOWED' : 'NONE';
+        const updated = await tx.product.update({
+          where: { id: productId },
+          data: { editState: nextState },
+        });
+
+        await tx.productEditRequest.updateMany({
+          where: { productId, requestType: 'EDIT_PERMISSION', status: 'PENDING' },
+          data: {
+            status: action === 'GRANT' ? 'APPROVED' : 'REJECTED',
+            adminId,
+            rejectionReason: reason,
+            reviewedAt: new Date(),
+          },
+        });
+
+        await tx.inAppNotification.create({
+          data: {
+            recipientRole: 'MERCHANT',
+            merchantId: product.merchantId,
+            title: action === 'GRANT' ? 'Edit Permission Granted' : 'Edit Request Denied',
+            message:
+              action === 'GRANT'
+                ? `Admin granted edit permission for "${product.title}". You can now submit revisions.`
+                : `Edit permission denied for "${product.title}": ${reason}`,
+            type: action === 'GRANT' ? 'EDIT_PERMISSION_GRANTED' : 'EDIT_PERMISSION_DENIED',
+            linkUrl: `/merchant/products/${product.id}`,
+          },
+        });
+
+        return updated;
+      });
+    } catch (err: any) {
+      if (this.isConnectionError(err)) {
+        this.prisma.isConnected = false;
+        return this.prisma.fallbackStore.reviewEditAccess(productId, adminId, action, reason);
+      }
+      throw err;
+    }
+  }
+
+  async submitRevision(productId: string, merchantId?: string, proposedSnapshot?: any) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.submitRevision(productId, merchantId, proposedSnapshot);
+    }
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const product = await tx.product.findUnique({ where: { id: productId } });
+        if (!product) throw new BadRequestException(`Product '${productId}' not found`);
+
+        const updated = await tx.product.update({
+          where: { id: productId },
+          data: { editState: 'EDIT_APPROVAL_PENDING' },
+        });
+
+        await tx.productEditRequest.create({
+          data: {
+            productId,
+            merchantId: product.merchantId,
+            requestType: 'REVISION_APPROVAL',
+            status: 'PENDING',
+            originalSnapshot: {
+              title: product.title,
+              description: product.description,
+              category: product.category,
+              brand: product.brand,
+              sellingPrice: product.sellingPrice ? Number(product.sellingPrice) : undefined,
+              purchasePrice: product.purchasePrice ? Number(product.purchasePrice) : undefined,
+              weight: product.weight,
+              dimensions: product.dimensions,
+              imageUrl: product.imageUrl,
+              images: product.images,
+            },
+            proposedSnapshot: proposedSnapshot || {},
+          },
+        });
+
+        await tx.inAppNotification.create({
+          data: {
+            recipientRole: 'SUPER_ADMIN',
+            merchantId: product.merchantId,
+            title: 'Product Revision Submitted',
+            message: `Merchant submitted revisions for "${product.title}". Ordering paused during review.`,
+            type: 'REVISION_SUBMITTED',
+            linkUrl: '/admin/products?tab=EDIT_APPROVAL',
+          },
+        });
+
+        return updated;
+      });
+    } catch (err: any) {
+      if (this.isConnectionError(err)) {
+        this.prisma.isConnected = false;
+        return this.prisma.fallbackStore.submitRevision(productId, merchantId, proposedSnapshot);
+      }
+      throw err;
+    }
+  }
+
+  async reviewRevision(productId: string, adminId?: string, action: 'APPROVE' | 'REJECT' = 'APPROVE', reason?: string) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.reviewRevision(productId, adminId, action, reason);
+    }
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const product = await tx.product.findUnique({ where: { id: productId } });
+        if (!product) throw new BadRequestException(`Product '${productId}' not found`);
+
+        const pendingRev = await tx.productEditRequest.findFirst({
+          where: { productId, requestType: 'REVISION_APPROVAL', status: 'PENDING' },
+        });
+
+        let updateData: any = { editState: 'NONE' };
+        if (action === 'APPROVE' && pendingRev?.proposedSnapshot) {
+          const snap = pendingRev.proposedSnapshot as any;
+          if (snap.title) updateData.title = snap.title;
+          if (snap.description !== undefined) updateData.description = snap.description;
+          if (snap.category) updateData.category = snap.category;
+          if (snap.brand !== undefined) updateData.brand = snap.brand;
+          if (snap.purchasePrice !== undefined) updateData.purchasePrice = snap.purchasePrice;
+          if (snap.sellingPrice !== undefined) updateData.sellingPrice = snap.sellingPrice;
+          if (snap.weight !== undefined) updateData.weight = snap.weight;
+          if (snap.dimensions !== undefined) updateData.dimensions = snap.dimensions;
+          if (snap.imageUrl) updateData.imageUrl = snap.imageUrl;
+          if (snap.images) updateData.images = snap.images;
+        }
+
+        const updated = await tx.product.update({
+          where: { id: productId },
+          data: updateData,
+        });
+
+        if (pendingRev) {
+          await tx.productEditRequest.update({
+            where: { id: pendingRev.id },
+            data: {
+              status: action === 'APPROVE' ? 'APPROVED' : 'REJECTED',
+              adminId,
+              rejectionReason: reason,
+              reviewedAt: new Date(),
+            },
+          });
+        }
+
+        await tx.inAppNotification.create({
+          data: {
+            recipientRole: 'MERCHANT',
+            merchantId: product.merchantId,
+            title: action === 'APPROVE' ? 'Revision Approved' : 'Revision Rejected',
+            message:
+              action === 'APPROVE'
+                ? `Admin approved revisions for "${product.title}". Ordering active!`
+                : `Revision rejected for "${product.title}": ${reason}`,
+            type: action === 'APPROVE' ? 'REVISION_APPROVED' : 'REVISION_REJECTED',
+            linkUrl: `/merchant/products/${product.id}`,
+          },
+        });
+
+        return updated;
+      });
+    } catch (err: any) {
+      if (this.isConnectionError(err)) {
+        this.prisma.isConnected = false;
+        return this.prisma.fallbackStore.reviewRevision(productId, adminId, action, reason);
+      }
+      throw err;
+    }
+  }
+
+  async createRestockRequest(productId: string, merchantId: string, data: any) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.createRestockRequest(productId, merchantId, data);
+    }
+    try {
+      return await this.prisma.restockRequest.create({
+        data: {
+          productId,
+          merchantId,
+          requestedQuantity: data.requestedQuantity,
+          estimatedDeliveryDate: data.estimatedDeliveryDate ? new Date(data.estimatedDeliveryDate) : null,
+          status: 'REQUESTED',
+          notes: data.notes,
+        },
+      });
+    } catch (err: any) {
+      if (this.isConnectionError(err)) {
+        this.prisma.isConnected = false;
+        return this.prisma.fallbackStore.createRestockRequest(productId, merchantId, data);
+      }
+      throw err;
+    }
+  }
+
+  async reviewRestockRequest(requestId: string, adminId?: string, action: 'APPROVE' | 'REJECT' = 'APPROVE', approvedQty?: number, reason?: string) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.reviewRestockRequest(requestId, adminId, action, approvedQty, reason);
+    }
+    try {
+      return await this.prisma.restockRequest.update({
+        where: { id: requestId },
+        data: {
+          status: action === 'APPROVE' ? 'APPROVED' : 'REJECTED',
+          approvedQuantity: action === 'APPROVE' ? approvedQty : undefined,
+          adminId,
+          rejectionReason: reason,
+          reviewedAt: new Date(),
+        },
+      });
+    } catch (err: any) {
+      if (this.isConnectionError(err)) {
+        this.prisma.isConnected = false;
+        return this.prisma.fallbackStore.reviewRestockRequest(requestId, adminId, action, approvedQty, reason);
+      }
+      throw err;
+    }
+  }
+
+  async receiveRestockStock(requestId: string, adminId: string, data: any) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.receiveRestockStock(requestId, adminId, data);
+    }
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const req = await tx.restockRequest.findUnique({ where: { id: requestId } });
+        if (!req) throw new BadRequestException(`Restock request '${requestId}' not found`);
+
+        const p = await tx.product.findUnique({
+          where: { id: req.productId },
+          include: { variants: true },
+        });
+        if (!p) throw new BadRequestException(`Product '${req.productId}' not found`);
+
+        const assignedBin = data.binCode || 'A-01-01';
+        const loc = await tx.inventoryLocation.upsert({
+          where: { binCode: assignedBin },
+          update: {},
+          create: {
+            binCode: assignedBin,
+            zone: assignedBin.split('-')[0] || 'A',
+            aisle: assignedBin.split('-')[1] || '01',
+            rack: assignedBin.split('-')[2] || '01',
+            shelf: '01',
+          },
+        });
+
+        for (const v of p.variants) {
+          await tx.inventoryItem.upsert({
+            where: {
+              variantId_locationId: {
+                variantId: v.id,
+                locationId: loc.id,
+              },
+            },
+            update: {
+              quantityAvailable: { increment: data.acceptedQuantity },
+              quantityDamaged: { increment: data.damagedQuantity || 0 },
+            },
+            create: {
+              variantId: v.id,
+              locationId: loc.id,
+              quantityAvailable: data.acceptedQuantity,
+              quantityDamaged: data.damagedQuantity || 0,
+              quantityReserved: 0,
+            },
+          });
+        }
+
+        const newReceived = req.receivedQuantity + data.acceptedQuantity;
+        const totalApproved = req.approvedQuantity || req.requestedQuantity;
+        const isComplete = newReceived >= totalApproved;
+
+        const updatedReq = await tx.restockRequest.update({
+          where: { id: requestId },
+          data: {
+            receivedQuantity: newReceived,
+            status: isComplete ? 'COMPLETED' : 'PARTIALLY_RECEIVED',
+            completedAt: isComplete ? new Date() : null,
+          },
+        });
+
+        await tx.inventoryTransaction.create({
+          data: {
+            productId: p.id,
+            merchantId: p.merchantId,
+            locationId: loc.id,
+            transactionType: 'RESTOCK_IN',
+            quantity: data.acceptedQuantity,
+            referenceType: 'RESTOCK_REQUEST',
+            referenceId: req.id,
+            performedBy: adminId,
+            notes: data.receivingNotes || `Restock accepted: ${data.acceptedQuantity} pcs into bin ${assignedBin}`,
+          },
+        });
+
+        return { product: p, request: updatedReq };
+      });
+    } catch (err: any) {
+      if (this.isConnectionError(err)) {
+        this.prisma.isConnected = false;
+        return this.prisma.fallbackStore.receiveRestockStock(requestId, adminId, data);
+      }
+      throw err;
+    }
+  }
+
+  async createReturnRequest(productId: string, merchantId: string, data: any) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.createReturnRequest(productId, merchantId, data);
+    }
+    try {
+      return await this.prisma.returnRequest.create({
+        data: {
+          productId,
+          merchantId,
+          requestedQuantity: data.requestedQuantity,
+          returnReason: data.returnReason,
+          notes: data.notes,
+          status: 'REQUESTED',
+        },
+      });
+    } catch (err: any) {
+      if (this.isConnectionError(err)) {
+        this.prisma.isConnected = false;
+        return this.prisma.fallbackStore.createReturnRequest(productId, merchantId, data);
+      }
+      throw err;
+    }
+  }
+
+  async reviewReturnRequest(requestId: string, adminId?: string, action: 'APPROVE' | 'REJECT' = 'APPROVE', approvedQty?: number, reason?: string) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.reviewReturnRequest(requestId, adminId, action, approvedQty, reason);
+    }
+    try {
+      return await this.prisma.returnRequest.update({
+        where: { id: requestId },
+        data: {
+          status: action === 'APPROVE' ? 'APPROVED' : 'REJECTED',
+          approvedQuantity: action === 'APPROVE' ? approvedQty : undefined,
+          adminId,
+          rejectionReason: reason,
+          reviewedAt: new Date(),
+        },
+      });
+    } catch (err: any) {
+      if (this.isConnectionError(err)) {
+        this.prisma.isConnected = false;
+        return this.prisma.fallbackStore.reviewReturnRequest(requestId, adminId, action, approvedQty, reason);
+      }
+      throw err;
+    }
+  }
+
+  async dispatchReturnStock(requestId: string, adminId: string, data: any) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.dispatchReturnStock(requestId, adminId, data);
+    }
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const req = await tx.returnRequest.findUnique({ where: { id: requestId } });
+        if (!req) throw new BadRequestException(`Return request '${requestId}' not found`);
+
+        const p = await tx.product.findUnique({
+          where: { id: req.productId },
+          include: { variants: { include: { inventoryItems: true } } },
+        });
+        if (!p) throw new BadRequestException(`Product '${req.productId}' not found`);
+
+        let qtyToDeduct = data.dispatchedQuantity;
+        for (const v of p.variants) {
+          for (const it of v.inventoryItems) {
+            const canTake = Math.min(it.quantityAvailable, qtyToDeduct);
+            if (canTake > 0) {
+              await tx.inventoryItem.update({
+                where: { id: it.id },
+                data: { quantityAvailable: { decrement: canTake } },
+              });
+              qtyToDeduct -= canTake;
+            }
+            if (qtyToDeduct <= 0) break;
+          }
+          if (qtyToDeduct <= 0) break;
+        }
+
+        const newDispatched = req.dispatchedQuantity + data.dispatchedQuantity;
+        const totalApproved = req.approvedQuantity || req.requestedQuantity;
+        const isComplete = newDispatched >= totalApproved;
+
+        const updatedReq = await tx.returnRequest.update({
+          where: { id: requestId },
+          data: {
+            dispatchedQuantity: newDispatched,
+            courierName: data.courierName,
+            trackingNumber: data.trackingNumber,
+            status: isComplete ? 'DISPATCHED' : 'PARTIALLY_DISPATCHED',
+            completedAt: isComplete ? new Date() : null,
+          },
+        });
+
+        await tx.inventoryTransaction.create({
+          data: {
+            productId: p.id,
+            merchantId: p.merchantId,
+            transactionType: 'RETURN_TO_MERCHANT',
+            quantity: data.dispatchedQuantity,
+            referenceType: 'RETURN_DISPATCH',
+            referenceId: req.id,
+            performedBy: adminId,
+            notes: data.notes || `Dispatched ${data.dispatchedQuantity} pcs via ${data.courierName || 'Courier'}`,
+          },
+        });
+
+        return { product: p, request: updatedReq };
+      });
+    } catch (err: any) {
+      if (this.isConnectionError(err)) {
+        this.prisma.isConnected = false;
+        return this.prisma.fallbackStore.dispatchReturnStock(requestId, adminId, data);
+      }
+      throw err;
+    }
+  }
+
+  async suspendProduct(productId: string, adminId?: string, reason?: string) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.suspendProduct(productId, adminId, reason);
+    }
+    try {
+      return await this.prisma.product.update({
+        where: { id: productId },
+        data: {
+          isSuspended: true,
+          suspendedReason: reason,
+          suspendedAt: new Date(),
+        },
+      });
+    } catch (err: any) {
+      if (this.isConnectionError(err)) {
+        this.prisma.isConnected = false;
+        return this.prisma.fallbackStore.suspendProduct(productId, adminId, reason);
+      }
+      throw err;
+    }
+  }
+
+  async reactivateProduct(productId: string, adminId?: string) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.reactivateProduct(productId, adminId);
+    }
+    try {
+      return await this.prisma.product.update({
+        where: { id: productId },
+        data: {
+          isSuspended: false,
+          suspendedReason: null,
+          suspendedAt: null,
+        },
+      });
+    } catch (err: any) {
+      if (this.isConnectionError(err)) {
+        this.prisma.isConnected = false;
+        return this.prisma.fallbackStore.reactivateProduct(productId, adminId);
+      }
+      throw err;
+    }
+  }
+
+  async listApprovalRequests(merchantId?: string, status?: string) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.listApprovalRequests(merchantId, status);
+    }
+    const where: any = {};
+    if (merchantId) where.merchantId = merchantId;
+    if (status) where.status = status;
+    return this.prisma.productApprovalRequest.findMany({
+      where,
+      include: { product: true },
+      orderBy: { submittedAt: 'desc' },
+    });
+  }
+
+  async listEditRequests(merchantId?: string, status?: string) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.listEditRequests(merchantId, status);
+    }
+    const where: any = {};
+    if (merchantId) where.merchantId = merchantId;
+    if (status) where.status = status;
+    return this.prisma.productEditRequest.findMany({
+      where,
+      include: { product: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async listRestockRequests(merchantId?: string, status?: string) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.listRestockRequests(merchantId, status);
+    }
+    const where: any = {};
+    if (merchantId) where.merchantId = merchantId;
+    if (status) where.status = status;
+    return this.prisma.restockRequest.findMany({
+      where,
+      include: { product: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async listReturnRequests(merchantId?: string, status?: string) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.listReturnRequests(merchantId, status);
+    }
+    const where: any = {};
+    if (merchantId) where.merchantId = merchantId;
+    if (status) where.status = status;
+    return this.prisma.returnRequest.findMany({
+      where,
+      include: { product: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async listInventoryTransactions(productId?: string, merchantId?: string) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.listInventoryTransactions(productId, merchantId);
+    }
+    const where: any = {};
+    if (productId) where.productId = productId;
+    if (merchantId) where.merchantId = merchantId;
+    return this.prisma.inventoryTransaction.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async listActivityLogs(entityType?: string, entityId?: string) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.listActivityLogs(entityType, entityId);
+    }
+    const where: any = {};
+    if (entityType) where.entityType = entityType;
+    if (entityId) where.entityId = entityId;
+    return this.prisma.activityLog.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+  }
+
+  async listNotifications(role?: string, merchantId?: string, isRead?: boolean) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.listNotifications(role, merchantId, isRead);
+    }
+    const where: any = {};
+    if (role) where.recipientRole = role;
+    if (merchantId) where.merchantId = merchantId;
+    if (isRead !== undefined) where.isRead = isRead;
+    return this.prisma.inAppNotification.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async markNotificationRead(id: string) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.markNotificationRead(id);
+    }
+    return this.prisma.inAppNotification.update({
+      where: { id },
+      data: { isRead: true },
+    });
+  }
+
+  async markAllNotificationsRead(role?: string, merchantId?: string) {
+    if (this.prisma.isOffline()) {
+      return this.prisma.fallbackStore.markAllNotificationsRead(role, merchantId);
+    }
+    const where: any = {};
+    if (role) where.recipientRole = role;
+    if (merchantId) where.merchantId = merchantId;
+    return this.prisma.inAppNotification.updateMany({
+      where,
+      data: { isRead: true },
+    });
+  }
+
+  checkOrderEligibility(productId: string, quantity: number = 1) {
+    return this.prisma.fallbackStore.checkOrderEligibility(productId, quantity);
   }
 }

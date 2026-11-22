@@ -315,16 +315,19 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
   };
 
   const addProducts = async (newItems: MerchantProductItem[]): Promise<{ ok: boolean; error?: string }> => {
-    const pendingItems: MerchantProductItem[] = newItems.map((item) => ({
-      ...item,
-      status: 'PENDING_APPROVAL' as const,
-      bin: 'Pending Approval',
-    }));
+    const preparedItems: MerchantProductItem[] = newItems.map((item) => {
+      const isDraft = item.status === 'DRAFT';
+      return {
+        ...item,
+        status: isDraft ? ('DRAFT' as const) : ('PENDING_APPROVAL' as const),
+        bin: isDraft ? 'Pending Approval' : (item.bin || 'Pending Approval'),
+      };
+    });
 
     let savedToDatabase = true;
 
     // 1. Send directly to PostgreSQL backend
-    for (const it of pendingItems) {
+    for (const it of preparedItems) {
       try {
         const res = await merchantApi.createProduct(it);
         if (!res.ok) {
@@ -337,24 +340,27 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    // Only sync submitted (PENDING_APPROVAL) products to Admin! Drafts are strictly private to Merchant.
+    const itemsForAdminSync = preparedItems.filter((it) => it.status === 'PENDING_APPROVAL');
+
     // 2. Refresh from server if online, or save locally with offline resilience
     if (savedToDatabase) {
       try {
         const serverProds = await merchantApi.getProducts();
         if (serverProds && serverProds.length > 0) {
           const reconciled = serverProds.map((sp) => {
-            const matchPending = pendingItems.find(
+            const matchPrepared = preparedItems.find(
               (pi) => pi.sku === sp.sku || pi.id === sp.id || pi.title === sp.title
             );
-            if (matchPending) {
+            if (matchPrepared) {
               return {
                 ...sp,
-                status: 'PENDING_APPROVAL' as const,
-                bin: 'Pending Approval',
+                status: matchPrepared.status,
+                bin: matchPrepared.bin,
                 colors: (sp.colors && sp.colors.some((c) => c.imageUrl))
                   ? sp.colors
-                  : (matchPending.colors || sp.colors),
-                imageUrl: sp.imageUrl || matchPending.imageUrl,
+                  : (matchPrepared.colors || sp.colors),
+                imageUrl: sp.imageUrl || matchPrepared.imageUrl,
               };
             }
             return sp;
@@ -362,43 +368,62 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
           setProducts(reconciled);
           if (typeof window !== 'undefined') {
             safeSetLocalStorage(getMerchantProductsKey(profile.merchantCode), JSON.stringify(reconciled));
-            syncMerchantProductsAddedToAdmin(pendingItems, profile);
+            if (itemsForAdminSync.length > 0) {
+              syncMerchantProductsAddedToAdmin(itemsForAdminSync, profile);
+            }
           }
         } else {
           setProducts((prev) => {
-            const filtered = prev.filter((p) => !pendingItems.some((pi) => pi.sku === p.sku || pi.id === p.id));
-            const next = [...pendingItems, ...filtered];
+            const filtered = prev.filter((p) => !preparedItems.some((pi) => pi.sku === p.sku || pi.id === p.id));
+            const next = [...preparedItems, ...filtered];
             if (typeof window !== 'undefined') {
               safeSetLocalStorage(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
-              syncMerchantProductsAddedToAdmin(pendingItems, profile);
+              if (itemsForAdminSync.length > 0) {
+                syncMerchantProductsAddedToAdmin(itemsForAdminSync, profile);
+              }
             }
             return next;
           });
         }
       } catch {
         setProducts((prev) => {
-          const filtered = prev.filter((p) => !pendingItems.some((pi) => pi.sku === p.sku || pi.id === p.id));
-          const next = [...pendingItems, ...filtered];
+          const filtered = prev.filter((p) => !preparedItems.some((pi) => pi.sku === p.sku || pi.id === p.id));
+          const next = [...preparedItems, ...filtered];
           if (typeof window !== 'undefined') {
             safeSetLocalStorage(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
-            syncMerchantProductsAddedToAdmin(pendingItems, profile);
+            if (itemsForAdminSync.length > 0) {
+              syncMerchantProductsAddedToAdmin(itemsForAdminSync, profile);
+            }
           }
           return next;
         });
       }
-      showToast('প্রোডাক্ট সফলভাবে PostgreSQL ডাটাবেজে সেভ হয়েছে (Pending Admin Approval)!');
+      const hasDraft = preparedItems.some((it) => it.status === 'DRAFT');
+      const hasPending = preparedItems.some((it) => it.status === 'PENDING_APPROVAL');
+      if (hasDraft && !hasPending) {
+        showToast('Product saved as Draft. Visible only in your Merchant Dashboard.');
+      } else {
+        showToast('Product submitted for Admin Approval (Pending Review).');
+      }
     } else {
-      // Offline fallback: persist locally and to Admin queue
+      // Offline fallback: persist locally and sync to Admin queue if submitted
       setProducts((prev) => {
-        const filtered = prev.filter((p) => !pendingItems.some((pi) => pi.sku === p.sku || pi.id === p.id));
-        const next = [...pendingItems, ...filtered];
+        const filtered = prev.filter((p) => !preparedItems.some((pi) => pi.sku === p.sku || pi.id === p.id));
+        const next = [...preparedItems, ...filtered];
         if (typeof window !== 'undefined') {
           safeSetLocalStorage(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
-          syncMerchantProductsAddedToAdmin(pendingItems, profile);
+          if (itemsForAdminSync.length > 0) {
+            syncMerchantProductsAddedToAdmin(itemsForAdminSync, profile);
+          }
         }
         return next;
       });
-      showToast('ডাটাবেজ বর্তমানে অফলাইনে থাকায় প্রোডাক্টটি লোকালি Pending Approval হিসেবে সেভ করা হয়েছে।');
+      const hasDraft = preparedItems.some((it) => it.status === 'DRAFT');
+      showToast(
+        hasDraft
+          ? 'Product saved as Draft locally in your Merchant Dashboard.'
+          : 'Product saved locally as Pending Approval.'
+      );
     }
 
     return { ok: true };
@@ -411,7 +436,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     let targetProduct = products.find((p) => p.id === id || p.sku === id);
 
     // Security & Inventory Integrity Guard:
-    // Merchants can strictly only edit products while in Pending Approval status.
+    // Merchants can strictly only edit products during First-Time Pending Approval (0 stock in warehouse).
     const isTargetDraft = targetProduct?.status === 'DRAFT' || Boolean(targetProduct?.isDraft);
     const isTargetPending =
       targetProduct &&
@@ -420,11 +445,14 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
         !targetProduct.bin ||
         targetProduct.bin === 'Pending Approval' ||
         targetProduct.bin === 'Assigned on intake');
-    const canEdit = !targetProduct || isTargetPending;
+    const isFirstTimePending = isTargetPending && (targetProduct?.stock || 0) === 0;
+    const canEdit = !targetProduct || isFirstTimePending;
 
     if (!canEdit) {
       const errorMsg =
-        'Product editing is locked. Merchants can strictly only edit products while under Pending Approval.';
+        (targetProduct?.stock || 0) > 0
+          ? 'Product editing is locked. Products that already have warehouse stock cannot be edited while waiting for publish approval from Draft.'
+          : 'Product editing is locked. Merchants can strictly only edit products during First-Time Pending Approval.';
       showToast(errorMsg);
       return { ok: false, error: errorMsg };
     }
@@ -524,7 +552,9 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     showToast(
       newStatus === 'DRAFT'
         ? `"${target.title}" saved in Draft.`
-        : `"${target.title}" submitted for Admin Approval.`
+        : (target.stock || 0) > 0
+          ? `"${target.title}" submitted for Warehouse Publish Approval (Waiting for Publish).`
+          : `"${target.title}" submitted for Admin Approval.`
     );
   };
 

@@ -46,8 +46,8 @@ export default function EditProductPage({ params }: EditProductPageProps) {
   }
 
   // Security & Inventory Integrity Guard:
-  // Merchants can strictly ONLY edit products while in Pending Approval.
-  // Draft, Approved, and Stock Stored products cannot be edited.
+  // Merchants can strictly ONLY edit products during First-Time Pending Approval (0 stock in warehouse).
+  // Draft, Approved, Stock Stored, and Draft-to-Publish Pending (stock > 0) products cannot be edited.
   const isDraft = product.status === 'DRAFT' || Boolean(product.isDraft);
   const isPending =
     !isDraft &&
@@ -55,11 +55,15 @@ export default function EditProductPage({ params }: EditProductPageProps) {
       !product.bin ||
       product.bin === 'Pending Approval' ||
       product.bin === 'Assigned on intake');
-  const canEdit = isPending;
+  const isFirstTimePending = isPending && (product.stock || 0) === 0;
+  const isPublishPendingFromDraft = isPending && (product.stock || 0) > 0;
+  const canEdit = isFirstTimePending;
 
   if (!canEdit) {
     const isStockStored = product.status === 'STOCK_STORED' || (product.stock || 0) > 0;
-    const currentStatusLabel = isDraft
+    const currentStatusLabel = isPublishPendingFromDraft
+      ? `Waiting for Publish (Warehouse Stock: ${product.stock} pcs)`
+      : isDraft
       ? 'Draft'
       : isStockStored
       ? `Stock Stored: ${product.stock} pcs`
@@ -78,7 +82,9 @@ export default function EditProductPage({ params }: EditProductPageProps) {
           <strong className="text-navy-900 dark:text-white">{currentStatusLabel}</strong> status.
         </p>
         <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">
-          Merchants can strictly only edit products while under <strong>Pending Approval</strong>. Products in Draft or Approved status cannot be edited.
+          {isPublishPendingFromDraft
+            ? 'This product already has physical stock stored in the warehouse and is waiting for warehouse approval to publish from Draft. Editing and deleting are locked.'
+            : 'Merchants can strictly only edit products during First-Time Pending Approval (0 stock). Products in Draft, Approved, or Stock Stored status cannot be edited.'}
         </p>
         <div className="mt-6 flex items-center justify-center gap-3">
           <Link

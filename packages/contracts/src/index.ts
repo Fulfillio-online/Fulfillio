@@ -176,3 +176,202 @@ export interface BarcodeScanResult {
   format?: string;
   timestamp: number;
 }
+
+// ============================================================================
+// WMS PRODUCT LIFECYCLE & INVENTORY APPROVAL WORKFLOW
+// ============================================================================
+
+export enum ProductLifecycleStatus {
+  DRAFT = 'DRAFT',
+  PENDING_APPROVAL = 'PENDING_APPROVAL',
+  AWAITING_STOCK = 'AWAITING_STOCK',
+  ACTIVE = 'ACTIVE',
+  REJECTED = 'REJECTED',
+  SUSPENDED = 'SUSPENDED',
+}
+
+export enum ProductEditState {
+  NONE = 'NONE',
+  EDIT_REQUESTED = 'EDIT_REQUESTED',
+  EDIT_ALLOWED = 'EDIT_ALLOWED',
+  EDIT_APPROVAL_PENDING = 'EDIT_APPROVAL_PENDING',
+}
+
+export enum ApprovalRequestStatus {
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+  CANCELLED = 'CANCELLED',
+}
+
+export enum EditRequestType {
+  EDIT_PERMISSION = 'EDIT_PERMISSION',
+  REVISION_APPROVAL = 'REVISION_APPROVAL',
+}
+
+export enum RestockRequestStatus {
+  REQUESTED = 'REQUESTED',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+  PARTIALLY_RECEIVED = 'PARTIALLY_RECEIVED',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
+}
+
+export enum ReturnRequestStatus {
+  REQUESTED = 'REQUESTED',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+  PARTIALLY_DISPATCHED = 'PARTIALLY_DISPATCHED',
+  DISPATCHED = 'DISPATCHED',
+  CANCELLED = 'CANCELLED',
+}
+
+export enum InventoryTransactionType {
+  INITIAL_STOCK_IN = 'INITIAL_STOCK_IN',
+  RESTOCK_IN = 'RESTOCK_IN',
+  RETURN_TO_MERCHANT = 'RETURN_TO_MERCHANT',
+  MANUAL_ADJUSTMENT = 'MANUAL_ADJUSTMENT',
+  ORDER_RESERVED = 'ORDER_RESERVED',
+  ORDER_FULFILLED = 'ORDER_FULFILLED',
+  ORDER_RELEASED = 'ORDER_RELEASED',
+}
+
+export enum ThermalStickerSize {
+  SIZE_40X30 = '40x30mm',
+  SIZE_50X30 = '50x30mm',
+}
+
+export interface CreateProductDto {
+  title: string;
+  description?: string;
+  baseSku: string;
+  category?: string;
+  brand?: string;
+  purchasePrice?: number;
+  sellingPrice?: number;
+  weight?: string;
+  dimensions?: string;
+  imageUrl?: string;
+  images?: string[];
+  saveAsDraft?: boolean;
+  variants?: Array<{
+    title: string;
+    variantCode?: string;
+    sku?: string;
+    barcode?: string;
+    price: number;
+    wholesalePrice?: number;
+    defaultBinCode?: string;
+    imageUrl?: string;
+    attributes?: Record<string, any>;
+  }>;
+}
+
+export interface ProductApprovalRequestDto {
+  id: string;
+  productId: string;
+  merchantId: string;
+  merchantCode?: string;
+  merchantName?: string;
+  productTitle?: string;
+  productSku?: string;
+  productImage?: string;
+  sellingPrice?: number;
+  requestedBy?: string;
+  status: ApprovalRequestStatus;
+  adminId?: string;
+  rejectionReason?: string;
+  submittedAt: string;
+  reviewedAt?: string;
+}
+
+export interface StockReceivingDto {
+  productId: string;
+  variantId?: string;
+  expectedQuantity: number;
+  actualQuantity: number;
+  acceptedQuantity: number;
+  damagedQuantity: number;
+  warehouseLocation?: string;
+  binCode: string;
+  receivingNotes?: string;
+  receivedBy?: string;
+}
+
+export interface RequestProductEditDto {
+  productId: string;
+  reason?: string;
+  proposedChanges?: Record<string, any>;
+}
+
+export interface SubmitProductRevisionDto {
+  productId: string;
+  proposedSnapshot: {
+    title?: string;
+    description?: string;
+    category?: string;
+    brand?: string;
+    purchasePrice?: number;
+    sellingPrice?: number;
+    weight?: string;
+    dimensions?: string;
+    imageUrl?: string;
+    images?: string[];
+    variants?: any[];
+  };
+}
+
+export interface CreateRestockRequestDto {
+  productId: string;
+  requestedQuantity: number;
+  estimatedDeliveryDate?: string;
+  notes?: string;
+}
+
+export interface CreateReturnRequestDto {
+  productId: string;
+  requestedQuantity: number;
+  returnReason: string;
+  notes?: string;
+}
+
+export interface InventoryTransactionDto {
+  id: string;
+  productId: string;
+  merchantId: string;
+  locationId?: string;
+  transactionType: InventoryTransactionType;
+  quantity: number;
+  referenceType?: string;
+  referenceId?: string;
+  performedBy?: string;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface ActivityLogDto {
+  id: string;
+  userId?: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  previousValues?: Record<string, any>;
+  newValues?: Record<string, any>;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface InAppNotificationDto {
+  id: string;
+  recipientRole: UserRole;
+  recipientUserId?: string;
+  merchantId?: string;
+  title: string;
+  message: string;
+  type: string;
+  linkUrl?: string;
+  isRead: boolean;
+  createdAt: string;
+}
+

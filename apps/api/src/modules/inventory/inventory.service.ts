@@ -324,4 +324,116 @@ export class InventoryService {
   ) {
     return this.inventoryRepo.releaseReservedStock(items, merchantId, orderReference);
   }
+
+  // ============================================================================
+  // PRODUCT LIFECYCLE & REQUEST WORKFLOWS
+  // ============================================================================
+
+  async submitApprovalRequest(productId: string, requestedBy?: string) {
+    return this.inventoryRepo.submitApprovalRequest(productId, requestedBy);
+  }
+
+  async cancelApprovalRequest(productId: string, merchantId?: string) {
+    return this.inventoryRepo.cancelApprovalRequest(productId, merchantId);
+  }
+
+  async approveSubmission(productId: string, adminId?: string, binCode?: string) {
+    return this.inventoryRepo.approveSubmission(productId, adminId, binCode);
+  }
+
+  async rejectSubmission(productId: string, adminId?: string, reason?: string) {
+    return this.inventoryRepo.rejectSubmission(productId, adminId, reason);
+  }
+
+  async receiveInitialStock(productId: string, data: any) {
+    return this.inventoryRepo.receiveInitialStock(productId, data);
+  }
+
+  async requestEditAccess(productId: string, merchantId?: string, reason?: string) {
+    return this.inventoryRepo.requestEditAccess(productId, merchantId, reason);
+  }
+
+  async reviewEditAccess(productId: string, adminId?: string, action: 'GRANT' | 'DENY' = 'GRANT', reason?: string) {
+    return this.inventoryRepo.reviewEditAccess(productId, adminId, action, reason);
+  }
+
+  async submitRevision(productId: string, merchantId?: string, proposedSnapshot?: any) {
+    return this.inventoryRepo.submitRevision(productId, merchantId, proposedSnapshot);
+  }
+
+  async reviewRevision(productId: string, adminId?: string, action: 'APPROVE' | 'REJECT' = 'APPROVE', reason?: string) {
+    return this.inventoryRepo.reviewRevision(productId, adminId, action, reason);
+  }
+
+  async createRestockRequest(productId: string, merchantId: string, data: any) {
+    return this.inventoryRepo.createRestockRequest(productId, merchantId, data);
+  }
+
+  async reviewRestockRequest(requestId: string, adminId?: string, action: 'APPROVE' | 'REJECT' = 'APPROVE', approvedQty?: number, reason?: string) {
+    return this.inventoryRepo.reviewRestockRequest(requestId, adminId, action, approvedQty, reason);
+  }
+
+  async receiveRestockStock(requestId: string, adminId: string, data: any) {
+    return this.inventoryRepo.receiveRestockStock(requestId, adminId, data);
+  }
+
+  async createReturnRequest(productId: string, merchantId: string, data: any) {
+    return this.inventoryRepo.createReturnRequest(productId, merchantId, data);
+  }
+
+  async reviewReturnRequest(requestId: string, adminId?: string, action: 'APPROVE' | 'REJECT' = 'APPROVE', approvedQty?: number, reason?: string) {
+    return this.inventoryRepo.reviewReturnRequest(requestId, adminId, action, approvedQty, reason);
+  }
+
+  async dispatchReturnStock(requestId: string, adminId: string, data: any) {
+    return this.inventoryRepo.dispatchReturnStock(requestId, adminId, data);
+  }
+
+  async suspendProduct(productId: string, adminId?: string, reason?: string) {
+    return this.inventoryRepo.suspendProduct(productId, adminId, reason);
+  }
+
+  async reactivateProduct(productId: string, adminId?: string) {
+    return this.inventoryRepo.reactivateProduct(productId, adminId);
+  }
+
+  async listApprovalRequests(merchantId?: string, status?: string) {
+    return this.inventoryRepo.listApprovalRequests(merchantId, status);
+  }
+
+  async listEditRequests(merchantId?: string, status?: string) {
+    return this.inventoryRepo.listEditRequests(merchantId, status);
+  }
+
+  async listRestockRequests(merchantId?: string, status?: string) {
+    return this.inventoryRepo.listRestockRequests(merchantId, status);
+  }
+
+  async listReturnRequests(merchantId?: string, status?: string) {
+    return this.inventoryRepo.listReturnRequests(merchantId, status);
+  }
+
+  async listInventoryTransactions(productId?: string, merchantId?: string) {
+    return this.inventoryRepo.listInventoryTransactions(productId, merchantId);
+  }
+
+  async listActivityLogs(entityType?: string, entityId?: string) {
+    return this.inventoryRepo.listActivityLogs(entityType, entityId);
+  }
+
+  async listNotifications(role?: string, merchantId?: string, isRead?: boolean) {
+    return this.inventoryRepo.listNotifications(role, merchantId, isRead);
+  }
+
+  async markNotificationRead(id: string) {
+    return this.inventoryRepo.markNotificationRead(id);
+  }
+
+  async markAllNotificationsRead(role?: string, merchantId?: string) {
+    return this.inventoryRepo.markAllNotificationsRead(role, merchantId);
+  }
+
+  async checkOrderEligibility(productId: string, quantity: number = 1) {
+    return this.inventoryRepo.checkOrderEligibility(productId, quantity);
+  }
 }

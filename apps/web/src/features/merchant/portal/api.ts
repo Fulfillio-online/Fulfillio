@@ -202,7 +202,15 @@ export const merchantApi = {
           (dbStatus === 'STOCK_STORED' || (dbStatus === 'PUBLISHED' && totalStock > 0) || totalStock > 0);
         const isApproved = !isDraft && !isPending;
 
-        const resolvedBin = isApproved ? (rawBin || 'A-01-02') : 'Pending Approval';
+        const hasValidBin =
+          Boolean(rawBin) &&
+          rawBin !== 'Pending Approval' &&
+          rawBin !== 'Assigned on intake';
+        const resolvedBin = hasValidBin
+          ? rawBin
+          : isApproved || totalStock > 0
+            ? 'A-01-02'
+            : 'Pending Approval';
         const resolvedStatus = isDraft
           ? ('DRAFT' as const)
           : isPending
@@ -475,6 +483,8 @@ export const merchantApi = {
       )
     );
 
+    const cleanStatus = product.status === 'DRAFT' ? 'DRAFT' : 'PENDING_APPROVAL';
+
     const payload = {
       merchantCode: code,
       title: product.title,
@@ -482,7 +492,7 @@ export const merchantApi = {
       baseSku: cleanBaseSku || `PROD-${Date.now().toString().slice(-4)}`,
       imageUrl: product.imageUrl || allDistinctImages[0],
       images: allDistinctImages,
-      status: 'PENDING_APPROVAL',
+      status: cleanStatus,
       variants: (product.variantsList && product.variantsList.length > 0)
         ? product.variantsList.map((v, vIdx) => {
             const matchingColor = (product.colors || []).find(
@@ -516,8 +526,8 @@ export const merchantApi = {
                 subcategory: product.subcategory,
                 productType: product.productType,
                 keyFeatures: product.keyFeatures,
-                status: 'PENDING_APPROVAL',
-                approvalStatus: 'PENDING_APPROVAL',
+                status: cleanStatus,
+                approvalStatus: cleanStatus,
                 bin: 'Pending Approval',
               },
             };
@@ -535,8 +545,8 @@ export const merchantApi = {
               subcategory: product.subcategory,
               productType: product.productType,
               keyFeatures: product.keyFeatures,
-              status: 'PENDING_APPROVAL',
-              approvalStatus: 'PENDING_APPROVAL',
+              status: cleanStatus,
+              approvalStatus: cleanStatus,
               bin: 'Pending Approval',
             },
           }],

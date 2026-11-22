@@ -36,6 +36,8 @@ export function ApprovalActionModal({
   const [approvalType, setApprovalType] = useState<'CATALOG_ONLY' | 'ACCEPT_STOCK_NOW'>('CATALOG_ONLY');
   const [approvalQty, setApprovalQty] = useState<number | ''>(50);
   const [approvalSelectedBin, setApprovalSelectedBin] = useState<string>('A-01-02');
+  const [rejectionReason, setRejectionReason] = useState<string>('');
+  const [rejectionError, setRejectionError] = useState<string | null>(null);
 
   const initializedRef = React.useRef<string | null>(null);
 
@@ -45,7 +47,15 @@ export function ApprovalActionModal({
         initializedRef.current = approvalData.product.id;
         setApprovalType('CATALOG_ONLY');
         setApprovalQty(approvalData.product.stock || 50);
-        setApprovalSelectedBin(approvalData.selectedBin || bins[0]?.code || 'A-01-02');
+        setRejectionReason('');
+        setRejectionError(null);
+        const existingBin =
+          approvalData.product.binCode &&
+          approvalData.product.binCode !== 'Pending Approval' &&
+          approvalData.product.binCode !== 'Assigned on intake'
+            ? approvalData.product.binCode
+            : approvalData.selectedBin || bins[0]?.code || 'A-01-02';
+        setApprovalSelectedBin(existingBin);
       }
     } else if (!isOpen) {
       initializedRef.current = null;
@@ -55,6 +65,7 @@ export function ApprovalActionModal({
   if (!approvalData) return null;
 
   const isApprove = approvalData.mode === 'APPROVE';
+  const isDraftToPublish = (approvalData.product.stock || 0) > 0;
 
   const handleDecrement = () => {
     setApprovalQty((prev) => {
@@ -72,12 +83,37 @@ export function ApprovalActionModal({
 
   const handleConfirm = () => {
     if (!isApprove) {
-      onConfirm('REJECT', approvalData.product, 0, approvalSelectedBin || 'A-01-02', false);
+      if (!rejectionReason.trim()) {
+        setRejectionError('A rejection reason is strictly required to notify the merchant.');
+        return;
+      }
+      setRejectionError(null);
+      (onConfirm as any)(
+        'REJECT',
+        approvalData.product,
+        0,
+        approvalSelectedBin || 'A-01-02',
+        false,
+        rejectionReason.trim()
+      );
       onClose();
       return;
     }
 
-    // Step 1 always moves the product to the APPROVED stage (0 stored stock until warehouse receives physical goods)
+    if (isDraftToPublish) {
+      // Draft-to-Publish Approval: Restore already-stored warehouse stock to published (Stock Stored)
+      onConfirm(
+        'APPROVE',
+        approvalData.product,
+        approvalData.product.stock,
+        approvalSelectedBin || 'A-01-02',
+        true
+      );
+      onClose();
+      return;
+    }
+
+    // First-Time Approval: Step 1 moves the product to the APPROVED stage (0 stored stock until warehouse receives physical goods)
     onConfirm(
       'APPROVE',
       approvalData.product,
@@ -92,7 +128,15 @@ export function ApprovalActionModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={isApprove ? 'Accept & Approve Product Request' : 'Reject Product Submission'}
+      title={
+        isApprove
+          ? isDraftToPublish
+            ? 'Accept & Publish Product from Draft'
+            : 'Accept & Approve Product Request'
+          : isDraftToPublish
+            ? 'Reject Publish Request (Return to Draft)'
+            : 'Reject Product Submission'
+      }
       size="md"
     >
       <div className="space-y-4">
@@ -110,8 +154,12 @@ export function ApprovalActionModal({
           <div>
             <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-200 leading-relaxed">
               {isApprove
-                ? `Approve store request for "${approvalData.product.title}" from ${approvalData.product.merchantName} (${approvalData.product.merchantCode}). This moves the product to the Approved stage so the merchant can send their physical shipment to the warehouse.`
-                : `Are you sure you want to reject "${approvalData.product.title}" (${approvalData.product.fullSku}) submitted by ${approvalData.product.merchantName}?`}
+                ? isDraftToPublish
+                  ? `Approve publish request from Draft for "${approvalData.product.title}" from ${approvalData.product.merchantName} (${approvalData.product.merchantCode}). This product already has ${approvalData.product.stock} pcs stored in the warehouse and will immediately return to Stock Stored status.`
+                  : `Approve store request for "${approvalData.product.title}" from ${approvalData.product.merchantName} (${approvalData.product.merchantCode}). This moves the product to the Approved stage so the merchant can send their physical shipment to the warehouse.`
+                : isDraftToPublish
+                  ? `Reject publish request for "${approvalData.product.title}" (${approvalData.product.fullSku})? Because ${approvalData.product.stock} pcs are already stored in the warehouse, this will return the product to Draft status without deleting its stock.`
+                  : `Are you sure you want to reject "${approvalData.product.title}" (${approvalData.product.fullSku}) submitted by ${approvalData.product.merchantName}?`}
             </p>
           </div>
         </div>
@@ -131,9 +179,10 @@ export function ApprovalActionModal({
               {approvalData.product.fullSku}
             </div>
             <div className="text-slate-600 dark:text-slate-300">
-              Reserved Bin:{' '}
+              {isDraftToPublish ? 'Stored Bin & Stock: ' : 'Reserved Bin: '}
               <strong className="text-orange-700 dark:text-orange-300 tabular-nums">
                 {approvalSelectedBin}
+                {isDraftToPublish ? ` (${approvalData.product.stock} pcs stored)` : ''}
               </strong>
             </div>
           </div>
@@ -141,14 +190,34 @@ export function ApprovalActionModal({
 
         {isApprove && (
           <div className="space-y-4 pt-1">
-            <div className="p-3 rounded-xl bg-orange-500/10 border border-orange-500/30 flex items-start gap-3">
-              <Clock className="w-4 h-4 text-orange-600 shrink-0 mt-0.5" />
+            <div
+              className={`p-3 rounded-xl border flex items-start gap-3 ${
+                isDraftToPublish
+                  ? 'bg-indigo-500/10 border-indigo-500/30'
+                  : 'bg-orange-500/10 border-orange-500/30'
+              }`}
+            >
+              <Clock
+                className={`w-4 h-4 shrink-0 mt-0.5 ${
+                  isDraftToPublish ? 'text-indigo-600' : 'text-orange-600'
+                }`}
+              />
               <div className="text-xs">
                 <span className="font-bold text-slate-900 dark:text-white block">
-                  Stage 1: Product Approval (Awaiting Physical Stock)
+                  {isDraftToPublish
+                    ? `Draft-to-Publish Approval (${approvalData.product.stock} pcs Already Stored)`
+                    : 'First-Time Product Approval (Awaiting Physical Stock)'}
                 </span>
                 <p className="text-slate-500 dark:text-slate-400 mt-1 leading-relaxed text-[11px]">
-                  Changes status to <strong>Approved</strong> in PostgreSQL. Once the merchant sends the product to the warehouse and it arrives, click <strong>Product Stock</strong> to accept the goods and change the status to <strong>Stock Stored</strong>.
+                  {isDraftToPublish ? (
+                    <>
+                      This product was previously stored in the warehouse, moved to <strong>Draft</strong>, and the merchant has requested to publish it again. Approving will immediately restore it to <strong>Stock Stored ({approvalData.product.stock} pcs)</strong>.
+                    </>
+                  ) : (
+                    <>
+                      Changes status to <strong>Approved</strong> in PostgreSQL. Once the merchant sends the product to the warehouse and it arrives, click <strong>Product Stock</strong> to accept the goods and change the status to <strong>Stock Stored</strong>.
+                    </>
+                  )}
                 </p>
               </div>
             </div>
@@ -156,7 +225,7 @@ export function ApprovalActionModal({
             {/* Target Bin */}
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1.5">
-                Reserved Warehouse Storage Bin *
+                {isDraftToPublish ? 'Active Warehouse Storage Bin *' : 'Reserved Warehouse Storage Bin *'}
               </label>
               <select
                 value={approvalSelectedBin}
@@ -170,6 +239,28 @@ export function ApprovalActionModal({
                 ))}
               </select>
             </div>
+          </div>
+        )}
+
+        {!isApprove && (
+          <div className="space-y-2 pt-1">
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-200">
+              Rejection Reason <span className="text-rose-500">*</span>
+            </label>
+            <textarea
+              value={rejectionReason}
+              onChange={(e) => {
+                setRejectionReason(e.target.value);
+                if (rejectionError) setRejectionError(null);
+              }}
+              placeholder="Explain why this submission is rejected (e.g. invalid SKU format, missing weight specs, packaging non-compliant)..."
+              rows={3}
+              required
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-300 dark:border-white/15 text-xs text-navy-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-rose-500"
+            />
+            {rejectionError && (
+              <p className="text-[11px] font-semibold text-rose-500">{rejectionError}</p>
+            )}
           </div>
         )}
 
@@ -190,7 +281,13 @@ export function ApprovalActionModal({
                 : 'bg-rose-600 hover:bg-rose-500 shadow-rose-600/25'
             }`}
           >
-            {!isApprove ? 'Confirm Reject' : 'Accept & Approve Product'}
+            {!isApprove
+              ? isDraftToPublish
+                ? 'Reject & Return to Draft'
+                : 'Confirm Reject'
+              : isDraftToPublish
+                ? 'Accept & Publish Product'
+                : 'Accept & Approve Product'}
           </button>
         </div>
       </div>
