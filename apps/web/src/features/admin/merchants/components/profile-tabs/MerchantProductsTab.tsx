@@ -381,14 +381,8 @@ export function MerchantProductsTab({
     const wasAlreadyStored = (product.stock || 0) > 0;
 
     if (mode === 'APPROVE') {
-      const isStockAccepted = wasAlreadyStored || (acceptStockNow ?? finalQty > 0);
-      const actualStock = wasAlreadyStored
-        ? finalQty > 0
-          ? finalQty
-          : product.stock
-        : isStockAccepted
-          ? finalQty
-          : 0;
+      const isStockAccepted = acceptStockNow === true;
+      const actualStock = isStockAccepted ? finalQty : 0;
 
       onApproveProduct(product.id, actualStock, finalBin);
 
@@ -475,7 +469,9 @@ export function MerchantProductsTab({
             ...p,
             stock: newTotal,
             binCode: binCode || p.binCode,
-            status: 'APPROVED' as const,
+            status: 'STOCK_STORED' as const,
+            stockAccepted: true,
+            stockStatus: 'IN_STOCK' as const,
           };
         }
         return p;

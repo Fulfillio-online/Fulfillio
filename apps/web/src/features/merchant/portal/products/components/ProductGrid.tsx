@@ -11,6 +11,7 @@ import {
   Layers,
   FileText,
   CheckCircle2,
+  RotateCcw,
 } from 'lucide-react';
 import { MerchantProductItem } from '../../types';
 
@@ -50,13 +51,18 @@ export function ProductGrid({
             p.bin === 'Assigned on intake');
         const isFirstTimePending = isPendingApproval && (p.stock || 0) === 0;
         const isPublishPendingFromDraft = isPendingApproval && (p.stock || 0) > 0;
+        const isAwaitingStock =
+          !isDraft &&
+          !isPendingApproval &&
+          (p.stock === 0 || p.stockAccepted === false || p.stockStatus === 'AWAITING_STOCK');
         const isStockStored =
           !isDraft &&
           !isPendingApproval &&
+          !isAwaitingStock &&
           (p.status === 'STOCK_STORED' || (p.stock || 0) > 0);
-        const isPublished = !isDraft && !isPendingApproval;
-        const isLowStock = !isDraft && p.stock <= 30 && p.stock > 0;
-        const isOutOfStock = !isDraft && p.stock === 0;
+        const isPublished = isStockStored;
+        const isLowStock = !isDraft && isStockStored && p.stock <= 30 && p.stock > 0;
+        const isOutOfStock = isAwaitingStock;
 
         return (
           <div
@@ -113,26 +119,22 @@ export function ProductGrid({
               <div className="absolute top-2 right-2 z-10">
                 <span
                   className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border backdrop-blur shadow-xs select-none ${
-                    isPublishPendingFromDraft
-                      ? 'bg-indigo-50 text-indigo-700 border-indigo-300 dark:bg-indigo-500/20 dark:text-indigo-300 dark:border-indigo-500/30'
-                      : isFirstTimePending
+                    isPendingApproval
                       ? 'bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/30'
-                      : !isPublished || p.status === 'DRAFT'
+                      : isDraft
                       ? 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-navy-800/80 dark:text-slate-300 dark:border-white/10'
-                      : isOutOfStock
+                      : isAwaitingStock
                       ? 'bg-sky-50 text-sky-700 border-sky-300 dark:bg-sky-500/20 dark:text-sky-300 dark:border-sky-500/30'
                       : 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/30'
                   }`}
                 >
-                  {isDraft
+                  {isPendingApproval
+                    ? 'Pending Product'
+                    : isDraft
                     ? 'Draft'
-                    : isPublishPendingFromDraft
-                    ? 'Waiting for Publish'
-                    : isFirstTimePending
-                    ? 'Pending Approval'
-                    : isOutOfStock
-                    ? 'Approved'
-                    : `Stock Stored (${p.stock})`}
+                    : isAwaitingStock
+                    ? 'Waiting for Stock'
+                    : 'Published'}
                 </span>
               </div>
 
@@ -230,10 +232,10 @@ export function ProductGrid({
                     type="button"
                     onClick={() => onToggleStatus(p.id)}
                     className="text-xs font-bold px-2 py-1.5 rounded-lg border bg-slate-100 hover:bg-slate-200 dark:bg-navy-800 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-white/10 transition-all flex items-center gap-1.5 cursor-pointer flex-1 justify-center"
-                    title="Save product in Draft"
+                    title={isPendingApproval || isAwaitingStock ? 'Cancel Submission and save in Draft' : 'Save product in Draft'}
                   >
-                    <FileText className="h-3.5 w-3.5 text-amber-500" />
-                    <span>Save in Draft</span>
+                    <RotateCcw className="h-3.5 w-3.5 text-amber-500" />
+                    <span>{isPendingApproval || isAwaitingStock ? 'Cancel Submission' : 'Save in Draft'}</span>
                   </button>
                 )}
 

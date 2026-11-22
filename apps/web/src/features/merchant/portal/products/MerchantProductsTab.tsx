@@ -30,6 +30,7 @@ import { RequestEditModal } from './modals/RequestEditModal';
 
 const isPendingApprovalProduct = (p: MerchantProductItem): boolean => {
   if (p.status === 'DRAFT') return false;
+  if (p.status === 'APPROVED' || p.status === 'PUBLISHED' || p.status === 'STOCK_STORED') return false;
   if (p.status === 'PENDING_APPROVAL') return true;
   if (!p.bin || p.bin === 'Pending Approval' || p.bin === 'Assigned on intake') return true;
   return false;
@@ -115,7 +116,7 @@ export function MerchantProductsTab({
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editModalProduct, setEditModalProduct] = useState<MerchantProductItem | null>(null);
 
-  const { categories: storeCategories = [] } = useMerchant();
+  const { categories: storeCategories = [], requestEditAccess } = useMerchant();
 
   // Category options extraction
   const categories = useMemo(() => {
@@ -134,10 +135,19 @@ export function MerchantProductsTab({
     const draftProducts = products.filter((p) => p.status === 'DRAFT');
     const pendingApproval = products.filter((p) => p.status !== 'DRAFT' && isPendingApprovalProduct(p));
     const awaitingStock = products.filter(
-      (p) => p.status !== 'DRAFT' && !isPendingApprovalProduct(p) && p.stock === 0
+      (p) =>
+        p.status !== 'DRAFT' &&
+        !isPendingApprovalProduct(p) &&
+        (p.status === 'APPROVED' || p.stockStatus === 'AWAITING_STOCK' || p.stockAccepted === false || p.stock === 0)
     );
     const activeProducts = products.filter(
-      (p) => p.status !== 'DRAFT' && !isPendingApprovalProduct(p) && p.stock > 0
+      (p) =>
+        p.status !== 'DRAFT' &&
+        !isPendingApprovalProduct(p) &&
+        (p.status === 'STOCK_STORED' || (p.status === 'PUBLISHED' && p.stockAccepted === true)) &&
+        p.stock > 0 &&
+        p.stockAccepted !== false &&
+        p.stockStatus !== 'AWAITING_STOCK'
     );
     const editApprovalPending = products.filter((p) => (p as any).editState === 'EDIT_APPROVAL_PENDING');
     const restockRequests = stockRequests.filter(
@@ -179,10 +189,18 @@ export function MerchantProductsTab({
       (p) => p.status !== 'DRAFT' && isPendingApprovalProduct(p)
     );
     const awaitingStockProducts = products.filter(
-      (p) => p.status !== 'DRAFT' && !isPendingApprovalProduct(p) && p.stock === 0
+      (p) =>
+        p.status !== 'DRAFT' &&
+        !isPendingApprovalProduct(p) &&
+        (p.stock === 0 || p.stockAccepted === false || p.stockStatus === 'AWAITING_STOCK')
     );
     const activeProducts = products.filter(
-      (p) => p.status !== 'DRAFT' && !isPendingApprovalProduct(p) && p.stock > 0
+      (p) =>
+        p.status !== 'DRAFT' &&
+        !isPendingApprovalProduct(p) &&
+        p.stock > 0 &&
+        p.stockAccepted !== false &&
+        p.stockStatus !== 'AWAITING_STOCK'
     );
     const editApprovalPendingProducts = products.filter(
       (p) => (p as any).editState === 'EDIT_APPROVAL_PENDING'
@@ -215,11 +233,15 @@ export function MerchantProductsTab({
       .filter((p) => {
         const isDraft = p.status === 'DRAFT';
         const isPendingApproval = isPendingApprovalProduct(p);
+        const isAwaitingStock =
+          !isDraft &&
+          !isPendingApproval &&
+          (p.stock === 0 || p.stockAccepted === false || p.stockStatus === 'AWAITING_STOCK');
         const isActiveOrPublished =
           !isDraft &&
           !isPendingApproval &&
+          !isAwaitingStock &&
           (p.status === 'STOCK_STORED' || (p.status === 'PUBLISHED' && p.stock > 0) || p.stock > 0);
-        const isAwaitingStock = !isDraft && !isPendingApproval && p.stock === 0;
         const isEditApprovalPending = (p as any).editState === 'EDIT_APPROVAL_PENDING';
 
         if (activeTab === 'DRAFT') {
@@ -658,16 +680,20 @@ export function MerchantProductsTab({
           setEditModalProduct(null);
         }}
         onSubmit={async (productId, reason) => {
-          try {
-            await fetch(`/api/inventory/products/${productId}/request-edit`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ reason }),
-            });
-            onTriggerToast?.('Product edit request submitted for warehouse admin review');
-          } catch (err) {
-            console.error('Failed to submit edit request:', err);
-            onTriggerToast?.('Failed to submit edit request');
+          if (requestEditAccess) {
+            await requestEditAccess(productId, reason);
+          } else {
+            try {
+              await fetch(`/api/inventory/products/${productId}/request-edit`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reason }),
+              });
+              onTriggerToast?.('Product edit request submitted for warehouse admin review');
+            } catch (err) {
+              console.error('Failed to submit edit request:', err);
+              onTriggerToast?.('Failed to submit edit request');
+            }
           }
         }}
       />

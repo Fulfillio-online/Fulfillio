@@ -146,11 +146,12 @@ export function QuickOrderCheckoutModal({
 
       const newOrder: MerchantOrderItem = {
         id: generatedId,
-        orderNumber: `#${generatedId}`,
+        orderNumber: generatedId,
         date: 'Today, Just now',
         customer: customerName.trim(),
         phone: customerPhone.trim(),
         address: `${customerAddress.trim()}, ${city}`,
+        city: city,
         productId: cartItems[0]?.productId || 'p-1',
         items: cartItems.map((it) => `${it.title} (${it.variantLabel}) x ${it.qty}`).join(', '),
         qty: totalItemCount,

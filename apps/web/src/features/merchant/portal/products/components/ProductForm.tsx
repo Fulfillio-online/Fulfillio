@@ -26,6 +26,7 @@ import {
   Info,
   SlidersHorizontal,
   FileText,
+  ShieldAlert,
 } from 'lucide-react';
 import { SAMPLE_PRODUCT_PRESETS } from '../utils/imageCompressor';
 import { MerchantProductItem } from '../../types';
@@ -587,6 +588,27 @@ export function ProductForm({
     return initialProduct?.barcode || `890${Math.floor(1000000000 + Math.random() * 9000000000)}`;
   }, [initialProduct?.barcode]);
 
+  // Product Stage & Admin Acceptance Identification
+  const isInitialDraft = initialProduct?.status === 'DRAFT' || Boolean(initialProduct?.isDraft);
+  const isInitialPending =
+    !isInitialDraft &&
+    (initialProduct?.status === 'PENDING_APPROVAL' ||
+      !initialProduct?.bin ||
+      initialProduct?.bin === 'Pending Approval' ||
+      initialProduct?.bin === 'Assigned on intake');
+  const isFirstTimePending = isInitialPending && (initialProduct?.stock || 0) === 0;
+  const isEditAllowed = (initialProduct as any)?.editState === 'EDIT_ALLOWED';
+  const isAcceptedByAdmin =
+    Boolean(isEdit) &&
+    !isInitialDraft &&
+    !isFirstTimePending &&
+    (initialProduct?.status === 'APPROVED' ||
+      initialProduct?.status === 'STOCK_STORED' ||
+      (Boolean(initialProduct?.bin) &&
+        initialProduct?.bin !== 'Pending Approval' &&
+        initialProduct?.bin !== 'Assigned on intake'));
+  const canDirectEdit = !isEdit || isInitialDraft || isFirstTimePending || isEditAllowed;
+
   // Submit Handler: Supports both "Save as Draft" and "Save to Publish" (Submit for Approval)
   const handleSubmit = useCallback(
     async (actionType: 'DRAFT' | 'PENDING_APPROVAL' = 'PENDING_APPROVAL', e?: React.FormEvent) => {
@@ -594,21 +616,21 @@ export function ProductForm({
       if (isSubmitting) return;
 
       // Security & Inventory Integrity Guard:
-      const isInitialDraft = initialProduct?.status === 'DRAFT' || Boolean(initialProduct?.isDraft);
-      const isInitialPending =
-        !isInitialDraft &&
-        (initialProduct?.status === 'PENDING_APPROVAL' ||
-          !initialProduct?.bin ||
-          initialProduct?.bin === 'Pending Approval' ||
-          initialProduct?.bin === 'Assigned on intake');
-      const isFirstTimePending = isInitialPending && (initialProduct?.stock || 0) === 0;
-      const canEdit = !isEdit || isInitialDraft || isFirstTimePending;
-
-      if (isEdit && !canEdit) {
+      if (isEdit && isAcceptedByAdmin && actionType === 'DRAFT') {
         setSubmitError(
-          (initialProduct?.stock || 0) > 0
+          'Action Blocked: After warehouse admin accepts a product, it cannot be drafted or directly edited.'
+        );
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+
+      if (isEdit && !canDirectEdit) {
+        setSubmitError(
+          isAcceptedByAdmin
+            ? 'Action Blocked: This product has been accepted by the warehouse admin. Direct editing is locked. Please use "Request Edit Access" from the products catalog.'
+            : (initialProduct?.stock || 0) > 0
             ? 'This product already has stock stored in the warehouse and is waiting for publish approval from Draft. Direct editing is locked.'
-            : 'Merchants can strictly only edit products in Draft or First-Time Pending Approval status.',
+            : 'Merchants can strictly only edit products in Draft or First-Time Pending Approval status.'
         );
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
@@ -684,9 +706,12 @@ export function ProductForm({
         description,
         price: numValue,
         costPrice: numCost,
-        stock: computedTotalStock,
+        stock: isAcceptedByAdmin ? (initialProduct?.stock || 0) : 0,
+        stockAccepted: isAcceptedByAdmin ? (initialProduct?.stockAccepted ?? ((initialProduct?.stock || 0) > 0)) : false,
+        stockStatus: isAcceptedByAdmin ? (initialProduct?.stockStatus || 'IN_STOCK') : 'AWAITING_STOCK',
         reserved: initialProduct?.reserved || 0,
         status: finalProductStatus,
+        editState: isAcceptedByAdmin ? 'EDIT_APPROVAL_PENDING' : null,
         imageUrl: primaryImage,
         images: allActiveImages,
         keyFeatures: features,
@@ -695,7 +720,9 @@ export function ProductForm({
           imageUrl: (c.imageUrl || '').trim(),
         })),
         sizes: allActiveSizes.length > 0 ? allActiveSizes : allSizes,
-        variantsList: cleanedVariants,
+        variantsList: isAcceptedByAdmin
+          ? cleanedVariants
+          : cleanedVariants.map((v) => ({ ...v, stock: 0 })),
         totalOrders: initialProduct?.totalOrders || 0,
       };
 
@@ -808,25 +835,31 @@ export function ProductForm({
               Discard
             </Link>
 
-            {/* Option 1: Save as Draft */}
-            <button
-              type="button"
-              onClick={() => handleSubmit('DRAFT')}
-              disabled={isSubmitting}
-              className="px-3.5 sm:px-4 py-2 rounded-xl border border-slate-300 dark:border-white/15 bg-white dark:bg-navy-800 hover:bg-slate-50 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-[0.98] disabled:opacity-50"
-              title="Save as private draft (only visible in your merchant dashboard)"
-            >
-              <FileText className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-              <span>Save as Draft</span>
-            </button>
+            {/* Option 1: Save as Draft (Only available before admin approval) */}
+            {!isAcceptedByAdmin && (
+              <button
+                type="button"
+                onClick={() => handleSubmit('DRAFT')}
+                disabled={isSubmitting}
+                className="px-3.5 sm:px-4 py-2 rounded-xl border border-slate-300 dark:border-white/15 bg-white dark:bg-navy-800 hover:bg-slate-50 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-[0.98] disabled:opacity-50"
+                title="Save as private draft (only visible in your merchant dashboard)"
+              >
+                <FileText className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                <span>Save as Draft</span>
+              </button>
+            )}
 
             {/* Option 2: Save to Publish / Submit for Approval */}
             <button
               type="button"
               onClick={() => handleSubmit('PENDING_APPROVAL')}
-              disabled={isSubmitting}
+              disabled={isSubmitting || (isAcceptedByAdmin && !isEditAllowed)}
               className="px-4 sm:px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white text-xs font-bold shadow-[0_1px_2px_rgba(242,107,29,0.25)] transition-all flex items-center gap-1.5 cursor-pointer active:scale-[0.98]"
-              title="Save and submit for warehouse admin approval"
+              title={
+                isAcceptedByAdmin && !isEditAllowed
+                  ? 'Product is accepted by warehouse admin. Direct editing is locked.'
+                  : 'Save and submit for warehouse admin approval'
+              }
             >
               {isSubmitting ? (
                 <>
@@ -836,7 +869,15 @@ export function ProductForm({
               ) : (
                 <>
                   <Check className="h-4 w-4 stroke-[2.5] shrink-0" />
-                  <span>{isEdit && isApprovedByAdmin ? 'Save Changes' : 'Save to Publish'}</span>
+                  <span>
+                    {isAcceptedByAdmin && !isEditAllowed
+                      ? 'Editing Locked (Approved)'
+                      : isAcceptedByAdmin && isEditAllowed
+                      ? 'Submit Revisions'
+                      : isInitialDraft
+                      ? 'Save to Publish'
+                      : 'Save Changes'}
+                  </span>
                 </>
               )}
             </button>
@@ -856,6 +897,16 @@ export function ProductForm({
           >
             <X className="h-3.5 w-3.5" />
           </button>
+        </div>
+      )}
+
+      {/* Admin Accepted Guard Banner */}
+      {isAcceptedByAdmin && !isEditAllowed && (
+        <div className="mb-8 p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs flex items-center gap-3 shadow-xs">
+          <AlertCircle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <div className="flex-1">
+            <span className="font-bold">Locked by Warehouse:</span> This product has been accepted and approved by the warehouse admin. Direct editing and moving to Draft are locked. If revisions are required, please use &ldquo;Request Edit Access&rdquo; from the products table.
+          </div>
         </div>
       )}
 
@@ -1619,26 +1670,41 @@ export function ProductForm({
                 </div>
 
                 {/* Bulk Stock Setter */}
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                    Bulk fill:
+                {!isAcceptedByAdmin ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                      Bulk fill:
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={bulkStockValue}
+                      onChange={(e) => setBulkStockValue(e.target.value)}
+                      className="w-20 px-3 py-1.5 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-mono font-bold text-center focus:outline-none focus:border-orange-500 shadow-xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleBulkApplyStock}
+                      className="px-3.5 py-1.5 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 text-xs font-bold text-slate-800 dark:text-slate-200 transition-colors cursor-pointer shadow-xs"
+                    >
+                      Apply All
+                    </button>
+                  </div>
+                ) : (
+                  <span className="px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400 text-xs font-semibold border border-amber-500/20">
+                    Stock Locked by Warehouse
                   </span>
-                  <input
-                    type="number"
-                    min="0"
-                    value={bulkStockValue}
-                    onChange={(e) => setBulkStockValue(e.target.value)}
-                    className="w-20 px-3 py-1.5 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-mono font-bold text-center focus:outline-none focus:border-orange-500 shadow-xs"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleBulkApplyStock}
-                    className="px-3.5 py-1.5 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 text-xs font-bold text-slate-800 dark:text-slate-200 transition-colors cursor-pointer shadow-xs"
-                  >
-                    Apply All
-                  </button>
-                </div>
+                )}
               </div>
+
+              {isAcceptedByAdmin && (
+                <div className="p-3 rounded-xl bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-500/20 text-xs text-amber-800 dark:text-amber-300 flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <span>
+                    Warehouse Stock Protected: Inventory counts can only be adjusted by warehouse physical receiving, inbound restock, or customer returns.
+                  </span>
+                </div>
+              )}
 
               {/* Table */}
               <div className="rounded-2xl border border-slate-200/80 dark:border-white/10 overflow-hidden bg-white dark:bg-navy-900 shadow-xs">
@@ -1671,21 +1737,28 @@ export function ProductForm({
                             type="number"
                             min="0"
                             value={v.stock}
+                            disabled={isAcceptedByAdmin}
                             onChange={(e) =>
                               handleStockChange(v.id, Number(e.target.value) || 0)
                             }
-                            className="w-24 px-3 py-1.5 text-right bg-slate-50/60 dark:bg-navy-950/60 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-mono font-bold text-slate-900 dark:text-white focus:outline-none focus:border-orange-500 shadow-xs"
+                            className={`w-24 px-3 py-1.5 text-right border rounded-xl text-xs font-mono font-bold shadow-xs ${
+                              isAcceptedByAdmin
+                                ? 'bg-slate-100 dark:bg-navy-800/80 border-slate-200 dark:border-white/10 text-slate-500 cursor-not-allowed'
+                                : 'bg-slate-50/60 dark:bg-navy-950/60 border-slate-200 dark:border-white/10 text-slate-900 dark:text-white focus:outline-none focus:border-orange-500'
+                            }`}
                           />
                         </td>
                         <td className="py-3 px-4 text-center">
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveVariant(v.id)}
-                            className="text-slate-400 hover:text-rose-500 p-1 cursor-pointer"
-                            title="Exclude variant from stock"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
+                          {!isAcceptedByAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveVariant(v.id)}
+                              className="text-slate-400 hover:text-rose-500 p-1 cursor-pointer"
+                              title="Exclude variant from stock"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -1697,18 +1770,28 @@ export function ProductForm({
 
           {/* Standard Item Stock */}
           {productType === 'STANDARD' && (
-            <div className="pt-3 border-t border-slate-100 dark:border-white/5">
-              <label className="block text-xs font-semibold text-slate-800 dark:text-slate-200 mb-2">
+            <div className="pt-3 border-t border-slate-100 dark:border-white/5 space-y-2">
+              <label className="block text-xs font-semibold text-slate-800 dark:text-slate-200">
                 Initial Warehouse Stock Units
               </label>
               <input
                 type="number"
                 min="0"
                 value={standardStock}
+                disabled={isAcceptedByAdmin}
                 onChange={(e) => setStandardStock(e.target.value)}
                 placeholder="30"
-                className="w-48 px-4 py-2.5 bg-white dark:bg-navy-950/60 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:border-orange-500 shadow-xs"
+                className={`w-48 px-4 py-2.5 border rounded-xl text-sm font-bold shadow-xs ${
+                  isAcceptedByAdmin
+                    ? 'bg-slate-100 dark:bg-navy-800/80 border-slate-200 dark:border-white/10 text-slate-500 cursor-not-allowed'
+                    : 'bg-white dark:bg-navy-950/60 border-slate-200 dark:border-white/10 text-slate-900 dark:text-white focus:outline-none focus:border-orange-500'
+                }`}
               />
+              {isAcceptedByAdmin && (
+                <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                  Stock is managed by warehouse intake / restock operations.
+                </p>
+              )}
             </div>
           )}
         </section>
@@ -1816,25 +1899,31 @@ export function ProductForm({
             Discard
           </Link>
 
-          {/* Option 1: Save as Draft */}
-          <button
-            type="button"
-            onClick={() => handleSubmit('DRAFT')}
-            disabled={isSubmitting}
-            className="px-5 py-2.5 rounded-xl border border-slate-300 dark:border-white/15 bg-white dark:bg-navy-800 hover:bg-slate-50 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-xs active:scale-[0.98] disabled:opacity-50"
-            title="Save as private draft (only visible in your merchant dashboard)"
-          >
-            <FileText className="h-4 w-4 text-amber-500" />
-            <span>Save as Draft</span>
-          </button>
+          {/* Option 1: Save as Draft (Only available before admin approval) */}
+          {!isAcceptedByAdmin && (
+            <button
+              type="button"
+              onClick={() => handleSubmit('DRAFT')}
+              disabled={isSubmitting}
+              className="px-5 py-2.5 rounded-xl border border-slate-300 dark:border-white/15 bg-white dark:bg-navy-800 hover:bg-slate-50 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-xs active:scale-[0.98] disabled:opacity-50"
+              title="Save as private draft (only visible in your merchant dashboard)"
+            >
+              <FileText className="h-4 w-4 text-amber-500" />
+              <span>Save as Draft</span>
+            </button>
+          )}
 
           {/* Option 2: Save to Publish / Submit for Approval */}
           <button
             type="button"
             onClick={() => handleSubmit('PENDING_APPROVAL')}
-            disabled={isSubmitting}
+            disabled={isSubmitting || (isAcceptedByAdmin && !isEditAllowed)}
             className="px-6 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white text-xs font-bold shadow-[0_1px_2px_rgba(242,107,29,0.25)] transition-all flex items-center gap-2 cursor-pointer active:scale-[0.98]"
-            title="Save and submit for warehouse admin approval"
+            title={
+              isAcceptedByAdmin && !isEditAllowed
+                ? 'Product is accepted by warehouse admin. Direct editing is locked.'
+                : 'Save and submit for warehouse admin approval'
+            }
           >
             {isSubmitting ? (
               <>
@@ -1844,7 +1933,15 @@ export function ProductForm({
             ) : (
               <>
                 <Check className="h-4 w-4 stroke-[2.5]" />
-                <span>{isEdit && isApprovedByAdmin ? 'Save Changes' : 'Save to Publish'}</span>
+                <span>
+                  {isAcceptedByAdmin && !isEditAllowed
+                    ? 'Editing Locked (Approved)'
+                    : isAcceptedByAdmin && isEditAllowed
+                    ? 'Submit Revisions'
+                    : isInitialDraft
+                    ? 'Save to Publish'
+                    : 'Save Changes'}
+                </span>
               </>
             )}
           </button>

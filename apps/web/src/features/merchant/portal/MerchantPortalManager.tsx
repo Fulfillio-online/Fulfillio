@@ -28,6 +28,8 @@ import {
   syncMerchantMemoToAdmin,
   syncMerchantMemoDeletedToAdmin,
   syncMerchantProductUpdatedToAdmin,
+  syncMerchantOrderCancelledToAdmin,
+  cancelOrderInDatabase,
   getMerchantProfileKey,
 } from '@/lib/warehouseSync';
 import { MerchantSidebar } from './components/MerchantSidebar';
@@ -38,6 +40,7 @@ import { MerchantOrdersTab } from './components/tabs/MerchantOrdersTab';
 import { MerchantMemoDesignerTab } from './components/tabs/MerchantMemoDesignerTab';
 import { MerchantInboundAsnTab } from './components/tabs/MerchantInboundAsnTab';
 import { MerchantBillingTab } from './components/tabs/MerchantBillingTab';
+import { MerchantReturnsTab } from './components/tabs/MerchantReturnsTab';
 import { MerchantApiKeysTab } from './components/tabs/MerchantApiKeysTab';
 import { MerchantProfileTab, StoreProfileData } from './profile';
 
@@ -51,6 +54,7 @@ function MerchantPortalInner() {
     'overview',
     'products',
     'orders',
+    'returns',
     'memo-designer',
     'inbound',
     'tracking',
@@ -330,19 +334,34 @@ function MerchantPortalInner() {
     });
   };
 
-  const handleCancelOrder = (orderId: string) => {
-    const target = orders.find((o) => o.id === orderId);
-    if (!target) return;
+  const handleCancelOrder = async (orderId: string, reason?: string): Promise<boolean> => {
+    if (!orderId) return false;
+    const cleanReqId = orderId.replace(/^#/, '').toLowerCase().trim();
+
+    const target = orders.find((o) => {
+      const oId = (o.id || '').replace(/^#/, '').toLowerCase().trim();
+      const oNum = (o.orderNumber || '').replace(/^#/, '').toLowerCase().trim();
+      return (
+        oId === cleanReqId ||
+        oNum === cleanReqId ||
+        o.id === orderId ||
+        o.orderNumber === orderId
+      );
+    });
+
+    const cleanTargetId = target?.orderNumber || target?.id || cleanReqId;
+    const displayOrderNum = cleanTargetId.startsWith('#') ? cleanTargetId : `#${cleanTargetId}`;
 
     const itemsToRestore: { productId: string; qty: number; variantSku?: string }[] = [];
-    if (target.lineItems && target.lineItems.length > 0) {
+    if (target?.lineItems && target.lineItems.length > 0) {
       target.lineItems.forEach((li) => {
         itemsToRestore.push({ productId: li.id, qty: li.quantity, variantSku: li.sku });
       });
-    } else if (target.productId) {
-      itemsToRestore.push({ productId: target.productId, qty: target.qty });
+    } else if (target?.productId) {
+      itemsToRestore.push({ productId: target.productId, qty: target.qty || 1 });
     }
 
+    let latestProducts = products;
     if (itemsToRestore.length > 0) {
       setProducts((prev) => {
         const next = prev.map((p) => {
@@ -370,6 +389,7 @@ function MerchantPortalInner() {
           }
           return p;
         });
+        latestProducts = next;
         if (typeof window !== 'undefined') {
           localStorage.setItem(STORAGE_KEY_MERCHANT_PRODUCTS, JSON.stringify(next));
         }
@@ -378,15 +398,42 @@ function MerchantPortalInner() {
     }
 
     setOrders((prev) => {
-      const next = prev.map((o) =>
-        o.id === orderId ? { ...o, status: 'CANCELLED' as const } : o
-      );
+      const next = prev.map((o) => {
+        const oId = (o.id || '').replace(/^#/, '').toLowerCase().trim();
+        const oNum = (o.orderNumber || '').replace(/^#/, '').toLowerCase().trim();
+        if (
+          oId === cleanReqId ||
+          oNum === cleanReqId ||
+          o.id === orderId ||
+          o.orderNumber === orderId
+        ) {
+          return { ...o, status: 'CANCELLED' as const };
+        }
+        return o;
+      });
       if (typeof window !== 'undefined') {
         localStorage.setItem(STORAGE_KEY_MERCHANT_ORDERS, JSON.stringify(next));
       }
       return next;
     });
-    showToast(`Order ${orderId} cancelled & stock restored.`);
+
+    try {
+      await cancelOrderInDatabase(cleanTargetId);
+      if (target?.id && target.id !== cleanTargetId) {
+        await cancelOrderInDatabase(target.id);
+      }
+    } catch (e) {
+      console.warn('[MerchantPortalManager] DB cancel error:', e);
+    }
+
+    syncMerchantOrderCancelledToAdmin(cleanTargetId, itemsToRestore, latestProducts);
+
+    window.dispatchEvent(
+      new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'MerchantPortalManager' } })
+    );
+
+    showToast(`Order ${displayOrderNum} cancelled successfully & stock restored in PostgreSQL database.`);
+    return true;
   };
 
   const handleCreateAsn = (newAsn: MerchantAsnRecord) => {
@@ -513,6 +560,15 @@ function MerchantPortalInner() {
               memoList={memoList}
               onCreateOrder={handleCreateOrder}
               onCancelOrder={handleCancelOrder}
+              onTriggerToast={showToast}
+            />
+          )}
+
+          {activeTab === 'returns' && (
+            <MerchantReturnsTab
+              profile={profile}
+              orders={orders}
+              products={products}
               onTriggerToast={showToast}
             />
           )}

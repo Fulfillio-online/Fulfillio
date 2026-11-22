@@ -12,6 +12,7 @@ export * from './components/tabs/MerchantMemoDesignerTab';
 export * from './components/tabs/MerchantTrackingTab';
 export * from './components/tabs/MerchantInboundAsnTab';
 export * from './components/tabs/MerchantBillingTab';
+export * from './components/tabs/MerchantReturnsTab';
 export * from './components/tabs/MerchantApiKeysTab';
 export * from './api';
 export * from './categories/MerchantCategoriesPage';

@@ -14,11 +14,11 @@ export function StatusBadge({ status, className, dot = true }: StatusBadgeProps)
     'bg-slate-100 text-slate-700 border-slate-200 dark:bg-white/5 dark:text-slate-300 dark:border-white/10';
   let dotColor = 'bg-slate-400';
 
-  if (['ACTIVE', 'APPROVED', 'VERIFIED', 'DELIVERED', 'READY'].includes(normalized)) {
+  if (['ACTIVE', 'APPROVED', 'VERIFIED', 'DELIVERED', 'READY', 'PUBLISHED', 'STOCK_STORED'].includes(normalized)) {
     styles =
       'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/30';
     dotColor = 'bg-emerald-500';
-  } else if (['PENDING', 'PENDING_APPROVAL', 'PENDING_REVIEW', 'ALLOCATED', 'PICKING', 'PACKED', 'PROCESSING'].includes(normalized)) {
+  } else if (['PENDING', 'PENDING_APPROVAL', 'PENDING_REVIEW', 'PENDING PRODUCT', 'ALLOCATED', 'PICKING', 'PACKED', 'PROCESSING'].includes(normalized)) {
     styles =
       'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/30';
     dotColor = 'bg-amber-500';
@@ -26,7 +26,7 @@ export function StatusBadge({ status, className, dot = true }: StatusBadgeProps)
     styles =
       'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:border-rose-500/30';
     dotColor = 'bg-rose-500';
-  } else if (['DISPATCHED', 'IN_TRANSIT', 'WEEKLY', 'BI-WEEKLY'].includes(normalized)) {
+  } else if (['DISPATCHED', 'IN_TRANSIT', 'WEEKLY', 'BI-WEEKLY', 'WAITING FOR STOCK', 'AWAITING_STOCK', 'AWAITING STOCK'].includes(normalized)) {
     styles =
       'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:border-sky-500/30';
     dotColor = 'bg-sky-500';

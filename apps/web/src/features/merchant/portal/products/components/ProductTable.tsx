@@ -24,6 +24,7 @@ import { MerchantProductItem } from '../../types';
 
 export const isPendingApprovalProductItem = (p: MerchantProductItem): boolean => {
   if (p.status === 'DRAFT') return false;
+  if (p.status === 'APPROVED' || p.status === 'PUBLISHED' || p.status === 'STOCK_STORED') return false;
   return (
     p.status === 'PENDING_APPROVAL' ||
     !p.bin ||
@@ -51,14 +52,16 @@ export const isPublishPendingFromDraftItem = (p: MerchantProductItem): boolean =
   return isPendingApprovalProductItem(p) && (p.stock || 0) > 0;
 };
 
-export const isStockStoredProductItem = (p: MerchantProductItem): boolean => {
-  if (p.status === 'DRAFT' || isPendingApprovalProductItem(p)) return false;
-  return p.status === 'STOCK_STORED' || (p.stock || 0) > 0;
-};
-
 export const isApprovedAwaitingStockProductItem = (p: MerchantProductItem): boolean => {
   if (p.status === 'DRAFT' || isPendingApprovalProductItem(p)) return false;
-  return !isStockStoredProductItem(p);
+  if (p.stockStatus === 'AWAITING_STOCK' || p.stockAccepted === false) return true;
+  return p.status === 'APPROVED' || ((p.stock || 0) === 0 && p.status !== 'STOCK_STORED' && p.status !== 'PUBLISHED');
+};
+
+export const isStockStoredProductItem = (p: MerchantProductItem): boolean => {
+  if (p.status === 'DRAFT' || isPendingApprovalProductItem(p)) return false;
+  if (isApprovedAwaitingStockProductItem(p)) return false;
+  return p.status === 'PUBLISHED' || p.status === 'STOCK_STORED' || (p.stockAccepted === true && (p.stock || 0) > 0);
 };
 
 export function ProductTable({
@@ -93,15 +96,16 @@ export function ProductTable({
 
   const renderDropdownItems = (p: MerchantProductItem) => {
     const isDraft = p.status === 'DRAFT';
-    const isFirstTimePending = !isDraft && isFirstTimePendingApprovalItem(p);
-    const isPublishPendingFromDraft = !isDraft && isPublishPendingFromDraftItem(p);
+    const isPendingApproval = !isDraft && isPendingApprovalProductItem(p);
+    const isAwaitingStock = isApprovedAwaitingStockProductItem(p);
     const isStockStored = isStockStoredProductItem(p);
     const isEditAllowed = (p as any).editState === 'EDIT_ALLOWED';
     const isEditPending = (p as any).editState === 'EDIT_APPROVAL_PENDING';
+    const isEditAccessRequested = (p as any).editState === 'EDIT_ACCESS_REQUESTED';
     const isSuspended = Boolean((p as any).isSuspended);
 
-    // APPROVAL TYPE 1: First-Time Product Approval (0 stock in warehouse) -> Can View, Edit, Save in Draft, and Delete/Cancel Request
-    if (isFirstTimePending) {
+    // DRAFT STAGE: Merchant can View, Edit Draft, Submit for Approval, Delete (stock = 0)
+    if (isDraft) {
       return (
         <>
           <Link
@@ -119,7 +123,7 @@ export function ProductTable({
             className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-semibold"
           >
             <Edit2 className="h-3.5 w-3.5 text-orange-500" />
-            <span>Edit Product</span>
+            <span>Edit Draft</span>
           </Link>
 
           <button
@@ -128,10 +132,10 @@ export function ProductTable({
               setActiveMenuId(null);
               onToggleStatus(p.id);
             }}
-            className="w-full px-3.5 py-2 text-xs text-amber-600 dark:text-amber-400 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-semibold"
+            className="w-full px-3.5 py-2 text-xs text-emerald-600 dark:text-emerald-400 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-semibold"
           >
-            <RotateCcw className="h-3.5 w-3.5 text-amber-500" />
-            <span>Cancel Request (Move to Draft)</span>
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+            <span>Submit for Approval</span>
           </button>
 
           <div className="border-t border-slate-100 dark:border-white/10 my-1" />
@@ -151,8 +155,9 @@ export function ProductTable({
       );
     }
 
-    // APPROVAL TYPE 2: Draft-to-Publish Approval (Already has stock stored in warehouse)
-    if (isPublishPendingFromDraft) {
+    // STAGE 1: Pending Approval (Awaiting Admin review)
+    // Merchant can: View Details, Edit (if stock === 0), Cancel Submission (moves to Draft), Delete (if stock === 0)
+    if (isPendingApproval) {
       return (
         <>
           <Link
@@ -163,161 +168,194 @@ export function ProductTable({
             <Eye className="h-3.5 w-3.5 text-sky-500" />
             <span>View Product Details</span>
           </Link>
-          <div className="w-full px-3.5 py-1.5 text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold flex items-center gap-2 bg-indigo-50/50 dark:bg-navy-950/60">
-            <Clock className="h-3 w-3" />
-            <span>Waiting for Warehouse Publish</span>
-          </div>
-        </>
-      );
-    }
 
-    return (
-      <>
-        {/* View Product Details */}
-        <Link
-          href={`/merchant/products/${p.id}`}
-          onClick={() => setActiveMenuId(null)}
-          className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors"
-        >
-          <Eye className="h-3.5 w-3.5 text-sky-500" />
-          <span>View Product Details</span>
-        </Link>
-
-        {/* If Edit Permission Granted -> Direct Edit Button */}
-        {isEditAllowed && (
-          <Link
-            href={`/merchant/products/${p.id}/edit`}
-            onClick={() => setActiveMenuId(null)}
-            className="w-full px-3.5 py-2 text-xs text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-bold"
-          >
-            <Edit2 className="h-3.5 w-3.5 text-orange-500" />
-            <span>Edit Product (Approved)</span>
-          </Link>
-        )}
-
-        {/* If Edit Revision in Review */}
-        {isEditPending && (
-          <div className="w-full px-3.5 py-1.5 text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold flex items-center gap-2 bg-indigo-50/50 dark:bg-navy-950/60">
-            <Clock className="h-3 w-3" />
-            <span>Revision in QA Review</span>
-          </div>
-        )}
-
-        {/* STAGE 2: Stock Stored -> Actions matching Permission Matrix */}
-        {isStockStored && !isSuspended && (
-          <>
-            <button
-              type="button"
-              onClick={() => {
-                setActiveMenuId(null);
-                onPrintBarcode(p);
-              }}
-              className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-semibold"
-            >
-              <Printer className="h-3.5 w-3.5 text-indigo-500" />
-              <span>Print Thermal Sticker</span>
-            </button>
-
-            {!isEditAllowed && !isEditPending && (
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveMenuId(null);
-                  if (onRequestEdit) onRequestEdit(p);
-                }}
-                className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-semibold"
-              >
-                <Edit2 className="h-3.5 w-3.5 text-orange-500" />
-                <span>Request Edit Access</span>
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={() => {
-                setActiveMenuId(null);
-                onManageStock(p, 'RETURN');
-              }}
-              className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-semibold"
-            >
-              <RotateCcw className="h-3.5 w-3.5 text-rose-500" />
-              <span>Request to Return</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setActiveMenuId(null);
-                onManageStock(p, 'RESTOCK');
-              }}
-              className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-semibold"
-            >
-              <ArrowUpRight className="h-3.5 w-3.5 text-emerald-500" />
-              <span>Request Restock</span>
-            </button>
-          </>
-        )}
-
-        {/* Save in Draft / Submit from Draft (Only for Draft products) */}
-        {isDraft && (
-          <>
-            <Link
-              href={`/merchant/products/${p.id}`}
-              onClick={() => setActiveMenuId(null)}
-              className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors"
-            >
-              <Eye className="h-3.5 w-3.5 text-sky-500" />
-              <span>View Product Details</span>
-            </Link>
-
+          {(p.stock || 0) === 0 && (
             <Link
               href={`/merchant/products/${p.id}/edit`}
               onClick={() => setActiveMenuId(null)}
               className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-semibold"
             >
               <Edit2 className="h-3.5 w-3.5 text-orange-500" />
-              <span>Edit Draft</span>
+              <span>Edit Product</span>
             </Link>
+          )}
 
-            <button
-              type="button"
-              onClick={() => {
-                setActiveMenuId(null);
-                onToggleStatus(p.id);
-              }}
-              className="w-full px-3.5 py-2 text-xs text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 flex items-center gap-2 cursor-pointer transition-colors font-bold"
-            >
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-              <span>Submit for Approval</span>
-            </button>
-          </>
-        )}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveMenuId(null);
+              onToggleStatus(p.id);
+            }}
+            className="w-full px-3.5 py-2 text-xs text-amber-600 dark:text-amber-400 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-semibold"
+            title="Cancel submission and move product back to Draft"
+          >
+            <RotateCcw className="h-3.5 w-3.5 text-amber-500" />
+            <span>Cancel Submission</span>
+          </button>
 
-        <div className="border-t border-slate-100 dark:border-white/10 my-1" />
+          {(p.stock || 0) === 0 && (
+            <>
+              <div className="border-t border-slate-100 dark:border-white/10 my-1" />
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveMenuId(null);
+                  onRequestDelete(p);
+                }}
+                className="w-full px-3.5 py-2 text-xs text-rose-500 hover:bg-rose-500/10 flex items-center gap-2 cursor-pointer transition-colors font-bold"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>Delete Product</span>
+              </button>
+            </>
+          )}
+        </>
+      );
+    }
 
-        {/* Delete Product (Guarded by 0-stock rule) */}
+    // STAGE 2: Awaiting Stock (Admin accepted product, waiting for physical stock to be received into warehouse)
+    // Rule: Merchant can cancel request (moves to draft) and view product only.
+    if (isAwaitingStock) {
+      return (
+        <>
+          <Link
+            href={`/merchant/products/${p.id}`}
+            onClick={() => setActiveMenuId(null)}
+            className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-medium"
+          >
+            <Eye className="h-3.5 w-3.5 text-sky-500" />
+            <span>View Product Details</span>
+          </Link>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveMenuId(null);
+              onToggleStatus(p.id);
+            }}
+            className="w-full px-3.5 py-2 text-xs text-amber-600 dark:text-amber-400 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-semibold"
+            title="Cancel warehouse stock intake and move product back to Draft"
+          >
+            <RotateCcw className="h-3.5 w-3.5 text-amber-500" />
+            <span>Cancel Submission</span>
+          </button>
+        </>
+      );
+    }
+
+    // STAGE 3: Stock Stored / Active in Warehouse
+    // Actions: View product, print thermal sticker, send edit request / edit product, request to return, request for restock, delete (if stock = 0)
+    return (
+      <>
+        {/* View Product Details */}
+        <Link
+          href={`/merchant/products/${p.id}`}
+          onClick={() => setActiveMenuId(null)}
+          className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-medium"
+        >
+          <Eye className="h-3.5 w-3.5 text-sky-500" />
+          <span>View Product Details</span>
+        </Link>
+
+        {/* Print Thermal Barcode Sticker */}
         <button
           type="button"
           onClick={() => {
             setActiveMenuId(null);
-            onRequestDelete(p);
+            onPrintBarcode(p);
           }}
-          className={`w-full px-3.5 py-2 text-xs flex items-center gap-2 cursor-pointer transition-colors font-medium ${
-            (p.stock || 0) >= 1
-              ? 'text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-navy-800'
-              : 'text-rose-500 hover:bg-rose-500/10'
+          className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-semibold"
+        >
+          <Printer className="h-3.5 w-3.5 text-indigo-500" />
+          <span>Print Thermal Sticker</span>
+        </button>
+
+        {/* Edit Request / Edit Product Behavior */}
+        {isEditAllowed ? (
+          <Link
+            href={`/merchant/products/${p.id}/edit`}
+            onClick={() => setActiveMenuId(null)}
+            className="w-full px-3.5 py-2 text-xs text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-bold"
+          >
+            <Edit2 className="h-3.5 w-3.5 text-orange-500" />
+            <span>Edit Product</span>
+          </Link>
+        ) : isEditPending ? (
+          <div className="w-full px-3.5 py-1.5 text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold flex items-center gap-2 bg-indigo-50/50 dark:bg-navy-950/60">
+            <Clock className="h-3 w-3" />
+            <span>Revision in QA Review</span>
+          </div>
+        ) : isEditAccessRequested ? (
+          <div className="w-full px-3.5 py-1.5 text-[11px] text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-2 bg-amber-50/50 dark:bg-navy-950/60">
+            <Clock className="h-3 w-3" />
+            <span>Edit Access Requested</span>
+          </div>
+        ) : !isSuspended ? (
+          <button
+            type="button"
+            onClick={() => {
+              setActiveMenuId(null);
+              if (onRequestEdit) onRequestEdit(p);
+            }}
+            className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-semibold"
+          >
+            <Edit2 className="h-3.5 w-3.5 text-orange-500" />
+            <span>Send Edit Request</span>
+          </button>
+        ) : null}
+
+        {/* Request to Return */}
+        {!isSuspended && (
+          <button
+            type="button"
+            onClick={() => {
+              setActiveMenuId(null);
+              onManageStock(p, 'RETURN');
+            }}
+            className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-semibold"
+          >
+            <RotateCcw className="h-3.5 w-3.5 text-rose-500" />
+            <span>Request to Return</span>
+          </button>
+        )}
+
+        {/* Request for Restock */}
+        {!isSuspended && (
+          <button
+            type="button"
+            onClick={() => {
+              setActiveMenuId(null);
+              onManageStock(p, 'RESTOCK');
+            }}
+            className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-semibold"
+          >
+            <ArrowUpRight className="h-3.5 w-3.5 text-emerald-500" />
+            <span>Request for Restock</span>
+          </button>
+        )}
+
+        <div className="border-t border-slate-100 dark:border-white/10 my-1" />
+
+        {/* Delete Product (ONLY allowed when stock is 0) */}
+        <button
+          type="button"
+          onClick={() => {
+            if ((p.stock || 0) === 0) {
+              setActiveMenuId(null);
+              onRequestDelete(p);
+            }
+          }}
+          disabled={(p.stock || 0) > 0}
+          className={`w-full px-3.5 py-2 text-xs flex items-center gap-2 transition-colors ${
+            (p.stock || 0) === 0
+              ? 'text-rose-500 hover:bg-rose-500/10 cursor-pointer font-bold'
+              : 'text-slate-400 dark:text-slate-500 cursor-not-allowed font-medium'
           }`}
-          title={
-            (p.stock || 0) >= 1
-              ? `Cannot delete while warehouse holds ${p.stock} pcs in stock (must be 0 stock)`
-              : 'Delete Product'
-          }
+          title={(p.stock || 0) > 0 ? `Cannot delete while warehouse holds ${p.stock} pcs` : 'Delete Product'}
         >
           <Trash2 className="h-3.5 w-3.5" />
           <span>
-            {(p.stock || 0) >= 1
-              ? `Delete Locked (${p.stock} in stock)`
-              : 'Delete Product'}
+            {(p.stock || 0) > 0 ? `Delete Locked (${p.stock} in stock)` : 'Delete Product'}
           </span>
         </button>
       </>
@@ -360,8 +398,9 @@ export function ProductTable({
             const isPendingApproval = !isDraft && isPendingApprovalProductItem(p);
             const isFirstTimePending = !isDraft && isFirstTimePendingApprovalItem(p);
             const isPublishPendingFromDraft = !isDraft && isPublishPendingFromDraftItem(p);
-            const isOutOfStock = !isPendingApproval && !isDraft && p.stock === 0;
-            const isLowStock = !isPendingApproval && !isDraft && p.stock > 0 && p.stock <= 30;
+            const isAwaitingStock = isApprovedAwaitingStockProductItem(p);
+            const isOutOfStock = isAwaitingStock;
+            const isLowStock = !isPendingApproval && !isDraft && !isAwaitingStock && p.stock > 0 && p.stock <= 30;
 
             return (
               <MerchantExpandableCard
@@ -371,26 +410,22 @@ export function ProductTable({
                 statusBadge={
                   <span
                     className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border select-none ${
-                      isPublishPendingFromDraft
-                        ? 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 border-indigo-500/30'
-                        : isFirstTimePending
-                        ? 'bg-amber-500/15 text-amber-600 dark:text-amber-300 border-amber-500/30'
+                      isPendingApproval
+                        ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30'
                         : isDraft
                         ? 'bg-slate-100 dark:bg-navy-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10'
-                        : isOutOfStock
+                        : isAwaitingStock
                         ? 'bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30'
-                        : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                        : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
                     }`}
                   >
-                    {isPublishPendingFromDraft
-                      ? 'WAITING FOR PUBLISH'
-                      : isFirstTimePending
-                      ? 'PENDING APPROVAL'
+                    {isPendingApproval
+                      ? 'PENDING PRODUCT'
                       : isDraft
                       ? 'DRAFT'
-                      : isOutOfStock
-                      ? 'APPROVED'
-                      : 'STOCK STORED'}
+                      : isAwaitingStock
+                      ? 'WAITING FOR STOCK'
+                      : 'PUBLISHED'}
                   </span>
                 }
                 row1={
@@ -481,7 +516,7 @@ export function ProductTable({
                         </button>
 
                         {activeMenuId === `mobile-${p.id}` && (
-                          <div className="absolute right-0 bottom-full mb-1.5 w-56 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-2xl py-1.5 z-[100] text-left font-sans text-xs pointer-events-auto">
+                          <div className="absolute right-0 top-0 -translate-y-full -mt-1.5 w-56 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-2xl py-1.5 z-[100] text-left font-sans text-xs pointer-events-auto">
                             {renderDropdownItems(p)}
                           </div>
                         )}
@@ -524,13 +559,14 @@ export function ProductTable({
             {products.map((p, idx) => {
               const isSelected = selectedIds.includes(p.id);
               const isMenuOpen = activeMenuId === `desktop-${p.id}`;
-              const isNearBottom = idx > 0 && idx >= products.length - 2;
+              const isNearBottom = products.length > 4 && idx >= products.length - 2;
               const isDraft = p.status === 'DRAFT';
               const isPendingApproval = !isDraft && isPendingApprovalProductItem(p);
               const isFirstTimePending = !isDraft && isFirstTimePendingApprovalItem(p);
               const isPublishPendingFromDraft = !isDraft && isPublishPendingFromDraftItem(p);
-              const isOutOfStock = !isPendingApproval && !isDraft && p.stock === 0;
-              const isLowStock = !isPendingApproval && !isDraft && p.stock > 0 && p.stock <= 30;
+              const isAwaitingStock = isApprovedAwaitingStockProductItem(p);
+              const isOutOfStock = isAwaitingStock;
+              const isLowStock = !isPendingApproval && !isDraft && !isAwaitingStock && p.stock > 0 && p.stock <= 30;
 
               return (
                 <tr
@@ -631,26 +667,22 @@ export function ProductTable({
                   <td className="py-3.5 px-3.5 text-center">
                     <span
                       className={`inline-flex items-center justify-center text-[11px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-full border select-none mx-auto ${
-                        isPublishPendingFromDraft
-                          ? 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 border-indigo-500/30'
-                          : isFirstTimePending
-                          ? 'bg-amber-500/15 text-amber-600 dark:text-amber-300 border-amber-500/30'
+                        isPendingApproval
+                          ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30'
                           : isDraft
                           ? 'bg-slate-100 dark:bg-navy-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10'
-                          : isOutOfStock
+                          : isAwaitingStock
                           ? 'bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30'
-                          : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                          : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
                       }`}
                     >
-                      {isPublishPendingFromDraft
-                        ? 'Waiting for Publish'
-                        : isFirstTimePending
-                        ? 'Pending Approval'
+                      {isPendingApproval
+                        ? 'Pending Product'
                         : isDraft
                         ? 'Draft'
-                        : isOutOfStock
-                        ? 'Approved'
-                        : `Stock Stored (${p.stock})`}
+                        : isAwaitingStock
+                        ? 'Waiting for Stock'
+                        : 'Published'}
                     </span>
                   </td>
 
@@ -678,7 +710,9 @@ export function ProductTable({
                       {isMenuOpen && (
                         <div
                           className={`absolute right-0 ${
-                            isNearBottom ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
+                            isNearBottom
+                              ? 'top-0 -translate-y-full -mt-1.5'
+                              : 'top-full mt-1.5'
                           } w-56 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-2xl py-1.5 z-[100] text-left font-sans text-xs pointer-events-auto`}
                         >
                           {renderDropdownItems(p)}

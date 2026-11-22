@@ -421,20 +421,31 @@ export class InventoryRepository {
     }
 
     // Security & Inventory Integrity Guard:
-    // Merchants can strictly only edit products during First-Time Pending Approval (0 stock in warehouse).
+    // Merchants can strictly only edit products during Draft or First-Time Pending Approval (0 stock in warehouse).
+    // Once accepted by admin (APPROVED / STOCK_STORED / assigned bin), direct editing and moving to Draft are locked.
     const existingStatus = ((existing as any).status || '').trim().toUpperCase();
+    const isDraft = existingStatus === 'DRAFT';
     const isPending = existingStatus === 'PENDING_APPROVAL';
     const existingTotalStock = (existing.variants || []).reduce(
       (sum: number, v: any) =>
         sum + (v.inventoryItems || []).reduce((s: number, it: any) => s + (it.quantityAvailable || 0), 0),
       0,
     );
+    const hasApprovedBin = (existing.variants || []).some(
+      (v: any) =>
+        v.defaultBinCode &&
+        v.defaultBinCode !== 'Pending Approval' &&
+        v.defaultBinCode !== 'Assigned on intake',
+    );
+    const isAccepted = existingStatus === 'APPROVED' || existingStatus === 'STOCK_STORED' || hasApprovedBin;
 
-    if (!isPending || existingTotalStock > 0) {
+    if (isAccepted || (!isPending && !isDraft) || existingTotalStock > 0) {
       throw new BadRequestException(
         existingTotalStock > 0
-          ? `Cannot edit product '${existing.title}': Product already has ${existingTotalStock} pcs stored in the warehouse and is waiting for publish approval from Draft. Editing is locked.`
-          : `Cannot edit product '${existing.title}': Merchants can strictly only edit products during First-Time Pending Approval status (current status: ${existingStatus}).`,
+          ? `Cannot edit product '${existing.title}': Product already has ${existingTotalStock} pcs stored in the warehouse. Direct editing is locked.`
+          : isAccepted
+          ? `Action Blocked: Cannot edit product '${existing.title}'. After warehouse admin accepts a product, it cannot be edited or moved to Draft.`
+          : `Cannot edit product '${existing.title}': Merchants can strictly only edit products in Draft or First-Time Pending Approval status (current status: ${existingStatus}).`,
       );
     }
 
@@ -450,6 +461,12 @@ export class InventoryRepository {
             : rawUpdateStatus === 'STOCK_STORED' || rawUpdateStatus === 'PUBLISHED'
               ? 'STOCK_STORED'
               : (existing as any).status || 'PENDING_APPROVAL';
+
+    if (updatedStatus === 'DRAFT' && isAccepted) {
+      throw new BadRequestException(
+        `Action Blocked: Cannot move product '${existing.title}' to Draft. After warehouse admin accepts a product, it cannot be drafted.`
+      );
+    }
     try {
       await (this.prisma.product as any).update({
         where: { id: existing.id },
@@ -625,9 +642,24 @@ export class InventoryRepository {
       throw new BadRequestException(`Product with ID '${productId}' not found.`);
     }
 
+    const existingStatus = ((existing as any).status || '').trim().toUpperCase();
+    const hasApprovedBin = (existing.variants || []).some(
+      (v: any) =>
+        v.defaultBinCode &&
+        v.defaultBinCode !== 'Pending Approval' &&
+        v.defaultBinCode !== 'Assigned on intake',
+    );
+    const isAccepted = existingStatus === 'APPROVED' || existingStatus === 'STOCK_STORED' || hasApprovedBin;
+
+    // Rule: After warehouse admin accepts a product, it cannot be drafted
+    if (initialCleanStatus === 'DRAFT' && isAccepted) {
+      throw new BadRequestException(
+        `Action Blocked: Cannot move product '${existing.title}' to Draft. After warehouse admin accepts a product, it cannot be drafted or directly edited.`
+      );
+    }
+
     let finalStatus = initialCleanStatus;
     if (initialCleanStatus === 'PUBLISHED') {
-      const existingStatus = ((existing as any).status || '').trim().toUpperCase();
       if (existingStatus === 'DRAFT') {
         finalStatus = 'PENDING_APPROVAL';
       } else {
@@ -635,12 +667,6 @@ export class InventoryRepository {
           (sum: number, v: any) =>
             sum + (v.inventoryItems || []).reduce((s: number, it: any) => s + (it.quantityAvailable || 0), 0),
           0,
-        );
-        const hasApprovedBin = (existing.variants || []).some(
-          (v: any) =>
-            v.defaultBinCode &&
-            v.defaultBinCode !== 'Pending Approval' &&
-            v.defaultBinCode !== 'Assigned on intake',
         );
         finalStatus = totalStock > 0 ? 'STOCK_STORED' : hasApprovedBin ? 'APPROVED' : 'PENDING_APPROVAL';
       }
@@ -730,21 +756,15 @@ export class InventoryRepository {
       binCode,
     });
 
-    const existingTotalStock = (existing.variants || []).reduce(
-      (sum: number, v: any) =>
-        sum + (v.inventoryItems || []).reduce((s: number, it: any) => s + (it.quantityAvailable || 0), 0),
-      0,
-    );
-    const wasAlreadyStored = existingTotalStock > 0;
-    const effectiveNextStatus = wasAlreadyStored || (isStockAccepted && finalStock > 0) ? 'STOCK_STORED' : nextStatus;
+    const effectiveNextStatus = isStockAccepted && finalStock > 0 ? 'STOCK_STORED' : 'APPROVED';
 
-    // 1. Update Product status to APPROVED (or STOCK_STORED if stock accepted now or already stored)
+    // 1. Update Product status to APPROVED (or STOCK_STORED if stock accepted now)
     await (this.prisma.product as any).update({
       where: { id: existing.id },
       data: { status: effectiveNextStatus },
     });
 
-    // 2. Update all variants with binCode & stock (preserve existing stored stock on Draft-to-Publish approval)
+    // 2. Update all variants with binCode & stock
     for (const v of existing.variants) {
       await this.prisma.productVariant.update({
         where: { id: v.id },
@@ -753,13 +773,10 @@ export class InventoryRepository {
 
       const defaultItem = v.inventoryItems[0];
       if (defaultItem) {
-        const preservedQty = wasAlreadyStored
-          ? Math.max(defaultItem.quantityAvailable || 0, finalStock)
-          : finalStock;
         await this.prisma.inventoryItem.update({
           where: { id: defaultItem.id },
           data: {
-            quantityAvailable: preservedQty,
+            quantityAvailable: isStockAccepted ? finalStock : 0,
             locationId: defaultLocation.id,
           },
         });
@@ -768,7 +785,7 @@ export class InventoryRepository {
           data: {
             variantId: v.id,
             locationId: defaultLocation.id,
-            quantityAvailable: finalStock,
+            quantityAvailable: isStockAccepted ? finalStock : 0,
             quantityReserved: 0,
             quantityDamaged: 0,
           },

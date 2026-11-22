@@ -49,6 +49,7 @@ export interface ProductsCatalogTabProps {
   onOpenStockAdjustModal: (product: WarehouseProductItem) => void;
   onChangeProductBin: (productId: string, nextBinCode: string) => void;
   onOpenAddProduct?: () => void;
+  onApproveProduct?: (productId: string, binCode?: string) => void;
   onOpenAcceptStockModal?: (product: WarehouseProductItem) => void;
   onOpenApprovalModal?: (
     mode: 'APPROVE' | 'REJECT',
@@ -66,6 +67,10 @@ export interface ProductsCatalogTabProps {
   onBulkPermanentDelete?: (productIds: string[]) => void;
   onDeleteProduct?: (productId: string) => void;
   onDeleteProducts?: (productIds: string[]) => void;
+  onAllowEdit?: (productId: string) => void;
+  onApproveRevision?: (productId: string) => void;
+  onRejectRevision?: (productId: string) => void;
+  onToggleSuspend?: (productId: string) => void;
 }
 
 export function ProductsCatalogTab({
@@ -79,6 +84,7 @@ export function ProductsCatalogTab({
   onOpenStockAdjustModal,
   onChangeProductBin,
   onOpenAddProduct,
+  onApproveProduct,
   onOpenAcceptStockModal,
   onOpenApprovalModal,
   onBulkApproveProductsWithSlots,
@@ -92,6 +98,10 @@ export function ProductsCatalogTab({
   onBulkPermanentDelete,
   onDeleteProduct,
   onDeleteProducts,
+  onAllowEdit,
+  onApproveRevision,
+  onRejectRevision,
+  onToggleSuspend,
 }: ProductsCatalogTabProps) {
   // Catalog Filter Tab
   const [activeCatalogTab, setActiveCatalogTab] = useState<ProductCatalogFilterTab>(initialFilterTab);
@@ -555,7 +565,7 @@ export function ProductsCatalogTab({
                 : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white font-medium'
             }`}
           >
-            <span>Product Approval</span>
+            <span>Pending Product</span>
             <span
               className={`px-1.5 py-0.2 rounded-full text-[11px] font-bold tabular-nums ${
                 catalogCounts.approvalCount > 0
@@ -577,7 +587,7 @@ export function ProductsCatalogTab({
                 : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white font-medium'
             }`}
           >
-            Public <span className="font-semibold tabular-nums">({catalogCounts.publicCount})</span>
+            Published <span className="font-semibold tabular-nums">({catalogCounts.publicCount})</span>
           </button>
           <span className="text-slate-300 dark:text-slate-700">|</span>
 
@@ -586,11 +596,11 @@ export function ProductsCatalogTab({
             onClick={() => handleTabSwitch('OUT_OF_STOCK')}
             className={`cursor-pointer transition-colors px-2.5 py-1 rounded-lg ${
               activeCatalogTab === 'OUT_OF_STOCK'
-                ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-bold border border-rose-500/20'
+                ? 'bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 font-bold border border-sky-500/20'
                 : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white font-medium'
             }`}
           >
-            Out of Stock <span className="font-semibold tabular-nums">({catalogCounts.outOfStockCount})</span>
+            Waiting for Stock <span className="font-semibold tabular-nums">({catalogCounts.outOfStockCount})</span>
           </button>
           <span className="text-slate-300 dark:text-slate-700">|</span>
 
@@ -701,12 +711,16 @@ export function ProductsCatalogTab({
                 paginatedProducts.map((p, idx) => {
                   const isSelected = selectedProductIds.has(p.id);
                   const isMenuOpen = activeMenuId === `desktop-${p.id}`;
-                  const isNearBottom = idx > 0 && idx >= paginatedProducts.length - 2;
+                  const isNearBottom = paginatedProducts.length > 4 && idx >= paginatedProducts.length - 2;
 
                   const isDraft = p.status === 'DRAFT' || Boolean(p.isDraft);
                   const isPending = p.status === 'PENDING_APPROVAL';
-                  const isOutOfStock = !isDraft && !isPending && p.stock === 0;
-                  const isLowStock = !isDraft && !isPending && p.stock > 0 && p.stock < 30;
+                  const isAwaitingStock =
+                    !isDraft &&
+                    !isPending &&
+                    (p.stock === 0 || p.stockAccepted === false || p.stockStatus === 'AWAITING_STOCK');
+                  const isOutOfStock = isAwaitingStock;
+                  const isLowStock = !isDraft && !isPending && !isAwaitingStock && p.stock > 0 && p.stock < 30;
 
                   return (
                     <tr
@@ -834,31 +848,24 @@ export function ProductsCatalogTab({
                       {/* 7. Status Column */}
                       <td className="py-3.5 px-3 align-middle">
                         {isPending ? (
-                          (p.stock || 0) > 0 ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30">
-                              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                              Waiting for Publish ({p.stock} pcs)
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
-                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                              Pending Approval
-                            </span>
-                          )
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                            Pending Product
+                          </span>
                         ) : isDraft ? (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-500/30">
                             <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
                             Draft
                           </span>
-                        ) : isOutOfStock ? (
+                        ) : isAwaitingStock ? (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30">
                             <Clock className="w-3.5 h-3.5 text-sky-500" />
-                            Approved
+                            Waiting for Stock
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            Stock Stored ({p.stock} pcs)
+                            Published
                           </span>
                         )}
                       </td>
@@ -887,10 +894,12 @@ export function ProductsCatalogTab({
                           {isMenuOpen && (
                             <div
                               className={`absolute right-0 ${
-                                isNearBottom ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
+                                isNearBottom
+                                  ? 'top-0 -translate-y-full -mt-1.5'
+                                  : 'top-full mt-1.5'
                               } w-56 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-2xl py-1.5 z-[100] text-left font-sans text-xs pointer-events-auto`}
                             >
-                              {/* STAGE 0: Pending Approval -> Accept, Reject, and View */}
+                              {/* STAGE 0: Pending Product -> Approved, Reject, and View */}
                               {isPending && (
                                 <>
                                   <button
@@ -900,7 +909,7 @@ export function ProductsCatalogTab({
                                       onOpenApprovalModal?.(
                                         'APPROVE',
                                         p,
-                                        p.binCode && p.binCode !== 'Pending Approval'
+                                        p.binCode && p.binCode !== 'Pending Approval' && p.binCode !== 'Assigned on intake'
                                           ? p.binCode
                                           : bins[0]?.code || 'A-01-02'
                                       );
@@ -908,7 +917,51 @@ export function ProductsCatalogTab({
                                     className="w-full px-3.5 py-2 text-left text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 flex items-center gap-2.5 font-bold cursor-pointer"
                                   >
                                     <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                                    <span>Accept</span>
+                                    <span>Approved</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveMenuId(null);
+                                      onOpenApprovalModal?.(
+                                        'REJECT',
+                                        p,
+                                        p.binCode && p.binCode !== 'Pending Approval'
+                                          ? p.binCode
+                                          : bins[0]?.code || 'A-01-02'
+                                        );
+                                    }}
+                                    className="w-full px-3.5 py-2 text-left text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex items-center gap-2.5 font-semibold cursor-pointer border-b border-slate-200/60 dark:border-white/10"
+                                  >
+                                    <XCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                                    <span>Reject</span>
+                                  </button>
+
+                                  <Link
+                                    href={`/admin/products/${p.id}`}
+                                    onClick={() => setActiveMenuId(null)}
+                                    className="w-full px-3.5 py-2 text-left text-orange-600 dark:text-orange-400 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2.5 font-bold cursor-pointer"
+                                  >
+                                    <Eye className="w-4 h-4 shrink-0" />
+                                    <span>View</span>
+                                  </Link>
+                                </>
+                              )}
+
+                              {/* STAGE 1: Approved (Waiting for Stock) -> Received Stock, Reject, and View */}
+                              {!isPending && !isDraft && isAwaitingStock && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveMenuId(null);
+                                      onOpenAcceptStockModal?.(p);
+                                    }}
+                                    className="w-full px-3.5 py-2 text-left text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/30 flex items-center gap-2.5 font-bold cursor-pointer"
+                                  >
+                                    <PackageCheck className="w-4 h-4 shrink-0 text-orange-600 dark:text-orange-400" />
+                                    <span>Received Product</span>
                                   </button>
 
                                   <button
@@ -932,56 +985,58 @@ export function ProductsCatalogTab({
                                   <Link
                                     href={`/admin/products/${p.id}`}
                                     onClick={() => setActiveMenuId(null)}
-                                    className="w-full px-3.5 py-2 text-left text-orange-600 dark:text-orange-400 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2.5 font-bold cursor-pointer"
-                                  >
-                                    <Eye className="w-4 h-4 shrink-0" />
-                                    <span>View</span>
-                                  </Link>
-                                </>
-                              )}
-
-                              {/* STAGE 1: Approved (Awaiting Physical Stock) -> Product Stock, View, and Delete (0 stock) */}
-                              {!isPending && !isDraft && isOutOfStock && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setActiveMenuId(null);
-                                      onOpenAcceptStockModal?.(p);
-                                    }}
-                                    className="w-full px-3.5 py-2 text-left text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/30 flex items-center gap-2.5 font-bold cursor-pointer"
-                                  >
-                                    <PackageCheck className="w-4 h-4 shrink-0 text-orange-600 dark:text-orange-400" />
-                                    <span>Product Stock</span>
-                                  </button>
-
-                                  <Link
-                                    href={`/admin/products/${p.id}`}
-                                    onClick={() => setActiveMenuId(null)}
                                     className="w-full px-3.5 py-2 text-left text-navy-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2.5 font-bold cursor-pointer"
                                   >
                                     <Eye className="w-4 h-4 shrink-0 text-orange-600 dark:text-orange-400" />
                                     <span>View</span>
                                   </Link>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setActiveMenuId(null);
-                                      setProductToDelete(p);
-                                      setIsPermanentDeleteMode(true);
-                                    }}
-                                    className="w-full px-3.5 py-2 text-left text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex items-center gap-2.5 font-semibold cursor-pointer border-t border-slate-200/60 dark:border-white/10"
-                                  >
-                                    <Trash2 className="w-4 h-4 shrink-0" />
-                                    <span>Delete Product</span>
-                                  </button>
                                 </>
                               )}
 
-                              {/* STAGE 2: Stock Stored -> View and Draft Product */}
+                              {/* STAGE 2: Stock Stored -> View, Allow Edit, Approve/Reject Revision, Suspend/Reactivate, and Delete (if stock is 0) */}
                               {!isPending && !isDraft && !isOutOfStock && (
                                 <>
+                                  {p.editState === 'EDIT_ACCESS_REQUESTED' && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setActiveMenuId(null);
+                                        onAllowEdit?.(p.id);
+                                      }}
+                                      className="w-full px-3.5 py-2 text-left text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 flex items-center gap-2.5 font-bold cursor-pointer"
+                                    >
+                                      <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
+                                      <span>Allow Edit</span>
+                                    </button>
+                                  )}
+
+                                  {p.editState === 'EDIT_APPROVAL_PENDING' && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setActiveMenuId(null);
+                                          onApproveRevision?.(p.id);
+                                        }}
+                                        className="w-full px-3.5 py-2 text-left text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 flex items-center gap-2.5 font-bold cursor-pointer"
+                                      >
+                                        <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
+                                        <span>Approve Revision</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setActiveMenuId(null);
+                                          onRejectRevision?.(p.id);
+                                        }}
+                                        className="w-full px-3.5 py-2 text-left text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex items-center gap-2.5 font-semibold cursor-pointer"
+                                      >
+                                        <XCircle className="w-4 h-4 shrink-0 text-rose-500" />
+                                        <span>Reject Revision</span>
+                                      </button>
+                                    </>
+                                  )}
+
                                   <Link
                                     href={`/admin/products/${p.id}`}
                                     onClick={() => setActiveMenuId(null)}
@@ -995,26 +1050,33 @@ export function ProductsCatalogTab({
                                     type="button"
                                     onClick={() => {
                                       setActiveMenuId(null);
-                                      onMoveToDraft?.(p.id);
+                                      onToggleSuspend?.(p.id);
                                     }}
-                                    className="w-full px-3.5 py-2 text-left text-navy-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2.5 font-semibold cursor-pointer"
+                                    className="w-full px-3.5 py-2 text-left text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 flex items-center gap-2.5 font-semibold cursor-pointer"
                                   >
-                                    <Archive className="w-4 h-4 shrink-0 text-amber-500" />
-                                    <span>Draft Product</span>
+                                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                                    <span>{p.isSuspended ? 'Reactivate Product' : 'Suspend Product'}</span>
                                   </button>
 
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      setActiveMenuId(null);
-                                      setProductToDelete(p);
-                                      setIsPermanentDeleteMode(true);
+                                      if ((p.stock || 0) === 0) {
+                                        setActiveMenuId(null);
+                                        setProductToDelete(p);
+                                        setIsPermanentDeleteMode(true);
+                                      }
                                     }}
-                                    className="w-full px-3.5 py-2 text-left text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2.5 font-semibold cursor-pointer border-t border-slate-200/60 dark:border-white/10"
-                                    title="Cannot delete while warehouse stock > 0"
+                                    disabled={(p.stock || 0) > 0}
+                                    className={`w-full px-3.5 py-2 text-left flex items-center gap-2.5 font-semibold transition-colors border-t border-slate-200/60 dark:border-white/10 ${
+                                      (p.stock || 0) === 0
+                                        ? 'text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 cursor-pointer'
+                                        : 'text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                                    }`}
+                                    title={(p.stock || 0) > 0 ? `Cannot delete while warehouse stock holds ${p.stock} pcs` : 'Delete Product'}
                                   >
                                     <Trash2 className="w-4 h-4 shrink-0" />
-                                    <span>Delete Locked ({p.stock} pcs)</span>
+                                    <span>{(p.stock || 0) > 0 ? `Delete Locked (${p.stock} pcs)` : 'Delete Product'}</span>
                                   </button>
                                 </>
                               )}

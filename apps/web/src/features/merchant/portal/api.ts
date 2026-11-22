@@ -196,11 +196,18 @@ export const merchantApi = {
           !isDraft &&
           (dbStatus === 'PENDING_APPROVAL' ||
             (!dbStatus && (!rawBin || rawBin === 'Pending Approval' || rawBin === 'Assigned on intake')));
+        const isApprovedAwaiting =
+          !isDraft &&
+          !isPending &&
+          (dbStatus === 'APPROVED' ||
+            dbStatus === 'AWAITING_STOCK' ||
+            (p as any).stockStatus === 'AWAITING_STOCK' ||
+            (p as any).stockAccepted === false);
         const isStockStored =
           !isDraft &&
           !isPending &&
-          (dbStatus === 'STOCK_STORED' || (dbStatus === 'PUBLISHED' && totalStock > 0) || totalStock > 0);
-        const isApproved = !isDraft && !isPending;
+          !isApprovedAwaiting &&
+          (dbStatus === 'STOCK_STORED' || (dbStatus === 'PUBLISHED' && totalStock > 0));
 
         const hasValidBin =
           Boolean(rawBin) &&
@@ -208,7 +215,7 @@ export const merchantApi = {
           rawBin !== 'Assigned on intake';
         const resolvedBin = hasValidBin
           ? rawBin
-          : isApproved || totalStock > 0
+          : isApprovedAwaiting || isStockStored
             ? 'A-01-02'
             : 'Pending Approval';
         const resolvedStatus = isDraft
@@ -221,20 +228,22 @@ export const merchantApi = {
 
         return {
           id: p.id,
-            title: p.title,
-            variantLabel: variants.length > 1 ? `${variants.length} Variants` : (firstVariant?.title || 'Standard'),
-            sku: p.baseSku,
-            barcode: firstVariant?.barcode || '',
-            stock: totalStock,
-            reserved: totalReserved,
-            price,
-            costPrice,
-            profit,
-            profitMargin,
-            minPrice,
-            maxPrice,
-            bin: resolvedBin,
-            status: resolvedStatus,
+          title: p.title,
+          variantLabel: variants.length > 1 ? `${variants.length} Variants` : (firstVariant?.title || 'Standard'),
+          sku: p.baseSku,
+          barcode: firstVariant?.barcode || '',
+          stock: resolvedStatus === 'STOCK_STORED' ? totalStock : 0,
+          stockAccepted: resolvedStatus === 'STOCK_STORED',
+          stockStatus: resolvedStatus === 'STOCK_STORED' ? ('IN_STOCK' as const) : ('AWAITING_STOCK' as const),
+          reserved: totalReserved,
+          price,
+          costPrice,
+          profit,
+          profitMargin,
+          minPrice,
+          maxPrice,
+          bin: resolvedBin,
+          status: resolvedStatus,
             imageUrl: p.imageUrl,
             images: p.images && p.images.length > 0 ? p.images : (p.imageUrl ? [p.imageUrl] : []),
             description: p.description,
@@ -260,6 +269,11 @@ export const merchantApi = {
               const costPrice = p.costPrice !== undefined ? Number(p.costPrice) : Math.round(price * 0.52);
               const profit = p.profit !== undefined ? Number(p.profit) : (price - costPrice);
               const profitMargin = p.profitMargin !== undefined ? Number(p.profitMargin) : (price > 0 ? Math.round((profit / price) * 100) : 0);
+              const status = p.status || (p.stock === 0 ? 'DRAFT' : 'PUBLISHED');
+              const isStockAccepted =
+                (status === 'STOCK_STORED' || status === 'PUBLISHED') &&
+                p.stockAccepted === true &&
+                (p.stock || 0) > 0;
               return {
                 ...p,
                 price,
@@ -267,7 +281,10 @@ export const merchantApi = {
                 profit,
                 profitMargin,
                 category: p.category || 'Apparel',
-                status: p.status || (p.stock === 0 ? 'DRAFT' : 'PUBLISHED'),
+                status,
+                stock: isStockAccepted ? Number(p.stock) || 0 : 0,
+                stockAccepted: isStockAccepted,
+                stockStatus: isStockAccepted ? ('IN_STOCK' as const) : ('AWAITING_STOCK' as const),
                 totalOrders: p.totalOrders ?? 0,
               };
             });
@@ -286,9 +303,10 @@ export const merchantApi = {
       headers: { 'x-merchant-code': code },
     });
     if (remote?.items && Array.isArray(remote.items)) {
-      const filtered = remote.items.filter(
-        (o) => !o.merchantCode || o.merchantCode.toUpperCase() === code.toUpperCase()
-      );
+      const filtered = remote.items.filter((o) => {
+        const orderMCode = o.merchant?.merchantCode || o.merchantCode;
+        return !orderMCode || orderMCode.toUpperCase() === code.toUpperCase();
+      });
       if (filtered.length > 0) {
         return filtered.map((o) => {
           const itemNames =
@@ -313,9 +331,12 @@ export const merchantApi = {
             imageUrl: it.variant?.imageUrl || it.variant?.product?.imageUrl || '',
           }));
 
+          const cleanId = String(o.id || o.orderNumber || o.externalOrderId || '').replace(/^#/, '').trim();
+          const cleanOrderNum = String(o.orderNumber || o.externalOrderId || o.id || '').replace(/^#/, '').trim();
+
           return {
-            id: o.orderNumber || o.externalOrderId || o.id,
-            orderNumber: o.externalOrderId || o.orderNumber || o.id,
+            id: cleanId,
+            orderNumber: cleanOrderNum,
             date: new Date(o.createdAt).toLocaleDateString(),
             customer: o.customerName || 'Customer',
             phone: o.customerPhone || '',
@@ -449,9 +470,18 @@ export const merchantApi = {
   },
 
   async updateOrderStatus(id: string, status: string): Promise<boolean> {
-    const remote = await safeFetch(`/orders/${id}/status`, {
+    const cleanId = (id || '').replace(/^#/, '').trim();
+    const remote = await safeFetch(`/orders/${encodeURIComponent(cleanId)}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
+    });
+    return Boolean(remote);
+  },
+
+  async cancelOrder(id: string): Promise<boolean> {
+    const cleanId = (id || '').replace(/^#/, '').trim();
+    const remote = await safeFetch(`/orders/${encodeURIComponent(cleanId)}/cancel`, {
+      method: 'POST',
     });
     return Boolean(remote);
   },
@@ -739,14 +769,14 @@ export const merchantApi = {
       customerName: order.customer,
       customerPhone: order.phone,
       customerAddress: order.address,
-      city: 'Dhaka',
+      city: order.city || 'Dhaka',
       memoCode: order.memoCode || 'MEMO-DEFAULT',
       totalAmount: Number(order.amount) || Number(order.codAmount) || 0,
-      codAmount: Number(order.codAmount) ?? Number(order.amount) ?? 0,
-      subtotal: Number(order.subtotal) ?? Number(order.amount) ?? 0,
-      deliveryFee: Number(order.deliveryFee) ?? 0,
-      discount: Number(order.discount) ?? 0,
-      advancePayment: Number(order.advancePayment) ?? 0,
+      codAmount: isNaN(Number(order.codAmount)) ? (Number(order.amount) || 0) : Number(order.codAmount),
+      subtotal: isNaN(Number(order.subtotal)) ? (Number(order.amount) || 0) : Number(order.subtotal),
+      deliveryFee: isNaN(Number(order.deliveryFee)) ? 0 : Number(order.deliveryFee),
+      discount: isNaN(Number(order.discount)) ? 0 : Number(order.discount),
+      advancePayment: isNaN(Number(order.advancePayment)) ? 0 : Number(order.advancePayment),
       paymentMethod: order.paymentMethod,
       paymentStatus: order.paymentStatus || (Number(order.codAmount) === 0 ? 'Paid' : 'Unpaid'),
       advancePaymentMethod: order.advancePaymentMethod,

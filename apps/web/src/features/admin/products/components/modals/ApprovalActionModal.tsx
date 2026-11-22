@@ -100,20 +100,8 @@ export function ApprovalActionModal({
       return;
     }
 
-    if (isDraftToPublish) {
-      // Draft-to-Publish Approval: Restore already-stored warehouse stock to published (Stock Stored)
-      onConfirm(
-        'APPROVE',
-        approvalData.product,
-        approvalData.product.stock,
-        approvalSelectedBin || 'A-01-02',
-        true
-      );
-      onClose();
-      return;
-    }
-
-    // First-Time Approval: Step 1 moves the product to the APPROVED stage (0 stored stock until warehouse receives physical goods)
+    // Both First-Time and Draft-to-Publish approvals move the product to "Awaiting Stock" stage.
+    // Stock remains unstocked/pending until physical goods are received via "Receive Product".
     onConfirm(
       'APPROVE',
       approvalData.product,
@@ -130,9 +118,7 @@ export function ApprovalActionModal({
       onClose={onClose}
       title={
         isApprove
-          ? isDraftToPublish
-            ? 'Accept & Publish Product from Draft'
-            : 'Accept & Approve Product Request'
+          ? 'Approve Product Submission — Move to Waiting for Stock'
           : isDraftToPublish
             ? 'Reject Publish Request (Return to Draft)'
             : 'Reject Product Submission'
@@ -154,9 +140,7 @@ export function ApprovalActionModal({
           <div>
             <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-200 leading-relaxed">
               {isApprove
-                ? isDraftToPublish
-                  ? `Approve publish request from Draft for "${approvalData.product.title}" from ${approvalData.product.merchantName} (${approvalData.product.merchantCode}). This product already has ${approvalData.product.stock} pcs stored in the warehouse and will immediately return to Stock Stored status.`
-                  : `Approve store request for "${approvalData.product.title}" from ${approvalData.product.merchantName} (${approvalData.product.merchantCode}). This moves the product to the Approved stage so the merchant can send their physical shipment to the warehouse.`
+                ? `Approve product submission for "${approvalData.product.title}" by ${approvalData.product.merchantName} (${approvalData.product.merchantCode}). Approving will assign the warehouse storage bin and set product status to "Waiting for Stock". Merchant will be notified to ship physical stock to the warehouse.`
                 : isDraftToPublish
                   ? `Reject publish request for "${approvalData.product.title}" (${approvalData.product.fullSku})? Because ${approvalData.product.stock} pcs are already stored in the warehouse, this will return the product to Draft status without deleting its stock.`
                   : `Are you sure you want to reject "${approvalData.product.title}" (${approvalData.product.fullSku}) submitted by ${approvalData.product.merchantName}?`}
@@ -176,48 +160,26 @@ export function ApprovalActionModal({
               {approvalData.product.title}
             </div>
             <div className="tabular-nums font-mono text-orange-600 dark:text-orange-400 text-[11px]">
-              {approvalData.product.fullSku}
+              {approvalData.product.fullSku} · {approvalData.product.merchantName}
             </div>
-            <div className="text-slate-600 dark:text-slate-300">
-              {isDraftToPublish ? 'Stored Bin & Stock: ' : 'Reserved Bin: '}
-              <strong className="text-orange-700 dark:text-orange-300 tabular-nums">
-                {approvalSelectedBin}
-                {isDraftToPublish ? ` (${approvalData.product.stock} pcs stored)` : ''}
-              </strong>
+            <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+              <span>Status: <strong className="text-amber-600 dark:text-amber-400">Pending Product</strong></span>
+              <span>·</span>
+              <span>Target Bin: <strong className="text-orange-700 dark:text-orange-300 tabular-nums">{approvalSelectedBin}</strong></span>
             </div>
           </div>
         </div>
 
         {isApprove && (
           <div className="space-y-4 pt-1">
-            <div
-              className={`p-3 rounded-xl border flex items-start gap-3 ${
-                isDraftToPublish
-                  ? 'bg-indigo-500/10 border-indigo-500/30'
-                  : 'bg-orange-500/10 border-orange-500/30'
-              }`}
-            >
-              <Clock
-                className={`w-4 h-4 shrink-0 mt-0.5 ${
-                  isDraftToPublish ? 'text-indigo-600' : 'text-orange-600'
-                }`}
-              />
+            <div className="p-3.5 rounded-xl border flex items-start gap-3 bg-amber-500/10 border-amber-500/30">
+              <Clock className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
               <div className="text-xs">
-                <span className="font-bold text-slate-900 dark:text-white block">
-                  {isDraftToPublish
-                    ? `Draft-to-Publish Approval (${approvalData.product.stock} pcs Already Stored)`
-                    : 'First-Time Product Approval (Awaiting Physical Stock)'}
+                <span className="font-bold text-navy-900 dark:text-white block">
+                  Step 1: Product Approval (Moves to Waiting for Stock)
                 </span>
-                <p className="text-slate-500 dark:text-slate-400 mt-1 leading-relaxed text-[11px]">
-                  {isDraftToPublish ? (
-                    <>
-                      This product was previously stored in the warehouse, moved to <strong>Draft</strong>, and the merchant has requested to publish it again. Approving will immediately restore it to <strong>Stock Stored ({approvalData.product.stock} pcs)</strong>.
-                    </>
-                  ) : (
-                    <>
-                      Changes status to <strong>Approved</strong> in PostgreSQL. Once the merchant sends the product to the warehouse and it arrives, click <strong>Product Stock</strong> to accept the goods and change the status to <strong>Stock Stored</strong>.
-                    </>
-                  )}
+                <p className="text-slate-600 dark:text-slate-300 mt-1 leading-relaxed text-[11px]">
+                  Approving moves the product status to <strong>Waiting for Stock</strong> in both Admin and Merchant dashboards (appearing under the Merchant <strong>Awaiting Stock</strong> filter tab). Once physical stock arrives at the warehouse dock, click <strong>Received Product</strong> in the Actions menu to count, store, and publish the product.
                 </p>
               </div>
             </div>
@@ -285,9 +247,7 @@ export function ApprovalActionModal({
               ? isDraftToPublish
                 ? 'Reject & Return to Draft'
                 : 'Confirm Reject'
-              : isDraftToPublish
-                ? 'Accept & Publish Product'
-                : 'Accept & Approve Product'}
+              : 'Confirm Approval (Waiting for Stock)'}
           </button>
         </div>
       </div>

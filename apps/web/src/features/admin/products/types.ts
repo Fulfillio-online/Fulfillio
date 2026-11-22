@@ -53,6 +53,7 @@ export interface WarehouseProductItem {
   size: string;
   binCode: string;
   stock: number;
+  reserved?: number;
   stockAccepted?: boolean;
   stockStatus?: 'AWAITING_STOCK' | 'IN_STOCK' | 'OUT_OF_STOCK';
   price: number;
@@ -74,6 +75,8 @@ export interface WarehouseProductItem {
     attributeValue?: string;
     stock: number;
   }[];
+  editState?: 'EDIT_ALLOWED' | 'EDIT_APPROVAL_PENDING' | 'EDIT_ACCESS_REQUESTED' | null;
+  isSuspended?: boolean;
 }
 
 export interface InboundStockReplenishment {

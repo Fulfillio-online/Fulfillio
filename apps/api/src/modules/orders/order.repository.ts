@@ -83,7 +83,16 @@ export class OrderRepository {
   }
 
   async findById(id: string, merchantId?: string) {
-    const where: any = { id };
+    const cleanId = (id || '').replace(/^#/, '').trim();
+    const where: any = {
+      OR: [
+        { id },
+        { id: cleanId },
+        { externalOrderId: id },
+        { externalOrderId: cleanId },
+        { externalOrderId: `#${cleanId}` },
+      ],
+    };
     if (merchantId) where.merchantId = merchantId;
 
     return this.prisma.order.findFirst({
@@ -151,25 +160,32 @@ export class OrderRepository {
       isVerifiedAtPacking?: boolean;
     }>;
   }) {
+    const totalAmount = isNaN(Number(data.totalAmount)) ? 0 : Number(data.totalAmount);
+    const codAmount = isNaN(Number(data.codAmount)) ? totalAmount : Number(data.codAmount);
+    const subtotal = isNaN(Number(data.subtotal)) ? totalAmount : Number(data.subtotal);
+    const deliveryFee = isNaN(Number(data.deliveryFee)) ? 0 : Number(data.deliveryFee);
+    const discount = isNaN(Number(data.discount)) ? 0 : Number(data.discount);
+    const advancePayment = isNaN(Number(data.advancePayment)) ? 0 : Number(data.advancePayment);
+
     try {
       return await this.prisma.order.create({
         data: {
-          merchantId: data.merchantId,
+          merchant: { connect: { id: data.merchantId } },
           externalOrderId: data.externalOrderId,
           customerName: data.customerName,
           customerPhone: data.customerPhone,
           customerAddress: data.customerAddress,
-          city: data.city,
+          city: data.city || 'Dhaka',
           memoCode: data.memoCode ? data.memoCode.toUpperCase() : 'MEMO-DEFAULT',
           status: data.status,
           customerRiskScore: data.customerRiskScore,
           customerRiskLevel: data.customerRiskLevel,
-          totalAmount: data.totalAmount,
-          codAmount: data.codAmount,
-          subtotal: data.subtotal ?? 0,
-          deliveryFee: data.deliveryFee ?? 0,
-          discount: data.discount ?? 0,
-          advancePayment: data.advancePayment ?? 0,
+          totalAmount,
+          codAmount,
+          subtotal,
+          deliveryFee,
+          discount,
+          advancePayment,
           paymentMethod: data.paymentMethod,
           paymentStatus: data.paymentStatus ?? 'Unpaid',
           advancePaymentMethod: data.advancePaymentMethod,
@@ -181,8 +197,8 @@ export class OrderRepository {
               sku: i.sku,
               productTitle: i.productTitle,
               variantLabel: i.variantLabel,
-              quantity: i.quantity,
-              unitPrice: i.unitPrice,
+              quantity: Math.max(1, Number(i.quantity) || 1),
+              unitPrice: isNaN(Number(i.unitPrice)) ? 0 : Number(i.unitPrice),
               isVerifiedAtPacking: i.isVerifiedAtPacking ?? false,
             })),
           },
@@ -200,25 +216,28 @@ export class OrderRepository {
         },
       });
     } catch (createErr: any) {
-      console.warn('[OrderRepository] Full order insert failed, attempting safe 0_init fallback:', createErr.message);
-      // Fallback: insert using only columns guaranteed to exist in base 0_init schema
+      console.warn('[OrderRepository] Full order insert failed, attempting safe fallback:', createErr.message);
+      // Fallback: insert using minimal fields with connected merchant
       return await this.prisma.order.create({
         data: {
-          merchantId: data.merchantId,
+          merchant: { connect: { id: data.merchantId } },
           externalOrderId: data.externalOrderId,
           customerName: data.customerName,
           customerPhone: data.customerPhone,
           customerAddress: data.customerAddress,
-          city: data.city,
+          city: data.city || 'Dhaka',
           memoCode: data.memoCode ? data.memoCode.toUpperCase() : 'MEMO-DEFAULT',
           status: data.status,
-          totalAmount: data.totalAmount,
-          codAmount: data.codAmount,
+          totalAmount,
+          codAmount,
           items: {
             create: data.items.map((i) => ({
-              variantId: i.variantId!,
-              quantity: i.quantity,
-              unitPrice: i.unitPrice,
+              variantId: i.variantId || null,
+              productTitle: i.productTitle,
+              variantLabel: i.variantLabel,
+              sku: i.sku,
+              quantity: Math.max(1, Number(i.quantity) || 1),
+              unitPrice: isNaN(Number(i.unitPrice)) ? 0 : Number(i.unitPrice),
               isVerifiedAtPacking: i.isVerifiedAtPacking ?? false,
             })),
           },

@@ -23,7 +23,7 @@ import { CancelOrderModal } from './order-details/CancelOrderModal';
 interface MerchantOrderDetailsTabProps {
   order: MerchantOrderItem;
   onUpdateStatus?: (orderId: string, status: MerchantOrderItem['status']) => void;
-  onCancelOrder: (orderId: string) => void;
+  onCancelOrder: (orderId: string, reason?: string) => Promise<boolean> | void;
   onTriggerToast: (msg: string) => void;
 }
 
@@ -211,6 +211,17 @@ export function MerchantOrderDetailsTab({
             <span>Print Invoice Memo</span>
           </Link>
 
+          {order.status !== 'CANCELLED' && order.status !== 'DELIVERED' && (
+            <button
+              type="button"
+              onClick={() => setIsCancelConfirmOpen(true)}
+              className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800/40 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer min-h-[38px]"
+            >
+              <Trash2 className="h-4 w-4" />
+              <span>Cancel Order</span>
+            </button>
+          )}
+
           {/* 3-Dots More Options Menu */}
           <div className="relative">
             <button
@@ -345,9 +356,12 @@ export function MerchantOrderDetailsTab({
       <CancelOrderModal
         isOpen={isCancelConfirmOpen}
         orderNumber={order.orderNumber || `#${order.id}`}
+        customerName={order.customer}
+        amount={order.amount}
+        qty={order.qty}
         onClose={() => setIsCancelConfirmOpen(false)}
-        onConfirm={() => {
-          onCancelOrder(order.id);
+        onConfirm={async (reason) => {
+          await onCancelOrder(order.orderNumber || order.id, reason);
           setIsCancelConfirmOpen(false);
         }}
       />

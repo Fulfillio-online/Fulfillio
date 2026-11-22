@@ -762,6 +762,49 @@ export function ProductsManager({
     }
   };
 
+  // Direct One-Click Approval for a Pending Product -> Moves status directly to "Waiting for Stock"
+  const handleApproveToAwaitingStock = (productId: string, binCode?: string) => {
+    const target = products.find((p) => p.id === productId);
+    if (!target) return;
+    const assignedBin =
+      binCode ||
+      (target.binCode && target.binCode !== 'Pending Approval' && target.binCode !== 'Assigned on intake'
+        ? target.binCode
+        : bins[0]?.code || 'A-01-02');
+
+    setProducts((prev) => {
+      const next = prev.map((p) =>
+        p.id === productId
+          ? {
+              ...p,
+              status: 'APPROVED' as const,
+              isDraft: false,
+              binCode: assignedBin,
+              stock: 0,
+              stockAccepted: false,
+              stockStatus: 'AWAITING_STOCK' as const,
+              submittedAt: 'Approved just now',
+            }
+          : p
+      );
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
+      } catch {}
+      return next;
+    });
+
+    approveProductInDatabase(productId, assignedBin, 0, false);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
+      );
+    }
+
+    triggerToast(`Product "${target.title}" approved! Status changed to Waiting for Stock.`);
+  };
+
   // Confirm Approval for a New Catalog Product or Draft-to-Publish Request
   const handleConfirmApproval = (
     mode: 'APPROVE' | 'REJECT',
@@ -771,17 +814,9 @@ export function ProductsManager({
     acceptStockNow?: boolean
   ) => {
     setApprovalModalData(null);
-    const wasAlreadyStored = (product.stock || 0) > 0;
-
     if (mode === 'APPROVE') {
-      const isStockAccepted = wasAlreadyStored || (acceptStockNow ?? finalQty > 0);
-      const actualStock = wasAlreadyStored
-        ? finalQty > 0
-          ? finalQty
-          : product.stock
-        : isStockAccepted
-          ? finalQty
-          : 0;
+      const isStockAccepted = acceptStockNow === true;
+      const actualStock = isStockAccepted ? finalQty : 0;
 
       setProducts((prev) => {
         const next = prev.map((p) =>
@@ -816,38 +851,11 @@ export function ProductsManager({
         );
       }
 
-      if (wasAlreadyStored) {
-        triggerToast(
-          `Approved publish request from Draft for "${product.title}". Restored to Stock Stored (${actualStock} units in Bin ${finalBin}).`
-        );
-      } else if (isStockAccepted && actualStock > 0) {
-        appendStockMovement({
-          type: 'INITIAL_INTAKE',
-          merchantCode: product.merchantCode,
-          merchantName: product.merchantName,
-          productId: product.id,
-          productTitle: product.title,
-          sku: product.fullSku,
-          deltaQty: actualStock,
-          previousStock: 0,
-          newStock: actualStock,
-          binCode: finalBin,
-          referenceDocType: 'INWARD_CHALLAN',
-          referenceNumber: `CHL-${Date.now().toString().slice(-6)}`,
-          operator: 'Warehouse Receiving Officer',
-          carrierOrCourier: 'Initial Catalog Intake Consignment',
-          notes: `Catalog submission approved and stock accepted. Slotted ${actualStock} units into Bin ${finalBin}.`,
-        });
-
-        triggerToast(
-          `Approved and accepted ${actualStock} units of "${product.title}" in Bin ${finalBin}. Ready for orders.`
-        );
-      } else {
-        triggerToast(
-          `Approved catalog specification for "${product.title}". Awaiting merchant physical stock shipment (0 units in warehouse).`
-        );
-      }
+      triggerToast(
+        `Product "${product.title}" approved! Status changed to Waiting for Stock.`
+      );
     } else {
+      const wasAlreadyStored = (product.stock || 0) > 0;
       if (wasAlreadyStored) {
         // Draft-to-Publish Rejection: Do NOT delete a product that already has warehouse stock; return it to Draft
         setProducts((prev) => {
@@ -913,7 +921,7 @@ export function ProductsManager({
             ...p,
             stock: newStockTotal,
             binCode: binCode || p.binCode,
-            status: 'APPROVED' as const,
+            status: 'STOCK_STORED' as const,
             stockAccepted: true,
             stockStatus: 'IN_STOCK' as const,
           };
@@ -950,7 +958,7 @@ export function ProductsManager({
       });
 
       triggerToast(
-        `Accepted +${quantity} units for "${targetProduct.title}" into Bin ${binCode}. Total stock: ${newStockTotal} pcs. Merchant can now create orders.`
+        `Stock received (+${quantity} pcs) for "${targetProduct.title}" into Bin ${binCode}. Product is now Active and Published!`
       );
     }
 
@@ -1654,6 +1662,96 @@ syncAdminProductsToMerchant(next);
     }
   };
 
+  const handleAllowEdit = (productId: string) => {
+    setProducts((prev) => {
+      const next = prev.map((p) =>
+        p.id === productId ? { ...p, editState: 'EDIT_ALLOWED' as const } : p
+      );
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+    triggerToast('Edit access granted to merchant.');
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
+      );
+    }
+  };
+
+  const handleApproveRevision = (productId: string) => {
+    setProducts((prev) => {
+      const next = prev.map((p) =>
+        p.id === productId ? { ...p, editState: null } : p
+      );
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+    triggerToast('Product revision approved.');
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
+      );
+    }
+  };
+
+  const handleRejectRevision = (productId: string) => {
+    setProducts((prev) => {
+      const next = prev.map((p) =>
+        p.id === productId ? { ...p, editState: null } : p
+      );
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+    triggerToast('Product revision rejected.');
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
+      );
+    }
+  };
+
+  const handleToggleSuspend = (productId: string) => {
+    let nextStatusText = '';
+    setProducts((prev) => {
+      const next = prev.map((p) => {
+        if (p.id === productId) {
+          const willSuspend = !p.isSuspended;
+          nextStatusText = willSuspend ? 'suspended' : 'reactivated';
+          return { ...p, isSuspended: willSuspend };
+        }
+        return p;
+      });
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+    triggerToast(`Product has been ${nextStatusText}.`);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
+      );
+    }
+  };
+
   const handleCreateBin = (newBin: WarehouseBin) => {
     setBins((prev) => {
       const next = [newBin, ...prev];
@@ -1739,6 +1837,7 @@ syncAdminProductsToMerchant(next);
         onOpenStockAdjustModal={(prod) => setStockAdjustProduct(prod)}
         onChangeProductBin={handleChangeProductBin}
         onOpenAddProduct={() => setAddProductModalOpen(true)}
+        onApproveProduct={handleApproveToAwaitingStock}
         onOpenAcceptStockModal={(prod) => setAcceptStockProduct(prod)}
         onOpenApprovalModal={(mode, product, selectedBin) =>
           setApprovalModalData({ mode, product, selectedBin })
@@ -1754,6 +1853,10 @@ syncAdminProductsToMerchant(next);
         onBulkPermanentDelete={handleDeleteProducts}
         onDeleteProduct={handleDeleteProduct}
         onDeleteProducts={handleDeleteProducts}
+        onAllowEdit={handleAllowEdit}
+        onApproveRevision={handleApproveRevision}
+        onRejectRevision={handleRejectRevision}
+        onToggleSuspend={handleToggleSuspend}
       />
 
       {/* Modals */}

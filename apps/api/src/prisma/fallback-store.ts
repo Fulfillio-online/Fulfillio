@@ -571,22 +571,39 @@ export class FallbackStore {
       data.description === undefined &&
       data.status !== undefined;
 
-    if (!isStatusOnlyUpdate) {
-      const existingLifecycle = existing.lifecycleStatus || existing.status || 'DRAFT';
-      const isDraft = existingLifecycle === 'DRAFT';
-      const isPending = existingLifecycle === 'PENDING_APPROVAL';
-      const existingTotalStock = (existing.variants || []).reduce(
-        (sum, v) =>
-          sum + (v.inventoryItems || []).reduce((s, it) => s + (it.quantityAvailable || 0), 0),
-        0
-      );
+    const existingLifecycle = existing.lifecycleStatus || existing.status || 'DRAFT';
+    const isDraft = existingLifecycle === 'DRAFT';
+    const isPending = existingLifecycle === 'PENDING_APPROVAL';
+    const existingTotalStock = (existing.variants || []).reduce(
+      (sum, v) =>
+        sum + (v.inventoryItems || []).reduce((s, it) => s + (it.quantityAvailable || 0), 0),
+      0
+    );
+    const hasApprovedBin = (existing.variants || []).some(
+      (v) =>
+        v.defaultBinCode &&
+        v.defaultBinCode !== 'Pending Approval' &&
+        v.defaultBinCode !== 'Assigned on intake'
+    );
+    const isAccepted =
+      existingLifecycle === 'APPROVED' || existingLifecycle === 'STOCK_STORED' || hasApprovedBin;
 
+    // Rule: "after admin accept the request mercent can not edit and draft product"
+    if (data.status === 'DRAFT' && isAccepted) {
+      throw new Error(
+        `Action Blocked: Cannot move product '${existing.title}' to Draft. After warehouse admin accepts a product, it cannot be drafted or directly edited.`
+      );
+    }
+
+    if (!isStatusOnlyUpdate) {
       // Rule: Merchant can edit in Draft or during initial Pending Approval (stock = 0).
       // Cannot directly edit approved/stocked product!
-      if (!isDraft && (!isPending || existingTotalStock > 0)) {
+      if (isAccepted || (!isDraft && (!isPending || existingTotalStock > 0))) {
         throw new Error(
           existingTotalStock > 0
             ? `Cannot directly edit product '${existing.title}': Product already has ${existingTotalStock} pcs stored in warehouse. Please use Request Edit.`
+            : isAccepted
+            ? `Action Blocked: Cannot edit product '${existing.title}'. After warehouse admin accepts a product, it cannot be drafted or directly edited.`
             : `Cannot directly edit product '${existing.title}': Editing is only permitted during Draft or initial Pending Approval stage (current status: ${existingLifecycle}).`
         );
       }

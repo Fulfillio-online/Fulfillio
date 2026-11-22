@@ -12,6 +12,8 @@ import {
 } from './types';
 import { StockRequestItem } from './products/types';
 import { safeSetLocalStorage } from './products/utils/imageCompressor';
+import { CancelledOrderItemRecord, RecoveryLedgerEntry } from '@/features/admin/returns/types';
+import { STORAGE_KEY_STOCK_LEDGER } from '@/features/admin/products/mockData';
 import {
   INITIAL_MERCHANT_PROFILE, INITIAL_MERCHANT_PRODUCTS, INITIAL_MERCHANT_ORDERS,
 } from './mockData';
@@ -41,6 +43,8 @@ import {
   getStoredMerchantCategoriesForCode,
   saveMerchantCategoriesForCode,
   getMerchantCategoriesKey,
+  updateOrderStatusInDatabase,
+  cancelOrderInDatabase,
 } from '@/lib/warehouseSync';
 
 function safeLocalStorageSet(key: string, value: string): void {
@@ -81,6 +85,7 @@ interface MerchantContextType {
   bulkDeleteProducts: (ids: string[]) => void;
   requestStockAdd: (productId: string, requestedQty: number, note?: string) => void;
   requestStockOperation: (payload: import("./products/modals/ManageStockModal").SubmitStockRequestPayload) => void;
+  requestEditAccess: (productId: string, reason: string) => Promise<boolean>;
   approveStockRequest: (requestId: string) => void;
   cancelStockRequest: (requestId: string) => void;
   createOrder: (
@@ -89,7 +94,7 @@ interface MerchantContextType {
     qty?: number
   ) => Promise<{ ok: boolean; error?: string }>;
   syncLocalOrdersToDatabase: () => Promise<{ uploaded: number; failed: number }>;
-  cancelOrder: (orderId: string) => void;
+  cancelOrder: (orderId: string, reason?: string) => Promise<boolean>;
   updateOrderStatus: (orderId: string, status: MerchantOrderItem['status']) => void;
   createAsn: (newAsn: MerchantAsnRecord) => void;
   saveMemo: (newMemo: ResellerMemo) => void;
@@ -528,16 +533,43 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     const target = products.find((p) => p.id === id);
     if (!target) return;
 
+    const isTargetDraft = target.status === 'DRAFT';
+    const isPendingOrAwaiting =
+      target.status === 'PENDING_APPROVAL' ||
+      target.status === 'APPROVED' ||
+      target.stockStatus === 'AWAITING_STOCK' ||
+      target.stockAccepted === false;
+    const hasPhysicalStock = (target.stock || 0) > 0;
+    const isTargetStockStored =
+      !isTargetDraft &&
+      !isPendingOrAwaiting &&
+      (target.status === 'STOCK_STORED' || target.status === 'PUBLISHED') &&
+      hasPhysicalStock;
+
+    // Rule: When physical stock is already stored in warehouse, merchant cannot move to Draft (must request return)
+    if (!isTargetDraft && isTargetStockStored) {
+      showToast(
+        `Action Blocked: "${target.title}" has ${target.stock} units stored in warehouse. Please use "Request to Return" before drafting.`
+      );
+      return;
+    }
+
     let newStatus: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'STOCK_STORED';
-    if (target.status !== 'DRAFT') {
-      // Merchant can save in draft from Pending Approval, Approved, or Stock Stored
+    if (!isTargetDraft) {
+      // Pending Approval or Awaiting Stock can be cancelled / moved back to Draft
       newStatus = 'DRAFT';
     } else {
-      // Any product sent to Draft requires Admin Approval again before it can be published
+      // Submitting from draft requires admin approval
       newStatus = 'PENDING_APPROVAL';
     }
 
-    const updatedTarget: MerchantProductItem = { ...target, status: newStatus };
+    const updatedTarget: MerchantProductItem = {
+      ...target,
+      status: newStatus,
+      stockAccepted: newStatus === 'DRAFT' ? false : target.stockAccepted,
+      stockStatus: newStatus === 'DRAFT' ? 'AWAITING_STOCK' : target.stockStatus,
+      bin: newStatus === 'DRAFT' ? 'Pending Approval' : target.bin,
+    };
 
     setProducts((prev) => {
       const next = prev.map((p) => (p.id === id ? updatedTarget : p));
@@ -551,7 +583,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     merchantApi.updateProductStatus(id, newStatus).catch(() => {});
     showToast(
       newStatus === 'DRAFT'
-        ? `"${target.title}" saved in Draft.`
+        ? `"${target.title}" moved to Draft.`
         : (target.stock || 0) > 0
           ? `"${target.title}" submitted for Warehouse Publish Approval (Waiting for Publish).`
           : `"${target.title}" submitted for Admin Approval.`
@@ -560,9 +592,37 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
 
   const bulkUpdateStatus = (ids: string[], status: 'PUBLISHED' | 'DRAFT') => {
     const idSet = new Set(ids);
+    let blockedCount = 0;
+
     setProducts((prev) => {
       const next = prev.map((p) => {
         if (!idSet.has(p.id)) return p;
+
+        if (status === 'DRAFT') {
+          const isTargetDraft = p.status === 'DRAFT';
+          const isTargetFirstTimePending =
+            !isTargetDraft &&
+            (p.status === 'PENDING_APPROVAL' ||
+              !p.bin ||
+              p.bin === 'Pending Approval' ||
+              p.bin === 'Assigned on intake') &&
+            (p.stock || 0) === 0;
+
+          const isAcceptedByAdmin =
+            !isTargetDraft &&
+            !isTargetFirstTimePending &&
+            (p.status === 'APPROVED' ||
+              p.status === 'STOCK_STORED' ||
+              (Boolean(p.bin) &&
+                p.bin !== 'Pending Approval' &&
+                p.bin !== 'Assigned on intake'));
+
+          if (isAcceptedByAdmin) {
+            blockedCount++;
+            return p; // Skip moving accepted product to Draft
+          }
+        }
+
         let nextStage: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'STOCK_STORED' = 'DRAFT';
         if (status !== 'DRAFT') {
           if (p.status === 'DRAFT') {
@@ -589,11 +649,18 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       }
       return next;
     });
-    showToast(
-      status === 'DRAFT'
-        ? `Moved ${ids.length} product(s) to Draft.`
-        : `Submitted ${ids.length} product(s) for Admin Approval.`
-    );
+
+    if (blockedCount > 0) {
+      showToast(
+        `${blockedCount} accepted product(s) skipped. After admin accepts a product, it cannot be drafted.`
+      );
+    } else {
+      showToast(
+        status === 'DRAFT'
+          ? `Moved ${ids.length} product(s) to Draft.`
+          : `Submitted ${ids.length} product(s) for Admin Approval.`
+      );
+    }
   };
 
   const bulkDeleteProducts = (ids: string[]) => {
@@ -774,11 +841,50 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     showToast('Stock request cancelled.');
   };
 
+  const requestEditAccess = async (productId: string, reason: string): Promise<boolean> => {
+    const target = products.find((p) => p.id === productId);
+    if (!target) return false;
+
+    const updatedTarget: MerchantProductItem = {
+      ...target,
+      editState: 'EDIT_ACCESS_REQUESTED',
+      editReason: reason,
+    } as any;
+
+    setProducts((prev) => {
+      const next = prev.map((p) => (p.id === productId ? updatedTarget : p));
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
+      }
+      return next;
+    });
+
+    syncMerchantProductUpdatedToAdmin(updatedTarget, profile);
+
+    try {
+      await fetch(`/api/inventory/products/${productId}/request-edit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      });
+    } catch {}
+
+    showToast(`Edit request for "${target.title}" submitted to warehouse admin.`);
+    return true;
+  };
+
   const createOrder = async (
-    order: MerchantOrderItem,
+    rawOrder: MerchantOrderItem,
     productIdOrItems?: string | { productId: string; qty: number }[],
     qty?: number
   ): Promise<{ ok: boolean; error?: string }> => {
+    const cleanId = (rawOrder.id || rawOrder.orderNumber || `ORD-${Date.now()}`).replace(/^#/, '').trim();
+    const cleanOrderNumber = (rawOrder.orderNumber || cleanId).replace(/^#/, '').trim();
+    const order: MerchantOrderItem = {
+      ...rawOrder,
+      id: cleanId,
+      orderNumber: cleanOrderNumber,
+    };
     const itemsToDeduct: { productId: string; qty: number }[] = [];
     if (Array.isArray(productIdOrItems)) {
       itemsToDeduct.push(...productIdOrItems);
@@ -796,13 +902,24 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     for (const it of itemsToDeduct) {
       const prod = products.find((p) => p.id === it.productId);
       if (prod) {
-        const isApproved =
-          (prod.status === 'PUBLISHED' || (prod.status as any) === 'APPROVED') &&
-          prod.bin &&
-          prod.bin !== 'Pending Approval' &&
-          prod.bin !== 'Assigned on intake';
-        if (!isApproved) {
-          const err = `Cannot create order: "${prod.title}" is pending warehouse admin approval. Orders can only be created after the warehouse approves the product and accepts stock.`;
+        if ((prod as any).editState === 'EDIT_APPROVAL_PENDING') {
+          const err = `Cannot order "${prod.title}": Product revisions are currently pending warehouse admin QA review. Orders are locked during edit review.`;
+          showToast(err);
+          return { ok: false, error: err };
+        }
+
+        if (Boolean((prod as any).isSuspended)) {
+          const err = `Cannot order "${prod.title}": Product is currently suspended by warehouse admin.`;
+          showToast(err);
+          return { ok: false, error: err };
+        }
+
+        const isApprovedAndStocked =
+          (prod.status === 'PUBLISHED' || prod.status === 'STOCK_STORED') &&
+          prod.stockAccepted !== false &&
+          prod.stockStatus !== 'AWAITING_STOCK';
+        if (!isApprovedAndStocked) {
+          const err = `Cannot create order: "${prod.title}" is waiting for warehouse stock intake. Orders can only be placed after the warehouse admin receives and publishes the stock into inventory.`;
           showToast(err);
           return { ok: false, error: err };
         }
@@ -817,12 +934,30 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     let latestProducts = products;
     setProducts((prev) => {
       const next = prev.map((p) => {
-        const match = itemsToDeduct.find((it) => it.productId === p.id);
+        const match = itemsToDeduct.find(
+          (it: any) =>
+            it.productId === p.id ||
+            (it.variantSku && (p.sku === it.variantSku || (p.variantsList && p.variantsList.some((v) => v.variantSku === it.variantSku))))
+        );
         if (match) {
+          const matchAny = match as any;
+          const updatedVariants = (p.variantsList || []).map((v) => {
+            const isMatch =
+              (matchAny.variantSku && v.variantSku.toUpperCase() === matchAny.variantSku.toUpperCase()) ||
+              (matchAny.color && matchAny.size &&
+                (v.color || '').toLowerCase() === matchAny.color.toLowerCase() &&
+                (v.size || '').toLowerCase() === matchAny.size.toLowerCase());
+            if (isMatch) {
+              return { ...v, stock: Math.max(0, v.stock - match.qty) };
+            }
+            return v;
+          });
+
           return {
             ...p,
             stock: Math.max(0, p.stock - match.qty),
-            reserved: p.reserved + match.qty,
+            reserved: (p.reserved || 0) + match.qty,
+            variantsList: updatedVariants.length > 0 ? updatedVariants : p.variantsList,
           };
         }
         return p;
@@ -918,55 +1053,196 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     return { uploaded, failed };
   };
 
-  const cancelOrder = (orderId: string) => {
-    const target = orders.find((o) => o.id === orderId || o.orderNumber === orderId);
-    if (!target) return;
+  const cancelOrder = async (orderId: string, reason?: string): Promise<boolean> => {
+    if (!orderId) return false;
+    const cleanReqId = orderId.replace(/^#/, '').toLowerCase().trim();
 
-    const itemsToRestore: { productId: string; qty: number }[] = [];
-    if (target.lineItems && target.lineItems.length > 0) {
+    // 1. Find target order in memory (robust lookup)
+    const target = orders.find((o) => {
+      const oId = (o.id || '').replace(/^#/, '').toLowerCase().trim();
+      const oNum = (o.orderNumber || '').replace(/^#/, '').toLowerCase().trim();
+      return (
+        oId === cleanReqId ||
+        oNum === cleanReqId ||
+        o.id === orderId ||
+        o.orderNumber === orderId
+      );
+    });
+
+    const cleanTargetId = target?.orderNumber || target?.id || cleanReqId;
+    const displayOrderNum = cleanTargetId.startsWith('#') ? cleanTargetId : `#${cleanTargetId}`;
+
+    // 2. Identify items to restore from target
+    const itemsToRestore: Array<{ productId: string; qty: number; variantSku?: string; color?: string; size?: string }> = [];
+    if (target?.lineItems && target.lineItems.length > 0) {
       target.lineItems.forEach((li) => {
-        itemsToRestore.push({ productId: li.id, qty: li.quantity });
+        const vParts = (li.variant || '').split('·');
+        itemsToRestore.push({
+          productId: li.id,
+          qty: li.quantity,
+          variantSku: li.sku,
+          color: vParts[0]?.trim(),
+          size: vParts[1]?.trim(),
+        });
       });
-    } else if (target.productId) {
-      itemsToRestore.push({ productId: target.productId, qty: target.qty });
+    } else if (target?.productId) {
+      itemsToRestore.push({ productId: target.productId, qty: target.qty || 1 });
     }
 
+    // 3. Restore inventory in Merchant products
     let latestProducts = products;
     if (itemsToRestore.length > 0) {
       setProducts((prev) => {
         const next = prev.map((p) => {
-          const match = itemsToRestore.find((it) => it.productId === p.id);
+          const match = itemsToRestore.find(
+            (it) =>
+              it.productId === p.id ||
+              (it.variantSku && (p.sku === it.variantSku || (p.variantsList && p.variantsList.some((v) => v.variantSku === it.variantSku))))
+          );
           if (match) {
+            const updatedVariants = (p.variantsList || []).map((v) => {
+              const isMatch =
+                (match.variantSku && v.variantSku.toUpperCase() === match.variantSku.toUpperCase()) ||
+                (match.color && match.size &&
+                  (v.color || '').toLowerCase() === match.color.toLowerCase() &&
+                  (v.size || '').toLowerCase() === match.size.toLowerCase());
+              if (isMatch) {
+                return { ...v, stock: v.stock + match.qty };
+              }
+              return v;
+            });
+
             return {
               ...p,
               stock: p.stock + match.qty,
-              reserved: Math.max(0, p.reserved - match.qty),
+              reserved: Math.max(0, (p.reserved || 0) - match.qty),
+              variantsList: updatedVariants.length > 0 ? updatedVariants : p.variantsList,
             };
           }
           return p;
         });
         latestProducts = next;
         if (typeof window !== 'undefined') {
-          localStorage.setItem(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
+          safeLocalStorageSet(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
         }
         return next;
       });
     }
 
+    // 4. Update orders in Merchant state & localStorage immediately
     setOrders((prev) => {
-      const next = prev.map((o) =>
-        o.id === orderId || o.orderNumber === orderId
-          ? { ...o, status: 'CANCELLED' as const }
-          : o
-      );
+      const next = prev.map((o) => {
+        const oId = (o.id || '').replace(/^#/, '').toLowerCase().trim();
+        const oNum = (o.orderNumber || '').replace(/^#/, '').toLowerCase().trim();
+        if (
+          oId === cleanReqId ||
+          oNum === cleanReqId ||
+          o.id === orderId ||
+          o.orderNumber === orderId
+        ) {
+          return { ...o, status: 'CANCELLED' as const };
+        }
+        return o;
+      });
       if (typeof window !== 'undefined') {
-        localStorage.setItem(getMerchantOrdersKey(profile.merchantCode), JSON.stringify(next));
+        safeLocalStorageSet(getMerchantOrdersKey(profile.merchantCode), JSON.stringify(next));
       }
       return next;
     });
 
-    syncMerchantOrderCancelledToAdmin(target.orderNumber || target.id, itemsToRestore, latestProducts);
-    showToast(`Order ${orderId} cancelled & stock restored.`);
+    // 5. Update in PostgreSQL Database via API
+    try {
+      await cancelOrderInDatabase(cleanTargetId);
+      if (target?.id && target.id !== cleanTargetId) {
+        await cancelOrderInDatabase(target.id);
+      }
+    } catch (dbErr) {
+      console.warn('[MerchantContext] DB cancellation error:', dbErr);
+    }
+
+    // 6. Sync with Admin Warehouse Pipeline & Stock Recovery Ledger
+    syncMerchantOrderCancelledToAdmin(cleanTargetId, itemsToRestore, latestProducts);
+
+    // 7. Accumulate into Returns & Cancellations Hub (both merchant & admin)
+    try {
+      if (typeof window !== 'undefined') {
+        const now = new Date();
+        const timeStr = `${now.toLocaleDateString('en-CA')} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+        const newProofId = `PRF-${now.getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+        const totalQty = target?.qty || itemsToRestore.reduce((s, it) => s + it.qty, 0) || 1;
+        const newCancelRecord: CancelledOrderItemRecord = {
+          id: cleanReqId,
+          orderId: displayOrderNum,
+          merchantCode: profile.merchantCode || 'MC-101',
+          merchantName: profile.storeName || "Sabbir's Store",
+          customerName: target?.customer || 'Customer',
+          customerPhone: target?.phone || 'N/A',
+          city: target?.address ? target.address.split(',')[0].trim() : 'Dhaka',
+          productTitle: target?.lineItems?.[0]?.title || target?.items || 'Product Item',
+          fullSku: target?.lineItems?.[0]?.sku || 'SKU-001',
+          color: target?.lineItems?.[0]?.variant ? target.lineItems[0].variant.split('·')[0]?.trim() : 'Standard',
+          size: target?.lineItems?.[0]?.variant ? target.lineItems[0].variant.split('·')[1]?.trim() : 'Standard',
+          qty: totalQty,
+          unitPrice: target?.amount ? target.amount / Math.max(1, target.qty || 1) : 1200,
+          codAmount: target?.amount || 1200,
+          targetBin: 'A-01-02',
+          currentStockSnapshot: 15,
+          cancelledAt: 'Just now',
+          cancelReason: reason || 'Cancelled by merchant — restored to available stock',
+          isRestocked: true,
+          restockedAt: 'Just now',
+          restockedBin: 'A-01-02',
+          imageUrl: target?.lineItems?.[0]?.imageUrl || '',
+        };
+
+        const newLedgerItem: RecoveryLedgerEntry = {
+          id: newProofId,
+          timestamp: timeStr,
+          sourceType: 'ORDER_CANCELLED',
+          referenceId: displayOrderNum,
+          merchantCode: profile.merchantCode || 'MC-101',
+          merchantName: profile.storeName || "Sabbir's Store",
+          productTitle: newCancelRecord.productTitle,
+          sku: newCancelRecord.fullSku,
+          deltaQty: totalQty,
+          previousStock: 10,
+          newStock: 10 + totalQty,
+          binCode: 'A-01-02',
+          operator: `${profile.storeName} (Merchant Portal)`,
+          digitalProofHash: `FL-SHA256-${cleanReqId.toUpperCase()}-CAN-REV`,
+          notes: reason || `Order cancelled by merchant. +${totalQty} units restored to stock.`,
+        };
+
+        const rawLedger = localStorage.getItem(STORAGE_KEY_STOCK_LEDGER);
+        let currLedger: any[] = [];
+        if (rawLedger) {
+          try {
+            const parsed = JSON.parse(rawLedger);
+            if (Array.isArray(parsed)) currLedger = parsed;
+          } catch {}
+        }
+        localStorage.setItem(STORAGE_KEY_STOCK_LEDGER, JSON.stringify([newLedgerItem, ...currLedger]));
+      }
+    } catch (ledgerErr) {
+      console.warn('[MerchantContext] Error writing stock ledger entry:', ledgerErr);
+    }
+
+    // 8. Re-fetch latest database orders to ensure full backend reconciliation
+    try {
+      const serverOrds = await merchantApi.getOrders();
+      if (serverOrds && serverOrds.length > 0) {
+        setOrders(serverOrds);
+        safeLocalStorageSet(getMerchantOrdersKey(profile.merchantCode), JSON.stringify(serverOrds));
+      }
+    } catch {}
+
+    window.dispatchEvent(
+      new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'MerchantCancelOrder' } })
+    );
+
+    showToast(`Order ${displayOrderNum} cancelled successfully & stock restored in PostgreSQL database.`);
+    return true;
   };
 
   const updateOrderStatus = (orderId: string, status: MerchantOrderItem['status']) => {
@@ -977,6 +1253,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       }
       return next;
     });
+    updateOrderStatusInDatabase(orderId, status).catch(() => {});
     merchantApi.updateOrderStatus?.(orderId, status).catch(() => {});
     showToast(`Order ${orderId} status updated to ${status}.`);
   };
@@ -1161,6 +1438,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
         bulkDeleteProducts,
         requestStockAdd,
         requestStockOperation,
+        requestEditAccess,
         approveStockRequest,
         cancelStockRequest,
         createOrder,

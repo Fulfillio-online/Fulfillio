@@ -17,10 +17,13 @@ import {
   ExternalLink,
   RefreshCw,
   Database,
+  RotateCcw,
+  ArrowRight,
 } from 'lucide-react';
 import { FraudRatioBadge } from '@/components/ui/FraudRatioBadge';
 import { MerchantOrderItem, MerchantProductItem, ResellerMemo } from '../../types';
 import { CreateManualOrderModal } from '../modals/CreateManualOrderModal';
+import { CancelOrderModal } from './order-details/CancelOrderModal';
 import { MerchantExpandableCard } from '../common/MerchantExpandableCard';
 import { useMerchant } from '../../MerchantContext';
 
@@ -33,11 +36,16 @@ interface MerchantOrdersTabProps {
     productIdOrItems?: string | { productId: string; qty: number }[],
     qty?: number
   ) => void;
-  onCancelOrder: (orderId: string) => void;
+  onCancelOrder: (orderId: string, reason?: string) => Promise<boolean> | void;
   onTriggerToast: (msg: string) => void;
 }
 
-type TabFilter = 'ALL' | 'PENDING' | 'PROCESSING' | 'COURIER_BOOKED' | 'HANDOVER';
+type TabFilter = 'ALL' | 'PENDING' | 'PROCESSING' | 'COURIER_BOOKED' | 'HANDOVER' | 'CANCELLED';
+
+export const getCleanOrderId = (order: { id?: string; orderNumber?: string }) => {
+  const raw = order.id || order.orderNumber || '';
+  return raw.replace(/^#/, '').trim();
+};
 
 export function MerchantOrdersTab({
   orders,
@@ -51,6 +59,7 @@ export function MerchantOrdersTab({
   const { syncLocalOrdersToDatabase } = useMerchant();
   const [isSyncing, setIsSyncing] = useState(false);
   const [isCreateOrderOpen, setIsCreateOrderOpen] = useState(false);
+  const [cancellingOrder, setCancellingOrder] = useState<MerchantOrderItem | null>(null);
   const [activeTab, setActiveTab] = useState<TabFilter>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -73,11 +82,12 @@ export function MerchantOrdersTab({
     const pending = orders.filter((o) => o.status === 'PENDING').length;
     const courierBooked = orders.filter((o) => o.status === 'DISPATCHED').length;
     const handover = orders.filter((o) => o.status === 'DELIVERED').length;
+    const cancelled = orders.filter((o) => o.status === 'CANCELLED').length;
     const processing = orders.filter(
       (o) => o.status === 'ALLOCATED' || o.status === 'PICKED' || o.status === 'PACKED',
     ).length;
 
-    return { total, pending, inDelivery: courierBooked, courierBooked, delivered: handover, handover, processing };
+    return { total, pending, inDelivery: courierBooked, courierBooked, delivered: handover, handover, processing, cancelled };
   }, [orders]);
 
   // Filter Orders by Tab and Search
@@ -94,6 +104,7 @@ export function MerchantOrdersTab({
         return false;
       if (activeTab === 'COURIER_BOOKED' && o.status !== 'DISPATCHED') return false;
       if (activeTab === 'HANDOVER' && o.status !== 'DELIVERED') return false;
+      if (activeTab === 'CANCELLED' && o.status !== 'CANCELLED') return false;
 
       // Search filter
       if (searchQuery.trim()) {
@@ -425,7 +436,38 @@ export function MerchantOrdersTab({
           >
             Handover ({stats.handover})
           </button>
+          <button
+            onClick={() => {
+              setActiveTab('CANCELLED');
+              setCurrentPage(1);
+            }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0 cursor-pointer ${
+              activeTab === 'CANCELLED'
+                ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30'
+                : 'text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-navy-800/60'
+            }`}
+          >
+            Cancelled ({stats.cancelled})
+          </button>
         </div>
+
+        {activeTab === 'CANCELLED' && (
+          <div className="p-3.5 rounded-xl bg-orange-500/10 border border-orange-500/25 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-navy-900 dark:text-white">
+            <div className="flex items-center gap-2">
+              <RotateCcw className="w-4 h-4 text-orange-600 dark:text-orange-400 shrink-0" />
+              <span>
+                Cancelled items are automatically restored to your available warehouse stock. View detailed storage bin allocations and cryptographic proof hashes.
+              </span>
+            </div>
+            <Link
+              href="/merchant/returns?tab=CANCELLED"
+              className="text-orange-600 dark:text-orange-400 font-bold hover:underline shrink-0 flex items-center gap-1"
+            >
+              <span>Returns &amp; Cancellations Hub</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        )}
 
         {/* Mobile Orders Card View (block md:hidden) */}
         <div className="block md:hidden space-y-2.5">
@@ -532,20 +574,30 @@ export function MerchantOrdersTab({
                 actions={
                   <>
                     <Link
-                      href={`/merchant/orders/${o.id}`}
+                      href={`/merchant/orders/${encodeURIComponent(getCleanOrderId(o))}`}
                       className="flex-1 min-w-[120px] py-2 px-3 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-navy-900 dark:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-slate-200/80 dark:border-white/10 cursor-pointer"
                     >
                       <span>View Full Details</span>
                     </Link>
 
                     <Link
-                      href={`/print/memo/${o.id}?memoCode=${encodeURIComponent(o.memoCode || 'MEMO-DEFAULT')}&customerName=${encodeURIComponent(o.customer)}&customerPhone=${encodeURIComponent(o.phone)}&customerAddress=${encodeURIComponent(o.address)}&codAmount=${o.amount}`}
+                      href={`/print/memo/${encodeURIComponent(getCleanOrderId(o))}?memoCode=${encodeURIComponent(o.memoCode || 'MEMO-DEFAULT')}&customerName=${encodeURIComponent(o.customer)}&customerPhone=${encodeURIComponent(o.phone)}&customerAddress=${encodeURIComponent(o.address)}&codAmount=${o.amount}`}
                       className="flex-1 min-w-[120px] py-2 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-navy-800 dark:hover:bg-navy-700 border border-slate-200 dark:border-white/10 text-slate-800 dark:text-slate-100 hover:text-orange-600 dark:hover:text-orange-400 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                       title="Print 2-in-1 4x6 Thermal Memo Slip"
                     >
                       <Printer className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" />
                       <span>Print 4x6" Memo</span>
                     </Link>
+
+                    {o.status !== 'CANCELLED' && o.status !== 'DELIVERED' && (
+                      <button
+                        type="button"
+                        onClick={() => setCancellingOrder(o)}
+                        className="flex-1 min-w-[120px] py-2 px-3 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800/40 text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        <span>Cancel Order</span>
+                      </button>
+                    )}
                   </>
                 }
               />
@@ -579,7 +631,7 @@ export function MerchantOrdersTab({
                 paginatedOrders.map((o) => (
                   <tr
                     key={o.id}
-                    onClick={() => router.push(`/merchant/orders/${o.id}`)}
+                    onClick={() => router.push(`/merchant/orders/${encodeURIComponent(getCleanOrderId(o))}`)}
                     className="hover:bg-slate-50/80 dark:hover:bg-navy-800/40 cursor-pointer transition-colors group"
                   >
                     {/* ORDER ID & Items */}
@@ -589,9 +641,9 @@ export function MerchantOrdersTab({
                           <Package className="h-3.5 w-3.5" />
                         </div>
                         <div>
-                          <span className="font-mono font-bold text-navy-900 dark:text-white group-hover:text-orange-600 dark:hover:text-orange-400 transition-colors block">
-                            {o.orderNumber || `#${o.id}`}
-                          </span>
+                          <Link href={`/merchant/orders/${encodeURIComponent(getCleanOrderId(o))}`} className="font-mono font-bold text-navy-900 dark:text-white group-hover:text-orange-600 dark:hover:text-orange-400 transition-colors block">
+                            {o.orderNumber?.startsWith('#') ? o.orderNumber : `#${o.orderNumber || o.id}`}
+                          </Link>
                           <span className="text-[11px] text-slate-500 font-medium">
                             {o.qty || 1} {o.qty === 1 ? 'item' : 'items'}
                           </span>
@@ -651,13 +703,23 @@ export function MerchantOrdersTab({
                     <td className="py-3.5 px-4 text-center" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-center gap-2">
                         <Link
-                          href={`/print/memo/${o.id}?memoCode=${encodeURIComponent(o.memoCode || 'MEMO-DEFAULT')}&customerName=${encodeURIComponent(o.customer)}&customerPhone=${encodeURIComponent(o.phone)}&customerAddress=${encodeURIComponent(o.address)}&codAmount=${o.amount}`}
+                          href={`/print/memo/${encodeURIComponent(getCleanOrderId(o))}?memoCode=${encodeURIComponent(o.memoCode || 'MEMO-DEFAULT')}&customerName=${encodeURIComponent(o.customer)}&customerPhone=${encodeURIComponent(o.phone)}&customerAddress=${encodeURIComponent(o.address)}&codAmount=${o.amount}`}
                           className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-navy-800 dark:hover:bg-navy-700 border border-slate-200 dark:border-white/10 text-slate-800 dark:text-slate-100 hover:text-orange-600 dark:hover:text-orange-400 rounded-lg text-[11px] font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
                           title="Print 2-in-1 4x6 Thermal Memo Slip"
                         >
                           <Printer className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" />
                           <span>Print</span>
                         </Link>
+                        {o.status !== 'CANCELLED' && o.status !== 'DELIVERED' && (
+                          <button
+                            type="button"
+                            onClick={() => setCancellingOrder(o)}
+                            className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800/40 text-rose-600 dark:text-rose-400 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer"
+                            title="Cancel order and restore stock"
+                          >
+                            Cancel
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -744,6 +806,22 @@ export function MerchantOrdersTab({
         onCreateOrder={onCreateOrder}
         onTriggerToast={onTriggerToast}
       />
+
+      {/* Cancel Order Confirmation Modal */}
+      {cancellingOrder && (
+        <CancelOrderModal
+          isOpen={Boolean(cancellingOrder)}
+          orderNumber={cancellingOrder.orderNumber || cancellingOrder.id}
+          customerName={cancellingOrder.customer}
+          amount={cancellingOrder.amount}
+          qty={cancellingOrder.qty}
+          onClose={() => setCancellingOrder(null)}
+          onConfirm={async (reason) => {
+            await onCancelOrder(cancellingOrder.orderNumber || cancellingOrder.id, reason);
+            setCancellingOrder(null);
+          }}
+        />
+      )}
     </div>
   );
 }

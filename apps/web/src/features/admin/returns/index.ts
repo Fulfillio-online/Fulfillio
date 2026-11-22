@@ -5,5 +5,7 @@ export { WarehouseReturnsManager as default } from './WarehouseReturnsManager';
 export * from './components/ReturnsStatsCards';
 export * from './components/ReturnsFiltersBar';
 export * from './components/ReturnsTable';
+export * from './components/CancelledOrdersTable';
+export * from './components/ReturnsStockLedgerTab';
 export * from './components/modals/QcInspectionModal';
 export * from './components/modals/LogNewReturnModal';

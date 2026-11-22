@@ -97,7 +97,7 @@ export function AcceptStockModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Product Stock — Accept Product into Warehouse"
+      title="Receive Product — Inbound Stock Intake & Publish"
       size="md"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -107,8 +107,8 @@ export function AcceptStockModal({
             <PackageCheck className="w-5 h-5" />
           </div>
           <div className="text-xs text-slate-700 dark:text-slate-200 leading-relaxed">
-            <strong>Stage 2 — Accept Product &amp; Store Stock:</strong> Physical items received at warehouse dock.
-            Confirming changes the product status from <strong>Approved</strong> to <strong>Stock Stored</strong> and unlocks order creation for the merchant.
+            <strong>Step 2 — Receive Physical Stock &amp; Publish:</strong> Physical goods received at warehouse dock.
+            Confirming intake stores stock into the selected warehouse bin and transitions the product status to <strong>Published (Active)</strong>, allowing the merchant to immediately fulfill customer orders.
           </div>
         </div>
 
@@ -130,14 +130,16 @@ export function AcceptStockModal({
               <span>
                 Current Stored Stock:{' '}
                 <strong className="text-navy-900 dark:text-white font-mono">
-                  {product.stock} pcs
+                  {product.stock || 0} pcs
                 </strong>
               </span>
               <span>·</span>
               <span>
                 Status:{' '}
-                <strong className="text-emerald-600 dark:text-emerald-400">
-                  {product.status}
+                <strong className="text-sky-600 dark:text-sky-400">
+                  {product.stock && product.stock > 0 && product.stockAccepted !== false
+                    ? 'Published'
+                    : 'Waiting for Stock'}
                 </strong>
               </span>
             </div>
@@ -294,7 +296,7 @@ export function AcceptStockModal({
           >
             <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
             <span>
-              Accept Product &amp; Store ({typeof quantity === 'number' ? quantity : 0} pcs) — Stock Stored
+              Receive Stock &amp; Publish ({typeof quantity === 'number' ? quantity : 0} pcs)
             </span>
           </button>
         </div>

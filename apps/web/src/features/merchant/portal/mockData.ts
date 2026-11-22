@@ -339,7 +339,7 @@ export const INITIAL_MERCHANT_PRODUCTS: MerchantProductItem[] = [
 export const INITIAL_MERCHANT_ORDERS: MerchantOrderItem[] = [
   {
     id: 'ord-1001',
-    orderNumber: '#ord-1001',
+    orderNumber: 'ORD-1001',
     date: 'Oct 01, 2026',
     customer: 'Nusrat Jahan',
     customerInitials: 'NJ',
@@ -412,7 +412,7 @@ export const INITIAL_MERCHANT_ORDERS: MerchantOrderItem[] = [
   },
   {
     id: 'ord-1002',
-    orderNumber: '#ord-1002',
+    orderNumber: 'ORD-1002',
     date: 'Oct 02, 2026',
     customer: 'Tanvir Hasan',
     customerInitials: 'TH',
@@ -469,7 +469,7 @@ export const INITIAL_MERCHANT_ORDERS: MerchantOrderItem[] = [
   },
   {
     id: 'ord-1003',
-    orderNumber: '#ord-1003',
+    orderNumber: 'ORD-1003',
     date: 'Oct 03, 2026',
     customer: 'Sadia Rahman',
     customerInitials: 'SR',
@@ -526,7 +526,7 @@ export const INITIAL_MERCHANT_ORDERS: MerchantOrderItem[] = [
   },
   {
     id: 'ord-1004',
-    orderNumber: '#ord-1004',
+    orderNumber: 'ORD-1004',
     date: 'Oct 04, 2026',
     customer: 'Rakib Ahmed',
     customerInitials: 'RA',
@@ -562,7 +562,7 @@ export const INITIAL_MERCHANT_ORDERS: MerchantOrderItem[] = [
   },
   {
     id: 'ord-1005',
-    orderNumber: '#ord-1005',
+    orderNumber: 'ORD-1005',
     date: 'Oct 05, 2026',
     customer: 'Ayesha Karim',
     customerInitials: 'AK',
@@ -587,7 +587,7 @@ export const INITIAL_MERCHANT_ORDERS: MerchantOrderItem[] = [
   },
   {
     id: 'ord-1006',
-    orderNumber: '#ord-1006',
+    orderNumber: 'ORD-1006',
     date: 'Oct 06, 2026',
     customer: 'Imran Hossain',
     customerInitials: 'IH',
@@ -611,7 +611,7 @@ export const INITIAL_MERCHANT_ORDERS: MerchantOrderItem[] = [
   },
   {
     id: 'ord-1007',
-    orderNumber: '#ord-1007',
+    orderNumber: 'ORD-1007',
     date: 'Oct 07, 2026',
     customer: 'Farhana Akter',
     customerInitials: 'FA',
@@ -635,7 +635,7 @@ export const INITIAL_MERCHANT_ORDERS: MerchantOrderItem[] = [
   },
   {
     id: 'ord-1008',
-    orderNumber: '#ord-1008',
+    orderNumber: 'ORD-1008',
     date: 'Oct 08, 2026',
     customer: 'Shafiqul Islam',
     customerInitials: 'SI',
@@ -660,7 +660,7 @@ export const INITIAL_MERCHANT_ORDERS: MerchantOrderItem[] = [
   // Additional items to reach 20 orders total (matching the screenshot's '20 orders matching your filters')
   {
     id: 'ord-1009',
-    orderNumber: '#ord-1009',
+    orderNumber: 'ORD-1009',
     date: 'Oct 09, 2026',
     customer: 'Mahmudul Hasan',
     customerInitials: 'MH',
@@ -678,7 +678,7 @@ export const INITIAL_MERCHANT_ORDERS: MerchantOrderItem[] = [
   },
   {
     id: 'ord-1010',
-    orderNumber: '#ord-1010',
+    orderNumber: 'ORD-1010',
     date: 'Oct 10, 2026',
     customer: 'Zubair Hossain',
     customerInitials: 'ZH',
@@ -696,7 +696,7 @@ export const INITIAL_MERCHANT_ORDERS: MerchantOrderItem[] = [
   },
   {
     id: 'ord-1011',
-    orderNumber: '#ord-1011',
+    orderNumber: 'ORD-1011',
     date: 'Oct 11, 2026',
     customer: 'Rumana Islam',
     customerInitials: 'RI',
@@ -714,7 +714,7 @@ export const INITIAL_MERCHANT_ORDERS: MerchantOrderItem[] = [
   },
   {
     id: 'ord-1012',
-    orderNumber: '#ord-1012',
+    orderNumber: 'ORD-1012',
     date: 'Oct 12, 2026',
     customer: 'Kamrul Hassan',
     customerInitials: 'KH',
@@ -732,7 +732,7 @@ export const INITIAL_MERCHANT_ORDERS: MerchantOrderItem[] = [
   },
   {
     id: 'ord-1013',
-    orderNumber: '#ord-1013',
+    orderNumber: 'ORD-1013',
     date: 'Oct 13, 2026',
     customer: 'Tania Sultana',
     customerInitials: 'TS',
@@ -750,7 +750,7 @@ export const INITIAL_MERCHANT_ORDERS: MerchantOrderItem[] = [
   },
   {
     id: 'ord-1014',
-    orderNumber: '#ord-1014',
+    orderNumber: 'ORD-1014',
     date: 'Oct 14, 2026',
     customer: 'Asif Iqbal',
     customerInitials: 'AI',
@@ -768,7 +768,7 @@ export const INITIAL_MERCHANT_ORDERS: MerchantOrderItem[] = [
   },
   {
     id: 'ord-1015',
-    orderNumber: '#ord-1015',
+    orderNumber: 'ORD-1015',
     date: 'Oct 15, 2026',
     customer: 'Sharmin Jahan',
     customerInitials: 'SJ',
@@ -786,7 +786,7 @@ export const INITIAL_MERCHANT_ORDERS: MerchantOrderItem[] = [
   },
   {
     id: 'ord-1016',
-    orderNumber: '#ord-1016',
+    orderNumber: 'ORD-1016',
     date: 'Oct 16, 2026',
     customer: 'Nayeemur Rahman',
     customerInitials: 'NR',
@@ -804,7 +804,7 @@ export const INITIAL_MERCHANT_ORDERS: MerchantOrderItem[] = [
   },
   {
     id: 'ord-1017',
-    orderNumber: '#ord-1017',
+    orderNumber: 'ORD-1017',
     date: 'Oct 17, 2026',
     customer: 'Sultana Parveen',
     customerInitials: 'SP',
@@ -822,7 +822,7 @@ export const INITIAL_MERCHANT_ORDERS: MerchantOrderItem[] = [
   },
   {
     id: 'ord-1018',
-    orderNumber: '#ord-1018',
+    orderNumber: 'ORD-1018',
     date: 'Oct 18, 2026',
     customer: 'Arifur Rahman',
     customerInitials: 'AR',
@@ -840,7 +840,7 @@ export const INITIAL_MERCHANT_ORDERS: MerchantOrderItem[] = [
   },
   {
     id: 'ord-1019',
-    orderNumber: '#ord-1019',
+    orderNumber: 'ORD-1019',
     date: 'Oct 19, 2026',
     customer: 'Munira Khatun',
     customerInitials: 'MK',
@@ -858,7 +858,7 @@ export const INITIAL_MERCHANT_ORDERS: MerchantOrderItem[] = [
   },
   {
     id: 'ord-1020',
-    orderNumber: '#ord-1020',
+    orderNumber: 'ORD-1020',
     date: 'Oct 20, 2026',
     customer: 'Nazmul Huda',
     customerInitials: 'NH',

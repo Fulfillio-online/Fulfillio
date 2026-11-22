@@ -312,8 +312,14 @@ export class OrderService {
         // Try lookup by variantId
         if (item.variantId) {
           try {
-            const v = await this.prisma.productVariant.findUnique({
-              where: { id: item.variantId },
+            const v = await this.prisma.productVariant.findFirst({
+              where: {
+                OR: [
+                  { id: item.variantId },
+                  { sku: item.variantId },
+                  { productId: item.variantId },
+                ],
+              },
               include: { product: true },
             });
             if (v) {
@@ -325,15 +331,21 @@ export class OrderService {
           } catch {}
         }
 
-        // Try lookup by sku
+        // Try lookup by sku or product baseSku
         if (!resolvedVariantId && item.sku) {
           try {
-            const v = await this.prisma.productVariant.findUnique({
-              where: { sku: item.sku },
+            const v = await this.prisma.productVariant.findFirst({
+              where: {
+                OR: [
+                  { sku: item.sku },
+                  { product: { baseSku: item.sku } },
+                ],
+              },
               include: { product: true },
             });
             if (v) {
               resolvedVariantId = v.id;
+              resolvedSku = resolvedSku || v.sku;
               resolvedTitle = resolvedTitle || v.product?.title || v.title;
               resolvedLabel = resolvedLabel || v.title;
             }
@@ -344,7 +356,13 @@ export class OrderService {
         if (!resolvedVariantId && item.productId) {
           try {
             const v = await this.prisma.productVariant.findFirst({
-              where: { productId: item.productId },
+              where: {
+                OR: [
+                  { productId: item.productId },
+                  { product: { id: item.productId } },
+                  { product: { baseSku: item.productId } },
+                ],
+              },
               include: { product: true },
             });
             if (v) {
@@ -410,17 +428,17 @@ export class OrderService {
       status: targetStatus,
       customerRiskScore: fraudReport.successRatio,
       customerRiskLevel: fraudReport.riskLevel,
-      totalAmount: Number(payload.totalAmount) || 0,
-      codAmount: Number(payload.codAmount) ?? Number(payload.totalAmount) ?? 0,
-      subtotal: Number(payload.subtotal) ?? Number(payload.totalAmount) ?? 0,
-      deliveryFee: Number(payload.deliveryFee) ?? 0,
-      discount: Number(payload.discount) ?? 0,
-      advancePayment: Number(payload.advancePayment) ?? 0,
+      totalAmount: isNaN(Number(payload.totalAmount)) ? 0 : Number(payload.totalAmount),
+      codAmount: isNaN(Number(payload.codAmount)) ? (Number(payload.totalAmount) || 0) : Number(payload.codAmount),
+      subtotal: isNaN(Number(payload.subtotal)) ? (Number(payload.totalAmount) || 0) : Number(payload.subtotal),
+      deliveryFee: isNaN(Number(payload.deliveryFee)) ? 0 : Number(payload.deliveryFee),
+      discount: isNaN(Number(payload.discount)) ? 0 : Number(payload.discount),
+      advancePayment: isNaN(Number(payload.advancePayment)) ? 0 : Number(payload.advancePayment),
       paymentMethod:
         payload.paymentMethod ||
-        (Number(payload.codAmount) === 0 ? 'Full Paid' : 'Cash on Delivery'),
+        ((Number(payload.codAmount) || 0) === 0 ? 'Full Paid' : 'Cash on Delivery'),
       paymentStatus:
-        payload.paymentStatus || (Number(payload.codAmount) === 0 ? 'Paid' : 'Unpaid'),
+        payload.paymentStatus || ((Number(payload.codAmount) || 0) === 0 ? 'Paid' : 'Unpaid'),
       advancePaymentMethod: payload.advancePaymentMethod,
       advanceTrxId: payload.advanceTrxId,
       timeline: payload.timeline,
@@ -525,17 +543,20 @@ export class OrderService {
     }
 
     if (order.status !== OrderStatus.ON_HOLD_STOCK) {
-      await this.inventoryService.releaseReservedStock(
-        order.items.map((item) => ({
-          variantId: item.variantId,
-          quantity: item.quantity,
-        })),
-        order.merchantId,
-        order.id,
-      );
+      const itemsWithVariants = order.items.filter((item) => Boolean(item.variantId));
+      if (itemsWithVariants.length > 0) {
+        await this.inventoryService.releaseReservedStock(
+          itemsWithVariants.map((item) => ({
+            variantId: item.variantId as string,
+            quantity: item.quantity,
+          })),
+          order.merchantId,
+          order.externalOrderId || order.id,
+        );
+      }
     }
 
-    return this.orderRepository.updateStatus(orderId, OrderStatus.CANCELLED);
+    return this.orderRepository.updateStatus(order.id, OrderStatus.CANCELLED);
   }
 
   /**

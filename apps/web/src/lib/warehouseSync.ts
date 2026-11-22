@@ -404,23 +404,39 @@ export function getStoredMerchantOrdersForCode(merchantCode = 'MC-101'): Merchan
     if (raw !== null) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
+        // Sanitize any legacy '#' prefixes from order.id or order.orderNumber
+        let hasModified = false;
+        const sanitized = parsed.map((o) => {
+          const cleanId = (o.id || o.orderNumber || '').replace(/^#/, '').trim();
+          const cleanOrderNum = (o.orderNumber || cleanId).replace(/^#/, '').trim();
+          if (o.id !== cleanId || o.orderNumber !== cleanOrderNum) {
+            hasModified = true;
+            return { ...o, id: cleanId, orderNumber: cleanOrderNum };
+          }
+          return o;
+        });
+
         // Guarantee newly registered merchants (MC-106+) never retain seed pipeline orders
         const isSeedMerchant = ['MC-101', 'MC-102', 'MC-103', 'MC-104', 'MC-105'].includes(code);
+        let finalOrders = sanitized;
         if (!isSeedMerchant) {
-          const cleaned = parsed.filter(
+          finalOrders = sanitized.filter(
             (o) =>
               !INITIAL_PIPELINE_ORDERS.some(
                 (seed) => seed.id === (o.orderNumber || o.id) || seed.id === o.id
               )
           );
-          if (cleaned.length !== parsed.length) {
-            try {
-              localStorage.setItem(getMerchantOrdersKey(code), JSON.stringify(cleaned));
-            } catch {}
+          if (finalOrders.length !== sanitized.length) {
+            hasModified = true;
           }
-          return cleaned;
         }
-        return parsed;
+
+        if (hasModified) {
+          try {
+            localStorage.setItem(getMerchantOrdersKey(code), JSON.stringify(finalOrders));
+          } catch {}
+        }
+        return finalOrders;
       }
     }
   } catch {
@@ -1292,8 +1308,12 @@ export function syncAdminProductsToMerchant(
           ...mp,
           title: matchedAdmin.title,
           stock: matchedAdmin.stock,
-          stockAccepted: matchedAdmin.stockAccepted ?? (matchedAdmin.stock > 0),
-          stockStatus: matchedAdmin.stockStatus ?? (matchedAdmin.stock > 0 ? 'IN_STOCK' : 'AWAITING_STOCK'),
+          stockAccepted: matchedAdmin.stockAccepted ?? false,
+          stockStatus:
+            matchedAdmin.stockStatus ??
+            (matchedAdmin.stockAccepted && matchedAdmin.stock > 0
+              ? ('IN_STOCK' as const)
+              : ('AWAITING_STOCK' as const)),
           price: matchedAdmin.price,
           imageUrl: matchedAdmin.imageUrl !== undefined ? (matchedAdmin.imageUrl || mp.imageUrl) : mp.imageUrl,
           images: (matchedAdmin.images && matchedAdmin.images.length > 0) ? matchedAdmin.images : mp.images,
@@ -1314,8 +1334,9 @@ export function syncAdminProductsToMerchant(
           status:
             matchedAdmin.status === 'DRAFT' || matchedAdmin.isDraft
               ? ('DRAFT' as const)
-              : matchedAdmin.status === 'STOCK_STORED' ||
-                  (matchedAdmin.status === 'APPROVED' && (matchedAdmin.stockAccepted || matchedAdmin.stock > 0))
+              : (matchedAdmin.status === 'STOCK_STORED' || matchedAdmin.status === 'APPROVED') &&
+                matchedAdmin.stockAccepted === true &&
+                matchedAdmin.stock > 0
                 ? ('STOCK_STORED' as const)
                 : matchedAdmin.status === 'APPROVED'
                   ? ('APPROVED' as const)
@@ -1584,8 +1605,10 @@ export function convertMerchantOrderToWarehouse(
       calculatedSubtotal + calculatedDeliveryFee - calculatedDiscount - calculatedAdvancePayment
     );
 
+  const cleanOrderId = (order.id || order.orderNumber || `ORD-${Date.now()}`).replace(/^#/, '').trim();
+
   return {
-    id: order.orderNumber || order.id,
+    id: cleanOrderId,
     createdAt: order.date || 'Just now',
     merchantCode,
     merchantName,
@@ -1625,7 +1648,7 @@ export function convertMerchantOrderToWarehouse(
  */
 export function syncMerchantOrderCreatedToAdmin(
   order: MerchantOrderItem,
-  itemsToDeduct: { productId: string; qty: number }[],
+  itemsToDeduct: Array<{ productId: string; qty: number; variantSku?: string; color?: string; size?: string }>,
   merchantProducts: MerchantProductItem[],
   memoList: ResellerMemo[],
   profile: MerchantProfileData = INITIAL_MERCHANT_PROFILE
@@ -1633,7 +1656,7 @@ export function syncMerchantOrderCreatedToAdmin(
   if (typeof window === 'undefined') return;
   try {
     const adminOrders = getStoredAdminOrders();
-    const orderId = order.orderNumber || order.id;
+    const orderId = (order.id || order.orderNumber || '').replace(/^#/, '').trim();
 
     const pipelineOrder = convertMerchantOrderToWarehouse(
       order,
@@ -1652,7 +1675,8 @@ export function syncMerchantOrderCreatedToAdmin(
       nextAdminOrders = [pipelineOrder, ...adminOrders];
     }
     localStorage.setItem(STORAGE_KEY_ORDERS, JSON.stringify(nextAdminOrders));
-    // Deduct stock on matching Admin products
+
+    // Deduct stock on matching Admin products and variants
     if (itemsToDeduct.length > 0) {
       const adminProducts = getStoredAdminProducts();
       const nextAdminProducts = adminProducts.map((ap) => {
@@ -1662,12 +1686,69 @@ export function syncMerchantOrderCreatedToAdmin(
         const deductEntry = itemsToDeduct.find(
           (d) =>
             d.productId === ap.id ||
-            (matchedMerchantProd && d.productId === matchedMerchantProd.id)
+            (matchedMerchantProd && d.productId === matchedMerchantProd.id) ||
+            (d.variantSku && (ap.fullSku === d.variantSku || (ap.variantsList && ap.variantsList.some((v) => v.variantSku === d.variantSku))))
         );
         if (!deductEntry) return ap;
+
+        let prevStock = ap.stock;
+        let newStock = Math.max(0, ap.stock - deductEntry.qty);
+        let updatedVariants = ap.variantsList;
+
+        if (ap.variantsList && ap.variantsList.length > 0) {
+          updatedVariants = ap.variantsList.map((v) => {
+            const isMatch =
+              (deductEntry.variantSku && v.variantSku.toUpperCase() === deductEntry.variantSku.toUpperCase()) ||
+              (deductEntry.color && deductEntry.size &&
+                (v.color || '').toLowerCase() === deductEntry.color.toLowerCase() &&
+                (v.size || '').toLowerCase() === deductEntry.size.toLowerCase());
+            if (isMatch) {
+              const prevVar = v.stock;
+              const newVar = Math.max(0, v.stock - deductEntry.qty);
+              appendStockLedgerRecord({
+                type: 'WITHDRAWAL',
+                merchantCode: ap.merchantCode || profile.merchantCode,
+                merchantName: ap.merchantName || profile.storeName,
+                productId: ap.id,
+                productTitle: `${ap.title}${deductEntry.color || deductEntry.size ? ` (${[deductEntry.color, deductEntry.size].filter(Boolean).join(' · ')})` : ''}`,
+                sku: v.variantSku || deductEntry.variantSku || ap.fullSku,
+                deltaQty: -deductEntry.qty,
+                previousStock: prevVar,
+                newStock: newVar,
+                binCode: ap.binCode || 'A-01-01',
+                referenceDocType: 'INTERNAL_AUDIT',
+                referenceNumber: orderId,
+                notes: `Order reservation: #${orderId} (${deductEntry.qty} units reserved)`,
+                operator: 'System / Order Allocation',
+              });
+              return { ...v, stock: newVar };
+            }
+            return v;
+          });
+        } else {
+          appendStockLedgerRecord({
+            type: 'WITHDRAWAL',
+            merchantCode: ap.merchantCode || profile.merchantCode,
+            merchantName: ap.merchantName || profile.storeName,
+            productId: ap.id,
+            productTitle: ap.title,
+            sku: ap.fullSku,
+            deltaQty: -deductEntry.qty,
+            previousStock: prevStock,
+            newStock: newStock,
+            binCode: ap.binCode || 'A-01-01',
+            referenceDocType: 'INTERNAL_AUDIT',
+            referenceNumber: orderId,
+            notes: `Order reservation: #${orderId} (${deductEntry.qty} units reserved)`,
+            operator: 'System / Order Allocation',
+          });
+        }
+
         return {
           ...ap,
-          stock: Math.max(0, ap.stock - deductEntry.qty),
+          stock: newStock,
+          reserved: (ap.reserved || 0) + deductEntry.qty,
+          variantsList: updatedVariants,
         };
       });
       localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(nextAdminProducts));
@@ -1686,17 +1767,19 @@ export function syncMerchantOrderCreatedToAdmin(
  */
 export function syncMerchantOrderCancelledToAdmin(
   orderId: string,
-  itemsToRestore: { productId: string; qty: number }[],
+  itemsToRestore: Array<{ productId?: string; qty: number; variantSku?: string; color?: string; size?: string }>,
   merchantProducts: MerchantProductItem[]
 ): void {
   if (typeof window === 'undefined') return;
   try {
+    const cleanId = orderId.replace(/^#/, '').toLowerCase().trim();
     const adminOrders = getStoredAdminOrders();
-    const nextAdminOrders = adminOrders.map((ao) =>
-      ao.id === orderId
+    const nextAdminOrders = adminOrders.map((ao) => {
+      const aoClean = (ao.id || '').replace(/^#/, '').toLowerCase().trim();
+      return aoClean === cleanId || ao.id === cleanId || ao.id === orderId
         ? { ...ao, stage: 'CANCELLED' as const, stockAvailable: ao.stockAvailable + ao.qty }
-        : ao
-    );
+        : ao;
+    });
     localStorage.setItem(STORAGE_KEY_ORDERS, JSON.stringify(nextAdminOrders));
 
     if (itemsToRestore.length > 0) {
@@ -1708,12 +1791,69 @@ export function syncMerchantOrderCancelledToAdmin(
         const restoreEntry = itemsToRestore.find(
           (r) =>
             r.productId === ap.id ||
-            (matchedMerchantProd && r.productId === matchedMerchantProd.id)
+            (matchedMerchantProd && r.productId === matchedMerchantProd.id) ||
+            (r.variantSku && (ap.fullSku === r.variantSku || (ap.variantsList && ap.variantsList.some((v) => v.variantSku === r.variantSku))))
         );
         if (!restoreEntry) return ap;
+
+        let prevStock = ap.stock;
+        let newStock = ap.stock + restoreEntry.qty;
+        let updatedVariants = ap.variantsList;
+
+        if (ap.variantsList && ap.variantsList.length > 0) {
+          updatedVariants = ap.variantsList.map((v) => {
+            const isMatch =
+              (restoreEntry.variantSku && v.variantSku.toUpperCase() === restoreEntry.variantSku.toUpperCase()) ||
+              (restoreEntry.color && restoreEntry.size &&
+                (v.color || '').toLowerCase() === restoreEntry.color.toLowerCase() &&
+                (v.size || '').toLowerCase() === restoreEntry.size.toLowerCase());
+            if (isMatch) {
+              const prevVar = v.stock;
+              const newVar = v.stock + restoreEntry.qty;
+              appendStockLedgerRecord({
+                type: 'RESTOCK',
+                merchantCode: ap.merchantCode || 'MC-101',
+                merchantName: ap.merchantName || "Sabbir's Store",
+                productId: ap.id,
+                productTitle: `${ap.title}${restoreEntry.color || restoreEntry.size ? ` (${[restoreEntry.color, restoreEntry.size].filter(Boolean).join(' · ')})` : ''}`,
+                sku: v.variantSku || restoreEntry.variantSku || ap.fullSku,
+                deltaQty: restoreEntry.qty,
+                previousStock: prevVar,
+                newStock: newVar,
+                binCode: ap.binCode || 'A-01-01',
+                referenceDocType: 'INTERNAL_AUDIT',
+                referenceNumber: cleanId,
+                notes: `Stock released from cancelled order #${cleanId} (+${restoreEntry.qty} units restored)`,
+                operator: 'Warehouse Admin / Order Cancel',
+              });
+              return { ...v, stock: newVar };
+            }
+            return v;
+          });
+        } else {
+          appendStockLedgerRecord({
+            type: 'RESTOCK',
+            merchantCode: ap.merchantCode || 'MC-101',
+            merchantName: ap.merchantName || "Sabbir's Store",
+            productId: ap.id,
+            productTitle: ap.title,
+            sku: ap.fullSku,
+            deltaQty: restoreEntry.qty,
+            previousStock: prevStock,
+            newStock: newStock,
+            binCode: ap.binCode || 'A-01-01',
+            referenceDocType: 'INTERNAL_AUDIT',
+            referenceNumber: cleanId,
+            notes: `Stock released from cancelled order #${cleanId} (+${restoreEntry.qty} units restored)`,
+            operator: 'Warehouse Admin / Order Cancel',
+          });
+        }
+
         return {
           ...ap,
-          stock: ap.stock + restoreEntry.qty,
+          stock: newStock,
+          reserved: Math.max(0, (ap.reserved || 0) - restoreEntry.qty),
+          variantsList: updatedVariants,
         };
       });
       localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(nextAdminProducts));
@@ -1783,10 +1923,12 @@ export function syncAdminOrdersToMerchant(adminOrders: WarehousePipelineOrder[])
       );
 
       if (newAdminOrders.length > 0) {
-        const converted: MerchantOrderItem[] = newAdminOrders.map((ao) => ({
-          id: ao.id,
-          orderNumber: ao.id,
-          date: ao.createdAt || 'Today, Just now',
+        const converted: MerchantOrderItem[] = newAdminOrders.map((ao) => {
+          const cleanId = (ao.id || '').replace(/^#/, '').trim();
+          return {
+            id: cleanId,
+            orderNumber: cleanId,
+            date: ao.createdAt || 'Today, Just now',
           customer: ao.customerName,
           phone: ao.customerPhone,
           address: ao.customerAddress,
@@ -1801,8 +1943,9 @@ export function syncAdminOrdersToMerchant(adminOrders: WarehousePipelineOrder[])
           trackingId: ao.trackingCode,
           paymentMethod: 'Cash on Delivery',
           paymentStatus: 'Unpaid',
-        }));
-        merchantOrders = [...converted, ...merchantOrders];
+        };
+      });
+      merchantOrders = [...converted, ...merchantOrders];
       }
 
       localStorage.setItem(storageKey, JSON.stringify(merchantOrders));
@@ -2859,5 +3002,343 @@ export async function acceptStockInDatabase(
   } catch (err) {
     console.warn('[Sync] Failed to accept stock in PostgreSQL:', err);
     return false;
+  }
+}
+
+/**
+ * Update order stage/status in PostgreSQL (pgAdmin) database
+ */
+export async function updateOrderStatusInDatabase(
+  orderId: string,
+  status: string
+): Promise<boolean> {
+  if (!orderId) return false;
+  const cleanId = orderId.replace(/^#/, '').trim();
+  try {
+    const res = await fetch(`${API_BASE}/orders/${encodeURIComponent(cleanId)}/status`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ status }),
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn('[Sync] Failed to update order status in PostgreSQL:', err);
+    return false;
+  }
+}
+
+/**
+ * Cancel order in PostgreSQL database: triggers atomic reserved stock release & audit log
+ */
+export async function cancelOrderInDatabase(orderId: string): Promise<boolean> {
+  if (!orderId) return false;
+  const cleanId = orderId.replace(/^#/, '').trim();
+  try {
+    const res = await fetch(`${API_BASE}/orders/${encodeURIComponent(cleanId)}/cancel`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn('[Sync] Failed to cancel order in PostgreSQL:', err);
+    return false;
+  }
+}
+
+/**
+ * Fetch all warehouse orders directly from PostgreSQL database
+ */
+export async function fetchOrdersFromDatabase(): Promise<WarehousePipelineOrder[]> {
+  try {
+    const res = await fetch(`${API_BASE}/orders?limit=100`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const items = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
+    if (items.length === 0) return [];
+
+    const dbStageMap: Record<string, OrderStage> = {
+      ALLOCATED: 'PICK',
+      PICKING: 'PICK',
+      ON_HOLD_STOCK: 'WAITING',
+      ON_HOLD_FRAUD: 'WAITING',
+      PACKED: 'PACK',
+      DISPATCHED: 'DISPATCH',
+      DELIVERED: 'HANDED_OVER',
+      PARTIAL_DELIVERED: 'HANDED_OVER',
+      RETURNED: 'CANCELLED',
+      CANCELLED: 'CANCELLED',
+      PENDING: 'PICK',
+    };
+
+    return items.map((o: any) => {
+      const cleanId = String(o.externalOrderId || o.id || '').replace(/^#/, '').trim();
+      const firstItem = (o.items && o.items[0]) || {};
+      const itemTitle =
+        firstItem.productTitle ||
+        firstItem.variant?.title ||
+        firstItem.variant?.product?.title ||
+        'Product Item';
+      const itemSku = firstItem.sku || firstItem.variant?.sku || 'SKU-001';
+      const totalQty =
+        (o.items || []).reduce((sum: number, it: any) => sum + (it.quantity || 1), 0) || 1;
+
+      const mappedItems: OrderItem[] = (o.items || []).map((it: any) => {
+        const vLabel = it.variantLabel || '';
+        const color = vLabel.includes('·') ? vLabel.split('·')[0].trim() : 'Standard';
+        const size = vLabel.includes('·') ? vLabel.split('·')[1].trim() : 'Standard';
+        return {
+          sku: it.sku || it.variant?.sku || '',
+          title: it.productTitle || it.variant?.title || 'Product Item',
+          image: it.variant?.imageUrl || it.variant?.product?.imageUrl || '',
+          color,
+          size,
+          qty: it.quantity || 1,
+          unitPrice: Number(it.unitPrice) || 0,
+          bin: it.variant?.defaultBinCode || 'A-01-01',
+        };
+      });
+
+      const firstColor = firstItem.variantLabel?.includes('·')
+        ? firstItem.variantLabel.split('·')[0].trim()
+        : 'Standard';
+      const firstSize = firstItem.variantLabel?.includes('·')
+        ? firstItem.variantLabel.split('·')[1].trim()
+        : 'Standard';
+
+      const pipelineOrder: WarehousePipelineOrder = {
+        id: cleanId,
+        createdAt: o.createdAt ? new Date(o.createdAt).toLocaleString() : 'Today',
+        merchantCode: o.merchant?.merchantCode || 'MC-101',
+        merchantName: o.merchant?.businessName || "Sabbir's Store",
+        customerName: o.customerName || 'Customer',
+        customerPhone: o.customerPhone || '',
+        customerAddress: o.customerAddress || '',
+        city: o.city || 'Dhaka',
+        productTitle:
+          o.items && o.items.length > 1 ? `${itemTitle} (+${o.items.length - 1} more)` : itemTitle,
+        productImage: firstItem.variant?.imageUrl || firstItem.variant?.product?.imageUrl || '',
+        bin: firstItem.variant?.defaultBinCode || 'A-01-01',
+        color: firstColor,
+        size: firstSize,
+        sku: itemSku,
+        qty: totalQty,
+        stockAvailable: 15,
+        items: mappedItems.length > 0 ? mappedItems : undefined,
+        memoCode: o.memoCode || 'MEMO-DEFAULT',
+        resellerName: o.merchant?.businessName || "Sabbir's Store",
+        resellerPhone: o.merchant?.phone || o.customerPhone,
+        resellerAddress: o.merchant?.location || 'Dhaka, Bangladesh',
+        codAmount: Number(o.codAmount) || Number(o.totalAmount) || 0,
+        subtotal: Number(o.subtotal) || Number(o.totalAmount) || 0,
+        deliveryFee: Number(o.deliveryFee) || 0,
+        discount: Number(o.discount) || 0,
+        advancePayment: Number(o.advancePayment) || 0,
+        paymentStatus:
+          Number(o.codAmount) === 0 && Number(o.totalAmount) > 0
+            ? 'Paid'
+            : o.advancePayment > 0
+            ? 'Partial'
+            : 'Unpaid',
+        courier: (o.courierProvider as CourierPartner) || 'Steadfast',
+        trackingCode: o.trackingCode || undefined,
+        stage: dbStageMap[o.status] || 'PICK',
+        isMemoPrinted: Boolean(o.isMemoPrinted),
+        isCourierBooked: Boolean(o.trackingCode || o.courierProvider),
+      };
+      return pipelineOrder;
+    });
+  } catch (err) {
+    console.warn('[Sync] Failed to fetch orders from database:', err);
+    return [];
+  }
+}
+
+/**
+ * When Admin cancels an order in Orders Pipeline:
+ * Restores variant & product stock and appends a RESTOCK proof movement to the Stock Ledger.
+ */
+export function restoreOrderStockAndLogLedger(
+  order: WarehousePipelineOrder | { id: string; qty: number; sku?: string; productTitle?: string; color?: string; size?: string; bin?: string; items?: any[] }
+): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const cleanOrderId = (order.id || '').replace(/^#/, '').trim();
+    const adminProducts = getStoredAdminProducts();
+
+    const itemsToRestore: Array<{ sku: string; title: string; color: string; size: string; qty: number; bin: string }> = [];
+    if ('items' in order && order.items && order.items.length > 0) {
+      order.items.forEach((it) => {
+        itemsToRestore.push({
+          sku: it.sku,
+          title: it.title,
+          color: it.color || 'Standard',
+          size: it.size || 'Standard',
+          qty: it.qty || 1,
+          bin: it.bin || 'A-01-01',
+        });
+      });
+    } else {
+      itemsToRestore.push({
+        sku: order.sku || 'SKU-001',
+        title: order.productTitle || 'Product',
+        color: order.color || 'Standard',
+        size: order.size || 'Standard',
+        qty: order.qty || 1,
+        bin: order.bin || 'A-01-01',
+      });
+    }
+
+    let modifiedAdmin = false;
+    const nextAdminProducts = adminProducts.map((ap) => {
+      let prodModified = false;
+      let newApStock = ap.stock;
+      let newApReserved = ap.reserved;
+      const updatedVariants = (ap.variantsList || []).map((v) => {
+        const match = itemsToRestore.find(
+          (it) =>
+            (it.sku && v.variantSku.toUpperCase() === it.sku.toUpperCase()) ||
+            (it.color &&
+              it.size &&
+              (v.color || '').toLowerCase().includes(it.color.toLowerCase()) &&
+              (v.size || '').toLowerCase().includes(it.size.toLowerCase()))
+        );
+        if (match) {
+          prodModified = true;
+          const prevVarStock = v.stock;
+          const newVarStock = v.stock + match.qty;
+          appendStockLedgerRecord({
+            type: 'RESTOCK',
+            merchantCode: ap.merchantCode || 'MC-101',
+            merchantName: ap.merchantName || "Sabbir's Store",
+            productId: ap.id,
+            productTitle: `${ap.title} (${[match.color, match.size].filter(Boolean).join(' · ')})`,
+            sku: v.variantSku || match.sku,
+            deltaQty: match.qty,
+            previousStock: prevVarStock,
+            newStock: newVarStock,
+            binCode: ap.binCode || 'A-01-01',
+            referenceDocType: 'INTERNAL_AUDIT',
+            referenceNumber: cleanOrderId,
+            notes: `Stock released from cancelled order #${cleanOrderId} (+${match.qty} units restored to available)`,
+            operator: 'Warehouse Admin / Order Cancel',
+          });
+          return { ...v, stock: newVarStock };
+        }
+        return v;
+      });
+
+      const prodMatch = itemsToRestore.find(
+        (it) =>
+          it.sku &&
+          (ap.fullSku.toUpperCase() === it.sku.toUpperCase() ||
+            ap.shortSku.toUpperCase() === it.sku.toUpperCase() ||
+            it.sku.toUpperCase().includes(ap.fullSku.toUpperCase()))
+      );
+
+      if (prodMatch) {
+        prodModified = true;
+        newApStock = ap.stock + prodMatch.qty;
+        newApReserved = Math.max(0, (ap.reserved || 0) - prodMatch.qty);
+        if (updatedVariants.length === 0) {
+          appendStockLedgerRecord({
+            type: 'RESTOCK',
+            merchantCode: ap.merchantCode || 'MC-101',
+            merchantName: ap.merchantName || "Sabbir's Store",
+            productId: ap.id,
+            productTitle: ap.title,
+            sku: ap.fullSku,
+            deltaQty: prodMatch.qty,
+            previousStock: ap.stock,
+            newStock: newApStock,
+            binCode: ap.binCode || 'A-01-01',
+            referenceDocType: 'INTERNAL_AUDIT',
+            referenceNumber: cleanOrderId,
+            notes: `Stock released from cancelled order #${cleanOrderId} (+${prodMatch.qty} units restored to available)`,
+            operator: 'Warehouse Admin / Order Cancel',
+          });
+        }
+      }
+
+      if (prodModified) {
+        modifiedAdmin = true;
+        return {
+          ...ap,
+          stock: newApStock,
+          reserved: newApReserved,
+          variantsList: updatedVariants.length > 0 ? updatedVariants : ap.variantsList,
+        };
+      }
+      return ap;
+    });
+
+    if (modifiedAdmin) {
+      localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(nextAdminProducts));
+    }
+
+    // Also restore in Merchant products
+    const directory = getStoredMerchantDirectory();
+    const codes = ['MC-101', ...directory.map((m) => m.merchantCode.toUpperCase())];
+    for (const code of codes) {
+      const mProducts = getStoredMerchantProductsForCode(code);
+      let mModified = false;
+      const nextMProducts = mProducts.map((mp) => {
+        let pMod = false;
+        let newStock = mp.stock;
+        let newReserved = mp.reserved;
+        const nextVariants = (mp.variantsList || []).map((mv) => {
+          const match = itemsToRestore.find(
+            (it) =>
+              (it.sku && mv.variantSku.toUpperCase() === it.sku.toUpperCase()) ||
+              (it.color &&
+                it.size &&
+                (mv.color || '').toLowerCase() === it.color.toLowerCase() &&
+                (mv.size || '').toLowerCase() === it.size.toLowerCase())
+          );
+          if (match) {
+            pMod = true;
+            return { ...mv, stock: mv.stock + match.qty };
+          }
+          return mv;
+        });
+
+        const prodMatch = itemsToRestore.find(
+          (it) =>
+            it.sku &&
+            (mp.sku.toUpperCase() === it.sku.toUpperCase() ||
+              it.sku.toUpperCase().includes(mp.sku.toUpperCase()))
+        );
+        if (prodMatch) {
+          pMod = true;
+          newStock = mp.stock + prodMatch.qty;
+          newReserved = Math.max(0, (mp.reserved || 0) - prodMatch.qty);
+        }
+
+        if (pMod) {
+          mModified = true;
+          return {
+            ...mp,
+            stock: newStock,
+            reserved: newReserved,
+            variantsList: nextVariants.length > 0 ? nextVariants : mp.variantsList,
+          };
+        }
+        return mp;
+      });
+
+      if (mModified) {
+        localStorage.setItem(getMerchantProductsKey(code), JSON.stringify(nextMProducts));
+      }
+    }
+  } catch (err) {
+    console.warn('[Sync] Failed to restore stock & log ledger:', err);
   }
 }

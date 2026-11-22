@@ -16,6 +16,7 @@ import {
   X,
   LogOut,
   ShieldCheck,
+  RotateCcw,
 } from 'lucide-react';
 import { MerchantProfileData, MerchantTab } from '../types';
 
@@ -60,6 +61,13 @@ export function MerchantSidebar({
       label: 'Orders',
       href: '/merchant/orders',
       icon: ShoppingCart,
+    },
+    {
+      id: 'returns' as MerchantTab,
+      label: 'Returns & Cancellations',
+      href: '/merchant/returns',
+      icon: RotateCcw,
+      badge: 'Hub',
     },
     {
       id: 'memo-designer' as MerchantTab,
@@ -171,6 +179,17 @@ export function MerchantSidebar({
                 >
                   <Icon className="h-4 w-4 shrink-0" />
                   <span className="truncate">{item.label}</span>
+                  {(item as any).badge && (
+                    <span
+                      className={`ml-auto text-[10px] font-bold tabular-nums px-1.5 py-0.5 rounded ${
+                        isActive
+                          ? 'bg-black/20 text-white'
+                          : 'bg-orange-500/10 text-orange-600 dark:text-orange-400'
+                      }`}
+                    >
+                      {(item as any).badge}
+                    </span>
+                  )}
                 </Link>
               );
             })}

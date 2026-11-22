@@ -3,6 +3,7 @@ export type MerchantTab =
   | 'products'
   | 'categories'
   | 'orders'
+  | 'returns'
   | 'memo-designer'
   | 'inbound'
   | 'tracking'
@@ -122,6 +123,7 @@ export interface MerchantOrderItem {
   customer: string;
   phone: string;
   address: string;
+  city?: string;
   customerInitials?: string;
   customerEmail?: string;
   productId: string;
@@ -187,6 +189,8 @@ export interface MerchantProductItem {
   status?: 'PUBLISHED' | 'STOCK_STORED' | 'APPROVED' | 'DRAFT' | 'ARCHIVED' | 'PENDING_APPROVAL';
   isDraft?: boolean;
   totalOrders?: number;
+  editState?: 'EDIT_ALLOWED' | 'EDIT_APPROVAL_PENDING' | 'EDIT_ACCESS_REQUESTED' | null;
+  isSuspended?: boolean;
 }
 
 export interface MerchantAsnItem {

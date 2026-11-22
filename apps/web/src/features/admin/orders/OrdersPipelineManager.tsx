@@ -23,6 +23,10 @@ import { IsolatedPrintPortal } from './components/print/IsolatedPrintPortal';
 import {
   reconcileAdminOrdersWithMerchant,
   syncAdminOrdersToMerchant,
+  fetchOrdersFromDatabase,
+  updateOrderStatusInDatabase,
+  cancelOrderInDatabase,
+  restoreOrderStockAndLogLedger,
 } from '@/lib/warehouseSync';
 
 export interface OrdersPipelineManagerProps {
@@ -73,7 +77,7 @@ export function OrdersPipelineManager({
 
   // Hydrate orders from localStorage on mount & reconcile with Merchant orders
   useEffect(() => {
-const loadOrders = () => {
+    const loadOrders = async () => {
       try {
         const stored = localStorage.getItem(STORAGE_KEY_ORDERS);
         let baseOrders = INITIAL_PIPELINE_ORDERS;
@@ -83,7 +87,26 @@ const loadOrders = () => {
             baseOrders = parsed;
           }
         }
-        const reconciled = reconcileAdminOrdersWithMerchant(baseOrders);
+        let reconciled = reconcileAdminOrdersWithMerchant(baseOrders);
+
+        // Fetch latest orders from PostgreSQL database
+        try {
+          const dbOrders = await fetchOrdersFromDatabase();
+          if (dbOrders && dbOrders.length > 0) {
+            const merged = [...dbOrders];
+            for (const r of reconciled) {
+              const rClean = (r.id || '').replace(/^#/, '');
+              if (!merged.some((m) => m.id === r.id || m.id === rClean)) {
+                merged.push(r);
+              }
+            }
+            reconciled = merged;
+            localStorage.setItem(STORAGE_KEY_ORDERS, JSON.stringify(reconciled));
+          }
+        } catch (dbErr) {
+          console.warn('[OrdersPipelineManager] DB fetch fallback:', dbErr);
+        }
+
         setOrders(reconciled);
       } catch (e) {
         console.error('Failed to load orders from localStorage:', e);
@@ -259,6 +282,26 @@ const loadOrders = () => {
     newStage: OrderStage | 'COURIER_BOOKED',
     customHoldReason?: string
   ) => {
+    // Sync to PostgreSQL backend
+    if (newStage === 'CANCELLED') {
+      cancelOrderInDatabase(orderId).catch(() => {});
+      const target = orders.find((o) => o.id === orderId);
+      if (target) {
+        restoreOrderStockAndLogLedger(target);
+      }
+    } else {
+      const stageToDbStatus: Record<string, string> = {
+        PICK: 'ALLOCATED',
+        WAITING: 'ON_HOLD_STOCK',
+        PACK: 'PACKED',
+        DISPATCH: 'DISPATCHED',
+        COURIER_BOOKED: 'DISPATCHED',
+        HANDED_OVER: 'DELIVERED',
+      };
+      const dbStatus = stageToDbStatus[newStage] || 'ALLOCATED';
+      updateOrderStatusInDatabase(orderId, dbStatus).catch(() => {});
+    }
+
     updateOrdersAndPersist((prev) =>
       prev.map((o) => {
         if (o.id !== orderId) return o;
@@ -321,6 +364,29 @@ const loadOrders = () => {
   ) => {
     if (selectedIds.length === 0) return;
     const count = selectedIds.length;
+
+    // Sync to PostgreSQL backend
+    selectedIds.forEach((id) => {
+      if (targetStage === 'CANCELLED') {
+        cancelOrderInDatabase(id).catch(() => {});
+        const target = orders.find((o) => o.id === id);
+        if (target) {
+          restoreOrderStockAndLogLedger(target);
+        }
+      } else {
+        const stageToDbStatus: Record<string, string> = {
+          PICK: 'ALLOCATED',
+          WAITING: 'ON_HOLD_STOCK',
+          PACK: 'PACKED',
+          DISPATCH: 'DISPATCHED',
+          COURIER_BOOKED: 'DISPATCHED',
+          HANDED_OVER: 'DELIVERED',
+        };
+        const dbStatus = stageToDbStatus[targetStage] || 'ALLOCATED';
+        updateOrderStatusInDatabase(id, dbStatus).catch(() => {});
+      }
+    });
+
     updateOrdersAndPersist((prev) =>
       prev.map((o) => {
         if (!selectedIds.includes(o.id)) return o;
@@ -387,6 +453,7 @@ const loadOrders = () => {
 
     switch (action.type) {
       case 'MARK_PICKED':
+        ids.forEach((id) => updateOrderStatusInDatabase(id, 'PACKED').catch(() => {}));
         updateOrdersAndPersist((prev) =>
           prev.map((o) => (ids.includes(o.id) ? { ...o, stage: 'PACK', holdReason: undefined } : o))
         );
@@ -396,6 +463,7 @@ const loadOrders = () => {
 
       case 'MARK_WAITING': {
         const reason = holdReasonInput?.trim() || 'Awaiting merchant stock delivery';
+        ids.forEach((id) => updateOrderStatusInDatabase(id, 'ON_HOLD_STOCK').catch(() => {}));
         updateOrdersAndPersist((prev) =>
           prev.map((o) => (ids.includes(o.id) ? { ...o, stage: 'WAITING', holdReason: reason } : o))
         );
@@ -405,6 +473,7 @@ const loadOrders = () => {
       }
 
       case 'RESUME_PICK':
+        ids.forEach((id) => updateOrderStatusInDatabase(id, 'ALLOCATED').catch(() => {}));
         updateOrdersAndPersist((prev) =>
           prev.map((o) => (ids.includes(o.id) ? { ...o, stage: 'PICK', holdReason: undefined } : o))
         );
@@ -414,6 +483,7 @@ const loadOrders = () => {
         break;
 
       case 'PRINT_AND_PACK':
+        ids.forEach((id) => updateOrderStatusInDatabase(id, 'PACKED').catch(() => {}));
         triggerIsolatedPrint('MEMOS', action.orders);
         updateOrdersAndPersist((prev) =>
           prev.map((o) =>
@@ -427,6 +497,7 @@ const loadOrders = () => {
         break;
 
       case 'BOOK_COURIER':
+        ids.forEach((id) => updateOrderStatusInDatabase(id, 'DISPATCHED').catch(() => {}));
         updateOrdersAndPersist((prev) =>
           prev.map((o) => {
             if (!ids.includes(o.id)) return o;
@@ -450,6 +521,7 @@ const loadOrders = () => {
         break;
 
       case 'CONFIRM_HANDOVER':
+        ids.forEach((id) => updateOrderStatusInDatabase(id, 'DELIVERED').catch(() => {}));
         updateOrdersAndPersist((prev) =>
           prev.map((o) => {
             if (!ids.includes(o.id)) return o;
@@ -472,6 +544,10 @@ const loadOrders = () => {
         break;
 
       case 'CANCEL_ORDER':
+        action.orders.forEach((ord) => {
+          cancelOrderInDatabase(ord.id).catch(() => {});
+          restoreOrderStockAndLogLedger(ord);
+        });
         updateOrdersAndPersist((prev) =>
           prev.map((o) =>
             ids.includes(o.id)

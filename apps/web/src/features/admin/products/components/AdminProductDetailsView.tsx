@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
   Package,
@@ -9,6 +10,7 @@ import {
   ShoppingCart,
   Truck,
   CheckCircle2,
+  XCircle,
   Clock,
   Boxes,
   Store,
@@ -43,6 +45,8 @@ import {
   reconcileAdminProductsWithMerchant,
   syncAdminProductsToMerchant,
   acceptStockInDatabase,
+  approveProductInDatabase,
+  deleteProductFromDatabase,
 } from '@/lib/warehouseSync';
 import { WarehousePipelineOrder } from '@/features/admin/orders/types';
 
@@ -99,6 +103,7 @@ function resolveColorHex(
 }
 
 export function AdminProductDetailsView({ productId }: AdminProductDetailsViewProps) {
+  const router = useRouter();
   const [product, setProduct] = useState<WarehouseProductItem | null>(null);
   const [productOrders, setProductOrders] = useState<WarehousePipelineOrder[]>([]);
   const [bins, setBins] = useState<WarehouseBin[]>(INITIAL_BINS);
@@ -431,6 +436,36 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
     setIsAdjustModalOpen(false);
   };
 
+  const handleApproveInDetails = () => {
+    if (!product) return;
+    const assignedBin = product.binCode && product.binCode !== 'Pending Approval' ? product.binCode : 'A-01-02';
+    const updatedProd: WarehouseProductItem = {
+      ...product,
+      status: 'APPROVED',
+      isDraft: false,
+      binCode: assignedBin,
+      stock: 0,
+      stockAccepted: false,
+      stockStatus: 'AWAITING_STOCK',
+      submittedAt: 'Approved just now',
+    };
+    setProduct(updatedProd);
+
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_PRODUCTS);
+      const all: WarehouseProductItem[] = stored ? JSON.parse(stored) : INITIAL_PRODUCTS;
+      const next = all.map((p) => (p.id === product.id ? updatedProd : p));
+      localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+      syncAdminProductsToMerchant(next);
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'AdminProductDetails' } })
+      );
+    } catch {}
+
+    approveProductInDatabase(product.id, assignedBin, 0, false);
+    showToast(`Product approved! Status changed to Waiting for Stock.`);
+  };
+
   const handleAcceptStockInDetails = (
     _pid: string,
     quantity: number,
@@ -444,7 +479,7 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
       ...product,
       stock: newTotal,
       binCode: binCode || product.binCode,
-      status: 'APPROVED',
+      status: 'STOCK_STORED',
       stockAccepted: true,
       stockStatus: 'IN_STOCK',
     };
@@ -639,16 +674,38 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
               <span>Draft Product (View Only)</span>
             </span>
           </div>
+        ) : product.status === 'PENDING_APPROVAL' ? (
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={handleApproveInDetails}
+              className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-2 shadow-md shadow-emerald-500/25 transition-all cursor-pointer active:scale-95"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Approved</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                deleteProductFromDatabase(product.id, product.merchantCode);
+                router.push('/admin/products');
+              }}
+              className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center gap-2 shadow-md shadow-rose-500/25 transition-all cursor-pointer active:scale-95"
+            >
+              <XCircle className="w-4 h-4" />
+              <span>Reject</span>
+            </button>
+          </div>
         ) : (
           <div className="flex items-center gap-2.5">
             <button
               type="button"
               onClick={() => setIsAcceptStockOpen(true)}
               className="px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold flex items-center gap-2 shadow-md shadow-orange-500/25 transition-all cursor-pointer active:scale-95"
-              title="Accept physical consignment into warehouse bin"
+              title="Receive physical consignment and publish product"
             >
               <PackageCheck className="w-4 h-4 stroke-[2.5]" />
-              <span>Accept &amp; Store Stock</span>
+              <span>Received Product</span>
             </button>
             <button
               type="button"
@@ -782,10 +839,13 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
                   </span>
                   <StatusBadge
                     status={
-                      product.status === 'APPROVED'
-                        ? 'Approved'
-                        : product.status === 'PENDING_APPROVAL'
-                        ? 'Pending Approval'
+                      product.status === 'PENDING_APPROVAL'
+                        ? 'Pending Product'
+                        : product.status === 'APPROVED' &&
+                          (product.stock === 0 || product.stockAccepted === false || product.stockStatus === 'AWAITING_STOCK')
+                        ? 'Waiting for Stock'
+                        : product.status === 'APPROVED' || product.status === 'STOCK_STORED'
+                        ? 'Published'
                         : product.status === 'REJECTED'
                         ? 'Rejected'
                         : 'Draft'

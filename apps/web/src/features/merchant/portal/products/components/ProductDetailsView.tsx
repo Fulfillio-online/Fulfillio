@@ -394,8 +394,15 @@ export function ProductDetailsView({
   const isFirstTimePending = isPendingApproval && (product.stock || 0) === 0;
   const isPublishPendingFromDraft = isPendingApproval && (product.stock || 0) > 0;
 
-  const isAwaitingStock = !isDraft && !isPendingApproval && (product.stock || 0) === 0;
-  const isReadyToOrder = !isDraft && !isPendingApproval && (product.stock || 0) > 0;
+  const isAwaitingStock =
+    !isDraft &&
+    !isPendingApproval &&
+    ((product.stock || 0) === 0 || product.stockAccepted === false || product.stockStatus === 'AWAITING_STOCK');
+  const isReadyToOrder =
+    !isDraft &&
+    !isPendingApproval &&
+    !isAwaitingStock &&
+    (product.stock || 0) > 0;
 
   const handleAddToCart = () => {
     if (!isReadyToOrder || currentVariantStock <= 0 || orderQty <= 0) return;
@@ -551,7 +558,7 @@ export function ProductDetailsView({
                   ? 'Draft · Locked'
                   : isReadyToOrder
                   ? 'Stock Stored · Locked'
-                  : 'Approved · Locked'}
+                  : 'Awaiting Stock · Locked'}
               </span>
             </div>
           )}

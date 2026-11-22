@@ -218,18 +218,23 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                 </span>
               </Link>
 
-              {/* Returns & RTO */}
+              {/* Returns & Cancellations */}
               <Link
                 href="/admin/returns"
                 onClick={onClose}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                   isCurrent('/admin/returns')
                     ? 'bg-orange-600 text-white shadow-sm'
                     : 'text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-slate-100 hover:bg-slate-100/60 dark:hover:bg-navy-800/60'
                 }`}
               >
-                <RotateCcw className="h-4 w-4" />
-                <span>Returns &amp; RTO</span>
+                <span className="flex items-center gap-3">
+                  <RotateCcw className="h-4 w-4" />
+                  <span>Returns &amp; Cancellations</span>
+                </span>
+                <span className="text-[11px] tabular-nums px-1.5 py-0.5 rounded bg-black/20">
+                  Hub
+                </span>
               </Link>
 
               {/* Stock & Cycle Count */}
