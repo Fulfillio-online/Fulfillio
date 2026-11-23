@@ -84,7 +84,27 @@ async function main() {
       },
     },
   });
-  console.log('✓ Merchants seeded: MC-101, MC-102, MC-103');
+
+  const merchant106 = await prisma.merchant.upsert({
+    where: { merchantCode: 'MC-106' },
+    update: {},
+    create: {
+      merchantCode: 'MC-106',
+      businessName: 'Fulfillio Partner Store',
+      email: 'merchant106@fulfillio.online',
+      phone: '01700-000106',
+      location: 'Dhaka, Bangladesh',
+      status: MerchantStatus.APPROVED,
+      baseHandlingFee: 45.0,
+      monthlyStorageFee: 2000.0,
+      payoutAccount: {
+        method: 'BKASH',
+        accountNumber: '01700000106',
+        accountName: 'Fulfillio Partner Store',
+      },
+    },
+  });
+  console.log('✓ Merchants seeded: MC-101, MC-102, MC-103, MC-106');
 
   // 3. Seed Merchant Users & WMS Workers
   await prisma.user.upsert({
@@ -95,6 +115,18 @@ async function main() {
       email: 'sabbir@sabbirstore.com',
       passwordHash,
       merchantId: merchant101.id,
+      role: UserRole.MERCHANT,
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { email: 'merchant106@fulfillio.online' },
+    update: {},
+    create: {
+      name: 'Fulfillio Partner Store',
+      email: 'merchant106@fulfillio.online',
+      passwordHash,
+      merchantId: merchant106.id,
       role: UserRole.MERCHANT,
     },
   });

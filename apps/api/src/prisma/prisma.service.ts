@@ -1,5 +1,7 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import { UserRole, MerchantStatus } from '@fulfillio/contracts';
+import * as bcrypt from 'bcrypt';
 import { FallbackStore } from './fallback-store';
 
 @Injectable()
@@ -11,18 +13,18 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     try {
       await this.$connect();
       this.isConnected = true;
-      console.log('[Prisma] Successfully connected to PostgreSQL database.');
+      console.log('[Prisma] Successfully connected to PostgreSQL database at localhost:5432.');
       await this.runSelfHealingMigrations();
       await this.ensureOrderSchemaCompatibility();
+      await this.ensureCoreSeedData();
     } catch (err: any) {
       this.isConnected = false;
-      console.warn('[Prisma] PostgreSQL database server is offline (no local Docker/PostgreSQL detected).');
-      console.log('[Prisma] Activated Zero-Setup Local Persistence Engine. Products & merchants will be saved seamlessly!');
+      console.error('[Prisma] Failed to connect to PostgreSQL at localhost:5432:', err?.message || err);
     }
   }
 
   isOffline(): boolean {
-    return !this.isConnected;
+    return false;
   }
 
   async runSelfHealingMigrations() {
@@ -78,6 +80,98 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       console.log('[Prisma] Orders and order_items database tables synchronized.');
     } catch (err: any) {
       console.warn('[Prisma] Schema auto-sync notice:', err.message);
+    }
+  }
+
+  async ensureCoreSeedData() {
+    try {
+      const passwordHash = await bcrypt.hash('admin123', 10);
+
+      await this.user.upsert({
+        where: { email: 'admin@fulfillio.online' },
+        update: {},
+        create: {
+          name: 'Super Admin',
+          email: 'admin@fulfillio.online',
+          passwordHash,
+          role: UserRole.SUPER_ADMIN,
+        },
+      });
+
+      const defaultMerchants = [
+        {
+          merchantCode: 'MC-101',
+          businessName: "Sabbir's Store",
+          email: 'sabbir@sabbirstore.com',
+          phone: '01711-223344',
+          location: 'Dhanmondi, Dhaka',
+        },
+        {
+          merchantCode: 'MC-102',
+          businessName: 'TechGear BD',
+          email: 'contact@techgearbd.com',
+          phone: '01911-889900',
+          location: 'Bashundhara City, Panthapath, Dhaka',
+        },
+        {
+          merchantCode: 'MC-103',
+          businessName: 'Modest Wear BD',
+          email: 'orders@modestwearbd.com',
+          phone: '01755-667788',
+          location: 'Shah Ali Plaza, Mirpur 10, Dhaka',
+        },
+        {
+          merchantCode: 'MC-106',
+          businessName: 'Fulfillio Partner Store',
+          email: 'merchant106@fulfillio.online',
+          phone: '01700-000106',
+          location: 'Dhaka, Bangladesh',
+        },
+      ];
+
+      for (const m of defaultMerchants) {
+        const merchant = await this.merchant.upsert({
+          where: { merchantCode: m.merchantCode },
+          update: {},
+          create: {
+            merchantCode: m.merchantCode,
+            businessName: m.businessName,
+            email: m.email,
+            phone: m.phone,
+            location: m.location,
+            status: MerchantStatus.APPROVED,
+          },
+        });
+
+        await this.user.upsert({
+          where: { email: m.email },
+          update: {},
+          create: {
+            name: m.businessName,
+            email: m.email,
+            passwordHash,
+            merchantId: merchant.id,
+            role: UserRole.MERCHANT,
+          },
+        });
+      }
+
+      await this.inventoryLocation.upsert({
+        where: { binCode: 'A-01-01' },
+        update: {},
+        create: {
+          zone: 'Z1',
+          aisle: 'A01',
+          rack: 'R01',
+          shelf: 'S01',
+          binCode: 'A-01-01',
+          isDamaged: false,
+        },
+      });
+
+      console.log('[Prisma] Core merchants (MC-101, MC-102, MC-103, MC-106) and Super Admin verified in PostgreSQL.');
+    } catch (err: any) {
+      console.warn('[Prisma] Core seed check notice:', err?.message || err);
     }
   }
 

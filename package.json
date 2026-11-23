@@ -5,7 +5,9 @@
   "description": "Fulfillio - Enterprise 3PL Warehouse Management System",
   "scripts": {
     "build": "turbo run build",
-    "dev": "turbo run dev",
+    "dev": "node scripts/dev-bootstrap.js && turbo run dev",
+    "dev:only": "turbo run dev",
+    "docker:up": "docker compose up -d postgres redis",
     "lint": "turbo run lint",
     "test": "turbo run test",
     "db:push": "pnpm --filter=@fulfillio/api exec prisma db push",
