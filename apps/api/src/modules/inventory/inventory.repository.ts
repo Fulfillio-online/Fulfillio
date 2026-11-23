@@ -691,6 +691,7 @@ export class InventoryRepository {
       binCode?: string;
       finalQty?: number;
       acceptStockNow?: boolean;
+      variantStocks?: Record<string, number>;
     },
   ) {
     const binCode = (data.binCode || 'A-01-02').trim().toUpperCase();
@@ -703,6 +704,7 @@ export class InventoryRepository {
         binCode,
         finalQty: finalStock,
         acceptStockNow: isStockAccepted,
+        variantStocks: data.variantStocks,
       }) as any;
     }
 
@@ -771,12 +773,22 @@ export class InventoryRepository {
         data: { defaultBinCode: binCode },
       });
 
+      let vStock = finalStock;
+      if (data.variantStocks) {
+        if (data.variantStocks[v.id] !== undefined) {
+          vStock = Number(data.variantStocks[v.id]) || 0;
+        } else if (data.variantStocks[v.sku] !== undefined) {
+          vStock = Number(data.variantStocks[v.sku]) || 0;
+        }
+      }
+      const effectiveVariantQty = isStockAccepted ? Math.max(0, vStock) : 0;
+
       const defaultItem = v.inventoryItems[0];
       if (defaultItem) {
         await this.prisma.inventoryItem.update({
           where: { id: defaultItem.id },
           data: {
-            quantityAvailable: isStockAccepted ? finalStock : 0,
+            quantityAvailable: effectiveVariantQty,
             locationId: defaultLocation.id,
           },
         });
@@ -785,22 +797,22 @@ export class InventoryRepository {
           data: {
             variantId: v.id,
             locationId: defaultLocation.id,
-            quantityAvailable: isStockAccepted ? finalStock : 0,
+            quantityAvailable: effectiveVariantQty,
             quantityReserved: 0,
             quantityDamaged: 0,
           },
         });
       }
 
-      if (isStockAccepted && finalStock > 0) {
+      if (isStockAccepted && effectiveVariantQty > 0) {
         try {
           await this.prisma.inventoryAuditLog.create({
             data: {
               merchantId: existing.merchantId,
               variantId: v.id,
-              quantityDelta: finalStock,
+              quantityDelta: effectiveVariantQty,
               reason: StockMovementReason.INBOUND_ASN,
-              notes: `Catalog approved & initial stock accepted into Bin ${binCode} (${finalStock} pcs)`,
+              notes: `Catalog approved & initial stock accepted into Bin ${binCode} (${effectiveVariantQty} pcs)`,
             },
           });
         } catch {}

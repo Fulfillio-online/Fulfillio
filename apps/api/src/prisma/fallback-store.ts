@@ -665,17 +665,35 @@ export class FallbackStore {
   // Legacy compatibility helpers
   approveProduct(
     productId: string,
-    data: { binCode: string; finalQty: number; acceptStockNow: boolean }
+    data: { binCode: string; finalQty: number; acceptStockNow: boolean; variantStocks?: Record<string, number> }
   ): LocalProduct {
     if (data.acceptStockNow && data.finalQty > 0) {
       this.approveSubmission(productId, 'admin', data.binCode);
-      return this.receiveInitialStock(productId, {
+      const res = this.receiveInitialStock(productId, {
         expectedQuantity: data.finalQty,
         actualQuantity: data.finalQty,
         acceptedQuantity: data.finalQty,
         damagedQuantity: 0,
         binCode: data.binCode,
       });
+
+      if (data.variantStocks && res.variants) {
+        res.variants.forEach((v) => {
+          let matchedStock: number | undefined;
+          if (data.variantStocks![v.id] !== undefined) {
+            matchedStock = Number(data.variantStocks![v.id]) || 0;
+          } else if (data.variantStocks![v.sku] !== undefined) {
+            matchedStock = Number(data.variantStocks![v.sku]) || 0;
+          }
+          if (matchedStock !== undefined) {
+            v.attributes = { ...(v.attributes || {}), declaredStock: matchedStock };
+            if (v.inventoryItems && v.inventoryItems[0]) {
+              v.inventoryItems[0].quantityAvailable = matchedStock;
+            }
+          }
+        });
+      }
+      return res;
     }
     return this.approveSubmission(productId, 'admin', data.binCode);
   }

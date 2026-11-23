@@ -41,15 +41,20 @@ export function ProductDetailsModal({
         'Suitable for everyday active wear',
       ];
 
-  // Realistic sample variants matrix
-  const variants = [
-    { variant: 'Black', size: 'M', stock: Math.max(0, Math.floor(product.stock * 0.2)) },
-    { variant: 'Black', size: 'L', stock: Math.max(0, Math.floor(product.stock * 0.3)) },
-    { variant: 'Black', size: 'XL', stock: Math.max(0, Math.floor(product.stock * 0.15)) },
-    { variant: 'Charcoal Grey', size: 'M', stock: Math.max(0, Math.floor(product.stock * 0.1)) },
-    { variant: 'Charcoal Grey', size: 'L', stock: Math.max(0, Math.floor(product.stock * 0.15)) },
-    { variant: 'Dark Olive', size: 'L', stock: Math.max(0, Math.floor(product.stock * 0.1)) },
-  ];
+  // Actual variants and stock breakdown
+  const variants = (product.variantsList && product.variantsList.length > 0)
+    ? product.variantsList.map((v) => ({
+        variant: v.color || 'Standard',
+        size: v.size || v.attributeValue || 'Standard',
+        stock: v.stock ?? 0,
+      }))
+    : [
+        {
+          variant: product.variantLabel || 'Standard',
+          size: 'Standard',
+          stock: product.stock || 0,
+        },
+      ];
 
   return (
     <div
@@ -119,11 +124,6 @@ export function ProductDetailsModal({
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-500/10 text-sky-400 border border-sky-500/30">
                   {product.status || 'Active'}
                 </span>
-                {product.category && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-navy-800 text-slate-300 border border-slate-200 dark:border-white/10">
-                    {product.category}
-                  </span>
-                )}
               </div>
             </div>
           </div>
@@ -237,14 +237,6 @@ export function ProductDetailsModal({
                   </span>
                   <span className="font-mono text-emerald-400 font-bold block mt-0.5">
                     {product.sku}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[10px] uppercase font-semibold text-slate-500 block">
-                    CATEGORY
-                  </span>
-                  <span className="text-navy-900 dark:text-slate-200 block mt-0.5 capitalize">
-                    {product.category || 'Fashion'} {product.subcategory ? `• ${product.subcategory}` : ''}
                   </span>
                 </div>
                 <div>

@@ -92,44 +92,22 @@ export function AddProductModal({
     >
       {!confirmStep ? (
         <div className="space-y-4">
-          {/* Merchant + Category */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-200 mb-1.5">
-                Select Merchant *
-              </label>
-              <select
-                value={formMerchantCode}
-                onChange={(e) => setFormMerchantCode(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-sm text-navy-800 dark:text-white focus:outline-none focus:border-orange-500"
-              >
-                {MERCHANTS.map((m) => (
-                  <option key={m.code} value={m.code}>
-                    {m.code} — {m.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-200 mb-1.5">
-                Category *
-              </label>
-              <select
-                value={formCategory}
-                onChange={(e) =>
-                  setFormCategory(
-                    e.target.value as 'Apparel' | 'Footwear' | 'Electronics' | 'Accessories'
-                  )
-                }
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-sm text-navy-800 dark:text-white focus:outline-none focus:border-orange-500"
-              >
-                <option value="Apparel">Apparel</option>
-                <option value="Footwear">Footwear</option>
-                <option value="Electronics">Electronics</option>
-                <option value="Accessories">Accessories</option>
-              </select>
-            </div>
+          {/* Merchant */}
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-200 mb-1.5">
+              Select Merchant *
+            </label>
+            <select
+              value={formMerchantCode}
+              onChange={(e) => setFormMerchantCode(e.target.value)}
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-sm text-navy-800 dark:text-white focus:outline-none focus:border-orange-500"
+            >
+              {MERCHANTS.map((m) => (
+                <option key={m.code} value={m.code}>
+                  {m.code} — {m.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Product Photo Upload + Preset Illustrations */}

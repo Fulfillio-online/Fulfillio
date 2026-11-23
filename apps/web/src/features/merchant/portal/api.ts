@@ -36,11 +36,28 @@ function getAuthHeader(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit = {},
+  timeoutMs = 12000
+): Promise<Response> {
+  if (options.signal) {
+    return fetch(url, options);
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function safeFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T | null> {
   const session = typeof window !== 'undefined' ? getActiveMerchantSession() : null;
   const merchantCode = session?.merchantCode || 'MC-101';
   try {
-    const res = await fetch(`${API_BASE}${endpoint}`, {
+    const res = await fetchWithTimeout(`${API_BASE}${endpoint}`, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
@@ -115,10 +132,20 @@ export const merchantApi = {
     if (remote && Array.isArray(remote)) {
       return remote.map((p) => {
         const variants = p.variants || [];
-        const totalStock = variants.reduce(
+        const physicalTotal = variants.reduce(
           (sum: number, v: any) => sum + (v.inventoryItems?.[0]?.quantityAvailable ?? 0),
           0
         );
+        const declaredTotal = variants.reduce(
+          (sum: number, v: any) => sum + (Number(v.attributes?.declaredStock ?? v.attributes?.stock) || 0),
+          0
+        );
+        const totalStock =
+          physicalTotal > 0
+            ? physicalTotal
+            : declaredTotal > 0
+            ? declaredTotal
+            : Number(variants[0]?.attributes?.declaredStock ?? 0);
         const totalReserved = variants.reduce(
           (sum: number, v: any) => sum + (v.inventoryItems?.[0]?.quantityReserved ?? 0),
           0
@@ -159,7 +186,9 @@ export const merchantApi = {
             if (!entry.sizes.includes(sizeName)) entry.sizes.push(sizeName);
           }
 
-          const vStock = v.inventoryItems?.[0]?.quantityAvailable ?? 0;
+          const vPhysical = v.inventoryItems?.[0]?.quantityAvailable ?? 0;
+          const vDeclared = Number(v.attributes?.declaredStock ?? v.attributes?.stock ?? 0);
+          const vStock = vPhysical > 0 ? vPhysical : vDeclared;
           return {
             id: v.id,
             variantSku: v.sku,
@@ -548,14 +577,12 @@ export const merchantApi = {
                 color: v.color,
                 size: v.size,
                 hex: matchingColor?.hex || '#111827',
-                imageUrl: colorImg,
                 attributeName: v.attributeName,
                 attributeValue: v.attributeValue,
-                allColors: product.colors || [],
+                ...(vIdx === 0 ? { allColors: product.colors || [], keyFeatures: product.keyFeatures } : {}),
                 category: product.category,
                 subcategory: product.subcategory,
                 productType: product.productType,
-                keyFeatures: product.keyFeatures,
                 status: cleanStatus,
                 approvalStatus: cleanStatus,
                 bin: 'Pending Approval',
@@ -583,7 +610,7 @@ export const merchantApi = {
     };
 
     try {
-      const res = await fetch(`${API_BASE}/inventory/products`, {
+      const res = await fetchWithTimeout(`${API_BASE}/inventory/products`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -591,7 +618,7 @@ export const merchantApi = {
           ...getAuthHeader(),
         },
         body: JSON.stringify(payload),
-      });
+      }, 15000);
 
       if (!res.ok) {
         let errMessage = `HTTP ${res.status}`;
@@ -643,7 +670,7 @@ export const merchantApi = {
         !product.bin ||
         product.bin === 'Pending Approval' ||
         product.bin === 'Assigned on intake';
-      payload.variants = product.variantsList.map((v) => {
+      payload.variants = product.variantsList.map((v, vIdx) => {
         const matchingColor = (product.colors || []).find(
           (c) => (c.name || '').trim().toLowerCase() === (v.color || '').trim().toLowerCase()
         );
@@ -661,21 +688,19 @@ export const merchantApi = {
             color: v.color,
             size: v.size,
             hex: matchingColor?.hex || '#111827',
-            imageUrl: colorImg,
             attributeName: v.attributeName,
             attributeValue: v.attributeValue,
-            allColors: product.colors || [],
+            ...(vIdx === 0 ? { allColors: product.colors || [], keyFeatures: product.keyFeatures } : {}),
             category: product.category,
             subcategory: product.subcategory,
             productType: product.productType,
-            keyFeatures: product.keyFeatures,
           },
         };
       });
     }
 
     try {
-      const res = await fetch(`${API_BASE}/inventory/products/${productId}`, {
+      const res = await fetchWithTimeout(`${API_BASE}/inventory/products/${productId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

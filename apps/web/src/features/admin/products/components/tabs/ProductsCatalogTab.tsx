@@ -490,23 +490,6 @@ export function ProductsCatalogTab({
               </select>
             )}
 
-            {/* Category Filter (Fashion, Footwear, Electronics, Accessories) */}
-            <select
-              value={categoryFilter}
-              onChange={(e) => {
-                setCategoryFilter(e.target.value);
-                setCurrentPage(1);
-              }}
-              aria-label="Filter by Category"
-              className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs font-semibold text-navy-800 dark:text-slate-100 focus:outline-none focus:border-orange-500 cursor-pointer shadow-2xs"
-            >
-              <option value="ALL">All Categories</option>
-              <option value="Fashion">Fashion</option>
-              <option value="Footwear">Footwear</option>
-              <option value="Electronics">Electronics</option>
-              <option value="Accessories">Accessories</option>
-            </select>
-
             {/* Warehouse Bin Filter */}
             <select
               value={binFilter}
@@ -671,8 +654,8 @@ export function ProductsCatalogTab({
                   />
                 </th>
 
-                {/* 2. Product Name, Thumbnail & Category with Date (SKU omitted) */}
-                <th className="py-3.5 px-3 text-left align-middle">Product &amp; Category</th>
+                {/* 2. Product Name, Thumbnail & Date */}
+                <th className="py-3.5 px-3 text-left align-middle">Product</th>
 
                 {/* 3. Merchant (Name & Code) */}
                 <th className="py-3.5 px-3 text-left align-middle">Merchant</th>
@@ -759,9 +742,6 @@ export function ProductsCatalogTab({
                               {p.title}
                             </Link>
                             <div className="flex items-center gap-2 mt-1 flex-wrap text-xs">
-                              <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 dark:bg-navy-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10">
-                                {normalizeCategory(p.category)}
-                              </span>
                               <span className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1 font-medium">
                                 <Clock className="w-3 h-3 text-slate-400 shrink-0" />
                                 <span>{p.submittedAt || 'Recently added'}</span>
@@ -1183,9 +1163,6 @@ export function ProductsCatalogTab({
                       </Link>
 
                       <div className="flex items-center gap-2 mt-1 flex-wrap text-xs">
-                        <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 dark:bg-navy-800 text-slate-700 dark:text-slate-300">
-                          {normalizeCategory(p.category)}
-                        </span>
                         <span className="text-[10px] text-slate-500 flex items-center gap-1">
                           <Clock className="w-2.5 h-2.5" />
                           {p.submittedAt}

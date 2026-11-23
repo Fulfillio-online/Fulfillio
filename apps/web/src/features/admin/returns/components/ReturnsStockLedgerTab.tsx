@@ -246,6 +246,7 @@ export function ReturnsStockLedgerTab({
                 filteredLedger.map((item) => {
                   const isCancel = item.sourceType === 'ORDER_CANCELLED';
                   const isDamaged = item.sourceType === 'DAMAGED_QUARANTINE';
+                  const isIntake = item.sourceType === 'INITIAL_INTAKE';
 
                   return (
                     <tr
@@ -273,6 +274,11 @@ export function ReturnsStockLedgerTab({
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
                             <AlertTriangle className="w-3 h-3" />
                             <span>Damage Quarantine</span>
+                          </span>
+                        ) : isIntake ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
+                            <Boxes className="w-3 h-3" />
+                            <span>Initial Stock Intake</span>
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">

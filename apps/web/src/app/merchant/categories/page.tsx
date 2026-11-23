@@ -1,8 +1,5 @@
-'use client';
-
-import React from 'react';
-import { MerchantCategoriesPage } from '@/features/merchant/portal/categories/MerchantCategoriesPage';
+import { redirect } from 'next/navigation';
 
 export default function CategoriesPage() {
-  return <MerchantCategoriesPage />;
+  redirect('/merchant/products');
 }

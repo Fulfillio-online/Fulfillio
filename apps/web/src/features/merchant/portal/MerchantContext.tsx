@@ -331,99 +331,67 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
 
     let savedToDatabase = true;
 
-    // 1. Send directly to PostgreSQL backend
-    for (const it of preparedItems) {
-      try {
-        const res = await merchantApi.createProduct(it);
-        if (!res.ok) {
+    // 1. Send directly to PostgreSQL backend (parallelized, no blocking full-catalog refetch)
+    const createdResults = await Promise.all(
+      preparedItems.map(async (it) => {
+        try {
+          const res = await merchantApi.createProduct(it);
+          if (!res.ok) {
+            savedToDatabase = false;
+            console.warn('[MerchantContext] createProduct server failed:', res.error);
+            return it;
+          }
+          const serverData = res.data;
+          if (!serverData?.id) return it;
+          return {
+            ...it,
+            id: serverData.id,
+            sku: serverData.baseSku || it.sku,
+            variantsList:
+              Array.isArray(serverData.variants) && serverData.variants.length > 0 && it.variantsList
+                ? it.variantsList.map((mv, idx) => ({
+                    ...mv,
+                    id: serverData.variants[idx]?.id || mv.id,
+                    variantSku: serverData.variants[idx]?.sku || mv.variantSku,
+                  }))
+                : it.variantsList,
+          };
+        } catch (err: any) {
           savedToDatabase = false;
-          console.warn('[MerchantContext] createProduct server failed:', res.error);
+          console.warn('[MerchantContext] createProduct network exception:', err);
+          return it;
         }
-      } catch (err: any) {
-        savedToDatabase = false;
-        console.warn('[MerchantContext] createProduct network exception:', err);
-      }
-    }
+      })
+    );
 
     // Only sync submitted (PENDING_APPROVAL) products to Admin! Drafts are strictly private to Merchant.
-    const itemsForAdminSync = preparedItems.filter((it) => it.status === 'PENDING_APPROVAL');
+    const itemsForAdminSync = createdResults.filter((it) => it.status === 'PENDING_APPROVAL');
 
-    // 2. Refresh from server if online, or save locally with offline resilience
-    if (savedToDatabase) {
-      try {
-        const serverProds = await merchantApi.getProducts();
-        if (serverProds && serverProds.length > 0) {
-          const reconciled = serverProds.map((sp) => {
-            const matchPrepared = preparedItems.find(
-              (pi) => pi.sku === sp.sku || pi.id === sp.id || pi.title === sp.title
-            );
-            if (matchPrepared) {
-              return {
-                ...sp,
-                status: matchPrepared.status,
-                bin: matchPrepared.bin,
-                colors: (sp.colors && sp.colors.some((c) => c.imageUrl))
-                  ? sp.colors
-                  : (matchPrepared.colors || sp.colors),
-                imageUrl: sp.imageUrl || matchPrepared.imageUrl,
-              };
-            }
-            return sp;
-          });
-          setProducts(reconciled);
-          if (typeof window !== 'undefined') {
-            safeSetLocalStorage(getMerchantProductsKey(profile.merchantCode), JSON.stringify(reconciled));
-            if (itemsForAdminSync.length > 0) {
-              syncMerchantProductsAddedToAdmin(itemsForAdminSync, profile);
-            }
-          }
-        } else {
-          setProducts((prev) => {
-            const filtered = prev.filter((p) => !preparedItems.some((pi) => pi.sku === p.sku || pi.id === p.id));
-            const next = [...preparedItems, ...filtered];
-            if (typeof window !== 'undefined') {
-              safeSetLocalStorage(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
-              if (itemsForAdminSync.length > 0) {
-                syncMerchantProductsAddedToAdmin(itemsForAdminSync, profile);
-              }
-            }
-            return next;
-          });
+    // 2. Optimistic state update & local cache sync (instant UI response)
+    setProducts((prev) => {
+      const filtered = prev.filter(
+        (p) => !createdResults.some((pi) => pi.sku === p.sku || pi.id === p.id)
+      );
+      const next = [...createdResults, ...filtered];
+      if (typeof window !== 'undefined') {
+        safeSetLocalStorage(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
+        if (itemsForAdminSync.length > 0) {
+          syncMerchantProductsAddedToAdmin(itemsForAdminSync, profile);
         }
-      } catch {
-        setProducts((prev) => {
-          const filtered = prev.filter((p) => !preparedItems.some((pi) => pi.sku === p.sku || pi.id === p.id));
-          const next = [...preparedItems, ...filtered];
-          if (typeof window !== 'undefined') {
-            safeSetLocalStorage(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
-            if (itemsForAdminSync.length > 0) {
-              syncMerchantProductsAddedToAdmin(itemsForAdminSync, profile);
-            }
-          }
-          return next;
-        });
       }
-      const hasDraft = preparedItems.some((it) => it.status === 'DRAFT');
-      const hasPending = preparedItems.some((it) => it.status === 'PENDING_APPROVAL');
+      return next;
+    });
+
+    if (savedToDatabase) {
+      const hasDraft = createdResults.some((it) => it.status === 'DRAFT');
+      const hasPending = createdResults.some((it) => it.status === 'PENDING_APPROVAL');
       if (hasDraft && !hasPending) {
         showToast('Product saved as Draft. Visible only in your Merchant Dashboard.');
       } else {
         showToast('Product submitted for Admin Approval (Pending Review).');
       }
     } else {
-      // Offline fallback: persist locally and sync to Admin queue if submitted
-      setProducts((prev) => {
-        const filtered = prev.filter((p) => !preparedItems.some((pi) => pi.sku === p.sku || pi.id === p.id));
-        const next = [...preparedItems, ...filtered];
-        if (typeof window !== 'undefined') {
-          safeSetLocalStorage(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
-          if (itemsForAdminSync.length > 0) {
-            syncMerchantProductsAddedToAdmin(itemsForAdminSync, profile);
-          }
-        }
-        return next;
-      });
-      const hasDraft = preparedItems.some((it) => it.status === 'DRAFT');
+      const hasDraft = createdResults.some((it) => it.status === 'DRAFT');
       showToast(
         hasDraft
           ? 'Product saved as Draft locally in your Merchant Dashboard.'

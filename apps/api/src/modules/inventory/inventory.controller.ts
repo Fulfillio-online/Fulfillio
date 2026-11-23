@@ -113,6 +113,7 @@ export class InventoryController {
       binCode?: string;
       finalQty?: number;
       acceptStockNow?: boolean;
+      variantStocks?: Record<string, number>;
     },
   ) {
     return this.inventoryService.approveProduct(id, body);
@@ -126,6 +127,7 @@ export class InventoryController {
       binCode?: string;
       finalQty?: number;
       acceptStockNow?: boolean;
+      variantStocks?: Record<string, number>;
     },
   ) {
     return this.inventoryService.approveProduct(id, body);

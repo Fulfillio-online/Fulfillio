@@ -514,24 +514,6 @@ export function ProductsApprovalTab({
             ))}
           </select>
 
-          {/* 4. All Categories Dropdown */}
-          <select
-            value={categoryFilter}
-            onChange={(e) => {
-              setCategoryFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-            aria-label="Filter by Category"
-            className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs font-semibold text-navy-800 dark:text-slate-100 focus:outline-none focus:border-orange-500 cursor-pointer shadow-2xs"
-          >
-            <option value="ALL">All Categories</option>
-            {categoriesList.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
-            ))}
-          </select>
-
           {/* 5. All Warehouse Bins Dropdown */}
           <select
             value={binFilter}
@@ -762,9 +744,6 @@ export function ProductsApprovalTab({
                                   ✨ New Catalog SKU
                                 </span>
                               )}
-                              <span className="text-[10px] text-slate-400 font-medium">
-                                {item.category}
-                              </span>
                             </div>
                             <div className="font-bold text-navy-800 dark:text-white truncate max-w-xs">
                               {item.title}

@@ -9,7 +9,6 @@ export * from './components/ProductBulkActionBar';
 export * from './components/StockRequestsTable';
 export * from './components/ProductForm';
 export * from './components/ProductDetailsView';
-export * from './modals/AddEditProductModal';
 export * from './modals/ManageStockModal';
 export * from './modals/DeleteConfirmModal';
 export * from './modals/ProductDetailsModal';

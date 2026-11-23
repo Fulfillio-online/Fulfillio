@@ -28,12 +28,34 @@ import { PrintBarcodeModal } from '../components/modals/PrintBarcodeModal';
 import { ThermalStickerModal } from './modals/ThermalStickerModal';
 import { RequestEditModal } from './modals/RequestEditModal';
 
+const isProductDraft = (p: MerchantProductItem): boolean => {
+  return p.status === 'DRAFT';
+};
+
 const isPendingApprovalProduct = (p: MerchantProductItem): boolean => {
   if (p.status === 'DRAFT') return false;
-  if (p.status === 'APPROVED' || p.status === 'PUBLISHED' || p.status === 'STOCK_STORED') return false;
+  if (
+    p.status === 'APPROVED' ||
+    p.status === 'PUBLISHED' ||
+    p.status === 'STOCK_STORED' ||
+    (p.status as string) === 'ACTIVE'
+  ) {
+    return false;
+  }
   if (p.status === 'PENDING_APPROVAL') return true;
   if (!p.bin || p.bin === 'Pending Approval' || p.bin === 'Assigned on intake') return true;
   return false;
+};
+
+const isProductActive = (p: MerchantProductItem): boolean => {
+  if (p.status === 'DRAFT') return false;
+  if (isPendingApprovalProduct(p)) return false;
+  return (
+    p.status === 'APPROVED' ||
+    p.status === 'PUBLISHED' ||
+    p.status === 'STOCK_STORED' ||
+    (p.status as string) === 'ACTIVE'
+  );
 };
 
 export interface MerchantProductsTabProps {
@@ -132,32 +154,12 @@ export function MerchantProductsTab({
 
   // Dynamic Statistics
   const stats: ProductStats = useMemo(() => {
-    const draftProducts = products.filter((p) => p.status === 'DRAFT');
-    const pendingApproval = products.filter((p) => p.status !== 'DRAFT' && isPendingApprovalProduct(p));
-    const awaitingStock = products.filter(
-      (p) =>
-        p.status !== 'DRAFT' &&
-        !isPendingApprovalProduct(p) &&
-        (p.status === 'APPROVED' || p.stockStatus === 'AWAITING_STOCK' || p.stockAccepted === false || p.stock === 0)
-    );
-    const activeProducts = products.filter(
-      (p) =>
-        p.status !== 'DRAFT' &&
-        !isPendingApprovalProduct(p) &&
-        (p.status === 'STOCK_STORED' || (p.status === 'PUBLISHED' && p.stockAccepted === true)) &&
-        p.stock > 0 &&
-        p.stockAccepted !== false &&
-        p.stockStatus !== 'AWAITING_STOCK'
-    );
-    const editApprovalPending = products.filter((p) => (p as any).editState === 'EDIT_APPROVAL_PENDING');
-    const restockRequests = stockRequests.filter(
-      (r) => (r.type === 'RESTOCK' || !r.type) && r.status === 'PENDING_APPROVAL'
-    ).length;
-    const returnRequests = stockRequests.filter(
-      (r) => r.type === 'RETURN' && r.status === 'PENDING_APPROVAL'
-    ).length;
+    const draftCount = products.filter(isProductDraft).length;
+    const pendingApproval = products.filter(isPendingApprovalProduct).length;
+    const activeProducts = products.filter((p) => isProductActive(p) && (p.stock || 0) > 0).length;
+    const outOfStock = products.filter((p) => (p.stock || 0) === 0).length;
     const totalWarehouseStock = products.reduce((sum, p) => sum + (p.stock || 0), 0);
-    const lowStock = activeProducts.filter((p) => p.stock > 0 && p.stock <= 30).length;
+    const lowStock = products.filter((p) => isProductActive(p) && p.stock > 0 && p.stock <= 30).length;
     const totalOrders =
       orders.length > 0
         ? orders.length
@@ -165,97 +167,57 @@ export function MerchantProductsTab({
 
     return {
       totalProducts: products.length,
-      draftProducts: draftProducts.length,
-      pendingApproval: pendingApproval.length,
-      awaitingStock: awaitingStock.length,
-      activeProducts: activeProducts.length,
-      editApprovalPending: editApprovalPending.length,
-      restockRequests,
-      returnRequests,
+      draftProducts: draftCount,
+      pendingApproval,
+      awaitingStock: 0,
+      activeProducts,
+      editApprovalPending: 0,
+      restockRequests: 0,
+      returnRequests: 0,
       totalWarehouseStock,
-      // Legacy aliases
-      storeProducts: activeProducts.length + awaitingStock.length,
-      published: activeProducts.length,
+      storeProducts: products.length,
+      published: activeProducts,
       totalOrders,
       lowStock,
-      pendingRequests: restockRequests + returnRequests,
+      outOfStock,
+      pendingRequests: 0,
     };
-  }, [products, orders, stockRequests]);
+  }, [products, orders]);
 
-  // Tab counts
+  // Tab counts: All Items, Active, Pending, Drafts, Out of Stock
   const counts = useMemo(() => {
-    const draftProducts = products.filter((p) => p.status === 'DRAFT');
-    const pendingApprovalProducts = products.filter(
-      (p) => p.status !== 'DRAFT' && isPendingApprovalProduct(p)
-    );
-    const awaitingStockProducts = products.filter(
-      (p) =>
-        p.status !== 'DRAFT' &&
-        !isPendingApprovalProduct(p) &&
-        (p.stock === 0 || p.stockAccepted === false || p.stockStatus === 'AWAITING_STOCK')
-    );
-    const activeProducts = products.filter(
-      (p) =>
-        p.status !== 'DRAFT' &&
-        !isPendingApprovalProduct(p) &&
-        p.stock > 0 &&
-        p.stockAccepted !== false &&
-        p.stockStatus !== 'AWAITING_STOCK'
-    );
-    const editApprovalPendingProducts = products.filter(
-      (p) => (p as any).editState === 'EDIT_APPROVAL_PENDING'
-    );
-    const restockReqs = stockRequests.filter(
-      (r) => (r.type === 'RESTOCK' || !r.type) && r.status === 'PENDING_APPROVAL'
-    );
-    const returnReqs = stockRequests.filter(
-      (r) => r.type === 'RETURN' && r.status === 'PENDING_APPROVAL'
-    );
+    const draftCount = products.filter(isProductDraft).length;
+    const pendingCount = products.filter(isPendingApprovalProduct).length;
+    const activeCount = products.filter((p) => isProductActive(p) && (p.stock || 0) > 0).length;
+    const outOfStockCount = products.filter((p) => (p.stock || 0) === 0).length;
 
     return {
       all: products.length,
-      active: activeProducts.length,
-      published: activeProducts.length,
-      pendingApproval: pendingApprovalProducts.length,
-      awaitingStock: awaitingStockProducts.length,
-      draft: draftProducts.length,
-      editApprovalPending: editApprovalPendingProducts.length,
-      restockRequests: restockReqs.length,
-      returnRequests: returnReqs.length,
-      outOfStock: awaitingStockProducts.length,
-      stockRequests: restockReqs.length + returnReqs.length,
+      active: activeCount,
+      published: activeCount,
+      pendingApproval: pendingCount,
+      draft: draftCount,
+      outOfStock: outOfStockCount,
     };
-  }, [products, stockRequests]);
+  }, [products]);
 
   // Filtered & Sorted Product List
   const filteredProducts = useMemo(() => {
     return products
       .filter((p) => {
-        const isDraft = p.status === 'DRAFT';
-        const isPendingApproval = isPendingApprovalProduct(p);
-        const isAwaitingStock =
-          !isDraft &&
-          !isPendingApproval &&
-          (p.stock === 0 || p.stockAccepted === false || p.stockStatus === 'AWAITING_STOCK');
-        const isActiveOrPublished =
-          !isDraft &&
-          !isPendingApproval &&
-          !isAwaitingStock &&
-          (p.status === 'STOCK_STORED' || (p.status === 'PUBLISHED' && p.stock > 0) || p.stock > 0);
-        const isEditApprovalPending = (p as any).editState === 'EDIT_APPROVAL_PENDING';
+        const isDraft = isProductDraft(p);
+        const isPending = isPendingApprovalProduct(p);
+        const isActive = isProductActive(p);
+        const isOutOfStock = (p.stock || 0) === 0;
 
         if (activeTab === 'DRAFT') {
           if (!isDraft) return false;
         } else if (activeTab === 'PENDING_APPROVAL') {
-          if (!isPendingApproval || isDraft) return false;
-        } else if (activeTab === 'AWAITING_STOCK') {
-          if (!isAwaitingStock) return false;
+          if (!isPending) return false;
         } else if (activeTab === 'ACTIVE' || activeTab === 'PUBLISHED') {
-          if (!isActiveOrPublished) return false;
-        } else if (activeTab === 'EDIT_APPROVAL_PENDING') {
-          if (!isEditApprovalPending) return false;
+          if (!isActive || isOutOfStock) return false;
         } else if (activeTab === 'OUT_OF_STOCK') {
-          if (!isAwaitingStock) return false;
+          if (!isOutOfStock) return false;
         }
         // When activeTab === 'ALL', show ALL products
 
@@ -269,9 +231,9 @@ export function MerchantProductsTab({
           const q = searchQuery.toLowerCase();
           const matchTitle = p.title.toLowerCase().includes(q);
           const matchSku = p.sku.toLowerCase().includes(q);
-          const matchBarcode = p.barcode.toLowerCase().includes(q);
-          const matchBin = p.bin?.toLowerCase().includes(q);
-          if (!matchTitle && !matchSku && !matchBarcode && !matchBin) {
+          const matchCategory = p.category?.toLowerCase().includes(q);
+          const matchBarcode = p.barcode?.toLowerCase().includes(q);
+          if (!matchTitle && !matchSku && !matchCategory && !matchBarcode) {
             return false;
           }
         }
@@ -376,31 +338,8 @@ export function MerchantProductsTab({
           </p>
         </div>
 
-        {/* Top Action Buttons: Request Restock/Return + Add Products */}
+        {/* Top Action Buttons: Orders + Add Products */}
         <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto shrink-0">
-          <button
-            type="button"
-            onClick={() => {
-              const storedProd = products.find(
-                (p) =>
-                  p.status !== 'DRAFT' &&
-                  !isPendingApprovalProduct(p) &&
-                  (p.status === 'STOCK_STORED' || p.stock > 0)
-              );
-              if (storedProd) {
-                handleOpenManageStock(storedProd, 'RESTOCK');
-              } else {
-                onTriggerToast(
-                  'Restock or Return requests are only available after a product reaches Stock Stored stage.'
-                );
-              }
-            }}
-            className="px-4 py-2.5 bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-navy-900 dark:text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 border border-slate-200/80 dark:border-white/10 transition-all cursor-pointer shadow-xs active:scale-95"
-          >
-            <ArrowUpRight className="h-4 w-4 text-emerald-500" />
-            <span>Request Restock / Return</span>
-          </button>
-
           <Link
             href="/merchant/orders"
             className="px-4 py-2.5 bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-navy-900 dark:text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 border border-slate-200/80 dark:border-white/10 transition-all cursor-pointer shadow-xs active:scale-95"
@@ -420,8 +359,15 @@ export function MerchantProductsTab({
         </div>
       </div>
 
-      {/* 4 Stat Cards */}
-      <ProductStatsGrid stats={stats} />
+      {/* 4 Core Essential Stat Cards */}
+      <ProductStatsGrid
+        stats={stats}
+        activeTab={activeTab}
+        onSelectTab={(tab) => {
+          setActiveTab(tab);
+          setSelectedIds([]);
+        }}
+      />
 
       {/* Main Content Card Container */}
       <div className="rounded-2xl border border-slate-200/80 dark:border-white/10 bg-white dark:bg-navy-900/60 shadow-xs p-4 sm:p-5 space-y-4">

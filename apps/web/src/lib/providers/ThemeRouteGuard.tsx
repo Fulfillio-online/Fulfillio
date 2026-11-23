@@ -11,8 +11,10 @@ export function isThemedRoute(pathname: string | null): boolean {
   if (!pathname) return false;
   return (
     pathname === '/' ||
+    pathname === '/login' ||
     pathname === '/admin' ||
     pathname.startsWith('/admin/') ||
+    pathname === '/admin-login' ||
     pathname === '/merchant' ||
     pathname.startsWith('/merchant/')
   );

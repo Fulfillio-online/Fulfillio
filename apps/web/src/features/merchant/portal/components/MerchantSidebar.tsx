@@ -6,7 +6,6 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
   Package,
-  FolderTree,
   ShoppingCart,
   Layers,
   Truck,
@@ -49,12 +48,6 @@ export function MerchantSidebar({
       label: 'Products',
       href: '/merchant/products',
       icon: Package,
-    },
-    {
-      id: 'categories' as MerchantTab,
-      label: 'Categories',
-      href: '/merchant/categories',
-      icon: FolderTree,
     },
     {
       id: 'orders' as MerchantTab,

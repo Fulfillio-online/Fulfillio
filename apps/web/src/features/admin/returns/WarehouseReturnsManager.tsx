@@ -222,7 +222,22 @@ export function WarehouseReturnsManager({
               .map((m: any) => ({
                 id: m.id || `PRF-2026-${Math.floor(1000 + Math.random() * 9000)}`,
                 timestamp: m.timestamp || '2026-11-22 14:00',
-                sourceType: m.notes?.includes('cancel') ? 'ORDER_CANCELLED' : 'COURIER_RETURN',
+                sourceType:
+                  m.type === 'INITIAL_INTAKE' ||
+                  m.sourceType === 'INITIAL_INTAKE' ||
+                  m.referenceDocType === 'INWARD_CHALLAN' ||
+                  (typeof m.referenceNumber === 'string' && m.referenceNumber.startsWith('CHL-')) ||
+                  m.carrierOrCourier?.toLowerCase().includes('initial catalog') ||
+                  m.notes?.toLowerCase().includes('catalog submission')
+                    ? 'INITIAL_INTAKE'
+                    : m.sourceType === 'ORDER_CANCELLED' ||
+                      m.type === 'ORDER_CANCELLED' ||
+                      m.notes?.toLowerCase().includes('cancel')
+                    ? 'ORDER_CANCELLED'
+                    : m.sourceType === 'DAMAGED_QUARANTINE' ||
+                      m.notes?.toLowerCase().includes('damage')
+                    ? 'DAMAGED_QUARANTINE'
+                    : 'COURIER_RETURN',
                 referenceId: m.referenceNumber || m.id,
                 merchantCode: m.merchantCode || 'MC-101',
                 merchantName: m.merchantName || "Sabbir's Store",

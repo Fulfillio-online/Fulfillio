@@ -50,7 +50,7 @@ interface MerchantReturnsTabProps {
   onTriggerToast?: (msg: string) => void;
 }
 
-type MerchantTabMode = 'ALL' | 'CANCELLED' | 'RETURNS' | 'STOCK_LEDGER';
+type MerchantTabMode = 'ALL' | 'CANCELLED' | 'RETURNS' | 'STOCK_LEDGER' | 'INITIAL_INTAKE';
 
 export function MerchantReturnsTab({
   profile,
@@ -184,23 +184,52 @@ export function MerchantReturnsTab({
                   m.merchantCode === merchantCode ||
                   (!m.merchantCode && merchantCode === 'MC-101')
               )
-              .map((m: any) => ({
-                id: m.id || `PRF-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-                timestamp: m.timestamp || '2026-11-22 14:00',
-                sourceType: m.notes?.includes('cancel') ? 'ORDER_CANCELLED' : 'COURIER_RETURN',
-                referenceId: m.referenceNumber || m.id,
-                merchantCode,
-                merchantName: profile.storeName,
-                productTitle: m.productTitle || 'Product',
-                sku: m.sku || 'SKU',
-                deltaQty: Math.abs(m.deltaQty || 1),
-                previousStock: m.previousStock || 10,
-                newStock: m.newStock || 15,
-                binCode: m.binCode || 'A-01-02',
-                operator: m.operator || 'Warehouse QC Station',
-                digitalProofHash: m.digitalProofHash || 'FL-SHA256-PROOF',
-                notes: m.notes || 'Stock recovered & restored',
-              }));
+              .map((m: any) => {
+                let detectedSource: 'ORDER_CANCELLED' | 'COURIER_RETURN' | 'DAMAGED_QUARANTINE' | 'INITIAL_INTAKE' = 'COURIER_RETURN';
+
+                if (
+                  m.type === 'INITIAL_INTAKE' ||
+                  m.sourceType === 'INITIAL_INTAKE' ||
+                  m.referenceDocType === 'INWARD_CHALLAN' ||
+                  (typeof m.referenceNumber === 'string' && m.referenceNumber.startsWith('CHL-')) ||
+                  (typeof m.referenceId === 'string' && m.referenceId.startsWith('CHL-')) ||
+                  m.carrierOrCourier?.toLowerCase().includes('initial catalog') ||
+                  m.notes?.toLowerCase().includes('catalog submission')
+                ) {
+                  detectedSource = 'INITIAL_INTAKE';
+                } else if (
+                  m.sourceType === 'ORDER_CANCELLED' ||
+                  m.type === 'ORDER_CANCELLED' ||
+                  m.notes?.toLowerCase().includes('cancel')
+                ) {
+                  detectedSource = 'ORDER_CANCELLED';
+                } else if (
+                  m.sourceType === 'DAMAGED_QUARANTINE' ||
+                  m.notes?.toLowerCase().includes('damage')
+                ) {
+                  detectedSource = 'DAMAGED_QUARANTINE';
+                } else {
+                  detectedSource = 'COURIER_RETURN';
+                }
+
+                return {
+                  id: m.id || `PRF-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+                  timestamp: m.timestamp || '2026-11-22 14:00',
+                  sourceType: detectedSource,
+                  referenceId: m.referenceNumber || m.referenceId || m.id,
+                  merchantCode,
+                  merchantName: profile.storeName,
+                  productTitle: m.productTitle || 'Product',
+                  sku: m.sku || 'SKU',
+                  deltaQty: Math.abs(m.deltaQty || 1),
+                  previousStock: m.previousStock || 0,
+                  newStock: m.newStock || 15,
+                  binCode: m.binCode || 'A-01-02',
+                  operator: m.operator || 'Warehouse QC Station',
+                  digitalProofHash: m.digitalProofHash || 'FL-SHA256-PROOF',
+                  notes: m.notes || 'Stock intake & recorded',
+                };
+              });
 
             const combined = [...INITIAL_RECOVERY_LEDGER.filter((l) => l.merchantCode === merchantCode)];
             for (const item of dynamic) {
@@ -277,6 +306,45 @@ export function MerchantReturnsTab({
     });
   }, [returnsList, searchQuery, statusFilter]);
 
+  // Segment ledger into:
+  // 1. Initial Intake (প্রাথমিক ক্যাটালগ ও ইনওয়ার্ড চালান এন্ট্রি)
+  // 2. Recovery Ledger (অর্ডার বাতিল ও কুরিয়ার রিটার্ন হতে রিকভারি)
+  const initialIntakeEntries = useMemo(
+    () => ledgerEntries.filter((m) => m.sourceType === 'INITIAL_INTAKE'),
+    [ledgerEntries]
+  );
+
+  const recoveryLedgerEntries = useMemo(
+    () => ledgerEntries.filter((m) => m.sourceType !== 'INITIAL_INTAKE'),
+    [ledgerEntries]
+  );
+
+  const filteredRecoveryLedger = useMemo(() => {
+    return recoveryLedgerEntries.filter((m) => {
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase().trim();
+      return (
+        m.id.toLowerCase().includes(q) ||
+        m.referenceId.toLowerCase().includes(q) ||
+        m.sku.toLowerCase().includes(q) ||
+        m.productTitle.toLowerCase().includes(q)
+      );
+    });
+  }, [recoveryLedgerEntries, searchQuery]);
+
+  const filteredInitialIntake = useMemo(() => {
+    return initialIntakeEntries.filter((m) => {
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase().trim();
+      return (
+        m.id.toLowerCase().includes(q) ||
+        m.referenceId.toLowerCase().includes(q) ||
+        m.sku.toLowerCase().includes(q) ||
+        m.productTitle.toLowerCase().includes(q)
+      );
+    });
+  }, [initialIntakeEntries, searchQuery]);
+
   const filteredLedger = useMemo(() => {
     return ledgerEntries.filter((m) => {
       if (!searchQuery.trim()) return true;
@@ -291,12 +359,20 @@ export function MerchantReturnsTab({
   }, [ledgerEntries, searchQuery]);
 
   // CSV Export for Merchant
-  const handleExportCsv = () => {
+  const handleExportCsv = (mode: 'RECOVERY' | 'INITIAL' | 'ALL' | React.MouseEvent = 'RECOVERY') => {
+    const effectiveMode = typeof mode === 'string' ? mode : 'RECOVERY';
+    const targetList =
+      effectiveMode === 'INITIAL'
+        ? filteredInitialIntake
+        : effectiveMode === 'RECOVERY'
+        ? filteredRecoveryLedger
+        : filteredLedger;
+
     const headers = [
       'Proof ID',
       'Date & Time',
       'Source Type',
-      'Reference ID (Order/Tracking)',
+      'Reference ID (Order/Challan/Tracking)',
       'Product Title',
       'SKU',
       'Delta Units (+)',
@@ -307,7 +383,7 @@ export function MerchantReturnsTab({
       'Notes',
     ];
 
-    const rows = filteredLedger.map((m) => [
+    const rows = targetList.map((m) => [
       `"${m.id}"`,
       `"${m.timestamp}"`,
       `"${m.sourceType}"`,
@@ -329,16 +405,26 @@ export function MerchantReturnsTab({
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
+    const fileTag =
+      mode === 'INITIAL'
+        ? 'initial_stock_intake_ledger'
+        : mode === 'RECOVERY'
+        ? 'stock_recovery_ledger'
+        : 'full_stock_ledger';
     link.setAttribute(
       'download',
-      `${merchantCode}_stock_recovery_ledger_${new Date().toISOString().slice(0, 10)}.csv`
+      `${merchantCode}_${fileTag}_${new Date().toISOString().slice(0, 10)}.csv`
     );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
 
     if (onTriggerToast) {
-      onTriggerToast('Stock recovery ledger CSV downloaded successfully.');
+      onTriggerToast(
+        mode === 'INITIAL'
+          ? 'Initial stock intake ledger CSV downloaded successfully.'
+          : 'Stock recovery ledger CSV downloaded successfully.'
+      );
     }
   };
 
@@ -368,7 +454,7 @@ export function MerchantReturnsTab({
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <button
             type="button"
-            onClick={handleExportCsv}
+            onClick={() => handleExportCsv('ALL')}
             className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-navy-800 dark:text-slate-100 border border-slate-300 dark:border-white/15 flex items-center gap-1.5 transition-colors cursor-pointer font-semibold"
           >
             <Download className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
@@ -545,7 +631,27 @@ export function MerchantReturnsTab({
                 activeTab === 'STOCK_LEDGER' ? 'bg-white/20 text-white' : 'bg-sky-500/10 text-sky-600 dark:text-sky-400'
               }`}
             >
-              {ledgerEntries.length} Proofs
+              {recoveryLedgerEntries.length} Proofs
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('INITIAL_INTAKE')}
+            className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all cursor-pointer ${
+              activeTab === 'INITIAL_INTAKE'
+                ? 'bg-orange-600 text-white shadow-md shadow-orange-500/20'
+                : 'text-slate-600 dark:text-slate-300 hover:text-navy-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-navy-800'
+            }`}
+          >
+            <Boxes className="w-4 h-4 text-indigo-500" />
+            <span>Initial Stock Intake</span>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[11px] tabular-nums font-semibold ${
+                activeTab === 'INITIAL_INTAKE' ? 'bg-white/20 text-white' : 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
+              }`}
+            >
+              {initialIntakeEntries.length} Proofs
             </span>
           </button>
         </div>
@@ -922,26 +1028,26 @@ export function MerchantReturnsTab({
         </div>
       )}
 
-      {/* TAB: STOCK ACCOUNTING LEDGER ("stock er hisab rakhar jonno") */}
+      {/* TAB: STOCK RECOVERY LEDGER (Returns & Cancellations recovery only) */}
       {activeTab === 'STOCK_LEDGER' && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1">
             <div>
               <h3 className="text-sm font-bold text-navy-900 dark:text-white flex items-center gap-2">
                 <FileText className="w-4 h-4 text-sky-500" />
-                <span>Store Stock Accounting &amp; Reversal Ledger</span>
+                <span>Store Stock Recovery Ledger (Returns &amp; Cancellations)</span>
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Immutable audit trail of all inventory restorations to storage bins with cryptographic verification hashes
+                Immutable audit trail of inventory restored from customer cancellations and courier returns (RTO)
               </p>
             </div>
             <button
               type="button"
-              onClick={handleExportCsv}
+              onClick={() => handleExportCsv('RECOVERY')}
               className="px-3.5 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer self-start sm:self-auto"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Download Ledger CSV</span>
+              <span>Download Recovery CSV</span>
             </button>
           </div>
 
@@ -960,14 +1066,14 @@ export function MerchantReturnsTab({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-white/5 text-xs sm:text-sm">
-                  {filteredLedger.length === 0 ? (
+                  {filteredRecoveryLedger.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="py-12 text-center text-slate-400">
-                        No stock ledger records found.
+                        No reverse stock recovery records found.
                       </td>
                     </tr>
                   ) : (
-                    filteredLedger.map((m) => (
+                    filteredRecoveryLedger.map((m) => (
                       <tr key={m.id} className="hover:bg-slate-50/50 dark:hover:bg-navy-800/40 transition-colors">
                         <td className="py-3.5 px-4">
                           <span className="font-extrabold text-navy-900 dark:text-white block font-mono text-xs">
@@ -1055,6 +1161,121 @@ export function MerchantReturnsTab({
         </div>
       )}
 
+      {/* TAB: INITIAL PRODUCT STOCK INTAKE (প্রাথমিক ক্যাটালগ ও ইনওয়ার্ড চালান স্টক হিসাব) */}
+      {activeTab === 'INITIAL_INTAKE' && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1">
+            <div>
+              <h3 className="text-sm font-bold text-navy-900 dark:text-white flex items-center gap-2">
+                <Boxes className="w-4 h-4 text-indigo-500" />
+                <span>Initial Product Stock Intake Ledger (প্রাথমিক স্টক হিসাব)</span>
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Immutable audit trail of initial catalog stock intake and warehouse inward receiving challans (CHL-...)
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleExportCsv('INITIAL')}
+              className="px-3.5 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer self-start sm:self-auto"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Download Intake CSV</span>
+            </button>
+          </div>
+
+          <div className="bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[980px]">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-white/10 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 bg-slate-50/60 dark:bg-navy-950/60">
+                    <th className="py-3.5 px-4">Proof ID &amp; Time</th>
+                    <th className="py-3.5 px-4">Source &amp; Inward Challan</th>
+                    <th className="py-3.5 px-4">Product &amp; SKU</th>
+                    <th className="py-3.5 px-4">Intake Units</th>
+                    <th className="py-3.5 px-4">Stock Audit (Before &rarr; After)</th>
+                    <th className="py-3.5 px-4">Storage Bin</th>
+                    <th className="py-3.5 px-4 text-right">Verification</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-white/5 text-xs sm:text-sm">
+                  {filteredInitialIntake.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-12 text-center text-slate-400">
+                        No initial stock intake records found.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredInitialIntake.map((m) => (
+                      <tr key={m.id} className="hover:bg-slate-50/50 dark:hover:bg-navy-800/40 transition-colors">
+                        <td className="py-3.5 px-4">
+                          <span className="font-extrabold text-navy-900 dark:text-white block font-mono text-xs">
+                            {m.id}
+                          </span>
+                          <span className="text-[11px] text-slate-400">{m.timestamp}</span>
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
+                            Initial Stock Intake
+                          </span>
+                          <span className="text-xs font-mono text-slate-500 block mt-0.5">
+                            Challan: {m.referenceId}
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          <span className="font-bold text-navy-900 dark:text-white block line-clamp-1">
+                            {m.productTitle}
+                          </span>
+                          <span className="text-xs font-mono text-slate-500 block mt-0.5">
+                            {m.sku}
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          <span className="font-extrabold text-sm text-emerald-600 dark:text-emerald-400">
+                            +{m.deltaQty} pcs
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-1.5 font-mono text-xs">
+                            <span className="text-slate-400 line-through">{m.previousStock}</span>
+                            <span className="text-slate-400">&rarr;</span>
+                            <span className="font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                              {m.newStock} units
+                            </span>
+                          </div>
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-1 font-mono text-xs font-bold text-navy-900 dark:text-white">
+                            <MapPin className="w-3.5 h-3.5 text-orange-500" />
+                            <span>{m.binCode}</span>
+                          </div>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => setReceiptRecord(m)}
+                            className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-semibold text-navy-900 dark:text-white inline-flex items-center gap-1 transition-colors cursor-pointer"
+                          >
+                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                            <span>Proof</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 6. Proof Receipt Verification Modal */}
       {receiptRecord && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/80 backdrop-blur-sm animate-in fade-in">
@@ -1097,7 +1318,14 @@ export function MerchantReturnsTab({
               <div className="flex justify-between">
                 <span className="text-slate-500">Source:</span>
                 <span className="font-bold text-navy-900 dark:text-white">
-                  {receiptRecord.sourceType} ({receiptRecord.referenceId})
+                  {receiptRecord.sourceType === 'INITIAL_INTAKE'
+                    ? 'Initial Stock Intake'
+                    : receiptRecord.sourceType === 'ORDER_CANCELLED'
+                    ? 'Cancelled Order'
+                    : receiptRecord.sourceType === 'COURIER_RETURN'
+                    ? 'Courier Return (RTO)'
+                    : 'Damage / Quarantine'}{' '}
+                  ({receiptRecord.referenceId})
                 </span>
               </div>
               <div className="flex justify-between">

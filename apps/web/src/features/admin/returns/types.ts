@@ -61,7 +61,7 @@ export interface WarehouseReturnRecord {
 export interface RecoveryLedgerEntry {
   id: string; // PRF-2026-XXXX
   timestamp: string;
-  sourceType: 'ORDER_CANCELLED' | 'COURIER_RETURN' | 'DAMAGED_QUARANTINE';
+  sourceType: 'ORDER_CANCELLED' | 'COURIER_RETURN' | 'DAMAGED_QUARANTINE' | 'INITIAL_INTAKE';
   referenceId: string; // Order ID or Tracking ID
   merchantCode: string;
   merchantName: string;

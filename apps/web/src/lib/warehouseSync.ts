@@ -2952,7 +2952,8 @@ export async function approveProductInDatabase(
   productId: string,
   binCode: string,
   finalQty: number,
-  acceptStockNow: boolean
+  acceptStockNow: boolean,
+  variantStocks?: Record<string, number>
 ): Promise<boolean> {
   if (!productId) return false;
   try {
@@ -2965,6 +2966,7 @@ export async function approveProductInDatabase(
         binCode,
         finalQty,
         acceptStockNow,
+        variantStocks,
       }),
     });
     return res.ok;

@@ -137,15 +137,6 @@ export function ProductGrid({
                     : 'Published'}
                 </span>
               </div>
-
-              {/* Category Pill */}
-              {p.category && (
-                <div className="absolute bottom-2 left-2 z-10">
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-white/90 dark:bg-navy-900/90 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-white/10 backdrop-blur">
-                    {p.category}
-                  </span>
-                </div>
-              )}
             </div>
 
             {/* Body */}
@@ -178,7 +169,7 @@ export function ProductGrid({
                 <div className="mt-3 p-2.5 rounded-lg bg-slate-50 dark:bg-navy-950/60 border border-slate-200/80 dark:border-white/10 flex items-center justify-between text-xs">
                   <div>
                     <span className="text-slate-500 block text-[10px] uppercase font-semibold">
-                      Declared Value
+                      Declare Price
                     </span>
                     <span className="font-bold text-navy-900 dark:text-white text-sm">
                       ৳{p.price.toLocaleString()}
@@ -201,16 +192,6 @@ export function ProductGrid({
                       <span className="text-xs text-navy-900 dark:text-white font-semibold font-mono">{p.stock}</span>
                     )}
                   </div>
-                  {isStockStored && (
-                    <button
-                      type="button"
-                      onClick={() => onManageStock(p)}
-                      className="px-2 py-1 rounded-md bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-navy-900 dark:text-white text-xs font-semibold flex items-center gap-1 border border-slate-200 dark:border-white/10 cursor-pointer transition-colors"
-                    >
-                      <Layers className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-                      <span>+ Stock</span>
-                    </button>
-                  )}
                 </div>
               </div>
 

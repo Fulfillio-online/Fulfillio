@@ -860,7 +860,7 @@ export function CreateManualOrderModal({
                               <optgroup label="Available in Warehouse (Approved with Stored Stock)">
                                 {eligibleProducts.map((prod: MerchantProductItem) => (
                                   <option key={prod.id} value={prod.id}>
-                                    {prod.title} — Stock: {prod.stock} pcs in Bin {prod.bin} (৳{prod.price})
+                                    {prod.title} — Stock: {prod.stock} pcs in Bin {prod.bin} (Declared: ৳{prod.price})
                                   </option>
                                 ))}
                               </optgroup>
@@ -961,11 +961,16 @@ export function CreateManualOrderModal({
                         </select>
                       </div>
 
-                      {/* Unit Price (৳) */}
+                      {/* Selling / Order Price (৳) */}
                       <div>
-                        <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1">
-                          Unit Price (৳)
-                        </label>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                            Selling Price (৳) *
+                          </label>
+                          <span className="text-[10px] text-slate-400 font-mono" title="Declared Catalog Price">
+                            Declared: ৳{products.find((p) => p.id === item.productId)?.price || item.unitPrice}
+                          </span>
+                        </div>
                         <input
                           type="number"
                           min="0"
@@ -973,6 +978,7 @@ export function CreateManualOrderModal({
                           onChange={(e) =>
                             handleUnitPriceChange(item.rowId, Number(e.target.value) || 0)
                           }
+                          aria-label="Order Selling Price"
                           className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-mono font-bold text-navy-900 dark:text-white text-right focus:outline-none focus:border-orange-500 shadow-2xs"
                         />
                       </div>

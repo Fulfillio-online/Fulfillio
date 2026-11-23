@@ -53,24 +53,6 @@ export function ProductToolbar({
 
         {/* Filters & View Toggles */}
         <div className="flex items-center gap-2 w-full sm:w-auto">
-          {/* Category Dropdown */}
-          <div className="relative flex-1 sm:flex-initial">
-            <select
-              value={selectedCategory}
-              onChange={(e) => onCategoryChange(e.target.value)}
-              aria-label="Filter by Category"
-              className="w-full appearance-none pl-3 pr-8 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-semibold text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer shadow-2xs"
-            >
-              <option value="ALL">All Categories</option>
-              {categories.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-2.5 top-2.5 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
-          </div>
-
           {/* Sort Dropdown */}
           <div className="relative flex-1 sm:flex-initial">
             <select
@@ -80,9 +62,8 @@ export function ProductToolbar({
               className="w-full appearance-none pl-3 pr-8 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-semibold text-navy-900 dark:text-slate-200 focus:outline-none focus:border-orange-500 cursor-pointer shadow-2xs"
             >
               <option value="NEWEST">Newest</option>
-              <option value="PRICE_ASC">Price: Low to High</option>
-              <option value="PRICE_DESC">Price: High to Low</option>
-              <option value="MARGIN_DESC">Highest Margin %</option>
+              <option value="PRICE_ASC">Declare Price: Low to High</option>
+              <option value="PRICE_DESC">Declare Price: High to Low</option>
               <option value="STOCK_DESC">Stock: High to Low</option>
             </select>
             <ArrowUpDown className="absolute right-2.5 top-2.5 h-3.5 w-3.5 text-slate-400 pointer-events-none" />

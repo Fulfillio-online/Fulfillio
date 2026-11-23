@@ -652,27 +652,6 @@ export function AdminProductForm() {
                   />
                 </div>
               </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-800 dark:text-slate-200 mb-2">
-                  Category
-                </label>
-                <div className="relative">
-                  <select
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value as any)}
-                    className="w-full appearance-none px-4 py-3 bg-white dark:bg-navy-950/60 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 shadow-xs cursor-pointer pr-10"
-                  >
-                    <option value="Apparel">Apparel / Fashion</option>
-                    <option value="Footwear">Footwear</option>
-                    <option value="Electronics">Electronics</option>
-                    <option value="Accessories">Accessories</option>
-                    <option value="Beauty">Beauty & Cosmetics</option>
-                    <option value="Grocery">Grocery & Food</option>
-                  </select>
-                  <ChevronDown className="absolute right-3.5 top-3.5 h-4 w-4 text-slate-400 pointer-events-none" />
-                </div>
-              </div>
             </div>
 
             <div>

@@ -4,4 +4,3 @@
  */
 
 export * from './portal';
-export * from './inbound/InboundAsnManager';

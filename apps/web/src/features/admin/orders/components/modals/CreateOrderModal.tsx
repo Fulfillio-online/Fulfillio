@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Palette, Layers } from 'lucide-react';
 import { Modal } from '@/components/admin/AdminModal';
 import { CourierPartner, WarehousePipelineOrder } from '../../types';
@@ -46,6 +46,13 @@ export function CreateOrderModal({
   const [newCourier, setNewCourier] = useState<CourierPartner>('Steadfast');
 
   const selectedProduct = PRODUCT_CATALOG.find((p) => p.sku === newSku) || PRODUCT_CATALOG[0];
+  const [newUnitPrice, setNewUnitPrice] = useState<number | ''>(selectedProduct.price);
+
+  useEffect(() => {
+    setNewUnitPrice(selectedProduct.price);
+  }, [selectedProduct.sku, selectedProduct.price]);
+
+  const effectivePrice = typeof newUnitPrice === 'number' ? newUnitPrice : selectedProduct.price;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,7 +88,7 @@ export function CreateOrderModal({
       resellerName: memo.resellerName,
       resellerPhone: memo.phone,
       resellerAddress: memo.address,
-      codAmount: product.price * newQty,
+      codAmount: effectivePrice * newQty,
       courier: newCourier,
       stage: 'PICK',
     };
@@ -241,6 +248,35 @@ export function CreateOrderModal({
           </div>
         </div>
 
+        {/* Pricing Selection Row: Selling Price vs Declared Price */}
+        <div className="p-3 rounded-xl bg-slate-50 dark:bg-navy-950/60 border border-slate-200 dark:border-white/10 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <label className="block text-xs font-bold text-slate-800 dark:text-slate-200">
+              Order Selling Price (৳ BDT) *
+            </label>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+              Catalog Declared Price: <strong className="text-slate-700 dark:text-slate-200 font-bold">৳{selectedProduct.price}</strong>
+            </span>
+          </div>
+          <div className="relative">
+            <span className="absolute left-3.5 top-2.5 font-bold text-slate-400 text-xs">৳</span>
+            <input
+              type="number"
+              min={0}
+              required
+              value={newUnitPrice}
+              onChange={(e) =>
+                setNewUnitPrice(e.target.value === '' ? '' : Math.max(0, Number(e.target.value)))
+              }
+              placeholder={String(selectedProduct.price)}
+              className="w-full rounded-xl bg-white dark:bg-navy-900 border border-slate-300 dark:border-white/20 pl-8 pr-3.5 py-2 font-mono font-bold text-sm text-emerald-600 dark:text-emerald-400 focus:outline-none focus:border-orange-500 shadow-2xs"
+            />
+          </div>
+          <p className="text-[10px] text-slate-400">
+            Set customer invoice selling price for this specific order. Declared price is the liability catalog value.
+          </p>
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="block font-bold text-slate-700 dark:text-slate-200 mb-1">
@@ -276,7 +312,10 @@ export function CreateOrderModal({
 
         <div className="flex justify-between items-center pt-3 border-t border-slate-200 dark:border-white/10">
           <div className="text-[11px] text-slate-500">
-            Selected: <strong className="text-navy-900 dark:text-white">{newColor} / {newSize}</strong> · Total COD: <strong className="text-emerald-600 dark:text-emerald-400 font-mono font-bold">৳{(selectedProduct.price * newQty).toLocaleString()}</strong>
+            Selected: <strong className="text-navy-900 dark:text-white">{newColor} / {newSize}</strong> · Total COD: <strong className="text-emerald-600 dark:text-emerald-400 font-mono font-bold">৳{(effectivePrice * newQty).toLocaleString()}</strong>
+            <span className="text-[10px] text-slate-400 block font-mono">
+              (৳{effectivePrice} × {newQty} pcs)
+            </span>
           </div>
           <div className="flex gap-2">
             <button

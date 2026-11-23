@@ -34,8 +34,6 @@ export type ProductFilterTab =
   | 'ACTIVE'
   | 'PUBLISHED'
   | 'EDIT_APPROVAL_PENDING'
-  | 'RESTOCK_REQUESTS'
-  | 'RETURN_REQUESTS'
   | 'OUT_OF_STOCK'
   | 'STOCK_REQUESTS';
 
@@ -63,6 +61,7 @@ export interface ProductStats {
   published?: number;
   totalOrders?: number;
   lowStock?: number;
+  outOfStock?: number;
   pendingRequests?: number;
 }
 

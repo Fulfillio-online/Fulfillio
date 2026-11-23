@@ -214,6 +214,7 @@ export class InventoryService {
       binCode?: string;
       finalQty?: number;
       acceptStockNow?: boolean;
+      variantStocks?: Record<string, number>;
     },
   ) {
     return this.inventoryRepo.approveProduct(productId, data);

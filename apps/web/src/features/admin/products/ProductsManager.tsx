@@ -811,7 +811,9 @@ export function ProductsManager({
     product: WarehouseProductItem,
     finalQty: number,
     finalBin: string,
-    acceptStockNow?: boolean
+    acceptStockNow?: boolean,
+    rejectionReason?: string,
+    variantStocks?: Record<string, number>
   ) => {
     setApprovalModalData(null);
     if (mode === 'APPROVE') {
@@ -819,20 +821,40 @@ export function ProductsManager({
       const actualStock = isStockAccepted ? finalQty : 0;
 
       setProducts((prev) => {
-        const next = prev.map((p) =>
-          p.id === product.id
-            ? {
-                ...p,
-                status: 'APPROVED' as const,
-                isDraft: false,
-                binCode: finalBin,
-                stock: actualStock,
-                stockAccepted: isStockAccepted,
-                stockStatus: isStockAccepted ? ('IN_STOCK' as const) : ('AWAITING_STOCK' as const),
-                submittedAt: 'Approved just now',
-              }
-            : p
-        );
+        const next = prev.map((p) => {
+          if (p.id === product.id) {
+            const updatedVariants = (p.variantsList || []).map((v) => {
+              const vKey = v.id || v.variantSku;
+              const newVStock =
+                variantStocks && variantStocks[vKey] !== undefined
+                  ? variantStocks[vKey]
+                  : variantStocks && variantStocks[v.variantSku] !== undefined
+                  ? variantStocks[v.variantSku]
+                  : v.stock;
+              return {
+                ...v,
+                stock: isStockAccepted ? newVStock : 0,
+              };
+            });
+
+            return {
+              ...p,
+              status: 'APPROVED' as const,
+              isDraft: false,
+              binCode: finalBin,
+              stock: actualStock,
+              stockAccepted: isStockAccepted,
+              stockStatus: isStockAccepted
+                ? actualStock > 0
+                  ? ('IN_STOCK' as const)
+                  : ('OUT_OF_STOCK' as const)
+                : ('AWAITING_STOCK' as const),
+              variantsList: updatedVariants.length > 0 ? updatedVariants : p.variantsList,
+              submittedAt: 'Approved just now',
+            };
+          }
+          return p;
+        });
         try {
           localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
           syncAdminProductsToMerchant(next);
@@ -843,7 +865,7 @@ export function ProductsManager({
       });
 
       // Persist directly to PostgreSQL database
-      approveProductInDatabase(product.id, finalBin, actualStock, isStockAccepted);
+      approveProductInDatabase(product.id, finalBin, actualStock, isStockAccepted, variantStocks);
 
       if (typeof window !== 'undefined') {
         window.dispatchEvent(
@@ -852,7 +874,7 @@ export function ProductsManager({
       }
 
       triggerToast(
-        `Product "${product.title}" approved! Status changed to Waiting for Stock.`
+        `Product "${product.title}" approved! Stored ${actualStock} units in Bin ${finalBin}.`
       );
     } else {
       const wasAlreadyStored = (product.stock || 0) > 0;

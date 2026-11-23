@@ -4,12 +4,9 @@ import React from 'react';
 import {
   Layers,
   Clock,
-  PackageCheck,
   CheckCircle2,
   FileText,
-  Edit3,
-  ArrowUpRight,
-  RotateCcw,
+  AlertCircle,
 } from 'lucide-react';
 import { ProductFilterTab } from '../types';
 
@@ -20,14 +17,14 @@ interface ProductStatusTabsProps {
     all: number;
     active: number;
     pendingApproval: number;
-    awaitingStock: number;
     draft: number;
+    outOfStock: number;
+    // Optional legacy support
+    awaitingStock?: number;
     editApprovalPending?: number;
     restockRequests?: number;
     returnRequests?: number;
-    // Legacy support
     published?: number;
-    outOfStock?: number;
     stockRequests?: number;
   };
 }
@@ -59,17 +56,10 @@ export function ProductStatusTabs({
     },
     {
       id: 'PENDING_APPROVAL',
-      label: 'Pending Product',
+      label: 'Pending',
       count: counts.pendingApproval,
       icon: <Clock className="h-3.5 w-3.5 text-amber-500" />,
       badgeStyle: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
-    },
-    {
-      id: 'AWAITING_STOCK',
-      label: 'Awaiting Stock',
-      count: counts.awaitingStock ?? counts.outOfStock ?? 0,
-      icon: <PackageCheck className="h-3.5 w-3.5 text-sky-500" />,
-      badgeStyle: 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20',
     },
     {
       id: 'DRAFT',
@@ -78,23 +68,11 @@ export function ProductStatusTabs({
       icon: <FileText className="h-3.5 w-3.5 text-slate-400" />,
     },
     {
-      id: 'EDIT_APPROVAL_PENDING',
-      label: 'Edit In Review',
-      count: counts.editApprovalPending ?? 0,
-      icon: <Edit3 className="h-3.5 w-3.5 text-indigo-500" />,
-      badgeStyle: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20',
-    },
-    {
-      id: 'RESTOCK_REQUESTS',
-      label: 'Restock Requests',
-      count: counts.restockRequests ?? counts.stockRequests ?? 0,
-      icon: <ArrowUpRight className="h-3.5 w-3.5 text-emerald-600" />,
-    },
-    {
-      id: 'RETURN_REQUESTS',
-      label: 'Return Requests',
-      count: counts.returnRequests ?? 0,
-      icon: <RotateCcw className="h-3.5 w-3.5 text-rose-500" />,
+      id: 'OUT_OF_STOCK',
+      label: 'Out of Stock',
+      count: counts.outOfStock,
+      icon: <AlertCircle className="h-3.5 w-3.5 text-rose-500" />,
+      badgeStyle: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20',
     },
   ];
 
@@ -103,9 +81,7 @@ export function ProductStatusTabs({
       {tabs.map((tab) => {
         const isActive =
           activeTab === tab.id ||
-          (tab.id === 'ACTIVE' && activeTab === 'PUBLISHED') ||
-          (tab.id === 'AWAITING_STOCK' && activeTab === 'OUT_OF_STOCK') ||
-          (tab.id === 'RESTOCK_REQUESTS' && activeTab === 'STOCK_REQUESTS');
+          (tab.id === 'ACTIVE' && activeTab === 'PUBLISHED');
 
         return (
           <button

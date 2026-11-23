@@ -827,9 +827,6 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
                 className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover border border-slate-200 dark:border-white/10 shrink-0 shadow-sm"
               />
               <div className="min-w-0 flex-1 space-y-1.5">
-                <span className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-slate-100 dark:bg-navy-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-white/10 inline-block">
-                  {product.category}
-                </span>
                 <h3 className="font-extrabold text-base text-navy-900 dark:text-white leading-snug line-clamp-2">
                   {product.title}
                 </h3>
@@ -1209,7 +1206,7 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
                   {product.fullSku}
                 </div>
                 <div className="text-slate-500 dark:text-slate-400">
-                  Bin: <strong className="text-orange-600 dark:text-orange-400 font-mono">{product.binCode}</strong> · Category: <strong className="text-navy-900 dark:text-white">{product.category}</strong>
+                  Bin: <strong className="text-orange-600 dark:text-orange-400 font-mono">{product.binCode}</strong>
                 </div>
               </div>
             </div>

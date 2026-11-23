@@ -706,8 +706,8 @@ export function ProductForm({
         description,
         price: numValue,
         costPrice: numCost,
-        stock: isAcceptedByAdmin ? (initialProduct?.stock || 0) : 0,
-        stockAccepted: isAcceptedByAdmin ? (initialProduct?.stockAccepted ?? ((initialProduct?.stock || 0) > 0)) : false,
+        stock: computedTotalStock,
+        stockAccepted: isAcceptedByAdmin ? (initialProduct?.stockAccepted ?? true) : false,
         stockStatus: isAcceptedByAdmin ? (initialProduct?.stockStatus || 'IN_STOCK') : 'AWAITING_STOCK',
         reserved: initialProduct?.reserved || 0,
         status: finalProductStatus,
@@ -720,9 +720,7 @@ export function ProductForm({
           imageUrl: (c.imageUrl || '').trim(),
         })),
         sizes: allActiveSizes.length > 0 ? allActiveSizes : allSizes,
-        variantsList: isAcceptedByAdmin
-          ? cleanedVariants
-          : cleanedVariants.map((v) => ({ ...v, stock: 0 })),
+        variantsList: cleanedVariants,
         totalOrders: initialProduct?.totalOrders || 0,
       };
 
@@ -945,7 +943,7 @@ export function ProductForm({
               />
             </div>
 
-            {/* SKU and Barcode Row */}
+            {/* Master SKU and Declare Price Row */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -987,86 +985,65 @@ export function ProductForm({
 
               <div>
                 <label className="block text-xs font-semibold text-slate-800 dark:text-slate-200 mb-2">
-                  Barcode (EAN-13 / Code128)
+                  Declare Price (৳ BDT) <span className="text-rose-500">*</span>
                 </label>
-                <div className="flex items-center justify-between px-4 py-3 bg-slate-50/80 dark:bg-navy-950/40 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-mono font-semibold text-slate-700 dark:text-slate-300">
-                  <span>{activeBarcodeString}</span>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-0.5 rounded bg-white dark:bg-navy-900 border border-slate-200/60 dark:border-white/10">
-                    Auto Generated
-                  </span>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">৳</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    required
+                    value={declaredValue}
+                    onChange={(e) => setDeclaredValue(e.target.value)}
+                    placeholder="850"
+                    className="w-full pl-8 pr-4 py-3 bg-white dark:bg-navy-950/60 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-bold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all shadow-xs"
+                  />
                 </div>
+                <span className="text-[11px] text-slate-400 mt-1 block">Official declared unit price for store &amp; memo</span>
               </div>
             </div>
 
             {/* Category and Subcategory Row */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-xs font-semibold text-slate-800 dark:text-slate-200">
-                    Category
-                  </label>
-                  <Link
-                    href="/merchant/categories"
-                    target="_blank"
-                    className="text-xs font-semibold text-orange-600 dark:text-orange-400 hover:underline flex items-center gap-1"
-                  >
-                    <span>Manage Categories</span>
-                    <ExternalLink className="h-3 w-3" />
-                  </Link>
-                </div>
-                <div className="relative">
-                  <select
-                    value={category}
-                    onChange={(e) => {
-                      const newCat = e.target.value;
-                      setCategory(newCat);
-                      const catObj = categories.find((c: any) => c.name.toLowerCase() === newCat.toLowerCase());
-                      if (catObj && catObj.subcategories.length > 0) {
-                        setSubcategory(catObj.subcategories[0].name);
-                      } else {
-                        setSubcategory('');
-                      }
-                    }}
-                    className="w-full appearance-none px-4 py-3 bg-white dark:bg-navy-950/60 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all shadow-xs cursor-pointer pr-10"
-                  >
-                    {categories.map((cat: any) => (
-                      <option key={cat.id} value={cat.name}>
-                        {cat.name} ({cat.subcategories.length} sub-items)
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-3.5 top-3.5 h-4 w-4 text-slate-400 pointer-events-none" />
-                </div>
+                <label className="block text-xs font-semibold text-slate-800 dark:text-slate-200 mb-2">
+                  Category
+                </label>
+                <select
+                  value={category}
+                  onChange={(e) => {
+                    const newCat = e.target.value;
+                    setCategory(newCat);
+                    const found = categories.find((c: MerchantCategoryItem) => c.name.toLowerCase() === newCat.toLowerCase());
+                    if (found && found.subcategories && found.subcategories.length > 0) {
+                      setSubcategory(found.subcategories[0].name);
+                    }
+                  }}
+                  className="w-full px-4 py-3 bg-white dark:bg-navy-950/60 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all shadow-xs"
+                >
+                  {categories.map((c: MerchantCategoryItem) => (
+                    <option key={c.id || c.name} value={c.name}>
+                      {c.name}
+                    </option>
+                  ))}
+                  {!categories.some((c: MerchantCategoryItem) => c.name.toLowerCase() === category.toLowerCase()) && (
+                    <option value={category}>{category}</option>
+                  )}
+                </select>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-800 dark:text-slate-200 mb-2">
                   Subcategory
                 </label>
-                {subcategoryList.length > 0 ? (
-                  <div className="relative">
-                    <select
-                      value={subcategory}
-                      onChange={(e) => setSubcategory(e.target.value)}
-                      className="w-full appearance-none px-4 py-3 bg-white dark:bg-navy-950/60 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all shadow-xs cursor-pointer pr-10"
-                    >
-                      {subcategoryList.map((sub: any) => (
-                        <option key={sub.id} value={sub.name}>
-                          {sub.name}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="absolute right-3.5 top-3.5 h-4 w-4 text-slate-400 pointer-events-none" />
-                  </div>
-                ) : (
-                  <input
-                    type="text"
-                    value={subcategory}
-                    onChange={(e) => setSubcategory(e.target.value)}
-                    placeholder="e.g. Standard item"
-                    className="w-full px-4 py-3 bg-white dark:bg-navy-950/60 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all shadow-xs"
-                  />
-                )}
+                <input
+                  type="text"
+                  value={subcategory}
+                  onChange={(e) => setSubcategory(e.target.value)}
+                  placeholder="e.g. Hoodie, T-Shirt, Gadgets"
+                  className="w-full px-4 py-3 bg-white dark:bg-navy-950/60 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-medium text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all shadow-xs"
+                />
               </div>
             </div>
 

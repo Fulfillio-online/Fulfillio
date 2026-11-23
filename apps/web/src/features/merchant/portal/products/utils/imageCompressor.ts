@@ -18,9 +18,9 @@ function sanitizeBase64(dataUrl: string): string {
  */
 export async function compressImage(
   file: File,
-  maxWidth = 500,
-  maxHeight = 500,
-  quality = 0.7
+  maxWidth = 450,
+  maxHeight = 450,
+  quality = 0.65
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     if (!file.type.startsWith('image/')) {
@@ -69,12 +69,12 @@ export async function compressImage(
         // Convert to web-friendly JPEG data URL
         let compressed = canvas.toDataURL('image/jpeg', quality);
 
-        // If still over 120KB, re-compress with reduced dimensions
-        if (compressed.length > 160000) {
+        // If still over ~52KB, re-compress with reduced dimensions
+        if (compressed.length > 70000) {
           canvas.width = Math.round(width * 0.7);
           canvas.height = Math.round(height * 0.7);
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          compressed = canvas.toDataURL('image/jpeg', 0.55);
+          compressed = canvas.toDataURL('image/jpeg', 0.52);
         }
 
         resolve(sanitizeBase64(compressed));
