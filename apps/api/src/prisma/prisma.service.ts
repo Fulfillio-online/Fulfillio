@@ -13,13 +13,19 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     try {
       await this.$connect();
       this.isConnected = true;
-      console.log('[Prisma] Successfully connected to PostgreSQL database at localhost:5432.');
+      const dbUrl = process.env.DATABASE_URL || '';
+      const isCloud = dbUrl.includes('neon.tech') || (!dbUrl.includes('localhost') && !dbUrl.includes('127.0.0.1'));
+      console.log(
+        isCloud
+          ? '[Prisma] Successfully connected to Cloud PostgreSQL database (Neon).'
+          : '[Prisma] Successfully connected to PostgreSQL database.'
+      );
       await this.runSelfHealingMigrations();
       await this.ensureOrderSchemaCompatibility();
       await this.ensureCoreSeedData();
     } catch (err: any) {
       this.isConnected = false;
-      console.error('[Prisma] Failed to connect to PostgreSQL at localhost:5432:', err?.message || err);
+      console.error('[Prisma] Failed to connect to PostgreSQL database:', err?.message || err);
     }
   }
 
