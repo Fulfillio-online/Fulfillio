@@ -583,7 +583,7 @@ export function ProductsCatalogTab({
                 : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white font-medium'
             }`}
           >
-            Waiting for Stock <span className="font-semibold tabular-nums">({catalogCounts.outOfStockCount})</span>
+            Out of Stock <span className="font-semibold tabular-nums">({catalogCounts.outOfStockCount})</span>
           </button>
           <span className="text-slate-300 dark:text-slate-700">|</span>
 
@@ -666,8 +666,8 @@ export function ProductsCatalogTab({
                 {/* 5. Stock Level */}
                 <th className="py-3.5 px-3 text-left align-middle">Stock Level</th>
 
-                {/* 6. Unit Price */}
-                <th className="py-3.5 px-3 text-left align-middle">Unit Price</th>
+                {/* 6. Declare Price */}
+                <th className="py-3.5 px-3 text-left align-middle">Declare Price</th>
 
                 {/* 7. Status */}
                 <th className="py-3.5 px-3 text-left align-middle">Status</th>
@@ -698,12 +698,8 @@ export function ProductsCatalogTab({
 
                   const isDraft = p.status === 'DRAFT' || Boolean(p.isDraft);
                   const isPending = p.status === 'PENDING_APPROVAL';
-                  const isAwaitingStock =
-                    !isDraft &&
-                    !isPending &&
-                    (p.stock === 0 || p.stockAccepted === false || p.stockStatus === 'AWAITING_STOCK');
-                  const isOutOfStock = isAwaitingStock;
-                  const isLowStock = !isDraft && !isPending && !isAwaitingStock && p.stock > 0 && p.stock < 30;
+                  const isOutOfStock = !isDraft && !isPending && (p.stock || 0) === 0;
+                  const isLowStock = !isDraft && !isPending && !isOutOfStock && p.stock > 0 && p.stock < 30;
 
                   return (
                     <tr
@@ -768,7 +764,7 @@ export function ProductsCatalogTab({
 
                       {/* 4. Warehouse Bin (Public items show bin; new pending approval items show Unassigned) */}
                       <td className="py-3.5 px-3 align-middle" onClick={(e) => e.stopPropagation()}>
-                        {isPending && (p.stock || 0) === 0 ? (
+                        {isPending && p.stockAccepted !== true ? (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-dashed border-amber-500/40">
                             <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                             Unassigned (Pending)
@@ -794,13 +790,13 @@ export function ProductsCatalogTab({
                       {/* 5. Stock Level */}
                       <td className="py-3.5 px-3 align-middle">
                         {isPending ? (
-                          (p.stock || 0) > 0 ? (
+                          p.stockAccepted === true ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold tabular-nums bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30">
                               {p.stock} <span className="text-[11px] font-normal">pcs (Stored)</span>
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold tabular-nums bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30">
-                              {p.stock} <span className="text-[11px] font-normal">pcs (Initial)</span>
+                              {p.stock} <span className="text-[11px] font-normal">pcs (Requested)</span>
                             </span>
                           )
                         ) : isOutOfStock ? (
@@ -837,10 +833,10 @@ export function ProductsCatalogTab({
                             <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
                             Draft
                           </span>
-                        ) : isAwaitingStock ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30">
-                            <Clock className="w-3.5 h-3.5 text-sky-500" />
-                            Waiting for Stock
+                        ) : isOutOfStock ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                            Out of Stock
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
@@ -929,52 +925,8 @@ export function ProductsCatalogTab({
                                 </>
                               )}
 
-                              {/* STAGE 1: Approved (Waiting for Stock) -> Received Stock, Reject, and View */}
-                              {!isPending && !isDraft && isAwaitingStock && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setActiveMenuId(null);
-                                      onOpenAcceptStockModal?.(p);
-                                    }}
-                                    className="w-full px-3.5 py-2 text-left text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/30 flex items-center gap-2.5 font-bold cursor-pointer"
-                                  >
-                                    <PackageCheck className="w-4 h-4 shrink-0 text-orange-600 dark:text-orange-400" />
-                                    <span>Received Product</span>
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setActiveMenuId(null);
-                                      onOpenApprovalModal?.(
-                                        'REJECT',
-                                        p,
-                                        p.binCode && p.binCode !== 'Pending Approval'
-                                          ? p.binCode
-                                          : bins[0]?.code || 'A-01-02'
-                                      );
-                                    }}
-                                    className="w-full px-3.5 py-2 text-left text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex items-center gap-2.5 font-semibold cursor-pointer border-b border-slate-200/60 dark:border-white/10"
-                                  >
-                                    <XCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
-                                    <span>Reject</span>
-                                  </button>
-
-                                  <Link
-                                    href={`/admin/products/${p.id}`}
-                                    onClick={() => setActiveMenuId(null)}
-                                    className="w-full px-3.5 py-2 text-left text-navy-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2.5 font-bold cursor-pointer"
-                                  >
-                                    <Eye className="w-4 h-4 shrink-0 text-orange-600 dark:text-orange-400" />
-                                    <span>View</span>
-                                  </Link>
-                                </>
-                              )}
-
-                              {/* STAGE 2: Stock Stored -> View, Allow Edit, Approve/Reject Revision, Suspend/Reactivate, and Delete (if stock is 0) */}
-                              {!isPending && !isDraft && !isOutOfStock && (
+                              {/* STAGE 2: Published / Out of Stock -> View, Allow Edit, Approve/Reject Revision, Suspend/Reactivate, and Delete (if stock is 0) */}
+                              {!isPending && !isDraft && (
                                 <>
                                   {p.editState === 'EDIT_ACCESS_REQUESTED' && (
                                     <button

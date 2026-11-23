@@ -391,17 +391,12 @@ export function ProductDetailsView({
       !product.bin ||
       product.bin === 'Pending Approval' ||
       product.bin === 'Assigned on intake');
-  const isFirstTimePending = isPendingApproval && (product.stock || 0) === 0;
-  const isPublishPendingFromDraft = isPendingApproval && (product.stock || 0) > 0;
+  const isFirstTimePending = isPendingApproval && product.stockAccepted !== true;
+  const isPublishPendingFromDraft = isPendingApproval && product.stockAccepted === true;
 
-  const isAwaitingStock =
-    !isDraft &&
-    !isPendingApproval &&
-    ((product.stock || 0) === 0 || product.stockAccepted === false || product.stockStatus === 'AWAITING_STOCK');
   const isReadyToOrder =
     !isDraft &&
     !isPendingApproval &&
-    !isAwaitingStock &&
     (product.stock || 0) > 0;
 
   const handleAddToCart = () => {
@@ -525,7 +520,7 @@ export function ProductDetailsView({
               </button>
             </>
           )}
-          {isFirstTimePending ? (
+          {isDraft || isFirstTimePending ? (
             <Link
               href={`/merchant/products/${product.id}/edit`}
               className="px-3.5 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm shadow-orange-500/20 transition-colors cursor-pointer"
@@ -535,31 +530,11 @@ export function ProductDetailsView({
             </Link>
           ) : (
             <div
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 select-none ${
-                isPublishPendingFromDraft
-                  ? 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30'
-                  : isDraft
-                  ? 'bg-slate-100 dark:bg-navy-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10'
-                  : isReadyToOrder
-                  ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30'
-                  : 'bg-sky-50 dark:bg-sky-950/30 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-500/30'
-              }`}
-              title={
-                isPublishPendingFromDraft
-                  ? 'Editing is locked. This product already has stock stored in the warehouse and is waiting for publish approval from Draft.'
-                  : 'Editing is locked. Merchants can only edit first-time products under Pending Approval.'
-              }
+              className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 select-none bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30"
+              title="Product editing is locked because it has been approved and published by the warehouse admin."
             >
               <Lock className="h-3.5 w-3.5" />
-              <span>
-                {isPublishPendingFromDraft
-                  ? 'Waiting for Publish · Locked'
-                  : isDraft
-                  ? 'Draft · Locked'
-                  : isReadyToOrder
-                  ? 'Stock Stored · Locked'
-                  : 'Awaiting Stock · Locked'}
-              </span>
+              <span>Product Editing Locked</span>
             </div>
           )}
         </div>
@@ -673,19 +648,19 @@ export function ProductDetailsView({
                   className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${
                     isPendingApproval
                       ? 'bg-amber-500/10 text-amber-500 dark:text-amber-400 border-amber-500/30'
-                      : isAwaitingStock
-                      ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30'
+                      : isDraft
+                      ? 'bg-slate-500/10 text-slate-600 dark:text-slate-300 border-slate-500/30'
                       : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
                   }`}
                 >
                   {isPendingApproval
                     ? 'Pending Approval'
-                    : isAwaitingStock
-                    ? 'Approved · Awaiting Stock'
-                    : 'Stock Stored · Ready to Sell'}
+                    : isDraft
+                    ? 'Draft'
+                    : 'Published · Ready to Sell'}
                 </span>
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-navy-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/10">
-                  {isPendingApproval ? 'Awaiting Admin Review' : isAwaitingStock ? '0 pcs in Warehouse' : `${product.stock} pcs in Bin ${product.bin}`}
+                  {isPendingApproval ? `${product.stock} pcs (Requested)` : `${product.stock} pcs in Bin ${product.bin}`}
                 </span>
               </div>
 
@@ -874,16 +849,6 @@ export function ProductDetailsView({
                       </p>
                     </div>
                   </div>
-                ) : isAwaitingStock ? (
-                  <div className="p-3 rounded-xl bg-sky-500/10 border border-sky-500/30 text-xs text-sky-800 dark:text-sky-300 flex items-start gap-2.5">
-                    <Package className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-bold block">Catalog Approved · Awaiting Stock Arrival</span>
-                      <p className="text-[11px] text-sky-700 dark:text-sky-300/90 mt-0.5 leading-relaxed">
-                        Your product is approved! Please dispatch physical stock to our warehouse dock. Once warehouse staff accepts and stores stock into bins, you will be able to fulfill orders.
-                      </p>
-                    </div>
-                  </div>
                 ) : null}
 
                 {/* Quantity and Add to Order List in ONE LINE */}
@@ -946,8 +911,6 @@ export function ProductDetailsView({
                     <span className="truncate">
                       {isPendingApproval
                         ? 'Pending Approval'
-                        : isAwaitingStock
-                        ? 'Awaiting Stock Arrival'
                         : currentVariantStock <= 0
                         ? 'Variant Out of Stock'
                         : `Add to Order List (৳${(product.price * orderQty).toLocaleString()})`}

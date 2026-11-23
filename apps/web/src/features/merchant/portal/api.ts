@@ -225,18 +225,10 @@ export const merchantApi = {
           !isDraft &&
           (dbStatus === 'PENDING_APPROVAL' ||
             (!dbStatus && (!rawBin || rawBin === 'Pending Approval' || rawBin === 'Assigned on intake')));
-        const isApprovedAwaiting =
-          !isDraft &&
-          !isPending &&
-          (dbStatus === 'APPROVED' ||
-            dbStatus === 'AWAITING_STOCK' ||
-            (p as any).stockStatus === 'AWAITING_STOCK' ||
-            (p as any).stockAccepted === false);
         const isStockStored =
           !isDraft &&
           !isPending &&
-          !isApprovedAwaiting &&
-          (dbStatus === 'STOCK_STORED' || (dbStatus === 'PUBLISHED' && totalStock > 0));
+          (dbStatus === 'STOCK_STORED' || dbStatus === 'APPROVED' || dbStatus === 'PUBLISHED');
 
         const hasValidBin =
           Boolean(rawBin) &&
@@ -244,16 +236,14 @@ export const merchantApi = {
           rawBin !== 'Assigned on intake';
         const resolvedBin = hasValidBin
           ? rawBin
-          : isApprovedAwaiting || isStockStored
+          : isStockStored
             ? 'A-01-02'
             : 'Pending Approval';
         const resolvedStatus = isDraft
           ? ('DRAFT' as const)
           : isPending
             ? ('PENDING_APPROVAL' as const)
-            : isStockStored
-              ? ('STOCK_STORED' as const)
-              : ('APPROVED' as const);
+            : ('STOCK_STORED' as const);
 
         return {
           id: p.id,
@@ -261,9 +251,14 @@ export const merchantApi = {
           variantLabel: variants.length > 1 ? `${variants.length} Variants` : (firstVariant?.title || 'Standard'),
           sku: p.baseSku,
           barcode: firstVariant?.barcode || '',
-          stock: resolvedStatus === 'STOCK_STORED' ? totalStock : 0,
+          stock: totalStock,
           stockAccepted: resolvedStatus === 'STOCK_STORED',
-          stockStatus: resolvedStatus === 'STOCK_STORED' ? ('IN_STOCK' as const) : ('AWAITING_STOCK' as const),
+          stockStatus:
+            resolvedStatus === 'STOCK_STORED'
+              ? totalStock > 0
+                ? ('IN_STOCK' as const)
+                : ('OUT_OF_STOCK' as const)
+              : undefined,
           reserved: totalReserved,
           price,
           costPrice,
@@ -299,10 +294,8 @@ export const merchantApi = {
               const profit = p.profit !== undefined ? Number(p.profit) : (price - costPrice);
               const profitMargin = p.profitMargin !== undefined ? Number(p.profitMargin) : (price > 0 ? Math.round((profit / price) * 100) : 0);
               const status = p.status || (p.stock === 0 ? 'DRAFT' : 'PUBLISHED');
-              const isStockAccepted =
-                (status === 'STOCK_STORED' || status === 'PUBLISHED') &&
-                p.stockAccepted === true &&
-                (p.stock || 0) > 0;
+              const isPublished = status === 'STOCK_STORED' || status === 'PUBLISHED' || status === 'APPROVED';
+              const numericStock = Number(p.stock) || 0;
               return {
                 ...p,
                 price,
@@ -310,10 +303,10 @@ export const merchantApi = {
                 profit,
                 profitMargin,
                 category: p.category || 'Apparel',
-                status,
-                stock: isStockAccepted ? Number(p.stock) || 0 : 0,
-                stockAccepted: isStockAccepted,
-                stockStatus: isStockAccepted ? ('IN_STOCK' as const) : ('AWAITING_STOCK' as const),
+                status: isPublished ? 'STOCK_STORED' : status,
+                stock: numericStock,
+                stockAccepted: isPublished,
+                stockStatus: isPublished ? (numericStock > 0 ? ('IN_STOCK' as const) : ('OUT_OF_STOCK' as const)) : undefined,
                 totalOrders: p.totalOrders ?? 0,
               };
             });
@@ -682,7 +675,7 @@ export const merchantApi = {
           variantCode: `${(v.color || 'STD').slice(0, 3)}-${(v.size || 'STD').slice(0, 3)}`.toUpperCase(),
           price: Number(product.price) || 0,
           defaultBinCode: isPendingProd ? 'Pending Approval' : (product.bin || 'A-01-01'),
-          initialStock: isPendingProd ? 0 : Math.max(0, Number(v.stock) || 0),
+          initialStock: Math.max(0, Number(v.stock) || 0),
           imageUrl: colorImg,
           attributes: {
             color: v.color,
@@ -690,6 +683,7 @@ export const merchantApi = {
             hex: matchingColor?.hex || '#111827',
             attributeName: v.attributeName,
             attributeValue: v.attributeValue,
+            declaredStock: Math.max(0, Number(v.stock) || 0),
             ...(vIdx === 0 ? { allColors: product.colors || [], keyFeatures: product.keyFeatures } : {}),
             category: product.category,
             subcategory: product.subcategory,

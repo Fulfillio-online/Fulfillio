@@ -49,20 +49,16 @@ export function ProductGrid({
             !p.bin ||
             p.bin === 'Pending Approval' ||
             p.bin === 'Assigned on intake');
-        const isFirstTimePending = isPendingApproval && (p.stock || 0) === 0;
-        const isPublishPendingFromDraft = isPendingApproval && (p.stock || 0) > 0;
-        const isAwaitingStock =
-          !isDraft &&
-          !isPendingApproval &&
-          (p.stock === 0 || p.stockAccepted === false || p.stockStatus === 'AWAITING_STOCK');
+        const isFirstTimePending = isPendingApproval && p.stockAccepted !== true;
+        const isPublishPendingFromDraft = isPendingApproval && p.stockAccepted === true;
+        const isAwaitingStock = false;
         const isStockStored =
           !isDraft &&
           !isPendingApproval &&
-          !isAwaitingStock &&
-          (p.status === 'STOCK_STORED' || (p.stock || 0) > 0);
+          (p.status === 'STOCK_STORED' || p.status === 'APPROVED' || p.status === 'PUBLISHED');
         const isPublished = isStockStored;
         const isLowStock = !isDraft && isStockStored && p.stock <= 30 && p.stock > 0;
-        const isOutOfStock = isAwaitingStock;
+        const isOutOfStock = !isDraft && !isPendingApproval && (p.stock || 0) === 0;
 
         return (
           <div
@@ -132,8 +128,8 @@ export function ProductGrid({
                     ? 'Pending Product'
                     : isDraft
                     ? 'Draft'
-                    : isAwaitingStock
-                    ? 'Waiting for Stock'
+                    : isOutOfStock
+                    ? 'Out of Stock'
                     : 'Published'}
                 </span>
               </div>

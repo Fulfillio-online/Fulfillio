@@ -514,6 +514,14 @@ export class InventoryRepository {
              (ev.attributes as any)?.size?.trim()?.toLowerCase() === (v.attributes as any)?.size?.trim()?.toLowerCase())
         );
 
+        const nextAttributes = {
+          ...(v.attributes || {}),
+          ...(v.initialStock !== undefined
+            ? { declaredStock: Math.max(0, Number(v.initialStock) || 0) }
+            : {}),
+        };
+        const isPhysicalStored = updatedStatus === 'STOCK_STORED';
+
         if (matchingExisting) {
           await this.prisma.productVariant.update({
             where: { id: matchingExisting.id },
@@ -522,13 +530,13 @@ export class InventoryRepository {
               price: v.price,
               wholesalePrice: v.wholesalePrice,
               imageUrl: v.imageUrl,
-              attributes: v.attributes || {},
+              attributes: nextAttributes,
               defaultBinCode: v.defaultBinCode || matchingExisting.defaultBinCode,
             },
           });
 
           if (v.initialStock !== undefined) {
-            const stockQty = Math.max(0, Number(v.initialStock) || 0);
+            const stockQty = isPhysicalStored ? Math.max(0, Number(v.initialStock) || 0) : 0;
             const defaultItem = matchingExisting.inventoryItems[0];
             if (defaultItem) {
               await this.prisma.inventoryItem.update({
@@ -559,11 +567,11 @@ export class InventoryRepository {
               wholesalePrice: v.wholesalePrice,
               defaultBinCode: v.defaultBinCode || 'A-01-01',
               imageUrl: v.imageUrl,
-              attributes: v.attributes || {},
+              attributes: nextAttributes,
               inventoryItems: {
                 create: {
                   locationId: data.defaultLocationId,
-                  quantityAvailable: Math.max(0, Number(v.initialStock) || 0),
+                  quantityAvailable: isPhysicalStored ? Math.max(0, Number(v.initialStock) || 0) : 0,
                   quantityReserved: 0,
                   quantityDamaged: 0,
                 },

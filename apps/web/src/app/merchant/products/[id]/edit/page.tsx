@@ -46,8 +46,8 @@ export default function EditProductPage({ params }: EditProductPageProps) {
   }
 
   // Security & Inventory Integrity Guard:
-  // Merchants can strictly ONLY edit products during First-Time Pending Approval (0 stock in warehouse).
-  // Draft, Approved, Stock Stored, and Draft-to-Publish Pending (stock > 0) products cannot be edited.
+  // Merchants can edit products while Draft or Pending Approval (before admin approves).
+  // Once approved/published by admin, direct editing is locked.
   const isDraft = product.status === 'DRAFT' || Boolean(product.isDraft);
   const isPending =
     !isDraft &&
@@ -55,19 +55,17 @@ export default function EditProductPage({ params }: EditProductPageProps) {
       !product.bin ||
       product.bin === 'Pending Approval' ||
       product.bin === 'Assigned on intake');
-  const isFirstTimePending = isPending && (product.stock || 0) === 0;
-  const isPublishPendingFromDraft = isPending && (product.stock || 0) > 0;
-  const canEdit = isFirstTimePending;
+  const isApprovedOrPublished =
+    !isDraft &&
+    !isPending &&
+    (product.status === 'STOCK_STORED' ||
+      product.status === 'APPROVED' ||
+      product.status === 'PUBLISHED' ||
+      product.stockAccepted === true);
+  const canEdit = !isApprovedOrPublished;
 
   if (!canEdit) {
-    const isStockStored = product.status === 'STOCK_STORED' || (product.stock || 0) > 0;
-    const currentStatusLabel = isPublishPendingFromDraft
-      ? `Waiting for Publish (Warehouse Stock: ${product.stock} pcs)`
-      : isDraft
-      ? 'Draft'
-      : isStockStored
-      ? `Stock Stored: ${product.stock} pcs`
-      : 'Approved';
+    const currentStatusLabel = `Published (${product.stock} pcs)`;
 
     return (
       <div className="rounded-2xl border border-slate-200 dark:border-white/10 p-8 sm:p-12 text-center max-w-xl mx-auto my-12 bg-white dark:bg-navy-900/60 shadow-lg">
@@ -82,9 +80,7 @@ export default function EditProductPage({ params }: EditProductPageProps) {
           <strong className="text-navy-900 dark:text-white">{currentStatusLabel}</strong> status.
         </p>
         <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">
-          {isPublishPendingFromDraft
-            ? 'This product already has physical stock stored in the warehouse and is waiting for warehouse approval to publish from Draft. Editing and deleting are locked.'
-            : 'Merchants can strictly only edit products during First-Time Pending Approval (0 stock). Products in Draft, Approved, or Stock Stored status cannot be edited.'}
+          This product has already been approved and published by the warehouse admin. Product editing is locked.
         </p>
         <div className="mt-6 flex items-center justify-center gap-3">
           <Link

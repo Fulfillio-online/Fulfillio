@@ -378,10 +378,11 @@ export function ProductsManager({
             if (backendProds && Array.isArray(backendProds) && backendProds.length > 0) {
               const mappedBackend: WarehouseProductItem[] = backendProds.map((p: any) => {
                 const variants = p.variants || [];
-                const totalStock = variants.reduce(
-                  (sum: number, v: any) => sum + (v.inventoryItems?.[0]?.quantityAvailable ?? 0),
-                  0
-                );
+                const totalStock = variants.reduce((sum: number, v: any) => {
+                  const phys = v.inventoryItems?.[0]?.quantityAvailable ?? 0;
+                  const decl = Number(v.attributes?.declaredStock ?? v.attributes?.stock ?? 0);
+                  return sum + (phys > 0 ? phys : decl);
+                }, 0);
                 const mCode = p.merchant?.merchantCode || p.merchantCode || 'MC-101';
                 const mName = p.merchant?.businessName || `Merchant (${mCode})`;
                 const firstVariant = variants[0];
@@ -395,6 +396,7 @@ export function ProductsManager({
                   !isPending &&
                   (rawDbStatus === 'APPROVED' ||
                     rawDbStatus === 'PUBLISHED' ||
+                    rawDbStatus === 'STOCK_STORED' ||
                     variants.some(
                       (v: any) =>
                         v.defaultBinCode &&
@@ -406,7 +408,7 @@ export function ProductsManager({
                   ? ('DRAFT' as const)
                   : isPending
                     ? ('PENDING_APPROVAL' as const)
-                    : ('APPROVED' as const);
+                    : ('STOCK_STORED' as const);
 
                 const hasValidAssignedBin =
                   Boolean(firstVariant?.defaultBinCode) &&
@@ -419,11 +421,11 @@ export function ProductsManager({
                     ? 'A-01-02'
                     : 'Pending Approval';
 
-                const stockAccepted = isApproved && totalStock > 0;
+                const stockAccepted = isApproved;
                 const stockStatus = isApproved
                   ? totalStock > 0
                     ? ('IN_STOCK' as const)
-                    : ('AWAITING_STOCK' as const)
+                    : ('OUT_OF_STOCK' as const)
                   : undefined;
 
                 const variantParts = (firstVariant?.title || '').split(/[/•·|-]/).map((s: string) => s.trim());
@@ -458,14 +460,18 @@ export function ProductsManager({
                   description: p.description,
                   colors: (firstVariant?.attributes as any)?.allColors || [],
                   sizes: (firstVariant?.attributes as any)?.sizes || [],
-                  variantsList: variants.map((v: any) => ({
-                    id: v.id,
-                    sku: v.sku,
-                    color: v.attributes?.color || v.title?.split('/')[0]?.trim() || '',
-                    size: v.attributes?.size || v.title?.split('/')[1]?.trim() || '',
-                    stock: v.inventoryItems?.[0]?.quantityAvailable ?? 0,
-                    imageUrl: v.imageUrl || p.imageUrl || '',
-                  })),
+                  variantsList: variants.map((v: any) => {
+                    const phys = v.inventoryItems?.[0]?.quantityAvailable ?? 0;
+                    const decl = Number(v.attributes?.declaredStock ?? v.attributes?.stock ?? 0);
+                    return {
+                      id: v.id,
+                      variantSku: v.sku,
+                      color: v.attributes?.color || v.title?.split('/')[0]?.trim() || '',
+                      size: v.attributes?.size || v.title?.split('/')[1]?.trim() || '',
+                      stock: phys > 0 ? phys : decl,
+                      imageUrl: v.imageUrl || p.imageUrl || '',
+                    };
+                  }),
                 };
               });
 
@@ -762,7 +768,7 @@ export function ProductsManager({
     }
   };
 
-  // Direct One-Click Approval for a Pending Product -> Moves status directly to "Waiting for Stock"
+  // Direct One-Click Approval for a Pending Product -> Moves status directly to "Published"
   const handleApproveToAwaitingStock = (productId: string, binCode?: string) => {
     const target = products.find((p) => p.id === productId);
     if (!target) return;
@@ -771,18 +777,19 @@ export function ProductsManager({
       (target.binCode && target.binCode !== 'Pending Approval' && target.binCode !== 'Assigned on intake'
         ? target.binCode
         : bins[0]?.code || 'A-01-02');
+    const approvedQty = target.stock || 0;
 
     setProducts((prev) => {
       const next = prev.map((p) =>
         p.id === productId
           ? {
               ...p,
-              status: 'APPROVED' as const,
+              status: 'STOCK_STORED' as const,
               isDraft: false,
               binCode: assignedBin,
-              stock: 0,
-              stockAccepted: false,
-              stockStatus: 'AWAITING_STOCK' as const,
+              stock: approvedQty,
+              stockAccepted: true,
+              stockStatus: approvedQty > 0 ? ('IN_STOCK' as const) : ('OUT_OF_STOCK' as const),
               submittedAt: 'Approved just now',
             }
           : p
@@ -794,7 +801,7 @@ export function ProductsManager({
       return next;
     });
 
-    approveProductInDatabase(productId, assignedBin, 0, false);
+    approveProductInDatabase(productId, assignedBin, approvedQty, true);
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
@@ -802,7 +809,7 @@ export function ProductsManager({
       );
     }
 
-    triggerToast(`Product "${target.title}" approved! Status changed to Waiting for Stock.`);
+    triggerToast(`Product "${target.title}" approved & published!`);
   };
 
   // Confirm Approval for a New Catalog Product or Draft-to-Publish Request
@@ -817,7 +824,7 @@ export function ProductsManager({
   ) => {
     setApprovalModalData(null);
     if (mode === 'APPROVE') {
-      const isStockAccepted = acceptStockNow === true;
+      const isStockAccepted = acceptStockNow !== false;
       const actualStock = isStockAccepted ? finalQty : 0;
 
       setProducts((prev) => {
@@ -839,16 +846,12 @@ export function ProductsManager({
 
             return {
               ...p,
-              status: 'APPROVED' as const,
+              status: 'STOCK_STORED' as const,
               isDraft: false,
               binCode: finalBin,
               stock: actualStock,
-              stockAccepted: isStockAccepted,
-              stockStatus: isStockAccepted
-                ? actualStock > 0
-                  ? ('IN_STOCK' as const)
-                  : ('OUT_OF_STOCK' as const)
-                : ('AWAITING_STOCK' as const),
+              stockAccepted: true,
+              stockStatus: actualStock > 0 ? ('IN_STOCK' as const) : ('OUT_OF_STOCK' as const),
               variantsList: updatedVariants.length > 0 ? updatedVariants : p.variantsList,
               submittedAt: 'Approved just now',
             };
@@ -877,7 +880,7 @@ export function ProductsManager({
         `Product "${product.title}" approved! Stored ${actualStock} units in Bin ${finalBin}.`
       );
     } else {
-      const wasAlreadyStored = (product.stock || 0) > 0;
+      const wasAlreadyStored = product.stockAccepted === true && (product.stock || 0) > 0;
       if (wasAlreadyStored) {
         // Draft-to-Publish Rejection: Do NOT delete a product that already has warehouse stock; return it to Draft
         setProducts((prev) => {

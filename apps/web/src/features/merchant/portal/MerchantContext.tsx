@@ -409,7 +409,8 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     let targetProduct = products.find((p) => p.id === id || p.sku === id);
 
     // Security & Inventory Integrity Guard:
-    // Merchants can strictly only edit products during First-Time Pending Approval (0 stock in warehouse).
+    // Merchants can edit products while Draft or Pending Approval (before admin approves).
+    // Once approved/published by admin, direct editing is locked.
     const isTargetDraft = targetProduct?.status === 'DRAFT' || Boolean(targetProduct?.isDraft);
     const isTargetPending =
       targetProduct &&
@@ -418,14 +419,19 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
         !targetProduct.bin ||
         targetProduct.bin === 'Pending Approval' ||
         targetProduct.bin === 'Assigned on intake');
-    const isFirstTimePending = isTargetPending && (targetProduct?.stock || 0) === 0;
-    const canEdit = !targetProduct || isFirstTimePending;
+    const isTargetApprovedOrPublished =
+      Boolean(targetProduct) &&
+      !isTargetDraft &&
+      !isTargetPending &&
+      (targetProduct?.status === 'STOCK_STORED' ||
+        targetProduct?.status === 'APPROVED' ||
+        targetProduct?.status === 'PUBLISHED' ||
+        targetProduct?.stockAccepted === true);
+    const canEdit = !targetProduct || !isTargetApprovedOrPublished;
 
     if (!canEdit) {
       const errorMsg =
-        (targetProduct?.stock || 0) > 0
-          ? 'Product editing is locked. Products that already have warehouse stock cannot be edited while waiting for publish approval from Draft.'
-          : 'Product editing is locked. Merchants can strictly only edit products during First-Time Pending Approval.';
+        'Product editing is locked. This product has already been approved and published by the warehouse admin.';
       showToast(errorMsg);
       return { ok: false, error: errorMsg };
     }

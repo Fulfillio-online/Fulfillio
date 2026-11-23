@@ -596,14 +596,16 @@ export function ProductForm({
       !initialProduct?.bin ||
       initialProduct?.bin === 'Pending Approval' ||
       initialProduct?.bin === 'Assigned on intake');
-  const isFirstTimePending = isInitialPending && (initialProduct?.stock || 0) === 0;
+  const isFirstTimePending = isInitialPending && initialProduct?.stockAccepted !== true;
   const isEditAllowed = (initialProduct as any)?.editState === 'EDIT_ALLOWED';
   const isAcceptedByAdmin =
     Boolean(isEdit) &&
     !isInitialDraft &&
-    !isFirstTimePending &&
+    !isInitialPending &&
     (initialProduct?.status === 'APPROVED' ||
       initialProduct?.status === 'STOCK_STORED' ||
+      initialProduct?.status === 'PUBLISHED' ||
+      initialProduct?.stockAccepted === true ||
       (Boolean(initialProduct?.bin) &&
         initialProduct?.bin !== 'Pending Approval' &&
         initialProduct?.bin !== 'Assigned on intake'));

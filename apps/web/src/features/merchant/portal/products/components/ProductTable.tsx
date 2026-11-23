@@ -38,29 +38,25 @@ export const isPendingApprovalProductItem = (p: MerchantProductItem): boolean =>
  * Merchant CAN edit and CAN delete/cancel this product.
  */
 export const isFirstTimePendingApprovalItem = (p: MerchantProductItem): boolean => {
-  return isPendingApprovalProductItem(p) && (p.stock || 0) === 0;
+  return isPendingApprovalProductItem(p) && p.stockAccepted !== true;
 };
 
 /**
  * Draft-to-Publish re-approval request:
- * Product already has physical stock stored in warehouse (stock > 0), was moved to Draft,
+ * Product already has physical stock stored in warehouse, was moved to Draft,
  * and merchant requested to publish it again (waiting for warehouse acceptance).
- * Merchant CANNOT edit and CANNOT delete this product.
  */
 export const isPublishPendingFromDraftItem = (p: MerchantProductItem): boolean => {
-  return isPendingApprovalProductItem(p) && (p.stock || 0) > 0;
+  return isPendingApprovalProductItem(p) && p.stockAccepted === true;
 };
 
-export const isApprovedAwaitingStockProductItem = (p: MerchantProductItem): boolean => {
-  if (p.status === 'DRAFT' || isPendingApprovalProductItem(p)) return false;
-  if (p.stockStatus === 'AWAITING_STOCK' || p.stockAccepted === false) return true;
-  return p.status === 'APPROVED' || ((p.stock || 0) === 0 && p.status !== 'STOCK_STORED' && p.status !== 'PUBLISHED');
+export const isApprovedAwaitingStockProductItem = (_p: MerchantProductItem): boolean => {
+  return false;
 };
 
 export const isStockStoredProductItem = (p: MerchantProductItem): boolean => {
   if (p.status === 'DRAFT' || isPendingApprovalProductItem(p)) return false;
-  if (isApprovedAwaitingStockProductItem(p)) return false;
-  return p.status === 'PUBLISHED' || p.status === 'STOCK_STORED' || (p.stockAccepted === true && (p.stock || 0) > 0);
+  return p.status === 'PUBLISHED' || p.status === 'STOCK_STORED' || p.status === 'APPROVED';
 };
 
 export function ProductTable({
@@ -168,7 +164,7 @@ export function ProductTable({
             <span>View Product Details</span>
           </Link>
 
-          {(p.stock || 0) === 0 && (
+          {p.stockAccepted !== true && (
             <Link
               href={`/merchant/products/${p.id}/edit`}
               onClick={() => setActiveMenuId(null)}
@@ -192,7 +188,7 @@ export function ProductTable({
             <span>Cancel Submission</span>
           </button>
 
-          {(p.stock || 0) === 0 && (
+          {p.stockAccepted !== true && (
             <>
               <div className="border-t border-slate-100 dark:border-white/10 my-1" />
               <button
@@ -555,9 +551,9 @@ export function ProductTable({
               const isPendingApproval = !isDraft && isPendingApprovalProductItem(p);
               const isFirstTimePending = !isDraft && isFirstTimePendingApprovalItem(p);
               const isPublishPendingFromDraft = !isDraft && isPublishPendingFromDraftItem(p);
-              const isAwaitingStock = isApprovedAwaitingStockProductItem(p);
-              const isOutOfStock = isAwaitingStock;
-              const isLowStock = !isPendingApproval && !isDraft && !isAwaitingStock && p.stock > 0 && p.stock <= 30;
+              const isAwaitingStock = false;
+              const isOutOfStock = !isDraft && !isPendingApproval && (p.stock || 0) === 0;
+              const isLowStock = !isPendingApproval && !isDraft && !isOutOfStock && p.stock > 0 && p.stock <= 30;
 
               return (
                 <tr
@@ -666,8 +662,8 @@ export function ProductTable({
                         ? 'Pending Product'
                         : isDraft
                         ? 'Draft'
-                        : isAwaitingStock
-                        ? 'Waiting for Stock'
+                        : isOutOfStock
+                        ? 'Out of Stock'
                         : 'Published'}
                     </span>
                   </td>

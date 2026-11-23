@@ -32,6 +32,7 @@ import {
 import { StatusBadge } from '@/components/ui';
 import { Modal } from '@/components/admin/AdminModal';
 import { AcceptStockModal } from './modals/AcceptStockModal';
+import { ApprovalActionModal } from './modals/ApprovalActionModal';
 import { WarehouseProductItem, WarehouseBin } from '../types';
 import {
   INITIAL_PRODUCTS,
@@ -117,6 +118,11 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
   const [draftVariantStocks, setDraftVariantStocks] = useState<Record<string, number>>({});
   const [adjustReason, setAdjustReason] = useState('Stock audit cycle recount');
   const [isAcceptStockOpen, setIsAcceptStockOpen] = useState(false);
+  const [approvalModalData, setApprovalModalData] = useState<{
+    mode: 'APPROVE' | 'REJECT';
+    product: WarehouseProductItem;
+    selectedBin: string;
+  } | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -436,34 +442,117 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
     setIsAdjustModalOpen(false);
   };
 
-  const handleApproveInDetails = () => {
-    if (!product) return;
-    const assignedBin = product.binCode && product.binCode !== 'Pending Approval' ? product.binCode : 'A-01-02';
-    const updatedProd: WarehouseProductItem = {
-      ...product,
-      status: 'APPROVED',
-      isDraft: false,
-      binCode: assignedBin,
-      stock: 0,
-      stockAccepted: false,
-      stockStatus: 'AWAITING_STOCK',
-      submittedAt: 'Approved just now',
-    };
-    setProduct(updatedProd);
+  const handleConfirmApprovalInDetails = (
+    mode: 'APPROVE' | 'REJECT',
+    targetProduct: WarehouseProductItem,
+    finalQty: number,
+    finalBin: string,
+    acceptStockNow?: boolean,
+    _rejectionReason?: string,
+    variantStocks?: Record<string, number>
+  ) => {
+    setApprovalModalData(null);
+    if (mode === 'APPROVE') {
+      const isStockAccepted = acceptStockNow !== false;
+      const actualStock = isStockAccepted ? finalQty : 0;
 
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY_PRODUCTS);
-      const all: WarehouseProductItem[] = stored ? JSON.parse(stored) : INITIAL_PRODUCTS;
-      const next = all.map((p) => (p.id === product.id ? updatedProd : p));
-      localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
-      syncAdminProductsToMerchant(next);
-      window.dispatchEvent(
-        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'AdminProductDetails' } })
-      );
-    } catch {}
+      const updatedVariantsList = (targetProduct.variantsList || []).map((v) => {
+        const vKey = v.id || v.variantSku;
+        const newVStock =
+          variantStocks && variantStocks[vKey] !== undefined
+            ? variantStocks[vKey]
+            : variantStocks && variantStocks[v.variantSku] !== undefined
+            ? variantStocks[v.variantSku]
+            : v.stock;
+        return {
+          ...v,
+          stock: isStockAccepted ? newVStock : 0,
+        };
+      });
 
-    approveProductInDatabase(product.id, assignedBin, 0, false);
-    showToast(`Product approved! Status changed to Waiting for Stock.`);
+      const updatedProd: WarehouseProductItem = {
+        ...targetProduct,
+        status: 'STOCK_STORED',
+        isDraft: false,
+        binCode: finalBin,
+        stock: actualStock,
+        stockAccepted: true,
+        stockStatus: actualStock > 0 ? 'IN_STOCK' : 'OUT_OF_STOCK',
+        variantsList: updatedVariantsList.length > 0 ? updatedVariantsList : targetProduct.variantsList,
+        submittedAt: 'Approved just now',
+      };
+      setProduct(updatedProd);
+
+      if (variants.length > 0) {
+        const updatedVars = variants.map((v) => {
+          const newVStock =
+            variantStocks && variantStocks[v.id] !== undefined
+              ? variantStocks[v.id]
+              : variantStocks && variantStocks[v.sku] !== undefined
+              ? variantStocks[v.sku]
+              : v.stock;
+          const finalVStock = isStockAccepted ? newVStock : 0;
+          return {
+            ...v,
+            binCode: finalBin,
+            stock: finalVStock,
+            available: Math.max(0, finalVStock - v.reserved),
+          };
+        });
+        setVariants(updatedVars);
+        try {
+          localStorage.setItem(`fulfillio_variants_${targetProduct.id}`, JSON.stringify(updatedVars));
+        } catch {}
+      }
+
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY_PRODUCTS);
+        const all: WarehouseProductItem[] = stored ? JSON.parse(stored) : INITIAL_PRODUCTS;
+        const next = all.map((p) => (p.id === targetProduct.id ? updatedProd : p));
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
+        window.dispatchEvent(
+          new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'AdminProductDetails' } })
+        );
+      } catch {}
+
+      approveProductInDatabase(targetProduct.id, finalBin, actualStock, isStockAccepted, variantStocks);
+      showToast(`Product "${targetProduct.title}" approved & published! Stored ${actualStock} units in Bin ${finalBin}.`);
+    } else {
+      const wasAlreadyStored = targetProduct.stockAccepted === true && (targetProduct.stock || 0) > 0;
+      if (wasAlreadyStored) {
+        const updatedProd: WarehouseProductItem = {
+          ...targetProduct,
+          status: 'DRAFT',
+          isDraft: true,
+        };
+        setProduct(updatedProd);
+        try {
+          const stored = localStorage.getItem(STORAGE_KEY_PRODUCTS);
+          const all: WarehouseProductItem[] = stored ? JSON.parse(stored) : INITIAL_PRODUCTS;
+          const next = all.map((p) => (p.id === targetProduct.id ? updatedProd : p));
+          localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+          syncAdminProductsToMerchant(next);
+        } catch {}
+        const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+        fetch(`${API_BASE}/inventory/products/${encodeURIComponent(targetProduct.id)}/status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'DRAFT' }),
+        }).catch(() => {});
+        showToast(`Rejected publish request for "${targetProduct.title}". Returned to Draft.`);
+      } else {
+        try {
+          const stored = localStorage.getItem(STORAGE_KEY_PRODUCTS);
+          const all: WarehouseProductItem[] = stored ? JSON.parse(stored) : INITIAL_PRODUCTS;
+          const next = all.filter((p) => p.id !== targetProduct.id);
+          localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+          syncAdminProductsToMerchant(next);
+        } catch {}
+        deleteProductFromDatabase(targetProduct.id, targetProduct.merchantCode);
+        router.push('/admin/products');
+      }
+    }
   };
 
   const handleAcceptStockInDetails = (
@@ -678,7 +767,18 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
           <div className="flex items-center gap-2.5">
             <button
               type="button"
-              onClick={handleApproveInDetails}
+              onClick={() =>
+                setApprovalModalData({
+                  mode: 'APPROVE',
+                  product,
+                  selectedBin:
+                    product.binCode &&
+                    product.binCode !== 'Pending Approval' &&
+                    product.binCode !== 'Assigned on intake'
+                      ? product.binCode
+                      : bins[0]?.code || 'A-01-02',
+                })
+              }
               className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-2 shadow-md shadow-emerald-500/25 transition-all cursor-pointer active:scale-95"
             >
               <CheckCircle2 className="w-4 h-4" />
@@ -686,10 +786,16 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
             </button>
             <button
               type="button"
-              onClick={() => {
-                deleteProductFromDatabase(product.id, product.merchantCode);
-                router.push('/admin/products');
-              }}
+              onClick={() =>
+                setApprovalModalData({
+                  mode: 'REJECT',
+                  product,
+                  selectedBin:
+                    product.binCode && product.binCode !== 'Pending Approval'
+                      ? product.binCode
+                      : bins[0]?.code || 'A-01-02',
+                })
+              }
               className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center gap-2 shadow-md shadow-rose-500/25 transition-all cursor-pointer active:scale-95"
             >
               <XCircle className="w-4 h-4" />
@@ -698,15 +804,6 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
           </div>
         ) : (
           <div className="flex items-center gap-2.5">
-            <button
-              type="button"
-              onClick={() => setIsAcceptStockOpen(true)}
-              className="px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold flex items-center gap-2 shadow-md shadow-orange-500/25 transition-all cursor-pointer active:scale-95"
-              title="Receive physical consignment and publish product"
-            >
-              <PackageCheck className="w-4 h-4 stroke-[2.5]" />
-              <span>Received Product</span>
-            </button>
             <button
               type="button"
               onClick={handleOpenAdjustModal}
@@ -838,11 +935,10 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
                     status={
                       product.status === 'PENDING_APPROVAL'
                         ? 'Pending Product'
-                        : product.status === 'APPROVED' &&
-                          (product.stock === 0 || product.stockAccepted === false || product.stockStatus === 'AWAITING_STOCK')
-                        ? 'Waiting for Stock'
                         : product.status === 'APPROVED' || product.status === 'STOCK_STORED'
-                        ? 'Published'
+                        ? (product.stock || 0) === 0
+                          ? 'Out of Stock'
+                          : 'Published'
                         : product.status === 'REJECTED'
                         ? 'Rejected'
                         : 'Draft'
@@ -855,7 +951,7 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
             {/* Specifications Grid */}
             <div className="border-t border-slate-200 dark:border-white/10 pt-4 grid grid-cols-2 gap-3 text-xs">
               <div className="p-3 rounded-xl bg-slate-50 dark:bg-navy-950/60 border border-slate-200/80 dark:border-white/10">
-                <span className="text-slate-500 dark:text-slate-400 block font-medium">Selling Price</span>
+                <span className="text-slate-500 dark:text-slate-400 block font-medium">Declare Price</span>
                 <span className="text-sm font-extrabold text-navy-900 dark:text-white tabular-nums block mt-0.5">
                   ৳{product.price.toLocaleString()}
                 </span>
@@ -1381,6 +1477,14 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
         product={product}
         bins={bins}
         onConfirm={handleAcceptStockInDetails}
+      />
+
+      <ApprovalActionModal
+        isOpen={Boolean(approvalModalData)}
+        onClose={() => setApprovalModalData(null)}
+        approvalData={approvalModalData}
+        bins={bins}
+        onConfirm={handleConfirmApprovalInDetails}
       />
     </div>
   );

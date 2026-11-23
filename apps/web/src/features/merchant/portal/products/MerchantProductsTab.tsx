@@ -157,7 +157,7 @@ export function MerchantProductsTab({
     const draftCount = products.filter(isProductDraft).length;
     const pendingApproval = products.filter(isPendingApprovalProduct).length;
     const activeProducts = products.filter((p) => isProductActive(p) && (p.stock || 0) > 0).length;
-    const outOfStock = products.filter((p) => (p.stock || 0) === 0).length;
+    const outOfStock = products.filter((p) => isProductActive(p) && (p.stock || 0) === 0).length;
     const totalWarehouseStock = products.reduce((sum, p) => sum + (p.stock || 0), 0);
     const lowStock = products.filter((p) => isProductActive(p) && p.stock > 0 && p.stock <= 30).length;
     const totalOrders =
@@ -189,7 +189,7 @@ export function MerchantProductsTab({
     const draftCount = products.filter(isProductDraft).length;
     const pendingCount = products.filter(isPendingApprovalProduct).length;
     const activeCount = products.filter((p) => isProductActive(p) && (p.stock || 0) > 0).length;
-    const outOfStockCount = products.filter((p) => (p.stock || 0) === 0).length;
+    const outOfStockCount = products.filter((p) => isProductActive(p) && (p.stock || 0) === 0).length;
 
     return {
       all: products.length,
@@ -208,7 +208,7 @@ export function MerchantProductsTab({
         const isDraft = isProductDraft(p);
         const isPending = isPendingApprovalProduct(p);
         const isActive = isProductActive(p);
-        const isOutOfStock = (p.stock || 0) === 0;
+        const isOutOfStock = isActive && (p.stock || 0) === 0;
 
         if (activeTab === 'DRAFT') {
           if (!isDraft) return false;
