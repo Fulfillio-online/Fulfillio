@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Palette, Layers } from 'lucide-react';
 import { Modal } from '@/components/admin/AdminModal';
-import { CourierPartner, WarehousePipelineOrder } from '../../types';
+import { CourierPartner, WarehousePipelineOrder, CatalogProductItem, ResellerMemoItem } from '../../types';
 import { PRODUCT_CATALOG, RESELLER_MEMOS } from '../../mockData';
 
 const POPULAR_COLORS = [
@@ -21,6 +21,26 @@ const POPULAR_COLORS = [
 
 const POPULAR_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', 'Free Size'];
 
+const DEFAULT_FALLBACK_PRODUCT: CatalogProductItem = {
+  sku: 'MC-101-HOODIE-BLK-XL',
+  title: 'Heavyweight Winter Fleece Hoodie',
+  price: 1650,
+  merchantCode: 'MC-101',
+  merchantName: "Sabbir's Store",
+  productImage: '',
+  bin: 'A-01-02',
+  color: 'Black',
+  size: 'XL',
+  stock: 42,
+};
+
+const DEFAULT_FALLBACK_MEMO: ResellerMemoItem = {
+  code: 'MEMO-DEFAULT',
+  resellerName: "Sabbir's Store Official",
+  phone: '+880 1711-234567',
+  address: 'Gulshan-1, Dhaka',
+};
+
 interface CreateOrderModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -34,18 +54,89 @@ export function CreateOrderModal({
   ordersCount,
   onCreateOrder,
 }: CreateOrderModalProps) {
+  const memoList: ResellerMemoItem[] = useMemo(() => {
+    if (Array.isArray(RESELLER_MEMOS) && RESELLER_MEMOS.length > 0) {
+      return RESELLER_MEMOS;
+    }
+    return [DEFAULT_FALLBACK_MEMO];
+  }, []);
+
+  const [availableProducts, setAvailableProducts] = useState<CatalogProductItem[]>(() => {
+    if (Array.isArray(PRODUCT_CATALOG) && PRODUCT_CATALOG.length > 0) {
+      return PRODUCT_CATALOG;
+    }
+    return [DEFAULT_FALLBACK_PRODUCT];
+  });
+
   const [newCustomerName, setNewCustomerName] = useState('');
   const [newCustomerPhone, setNewCustomerPhone] = useState('');
   const [newCustomerAddress, setNewCustomerAddress] = useState('');
   const [newCity, setNewCity] = useState('Dhaka');
-  const [newSku, setNewSku] = useState(PRODUCT_CATALOG[0].sku);
+  const [newSku, setNewSku] = useState(
+    (PRODUCT_CATALOG && PRODUCT_CATALOG[0]?.sku) || DEFAULT_FALLBACK_PRODUCT.sku
+  );
   const [newColor, setNewColor] = useState('Red');
   const [newSize, setNewSize] = useState('XXL');
   const [newQty, setNewQty] = useState(1);
-  const [newMemoCode, setNewMemoCode] = useState(RESELLER_MEMOS[0].code);
+  const [newMemoCode, setNewMemoCode] = useState(memoList[0]?.code || 'MEMO-DEFAULT');
   const [newCourier, setNewCourier] = useState<CourierPartner>('Steadfast');
 
-  const selectedProduct = PRODUCT_CATALOG.find((p) => p.sku === newSku) || PRODUCT_CATALOG[0];
+  // Load any live published products from localStorage
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('fulfillio_warehouse_products_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const liveItems: CatalogProductItem[] = [];
+          for (const item of parsed) {
+            if (item.status === 'PUBLISHED' || item.status === 'ACTIVE' || !item.status) {
+              liveItems.push({
+                merchantCode: item.merchantCode || 'MC-101',
+                merchantName: item.merchantName || "Sabbir's Store",
+                title: item.title || item.name || 'Warehouse Product',
+                productImage: item.thumbnail || item.productImage || '',
+                bin: item.bin || 'A-01-01',
+                color: item.color || 'Black',
+                size: item.size || 'XL',
+                sku: item.sku || `SKU-${item.id || Math.random().toString(36).slice(2, 6)}`,
+                price: Number(item.price) || 1200,
+                stock: Number(item.stock) || Number(item.availableStock) || 10,
+              });
+            }
+          }
+          if (liveItems.length > 0) {
+            const combined = [...liveItems];
+            for (const base of (PRODUCT_CATALOG || [])) {
+              if (!combined.some((c) => c.sku === base.sku)) {
+                combined.push(base);
+              }
+            }
+            setAvailableProducts(combined);
+          }
+        }
+      }
+    } catch {
+      // ignore JSON parse errors
+    }
+  }, []);
+
+  const selectedProduct = useMemo(() => {
+    return (
+      availableProducts.find((p) => p.sku === newSku) ||
+      availableProducts[0] ||
+      DEFAULT_FALLBACK_PRODUCT
+    );
+  }, [availableProducts, newSku]);
+
+  // Sync color/size when sku selection changes
+  useEffect(() => {
+    if (selectedProduct) {
+      if (selectedProduct.color) setNewColor(selectedProduct.color);
+      if (selectedProduct.size) setNewSize(selectedProduct.size);
+    }
+  }, [selectedProduct]);
+
   const [newUnitPrice, setNewUnitPrice] = useState<number | ''>(selectedProduct.price);
 
   useEffect(() => {
@@ -60,7 +151,9 @@ export function CreateOrderModal({
       return;
     }
     const product = selectedProduct;
-    const memo = RESELLER_MEMOS.find((m) => m.code === newMemoCode) || RESELLER_MEMOS[0];
+    const memo = memoList.find((m) => m.code === newMemoCode) ||
+      memoList[0] ||
+      DEFAULT_FALLBACK_MEMO;
     const nextOrderNum = 9833 + ordersCount;
 
     const colorCode = newColor.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3) || 'RED';
@@ -171,14 +264,14 @@ export function CreateOrderModal({
             value={newSku}
             onChange={(e) => {
               setNewSku(e.target.value);
-              const p = PRODUCT_CATALOG.find((prod) => prod.sku === e.target.value);
+              const p = availableProducts.find((prod) => prod.sku === e.target.value);
               if (p?.color) setNewColor(p.color);
               if (p?.size) setNewSize(p.size);
             }}
             aria-label="Product Catalog"
             className="w-full rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 px-3 py-2 text-navy-800 dark:text-white focus:outline-none focus:border-orange-500 shadow-2xs cursor-pointer"
           >
-            {PRODUCT_CATALOG.map((p) => (
+            {availableProducts.map((p) => (
               <option key={p.sku} value={p.sku}>
                 {p.title} ({p.merchantName}) · Bin: {p.bin} · Stock: {p.stock}
               </option>
@@ -288,7 +381,7 @@ export function CreateOrderModal({
               aria-label="Reseller Memo Template Code"
               className="w-full rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 px-3 py-2 text-navy-800 dark:text-white focus:outline-none focus:border-orange-500 shadow-2xs cursor-pointer"
             >
-              {RESELLER_MEMOS.map((m) => (
+              {memoList.map((m) => (
                 <option key={m.code} value={m.code}>
                   {m.code} — {m.resellerName}
                 </option>

@@ -15,7 +15,7 @@ import { safeSetLocalStorage } from './products/utils/imageCompressor';
 import { CancelledOrderItemRecord, RecoveryLedgerEntry } from '@/features/admin/returns/types';
 import { STORAGE_KEY_STOCK_LEDGER } from '@/features/admin/products/mockData';
 import {
-  INITIAL_MERCHANT_PROFILE, INITIAL_MERCHANT_PRODUCTS, INITIAL_MERCHANT_ORDERS,
+  INITIAL_MERCHANT_PROFILE, INITIAL_MERCHANT_PRODUCTS, INITIAL_MERCHANT_ORDERS, INITIAL_MERCHANT_MEMOS,
 } from './mockData';
 import { merchantApi } from './api';
 import {
@@ -206,27 +206,72 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
             }
             return sp;
           });
-          setProducts(reconciled);
+          const withDemoProducts =
+            code === 'MC-101'
+              ? [
+                  ...reconciled,
+                  ...INITIAL_MERCHANT_PRODUCTS.filter(
+                    (dp) => !reconciled.some((sp) => sp.id === dp.id || sp.sku === dp.sku)
+                  ),
+                ]
+              : reconciled;
+          setProducts(withDemoProducts);
           if (typeof window !== 'undefined') {
-            safeSetLocalStorage(getMerchantProductsKey(code), JSON.stringify(reconciled));
+            safeSetLocalStorage(getMerchantProductsKey(code), JSON.stringify(withDemoProducts));
           }
         } else {
-          setProducts(getStoredMerchantProductsForCode(code));
+          const localProds = getStoredMerchantProductsForCode(code);
+          const withDemoProducts =
+            code === 'MC-101'
+              ? [
+                  ...localProds,
+                  ...INITIAL_MERCHANT_PRODUCTS.filter(
+                    (dp) => !localProds.some((lp) => lp.id === dp.id || lp.sku === dp.sku)
+                  ),
+                ]
+              : localProds;
+          setProducts(withDemoProducts);
         }
         if (serverOrds && serverOrds.length > 0) {
-          setOrders(serverOrds);
+          const withDemoOrders =
+            code === 'MC-101'
+              ? [
+                  ...serverOrds,
+                  ...INITIAL_MERCHANT_ORDERS.filter(
+                    (doItem) =>
+                      !serverOrds.some(
+                        (so) => so.id === doItem.id || so.orderNumber === doItem.orderNumber
+                      )
+                  ),
+                ]
+              : serverOrds;
+          setOrders(withDemoOrders);
           if (typeof window !== 'undefined') {
-            safeSetLocalStorage(getMerchantOrdersKey(code), JSON.stringify(serverOrds));
+            safeSetLocalStorage(getMerchantOrdersKey(code), JSON.stringify(withDemoOrders));
           }
         } else {
-          setOrders(getStoredMerchantOrdersForCode(code));
+          const localOrds = getStoredMerchantOrdersForCode(code);
+          const withDemoOrders =
+            code === 'MC-101'
+              ? [
+                  ...localOrds,
+                  ...INITIAL_MERCHANT_ORDERS.filter(
+                    (doItem) =>
+                      !localOrds.some(
+                        (lo) => lo.id === doItem.id || lo.orderNumber === doItem.orderNumber
+                      )
+                  ),
+                ]
+              : localOrds;
+          setOrders(withDemoOrders);
         }
       } catch {
         setProducts(getStoredMerchantProductsForCode(code));
         setOrders(getStoredMerchantOrdersForCode(code));
       }
 
-      setMemoList(getStoredMerchantMemosForCode(code, prof));
+      const localMemos = getStoredMerchantMemosForCode(code, prof);
+      setMemoList(localMemos);
       setAsns(getStoredMerchantAsnsForCode(code));
       setStockRequests(getStoredMerchantStockRequestsForCode(code));
       setCategories(getStoredMerchantCategoriesForCode(code));
@@ -870,6 +915,26 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       });
     } else if (order.productId) {
       itemsToDeduct.push({ productId: order.productId, qty: order.qty || 1 });
+    }
+
+    // Strict Business Logic: Merchant must create and select a custom memo
+    if (!memoList || memoList.length === 0) {
+      const err = `Cannot create order: You must create at least one custom Memo Template before placing orders. Please design your invoice memo in the Memo Designer.`;
+      showToast(err);
+      return { ok: false, error: err };
+    }
+
+    if (!order.memoCode || !order.memoCode.trim()) {
+      const err = `Cannot create order: A custom Memo Template must be selected for every order.`;
+      showToast(err);
+      return { ok: false, error: err };
+    }
+
+    const matchedMemo = memoList.find((m) => m.code === order.memoCode);
+    if (!matchedMemo) {
+      const err = `Cannot create order: Selected memo "${order.memoCode}" is not found in your created memo templates. Please choose a valid memo template.`;
+      showToast(err);
+      return { ok: false, error: err };
     }
 
     // Strict Business Logic: Orders can only be placed for approved products with verified stored stock

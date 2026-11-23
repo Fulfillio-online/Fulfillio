@@ -552,6 +552,7 @@ export function ProductTable({
               const isFirstTimePending = !isDraft && isFirstTimePendingApprovalItem(p);
               const isPublishPendingFromDraft = !isDraft && isPublishPendingFromDraftItem(p);
               const isAwaitingStock = false;
+              const isSuspended = Boolean((p as any).isSuspended);
               const isOutOfStock = !isDraft && !isPendingApproval && (p.stock || 0) === 0;
               const isLowStock = !isPendingApproval && !isDraft && !isOutOfStock && p.stock > 0 && p.stock <= 30;
 
@@ -653,8 +654,10 @@ export function ProductTable({
                           ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30'
                           : isDraft
                           ? 'bg-slate-100 dark:bg-navy-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10'
-                          : isAwaitingStock
-                          ? 'bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30'
+                          : isSuspended
+                          ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30'
+                          : isOutOfStock
+                          ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30'
                           : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
                       }`}
                     >
@@ -662,6 +665,8 @@ export function ProductTable({
                         ? 'Pending Product'
                         : isDraft
                         ? 'Draft'
+                        : isSuspended
+                        ? 'Suspended'
                         : isOutOfStock
                         ? 'Out of Stock'
                         : 'Published'}

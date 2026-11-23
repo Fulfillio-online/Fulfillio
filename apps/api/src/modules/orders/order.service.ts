@@ -255,6 +255,7 @@ export class OrderService {
       customerAddress: string;
       city?: string;
       memoCode?: string;
+      courierProvider?: string;
       totalAmount: number;
       codAmount?: number;
       subtotal?: number;
@@ -282,6 +283,10 @@ export class OrderService {
   ) {
     if (!payload.items || payload.items.length === 0) {
       throw new BadRequestException('Order must contain at least one item.');
+    }
+
+    if (!payload.memoCode || !payload.memoCode.trim()) {
+      throw new BadRequestException('Order must have a valid custom memo template (memoCode is required).');
     }
 
     // 1. Resolve merchant entity (guaranteeing valid PostgreSQL UUID foreign key)
@@ -424,7 +429,8 @@ export class OrderService {
       customerPhone: cleanPhone,
       customerAddress: payload.customerAddress || 'Address',
       city: payload.city || 'Dhaka',
-      memoCode: payload.memoCode ? payload.memoCode.toUpperCase() : 'MEMO-DEFAULT',
+      memoCode: payload.memoCode.trim().toUpperCase(),
+      courierProvider: payload.courierProvider || undefined,
       status: targetStatus,
       customerRiskScore: fraudReport.successRatio,
       customerRiskLevel: fraudReport.riskLevel,
@@ -463,6 +469,7 @@ export class OrderService {
       customerAddress: string;
       city?: string;
       memoCode?: string;
+      courierProvider?: string;
       totalAmount: number;
       codAmount?: number;
       items: Array<{ variantId: string; quantity: number; unitPrice: number }>;
@@ -640,5 +647,9 @@ export class OrderService {
       pickStops: sortedPickList,
       generatedAt: new Date().toISOString(),
     };
+  }
+
+  async updateOrderCourier(orderId: string, courierProvider?: string | null) {
+    return this.orderRepository.updateOrderCourier(orderId, courierProvider);
   }
 }

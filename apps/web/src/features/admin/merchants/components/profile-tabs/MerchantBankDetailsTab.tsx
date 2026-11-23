@@ -108,7 +108,7 @@ export function MerchantBankDetailsTab({ merchant }: MerchantBankDetailsTabProps
             Available COD Balance
           </span>
           <div className="text-3xl font-extrabold text-navy-800 dark:text-white tabular-nums">
-            ৳{merchant.payoutAccount.availableBalance.toLocaleString()}
+            ৳{(merchant.payoutAccount?.availableBalance ?? 0).toLocaleString()}
           </div>
           <p className="text-xs text-slate-600 dark:text-slate-300">
             Net payable after 3PL Pick-Pack &amp; storage fee deductions.
@@ -120,7 +120,7 @@ export function MerchantBankDetailsTab({ merchant }: MerchantBankDetailsTabProps
             Last Disbursed Payout
           </span>
           <div className="text-2xl font-bold text-navy-800 dark:text-slate-100 tabular-nums">
-            ৳{merchant.payoutAccount.lastPayoutAmount.toLocaleString()}
+            ৳{(merchant.payoutAccount?.lastPayoutAmount ?? 0).toLocaleString()}
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400">
             Settled via BEFTN bank transfer to {merchant.payoutAccount.provider}.

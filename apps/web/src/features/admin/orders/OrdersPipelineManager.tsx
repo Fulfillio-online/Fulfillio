@@ -267,13 +267,24 @@ export function OrdersPipelineManager({
     updateOrdersAndPersist((prev) =>
       prev.map((o) => {
         if (o.id !== orderId) return o;
-        const updatedTracking = o.isCourierBooked
-          ? `TRK-${newCourier.slice(0, 3).toUpperCase()}-${Math.floor(100000 + Math.random() * 900000)}`
-          : o.trackingCode;
+        const updatedTracking =
+          o.isCourierBooked && newCourier
+            ? `TRK-${newCourier.slice(0, 3).toUpperCase()}-${Math.floor(100000 + Math.random() * 900000)}`
+            : o.trackingCode;
         return { ...o, courier: newCourier, trackingCode: updatedTracking };
       })
     );
-    showToast(`Courier for ${orderId} updated to ${newCourier}.`);
+    const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+    fetch(`${API_BASE}/orders/${encodeURIComponent(orderId)}/courier`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ courierProvider: newCourier || null }),
+    }).catch(() => {});
+    showToast(
+      newCourier
+        ? `Courier for ${orderId} updated to ${newCourier}.`
+        : `Courier for ${orderId} cleared (Unassigned).`
+    );
   };
 
   // Direct Inline Stage Change for single row
@@ -306,6 +317,7 @@ export function OrdersPipelineManager({
       prev.map((o) => {
         if (o.id !== orderId) return o;
         if (newStage === 'COURIER_BOOKED') {
+          if (!o.courier) return o;
           const prefix = o.courier.slice(0, 3).toUpperCase();
           const code =
             o.trackingCode || `TRK-${prefix}-${Math.floor(100000 + Math.random() * 900000)}`;
@@ -391,6 +403,7 @@ export function OrdersPipelineManager({
       prev.map((o) => {
         if (!selectedIds.includes(o.id)) return o;
         if (targetStage === 'COURIER_BOOKED') {
+          if (!o.courier) return o;
           const prefix = o.courier.slice(0, 3).toUpperCase();
           const code =
             o.trackingCode || `TRK-${prefix}-${Math.floor(100000 + Math.random() * 900000)}`;
@@ -496,8 +509,26 @@ export function OrdersPipelineManager({
         );
         break;
 
-      case 'BOOK_COURIER':
-        ids.forEach((id) => updateOrderStatusInDatabase(id, 'DISPATCHED').catch(() => {}));
+      case 'BOOK_COURIER': {
+        const missingCourier = action.orders.some(
+          (o) => (courierOverride === 'KEEP_ORDER_COURIER' || !courierOverride) && !o.courier
+        );
+        if (missingCourier) {
+          showToast('Please select a Courier Partner before booking dispatch.');
+          setPendingAction(null);
+          return;
+        }
+        const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+        ids.forEach((id) => {
+          updateOrderStatusInDatabase(id, 'DISPATCHED').catch(() => {});
+          if (courierOverride && courierOverride !== 'KEEP_ORDER_COURIER') {
+            fetch(`${API_BASE}/orders/${encodeURIComponent(id)}/courier`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ courierProvider: courierOverride }),
+            }).catch(() => {});
+          }
+        });
         updateOrdersAndPersist((prev) =>
           prev.map((o) => {
             if (!ids.includes(o.id)) return o;
@@ -505,7 +536,7 @@ export function OrdersPipelineManager({
               courierOverride === 'KEEP_ORDER_COURIER' || !courierOverride
                 ? o.courier
                 : courierOverride;
-            const prefix = finalCourier.slice(0, 3).toUpperCase();
+            const prefix = (finalCourier || 'STR').slice(0, 3).toUpperCase();
             const code = `TRK-${prefix}-${Math.floor(100000 + Math.random() * 900000)}`;
             return {
               ...o,
@@ -519,6 +550,7 @@ export function OrdersPipelineManager({
         setSelectedIds([]);
         showToast(`Booked ${ids.length} parcel(s) in Courier API with Tracking ID!`);
         break;
+      }
 
       case 'CONFIRM_HANDOVER':
         ids.forEach((id) => updateOrderStatusInDatabase(id, 'DELIVERED').catch(() => {}));

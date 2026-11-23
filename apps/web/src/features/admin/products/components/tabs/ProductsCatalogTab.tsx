@@ -723,11 +723,17 @@ export function ProductsCatalogTab({
                       <td className="py-3.5 px-3 align-middle">
                         <div className="flex items-center gap-3">
                           <Link href={`/admin/products/${p.id}`} className="shrink-0 group">
-                            <img
-                              src={p.imageUrl}
-                              alt={p.title}
-                              className="w-11 h-11 rounded-xl object-cover border border-slate-200 dark:border-white/10 group-hover:border-orange-500 transition-colors"
-                            />
+                            {p.imageUrl ? (
+                              <img
+                                src={p.imageUrl}
+                                alt={p.title}
+                                className="w-11 h-11 rounded-xl object-cover border border-slate-200 dark:border-white/10 group-hover:border-orange-500 transition-colors"
+                              />
+                            ) : (
+                              <div className="w-11 h-11 rounded-xl bg-slate-100 dark:bg-navy-950 border border-slate-200 dark:border-white/10 group-hover:border-orange-500 transition-colors flex items-center justify-center">
+                                <Package className="w-5 h-5 text-slate-400 dark:text-slate-600" />
+                              </div>
+                            )}
                           </Link>
                           <div className="min-w-0 max-w-xs lg:max-w-md">
                             <Link
@@ -799,6 +805,11 @@ export function ProductsCatalogTab({
                               {p.stock} <span className="text-[11px] font-normal">pcs</span>
                             </span>
                           )
+                        ) : p.isSuspended ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                            Suspended
+                          </span>
                         ) : isOutOfStock ? (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold tabular-nums bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30">
                             0 <span className="text-[11px] font-normal text-rose-500">pcs</span>
@@ -832,6 +843,11 @@ export function ProductsCatalogTab({
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-500/30">
                             <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
                             Draft
+                          </span>
+                        ) : p.isSuspended ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                            Suspended
                           </span>
                         ) : isOutOfStock ? (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
@@ -1100,11 +1116,17 @@ export function ProductsCatalogTab({
                       className="mt-1 w-4 h-4 rounded bg-slate-50 dark:bg-navy-950 border-slate-300 dark:border-white/15 text-orange-600 focus:ring-orange-500 cursor-pointer accent-orange-500"
                     />
 
-                    <img
-                      src={p.imageUrl}
-                      alt={p.title}
-                      className="w-12 h-12 rounded-xl object-cover border border-slate-200 dark:border-white/10 shrink-0"
-                    />
+                    {p.imageUrl ? (
+                      <img
+                        src={p.imageUrl}
+                        alt={p.title}
+                        className="w-12 h-12 rounded-xl object-cover border border-slate-200 dark:border-white/10 shrink-0"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-navy-950 border border-slate-200 dark:border-white/10 shrink-0 flex items-center justify-center">
+                        <Package className="w-5 h-5 text-slate-400 dark:text-slate-600" />
+                      </div>
+                    )}
 
                     <div className="min-w-0 flex-1">
                       <Link
@@ -1143,7 +1165,12 @@ export function ProductsCatalogTab({
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-500/15 text-slate-700 dark:text-slate-300">
                               Draft
                             </span>
-                          ) : isOutOfStock ? (
+                          ) : p.isSuspended ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                            Suspended
+                          </span>
+                        ) : isOutOfStock ? (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/15 text-sky-700 dark:text-sky-400">
                               Approved
                             </span>

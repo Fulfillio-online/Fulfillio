@@ -8,7 +8,7 @@ export type OrderStage =
   | 'HANDED_OVER'
   | 'CANCELLED';
 
-export type CourierPartner = 'Steadfast' | 'Pathao' | 'RedX';
+export type CourierPartner = 'Steadfast' | 'Pathao' | 'RedX' | '';
 
 export interface OrderItem {
   sku: string;

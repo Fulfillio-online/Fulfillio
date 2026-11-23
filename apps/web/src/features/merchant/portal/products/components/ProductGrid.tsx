@@ -58,6 +58,7 @@ export function ProductGrid({
           (p.status === 'STOCK_STORED' || p.status === 'APPROVED' || p.status === 'PUBLISHED');
         const isPublished = isStockStored;
         const isLowStock = !isDraft && isStockStored && p.stock <= 30 && p.stock > 0;
+        const isSuspended = Boolean((p as any).isSuspended);
         const isOutOfStock = !isDraft && !isPendingApproval && (p.stock || 0) === 0;
 
         return (
@@ -119,8 +120,10 @@ export function ProductGrid({
                       ? 'bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/30'
                       : isDraft
                       ? 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-navy-800/80 dark:text-slate-300 dark:border-white/10'
-                      : isAwaitingStock
-                      ? 'bg-sky-50 text-sky-700 border-sky-300 dark:bg-sky-500/20 dark:text-sky-300 dark:border-sky-500/30'
+                      : isSuspended
+                      ? 'bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-500/30'
+                      : isOutOfStock
+                      ? 'bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-500/30'
                       : 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/30'
                   }`}
                 >
@@ -128,6 +131,8 @@ export function ProductGrid({
                     ? 'Pending Product'
                     : isDraft
                     ? 'Draft'
+                    : isSuspended
+                    ? 'Suspended'
                     : isOutOfStock
                     ? 'Out of Stock'
                     : 'Published'}

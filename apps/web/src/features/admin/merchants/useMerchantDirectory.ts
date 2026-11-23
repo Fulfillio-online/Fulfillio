@@ -140,13 +140,6 @@ export function useMerchantDirectory() {
   };
 
   const readLocalMerchants = (): MerchantRecord[] | null => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {}
     return null;
   };
 
@@ -157,9 +150,8 @@ export function useMerchantDirectory() {
 
   /** Apply localStorage + last backend snapshot synchronously in ONE commit. */
   const applyLocal = useCallback(() => {
-    const localMerchants = readLocalMerchants();
-    if (localMerchants || dbMerchantsRef.current) {
-      setIfChanged(setMerchants, mergeMerchants(localMerchants || MERCHANTS_DATA, dbMerchantsRef.current));
+    if (dbMerchantsRef.current) {
+      setIfChanged(setMerchants, dbMerchantsRef.current);
     }
 
     const { products, orders } = getSyncedMerchantDirectoryLists(ALL_PRODUCTS, ALL_ORDERS);
@@ -203,24 +195,19 @@ export function useMerchantDirectory() {
             }),
             avatarInitials: (m.businessName || 'MC').slice(0, 2).toUpperCase(),
             avatarBg: 'from-orange-500 to-amber-600',
-            payoutAccount: m.payoutAccount || {
-              provider: 'Pending Bank Setup',
-              accountHolder: m.ownerName || 'Store Owner',
-              accountNumber: '0000000000000',
-              branchName: 'Dhaka Main Branch',
-              routingNumber: '000000000',
-              bkashNumber: m.phone || '',
-              frequency: 'Weekly (Every Friday)',
-              status: 'PENDING_REVIEW',
-              availableBalance: 0,
-              lastPayoutAmount: 0,
+            payoutAccount: {
+              provider: m.payoutAccount?.provider || m.payoutAccount?.bankName || m.payoutAccount?.method || 'Pending Bank Setup',
+              accountHolder: m.payoutAccount?.accountHolder || m.payoutAccount?.accountName || m.ownerName || m.businessName || 'Store Owner',
+              accountNumber: String(m.payoutAccount?.accountNumber || ''),
+              branchName: m.payoutAccount?.branchName || 'Dhaka Main Branch',
+              routingNumber: m.payoutAccount?.routingNumber || '—',
+              bkashNumber: m.payoutAccount?.bkashNumber || (m.payoutAccount?.method === 'BKASH' ? m.payoutAccount?.accountNumber : '') || m.phone || '',
+              frequency: m.payoutAccount?.frequency || 'Weekly (Every Friday)',
+              status: m.payoutAccount?.status || (m.status === 'APPROVED' ? 'VERIFIED' : 'PENDING_REVIEW'),
+              availableBalance: Number(m.payoutAccount?.availableBalance ?? 0),
+              lastPayoutAmount: Number(m.payoutAccount?.lastPayoutAmount ?? 0),
             },
           }));
-          // Persist the merged directory so the next local read already matches.
-          try {
-            const merged = mergeMerchants(readLocalMerchants() || MERCHANTS_DATA, dbMerchantsRef.current);
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-          } catch {}
         })
         .catch(() => {});
 

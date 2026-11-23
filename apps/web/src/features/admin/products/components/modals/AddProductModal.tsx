@@ -29,7 +29,7 @@ export function AddProductModal({
   const [formPrice, setFormPrice] = useState('1650');
   const [formStock, setFormStock] = useState('50');
   const [formBinCode, setFormBinCode] = useState(bins[0]?.code || 'A-01-02');
-  const [formImageUrl, setFormImageUrl] = useState(PRESET_THUMBNAILS[0].url);
+  const [formImageUrl, setFormImageUrl] = useState(PRESET_THUMBNAILS[0]?.url || '');
 
   const sanitizedShortSku = (formShortSku.trim() || 'ITEM-01')
     .toUpperCase()
@@ -49,7 +49,8 @@ export function AddProductModal({
   };
 
   const handleSave = () => {
-    const merchantObj = MERCHANTS.find((m) => m.code === formMerchantCode) || MERCHANTS[0];
+    const merchantObj = MERCHANTS.find((m) => m.code === formMerchantCode) ||
+      MERCHANTS[0] || { code: formMerchantCode || 'MC-101', name: formMerchantCode || 'Merchant' };
     const finalBin = formBinCode || bins[0]?.code || 'A-01-02';
 
     const newProd: WarehouseProductItem = {

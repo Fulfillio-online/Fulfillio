@@ -1,16 +1,15 @@
 import { PrismaClient } from '@prisma/client';
-import { UserRole, MerchantStatus, OrderStatus, CourierProvider, StockMovementReason } from '@fulfillio/contracts';
-import { PackagingType } from '@fulfillio/contracts';
+import { UserRole, MerchantStatus, OrderStatus, CourierProvider } from '@fulfillio/contracts';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🌱 Starting Fulfillio Database Seeding...');
+  console.log('🌱 Starting Fulfillio Database Seeding (Single Demo Merchant Mode)...');
 
-  // 1. Seed Super Admin & Test Users
   const passwordHash = await bcrypt.hash('admin123', 10);
 
+  // 1. Seed Super Admin
   const adminUser = await prisma.user.upsert({
     where: { email: 'admin@fulfillio.online' },
     update: {},
@@ -23,13 +22,14 @@ async function main() {
   });
   console.log('✓ Super Admin created:', adminUser.email);
 
-  // 2. Seed Merchants
-  const merchant101 = await prisma.merchant.upsert({
+  // 2. Seed Single Demo Merchant (MC-101)
+  const demoMerchant = await prisma.merchant.upsert({
     where: { merchantCode: 'MC-101' },
     update: {},
     create: {
       merchantCode: 'MC-101',
       businessName: "Sabbir's Store",
+      ownerName: 'Sabbir Ahmed',
       email: 'sabbir@sabbirstore.com',
       phone: '01711-223344',
       location: 'Dhanmondi, Dhaka',
@@ -43,70 +43,9 @@ async function main() {
       },
     },
   });
+  console.log('✓ Single Demo Merchant seeded: MC-101');
 
-  const merchant102 = await prisma.merchant.upsert({
-    where: { merchantCode: 'MC-102' },
-    update: {},
-    create: {
-      merchantCode: 'MC-102',
-      businessName: 'TechGear BD',
-      email: 'contact@techgearbd.com',
-      phone: '01911-889900',
-      location: 'Bashundhara City, Panthapath, Dhaka',
-      status: MerchantStatus.APPROVED,
-      baseHandlingFee: 50.0,
-      monthlyStorageFee: 3000.0,
-      payoutAccount: {
-        method: 'BANK_TRANSFER',
-        bankName: 'City Bank Ltd',
-        accountNumber: '110293847501',
-        accountName: 'TechGear Electronics BD',
-      },
-    },
-  });
-
-  const merchant103 = await prisma.merchant.upsert({
-    where: { merchantCode: 'MC-103' },
-    update: {},
-    create: {
-      merchantCode: 'MC-103',
-      businessName: 'Modest Wear BD',
-      email: 'orders@modestwearbd.com',
-      phone: '01755-667788',
-      location: 'Shah Ali Plaza, Mirpur 10, Dhaka',
-      status: MerchantStatus.APPROVED,
-      baseHandlingFee: 40.0,
-      monthlyStorageFee: 1800.0,
-      payoutAccount: {
-        method: 'NAGAD',
-        accountNumber: '01755667788',
-        accountName: 'Modest Wear Boutique',
-      },
-    },
-  });
-
-  const merchant106 = await prisma.merchant.upsert({
-    where: { merchantCode: 'MC-106' },
-    update: {},
-    create: {
-      merchantCode: 'MC-106',
-      businessName: 'Fulfillio Partner Store',
-      email: 'merchant106@fulfillio.online',
-      phone: '01700-000106',
-      location: 'Dhaka, Bangladesh',
-      status: MerchantStatus.APPROVED,
-      baseHandlingFee: 45.0,
-      monthlyStorageFee: 2000.0,
-      payoutAccount: {
-        method: 'BKASH',
-        accountNumber: '01700000106',
-        accountName: 'Fulfillio Partner Store',
-      },
-    },
-  });
-  console.log('✓ Merchants seeded: MC-101, MC-102, MC-103, MC-106');
-
-  // 3. Seed Merchant Users & WMS Workers
+  // 3. Seed Demo Merchant User & 1 Warehouse Operator
   await prisma.user.upsert({
     where: { email: 'sabbir@sabbirstore.com' },
     update: {},
@@ -114,19 +53,7 @@ async function main() {
       name: 'Sabbir Ahmed',
       email: 'sabbir@sabbirstore.com',
       passwordHash,
-      merchantId: merchant101.id,
-      role: UserRole.MERCHANT,
-    },
-  });
-
-  await prisma.user.upsert({
-    where: { email: 'merchant106@fulfillio.online' },
-    update: {},
-    create: {
-      name: 'Fulfillio Partner Store',
-      email: 'merchant106@fulfillio.online',
-      passwordHash,
-      merchantId: merchant106.id,
+      merchantId: demoMerchant.id,
       role: UserRole.MERCHANT,
     },
   });
@@ -142,16 +69,12 @@ async function main() {
       role: UserRole.WAREHOUSE_OPERATOR,
     },
   });
-  console.log('✓ Merchant user and WMS worker seeded');
+  console.log('✓ Demo Merchant user and WMS operator seeded');
 
   // 4. Seed Warehouse Locations & Shelf Bins
   const binCodes = [
     { zone: 'Z1', aisle: 'A01', rack: 'R01', shelf: 'S01', binCode: 'A-01-01', isDamaged: false },
     { zone: 'Z1', aisle: 'A01', rack: 'R02', shelf: 'S01', binCode: 'Z1-R02-S1-B04', isDamaged: false },
-    { zone: 'Z1', aisle: 'A01', rack: 'R03', shelf: 'S02', binCode: 'Z1-R03-S2-B01', isDamaged: false },
-    { zone: 'Z2', aisle: 'B01', rack: 'R01', shelf: 'S01', binCode: 'Z2-R01-S1-B02', isDamaged: false },
-    { zone: 'Z2', aisle: 'B02', rack: 'R02', shelf: 'S01', binCode: 'Z2-R02-S1-B01', isDamaged: false },
-    { zone: 'Z3', aisle: 'C01', rack: 'R04', shelf: 'S03', binCode: 'Z3-R04-S3-B05', isDamaged: false },
     { zone: 'DMG', aisle: 'Q01', rack: 'R01', shelf: 'S01', binCode: 'DMG-01', isDamaged: true },
   ];
 
@@ -166,64 +89,27 @@ async function main() {
   }
   console.log('✓ Warehouse bin locations seeded');
 
-  // 5. Seed Memo / Invoice Templates
+  // 5. Seed Default Memo Template for Demo Merchant
   await prisma.memoTemplate.upsert({
     where: {
       merchantId_memoCode: {
-        merchantId: merchant101.id,
-        memoCode: 'MEMO-DARAZ-BD',
-      },
-    },
-    update: {},
-    create: {
-      merchantId: merchant101.id,
-      memoCode: 'MEMO-DARAZ-BD',
-      name: 'Daraz BD Branded 4x6 Slip',
-      isDefault: false,
-      layout: {
-        paperSize: 'THERMAL_4X6',
-        header: {
-          storeName: "Sabbir's Store Mall",
-          brandColor: '#ff5722',
-          phone: '01711-223344',
-          address: 'Dhanmondi, Dhaka',
-          showLogo: true,
-        },
-        fields: {
-          showBarcode: true,
-          showCourierSlip: true,
-          showCustomerNotes: true,
-          showSKU: true,
-          showUnitPrice: true,
-          showTaxTotal: false,
-        },
-        footer: {
-          thankYouMessage: 'Thank you for shopping on Daraz!',
-        },
-      },
-    },
-  });
-
-  await prisma.memoTemplate.upsert({
-    where: {
-      merchantId_memoCode: {
-        merchantId: merchant101.id,
+        merchantId: demoMerchant.id,
         memoCode: 'MEMO-DEFAULT',
       },
     },
     update: {},
     create: {
-      merchantId: merchant101.id,
+      merchantId: demoMerchant.id,
       memoCode: 'MEMO-DEFAULT',
       name: 'Default Clean 4x6 Memo',
       isDefault: true,
       layout: {
         paperSize: 'THERMAL_4X6',
         header: {
-          storeName: "Sabbir's Official Store",
-          brandColor: '#059669',
+          storeName: "Sabbir's Store",
+          brandColor: '#ea580c',
           phone: '01711-223344',
-          address: 'House 14, Road 5, Dhanmondi, Dhaka',
+          address: 'Dhanmondi, Dhaka',
           showLogo: false,
         },
         fields: {
@@ -240,22 +126,24 @@ async function main() {
       },
     },
   });
-  console.log('✓ Memo templates seeded');
+  console.log('✓ Default memo template seeded');
 
-  // 6. Seed Products & Variants
+  // 6. Seed Demo Merchant Product, Variant & Inventory
   const product1 = await prisma.product.upsert({
     where: {
       merchantId_baseSku: {
-        merchantId: merchant101.id,
+        merchantId: demoMerchant.id,
         baseSku: 'MC-101-TSHIRT',
       },
     },
     update: {},
     create: {
-      merchantId: merchant101.id,
+      merchantId: demoMerchant.id,
       title: 'Heavyweight Drop-Shoulder Tee',
       baseSku: 'MC-101-TSHIRT',
       description: '100% 240 GSM combed cotton oversized streetwear tee.',
+      lifecycleStatus: 'ACTIVE',
+      status: 'PUBLISHED',
     },
   });
 
@@ -274,38 +162,6 @@ async function main() {
     },
   });
 
-  const product2 = await prisma.product.upsert({
-    where: {
-      merchantId_baseSku: {
-        merchantId: merchant102.id,
-        baseSku: 'MC-102-EARBUD',
-      },
-    },
-    update: {},
-    create: {
-      merchantId: merchant102.id,
-      title: 'ANC Wireless Earbuds Pro V2',
-      baseSku: 'MC-102-EARBUD',
-      description: 'Active Noise Cancellation Bluetooth 5.3 Earbuds.',
-    },
-  });
-
-  const variant2 = await prisma.productVariant.upsert({
-    where: { sku: 'MC-102-EARBUD-PRO-BLK' },
-    update: {},
-    create: {
-      productId: product2.id,
-      sku: 'MC-102-EARBUD-PRO-BLK',
-      barcode: '89410200201',
-      title: 'Matte Black / Standard',
-      price: 1850.0,
-      wholesalePrice: 1250.0,
-      defaultBinCode: 'Z2-R01-S1-B02',
-      attributes: { color: 'Matte Black', size: 'STD' },
-    },
-  });
-
-  // 7. Seed Inventory Items
   const loc1 = locationsMap.get('Z1-R02-S1-B04');
   if (loc1) {
     await prisma.inventoryItem.upsert({
@@ -325,41 +181,21 @@ async function main() {
       },
     });
   }
+  console.log('✓ Demo product, variant, and inventory seeded');
 
-  const loc2 = locationsMap.get('Z2-R01-S1-B02');
-  if (loc2) {
-    await prisma.inventoryItem.upsert({
-      where: {
-        variantId_locationId: {
-          variantId: variant2.id,
-          locationId: loc2,
-        },
-      },
-      update: {},
-      create: {
-        variantId: variant2.id,
-        locationId: loc2,
-        quantityAvailable: 85,
-        quantityReserved: 2,
-        reorderPoint: 15,
-      },
-    });
-  }
-  console.log('✓ Products, variants and initial inventory stock seeded');
-
-  // 8. Seed Sample Dispatched Order with Courier details
+  // 7. Seed 1 Sample Order for Demo Merchant
   await prisma.order.upsert({
     where: { id: 'ORD-99201' },
     update: {},
     create: {
       id: 'ORD-99201',
-      merchantId: merchant101.id,
+      merchantId: demoMerchant.id,
       customerName: 'Tanvir Hossain',
       customerPhone: '01712-984512',
       customerAddress: 'Flat 4B, House 22, Block C, Banani, Dhaka',
       city: 'Dhaka',
       status: OrderStatus.PACKED,
-      memoCode: 'MEMO-DARAZ-BD',
+      memoCode: 'MEMO-DEFAULT',
       isMemoPrinted: true,
       packagingType: 'POLY_MEDIUM',
       courierProvider: CourierProvider.STEADFAST,
@@ -379,7 +215,7 @@ async function main() {
       },
     },
   });
-  console.log('✓ Demo order ORD-99201 seeded with Steadfast consignment');
+  console.log('✓ Demo order ORD-99201 seeded');
 
   console.log('🎉 Fulfillio Database Seeding Complete!');
 }

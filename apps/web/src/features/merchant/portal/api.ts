@@ -268,6 +268,7 @@ export const merchantApi = {
           maxPrice,
           bin: resolvedBin,
           status: resolvedStatus,
+          isSuspended: Boolean(p.isSuspended),
             imageUrl: p.imageUrl,
             images: p.images && p.images.length > 0 ? p.images : (p.imageUrl ? [p.imageUrl] : []),
             description: p.description,
@@ -374,7 +375,13 @@ export const merchantApi = {
             codAmount: Number(o.codAmount) || 0,
             memoCode: o.memoCode || 'MEMO-DEFAULT',
             status: o.status,
-            courier: o.courierProvider || 'Steadfast',
+            courier: (() => {
+              const upper = String(o.courierProvider || '').toUpperCase();
+              if (upper === 'STEADFAST') return 'Steadfast';
+              if (upper === 'PATHAO') return 'Pathao';
+              if (upper === 'REDX') return 'RedX';
+              return '';
+            })(),
             paymentMethod: o.paymentMethod || 'Cash on Delivery',
             paymentStatus:
               (o.paymentStatus as any) || (Number(o.codAmount) === 0 ? 'Paid' : 'Unpaid'),
@@ -436,7 +443,7 @@ export const merchantApi = {
         } catch {}
       }
     }
-    return INITIAL_MERCHANT_MEMOS;
+    return [];
   },
 
   async getInboundAsns(): Promise<MerchantAsnRecord[]> {
@@ -790,6 +797,7 @@ export const merchantApi = {
       customerAddress: order.address,
       city: order.city || 'Dhaka',
       memoCode: order.memoCode || 'MEMO-DEFAULT',
+      courierProvider: order.courier || undefined,
       totalAmount: Number(order.amount) || Number(order.codAmount) || 0,
       codAmount: isNaN(Number(order.codAmount)) ? (Number(order.amount) || 0) : Number(order.codAmount),
       subtotal: isNaN(Number(order.subtotal)) ? (Number(order.amount) || 0) : Number(order.subtotal),

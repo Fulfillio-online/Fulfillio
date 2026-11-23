@@ -138,19 +138,28 @@ export function getAllColorsForProduct(p?: MerchantProductItem): { name: string;
   if (p?.colors && p.colors.length > 0) {
     for (const c of p.colors) {
       const lower = c.name.toLowerCase().trim();
-      if (!seen.has(lower)) {
+      if (lower && !seen.has(lower)) {
         seen.add(lower);
         result.push({ name: c.name, hex: c.hex || '#1e293b' });
       }
     }
   }
 
-  for (const c of POPULAR_COLORS) {
-    const lower = c.name.toLowerCase().trim();
-    if (!seen.has(lower)) {
-      seen.add(lower);
-      result.push(c);
+  if (p?.variantsList && p.variantsList.length > 0) {
+    for (const v of p.variantsList) {
+      const vColor = (v.color || '').trim();
+      if (vColor) {
+        const lower = vColor.toLowerCase();
+        if (!seen.has(lower)) {
+          seen.add(lower);
+          result.push({ name: vColor, hex: '#1e293b' });
+        }
+      }
     }
+  }
+
+  if (result.length === 0) {
+    result.push({ name: 'Standard', hex: '#1e293b' });
   }
 
   return result;
@@ -164,19 +173,15 @@ export function getAllSizesForProduct(p?: MerchantProductItem, selectedColor?: s
     const pSizes = getAvailableSizesForColor(p, selectedColor);
     for (const s of pSizes) {
       const upper = s.toUpperCase().trim();
-      if (!seen.has(upper)) {
+      if (upper && !seen.has(upper)) {
         seen.add(upper);
         result.push(s);
       }
     }
   }
 
-  for (const s of POPULAR_SIZES) {
-    const upper = s.toUpperCase().trim();
-    if (!seen.has(upper)) {
-      seen.add(upper);
-      result.push(s);
-    }
+  if (result.length === 0) {
+    result.push('Standard');
   }
 
   return result;
@@ -196,7 +201,7 @@ export function resolveVariantConfig(
   selectedVariantId?: string;
 } {
   const allColors = getAllColorsForProduct(p);
-  const resolvedColor = colorName || p.colors?.[0]?.name || allColors[0]?.name || 'Red';
+  const resolvedColor = colorName || p.colors?.[0]?.name || allColors[0]?.name || 'Standard';
 
   const colorObj = p.colors?.find((c) => c.name.toLowerCase() === resolvedColor.toLowerCase());
   const resolvedImage = colorObj?.imageUrl || p.imageUrl;
@@ -251,6 +256,7 @@ export function resolveVariantConfig(
 
 export function isEligibleProductForOrder(p?: MerchantProductItem | null): boolean {
   if (!p) return false;
+  if (Boolean((p as any).isSuspended)) return false;
   if (p.status === 'DRAFT' || p.status === 'PENDING_APPROVAL') return false;
   const hasApprovedBin =
     Boolean(p.bin) &&
@@ -298,10 +304,25 @@ export function CreateManualOrderModal({
   const [orderPhone, setOrderPhone] = useState('');
   const [orderAddress, setOrderAddress] = useState('');
   const [orderCity, setOrderCity] = useState('Dhaka');
-  const [orderCourier, setOrderCourier] = useState('Steadfast');
-  const [orderMemoCode, setOrderMemoCode] = useState(
-    memoList[0]?.code || 'MEMO-DEFAULT'
-  );
+  const [orderCourier, setOrderCourier] = useState('');
+  const [orderMemoCode, setOrderMemoCode] = useState(() => {
+    if (memoList && memoList.length > 0) {
+      const def = memoList.find((m) => m.isDefault);
+      return def ? def.code : memoList[0].code;
+    }
+    return '';
+  });
+
+  useEffect(() => {
+    if (memoList && memoList.length > 0) {
+      if (!orderMemoCode || !memoList.some((m) => m.code === orderMemoCode)) {
+        const def = memoList.find((m) => m.isDefault);
+        setOrderMemoCode(def ? def.code : memoList[0].code);
+      }
+    } else {
+      setOrderMemoCode('');
+    }
+  }, [memoList, orderMemoCode]);
 
   const eligibleProducts = useMemo(() => {
     return products.filter(isEligibleProductForOrder);
@@ -590,6 +611,21 @@ export function CreateManualOrderModal({
       }
     }
 
+    if (!memoList || memoList.length === 0) {
+      onTriggerToast('Cannot create order: You must create at least one custom Memo Template in Memo Designer first.');
+      return;
+    }
+
+    if (!orderMemoCode || !orderMemoCode.trim()) {
+      onTriggerToast('Please select an invoice memo template.');
+      return;
+    }
+
+    if (!memoList.some((m) => m.code === orderMemoCode)) {
+      onTriggerToast('Selected memo is invalid. Please select one of your created memos.');
+      return;
+    }
+
     const newOrderId = `ORD-${Math.floor(1000 + Math.random() * 9000)}`;
 
     const isFullPaid = advancePayment >= orderTotal;
@@ -786,6 +822,7 @@ export function CreateManualOrderModal({
                   onChange={(e) => setOrderCourier(e.target.value)}
                   className="w-full px-3 py-2 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-navy-900 dark:text-white focus:outline-none focus:border-orange-500 transition-colors cursor-pointer shadow-2xs"
                 >
+                  <option value="">Select Courier (Optional)</option>
                   <option value="Steadfast">Steadfast Courier</option>
                   <option value="Pathao">Pathao Logistics</option>
                   <option value="RedX">RedX Delivery</option>
@@ -1362,20 +1399,35 @@ export function CreateManualOrderModal({
 
                 {/* Thermal Memo Template Selector */}
                 <div className="pt-2 border-t border-slate-200 dark:border-white/10">
-                  <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">
-                    Assign Reseller Memo (4x6 Thermal Slip)
+                  <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1 flex items-center justify-between">
+                    <span>Assign Reseller Memo (4x6 Thermal Slip) *</span>
+                    <span className="text-[10px] text-orange-600 dark:text-orange-400 font-normal">Required for packing</span>
                   </label>
-                  <select
-                    value={orderMemoCode}
-                    onChange={(e) => setOrderMemoCode(e.target.value)}
-                    className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-mono font-semibold text-indigo-700 dark:text-indigo-300 focus:outline-none focus:border-indigo-500 cursor-pointer shadow-2xs"
-                  >
-                    {memoList.map((m) => (
-                      <option key={m.id} value={m.code}>
-                        {m.code} — {m.resellerName} {m.isDefault ? '[DEFAULT]' : ''}
-                      </option>
-                    ))}
-                  </select>
+                  {memoList && memoList.length > 0 ? (
+                    <select
+                      value={orderMemoCode}
+                      onChange={(e) => setOrderMemoCode(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-mono font-semibold text-indigo-700 dark:text-indigo-300 focus:outline-none focus:border-indigo-500 cursor-pointer shadow-2xs"
+                    >
+                      {memoList.map((m) => (
+                        <option key={m.id} value={m.code}>
+                          {m.code} — {m.resellerName} {m.isDefault ? '[DEFAULT]' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 space-y-2">
+                      <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">
+                        ⚠️ <strong>No Memo Template Found:</strong> You must create a custom memo before creating orders.
+                      </p>
+                      <a
+                        href="/merchant/memos"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs shadow-xs transition-colors"
+                      >
+                        Create Memo Template
+                      </a>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1392,13 +1444,15 @@ export function CreateManualOrderModal({
             </button>
             <button
               type="submit"
-              disabled={eligibleProducts.length === 0}
+              disabled={eligibleProducts.length === 0 || !memoList || memoList.length === 0}
               className="px-6 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold transition-all shadow-md shadow-orange-500/20 flex items-center gap-2 cursor-pointer active:scale-95"
             >
               <Sparkles className="h-4 w-4" />
               <span>
                 {eligibleProducts.length === 0
                   ? 'Awaiting Approved Warehouse Stock'
+                  : !memoList || memoList.length === 0
+                  ? 'Create Memo Template First'
                   : `Confirm & Reserve Stock (${totalQty} Items)`}
               </span>
             </button>

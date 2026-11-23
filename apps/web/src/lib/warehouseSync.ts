@@ -22,7 +22,6 @@ import {
   STORAGE_KEY_STOCK_REQUESTS,
   STORAGE_KEY_MERCHANT_CATEGORIES,
   INITIAL_MERCHANT_CATEGORIES,
-  INITIAL_AZAD_PRODUCTS,
 } from '@/features/merchant/portal/mockData';
 import { MerchantMemoItem } from '@/features/admin/merchants/types';
 import { ALL_MEMOS, STORAGE_KEY as STORAGE_KEY_MERCHANTS_DIRECTORY } from '@/features/admin/merchants/mockData';
@@ -149,84 +148,10 @@ export function getMerchantCategoriesKey(merchantCode = 'MC-101'): string {
 }
 
 export function getStoredMerchantDirectory(): MerchantRecord[] {
-  if (typeof window === 'undefined') return MERCHANTS_DATA;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_MERCHANT_DIRECTORY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        const merged = [...parsed];
-        for (const m of MERCHANTS_DATA) {
-          if (!merged.some((existing) => existing.merchantCode === m.merchantCode)) {
-            merged.push(m);
-          }
-        }
-        return merged;
-      }
-    }
-  } catch {
-    // ignore
-  }
-  return MERCHANTS_DATA;
+  return [];
 }
 
-
-export const INITIAL_MERCHANT_CREDENTIALS: MerchantCredentialRecord[] = [
-  {
-    email: 'supplyro@gmail.com',
-    password: 'Supplyro',
-    merchantCode: 'MC-106',
-    storeName: 'Supplyro',
-    ownerName: 'Azad',
-    phone: '01700 000000',
-  },
-  {
-    email: 'azad@gmail.com',
-    password: 'Azad?1',
-    merchantCode: 'MC-105',
-    storeName: "Azad's Store",
-    ownerName: 'Azad',
-    phone: '01712 000000',
-  },
-  {
-    email: 'sabbir@example.com',
-    password: 'password123',
-    merchantCode: 'MC-101',
-    storeName: "Sabbir's Store",
-    ownerName: 'Sabbir Ahmed',
-    phone: '01712 345678',
-  },
-  {
-    email: 'founder@urbanthreads.com',
-    password: 'password123',
-    merchantCode: 'MC-102',
-    storeName: 'Urban Threads BD',
-    ownerName: 'Tariqul Rahman',
-    phone: '01819 554433',
-  },
-];
-
-function getStoredMerchantCredentials(): MerchantCredentialRecord[] {
-  if (typeof window === 'undefined') return INITIAL_MERCHANT_CREDENTIALS;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_MERCHANT_CREDENTIALS);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        const merged = [...parsed];
-        for (const init of INITIAL_MERCHANT_CREDENTIALS) {
-          if (!merged.some((c) => c.email.trim().toLowerCase() === init.email.trim().toLowerCase())) {
-            merged.push(init);
-          }
-        }
-        return merged;
-      }
-    }
-  } catch {
-    // ignore
-  }
-  return INITIAL_MERCHANT_CREDENTIALS;
-}
+export const INITIAL_MERCHANT_CREDENTIALS: MerchantCredentialRecord[] = [];
 
 export function getActiveMerchantSession(): ActiveMerchantSession {
   if (typeof window !== 'undefined') {
@@ -365,7 +290,6 @@ export function getStoredMerchantProfileForCode(merchantCode: string): MerchantP
 export function getStoredMerchantProductsForCode(merchantCode = 'MC-101'): MerchantProductItem[] {
   const code = (merchantCode || 'MC-101').trim().toUpperCase();
   if (typeof window === 'undefined') {
-    if (code === 'MC-105') return INITIAL_AZAD_PRODUCTS;
     return code === 'MC-101' ? INITIAL_MERCHANT_PRODUCTS : [];
   }
   try {
@@ -373,23 +297,14 @@ export function getStoredMerchantProductsForCode(merchantCode = 'MC-101'): Merch
     if (raw !== null) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        if (code === 'MC-105' && parsed.length === 0) {
-          localStorage.setItem(getMerchantProductsKey(code), JSON.stringify(INITIAL_AZAD_PRODUCTS));
-          return INITIAL_AZAD_PRODUCTS;
+        if (parsed.length === 0 && code === 'MC-101') {
+          return INITIAL_MERCHANT_PRODUCTS;
         }
         return parsed;
       }
     }
   } catch {
     // ignore
-  }
-  if (code === 'MC-105') {
-    try {
-      localStorage.setItem(getMerchantProductsKey(code), JSON.stringify(INITIAL_AZAD_PRODUCTS));
-    } catch {
-      // ignore
-    }
-    return INITIAL_AZAD_PRODUCTS;
   }
   return code === 'MC-101' ? INITIAL_MERCHANT_PRODUCTS : [];
 }
@@ -436,6 +351,9 @@ export function getStoredMerchantOrdersForCode(merchantCode = 'MC-101'): Merchan
             localStorage.setItem(getMerchantOrdersKey(code), JSON.stringify(finalOrders));
           } catch {}
         }
+        if (finalOrders.length === 0 && code === 'MC-101') {
+          return INITIAL_MERCHANT_ORDERS;
+        }
         return finalOrders;
       }
     }
@@ -447,38 +365,22 @@ export function getStoredMerchantOrdersForCode(merchantCode = 'MC-101'): Merchan
 
 export function getStoredMerchantMemosForCode(
   merchantCode = 'MC-101',
-  profile?: MerchantProfileData
+  _profile?: MerchantProfileData
 ): ResellerMemo[] {
   const code = (merchantCode || 'MC-101').trim().toUpperCase();
   if (typeof window === 'undefined') {
-    return code === 'MC-101' ? INITIAL_MERCHANT_MEMOS : [];
+    return [];
   }
   try {
     const raw = localStorage.getItem(getMerchantMemosKey(code));
     if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) return parsed;
     }
   } catch {
     // ignore
   }
-  if (code === 'MC-101') return INITIAL_MERCHANT_MEMOS;
-  const prof = profile || getStoredMerchantProfileForCode(code);
-  return [
-    {
-      id: `m-${code.toLowerCase()}-1`,
-      code: 'MEMO-DEFAULT',
-      name: `${prof.storeName} Official Slip`,
-      resellerName: prof.storeName,
-      phone: prof.phone || '01700-000000',
-      address: prof.location || 'Dhaka, Bangladesh',
-      note: 'Thank you for shopping with us!',
-      accentColor: '#10b981',
-      paperSize: 'THERMAL_4X6',
-      isDefault: true,
-      created: 'Today',
-    },
-  ];
+  return [];
 }
 
 export function getStoredMerchantAsnsForCode(merchantCode = 'MC-101'): MerchantAsnRecord[] {
@@ -570,22 +472,6 @@ export async function registerNewMerchantAccount(
     return { ok: false, error: 'অনুগ্রহ করে সকল আবশ্যক তথ্য পূরণ করুন।' };
   }
 
-  const directory = getStoredMerchantDirectory();
-  const credentials = getStoredMerchantCredentials();
-
-  // Check duplicate email
-  if (
-    directory.some((m) => m.email.trim().toLowerCase() === cleanEmail) ||
-    credentials.some((c) => c.email.trim().toLowerCase() === cleanEmail)
-  ) {
-    return {
-      ok: false,
-      error: 'এই ইমেইল দিয়ে ইতিমধ্যে একটি মার্চেন্ট একাউন্ট খোলা হয়েছে। অনুগ্রহ করে লগইন করুন।',
-    };
-  }
-
-  // Try calling backend API if available (localhost)
-  let backendMerchantCode: string | null = null;
   try {
     const res = await fetch(`${API_BASE}/auth/register`, {
       method: 'POST',
@@ -598,130 +484,75 @@ export async function registerNewMerchantAccount(
         password: input.password,
       }),
     });
+
+    const data = await res.json().catch(() => ({}));
+
     if (res.status === 409) {
       return {
         ok: false,
-        error: 'এই ইমেইল দিয়ে ইতিমধ্যে একটি মার্চেন্ট একাউন্ট খোলা হয়েছে।',
+        error: 'এই ইমেইল দিয়ে ইতিমধ্যে একটি মার্চেন্ট একাউন্ট খোলা হয়েছে। অনুগ্রহ করে লগইন করুন।',
       };
     }
-    if (res.ok) {
-      const data = await res.json();
-      if (data?.merchantCode) {
-        backendMerchantCode = data.merchantCode;
-      }
+
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: data?.message || 'রেজিস্ট্রেশন সম্পন্ন করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।',
+      };
     }
+
+    const merchantCode = data?.merchantCode || 'MC-NEW';
+    const initials =
+      cleanStoreName
+        .split(/\s+/)
+        .map((w) => w[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase() || 'MC';
+
+    const newMerchantRecord: MerchantRecord = {
+      id: data?.merchantId || merchantCode,
+      merchantCode,
+      storeName: cleanStoreName,
+      ownerName: cleanOwnerName,
+      email: cleanEmail,
+      phone: cleanPhone,
+      location: 'Dhaka, Bangladesh',
+      deliveryArea: 'Nationwide Bangladesh',
+      status: 'Pending',
+      verified: false,
+      joinedDate: new Date().toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      }),
+      avatarInitials: initials,
+      avatarBg: AVATAR_GRADIENTS[0],
+      payoutAccount: {
+        provider: 'Pending Bank Setup',
+        accountHolder: cleanOwnerName,
+        accountNumber: '',
+        branchName: '',
+        routingNumber: '',
+        bkashNumber: cleanPhone,
+        frequency: 'Weekly (Every Friday)',
+        status: 'PENDING_REVIEW',
+        availableBalance: 0,
+        lastPayoutAmount: 0,
+      },
+    };
+
+    return { ok: true, merchant: newMerchantRecord };
   } catch {
-    // Backend offline or on Vercel static deployment; continue with local storage engine
+    return {
+      ok: false,
+      error: 'সার্ভার বা ডাটাবেজের সাথে সংযোগ করা যাচ্ছে না। অনুগ্রহ করে নিশ্চিত করুন API সার্ভার চালু আছে।',
+    };
   }
-
-  // Determine next sequential Merchant Code (MC-106, MC-107, ...)
-  const maxNum = directory.reduce((max, m) => {
-    const num = parseInt(m.merchantCode.replace(/[^0-9]/g, ''), 10);
-    return Number.isFinite(num) && num > max ? num : max;
-  }, 105);
-  const nextNum = maxNum + 1;
-  const merchantCode = backendMerchantCode || `MC-${nextNum}`;
-
-  const initials =
-    cleanStoreName
-      .split(/\s+/)
-      .map((w) => w[0])
-      .join('')
-      .slice(0, 2)
-      .toUpperCase() || 'MC';
-
-  const avatarBg = AVATAR_GRADIENTS[nextNum % AVATAR_GRADIENTS.length];
-  const joinedDate = new Date().toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-
-  const newMerchantRecord: MerchantRecord = {
-    id: `m-${nextNum}`,
-    merchantCode,
-    storeName: cleanStoreName,
-    ownerName: cleanOwnerName,
-    email: input.email.trim(),
-    phone: cleanPhone,
-    location: 'Dhaka, Bangladesh',
-    deliveryArea: 'Nationwide Bangladesh',
-    status: 'Pending',
-    verified: false,
-    joinedDate,
-    avatarInitials: initials,
-    avatarBg,
-    payoutAccount: {
-      provider: 'Pending Bank Setup',
-      accountHolder: cleanOwnerName,
-      accountNumber: '0000000000000',
-      branchName: 'Dhaka Main Branch',
-      routingNumber: '000000000',
-      bkashNumber: cleanPhone,
-      frequency: 'Weekly (Every Friday)',
-      status: 'PENDING_REVIEW',
-      availableBalance: 0,
-      lastPayoutAmount: 0,
-    },
-  };
-
-  if (typeof window !== 'undefined') {
-    try {
-      // 1. Prepend to Admin Merchant Directory
-      const updatedDirectory = [newMerchantRecord, ...directory];
-      localStorage.setItem(STORAGE_KEY_MERCHANT_DIRECTORY, JSON.stringify(updatedDirectory));
-
-      // 2. Save Credentials
-      const newCred: MerchantCredentialRecord = {
-        email: cleanEmail,
-        password: input.password,
-        merchantCode,
-        storeName: cleanStoreName,
-        ownerName: cleanOwnerName,
-        phone: cleanPhone,
-        category: input.category,
-        orderVolume: input.orderVolume,
-        storeUrl: input.storeUrl?.trim(),
-      };
-      localStorage.setItem(
-        STORAGE_KEY_MERCHANT_CREDENTIALS,
-        JSON.stringify([newCred, ...credentials])
-      );
-
-      // 3. Initialize isolated Merchant Portal profile & empty workspaces (0 products, 0 orders)
-      const initialProfile: MerchantProfileData = {
-        ...buildProfileFromMerchantRecord(newMerchantRecord),
-        socialChannels: input.storeUrl?.trim()
-          ? [{ id: '1', platform: 'Facebook', url: input.storeUrl.trim() }]
-          : [],
-      };
-      localStorage.setItem(getMerchantProfileKey(merchantCode), JSON.stringify(initialProfile));
-      localStorage.setItem(getMerchantProductsKey(merchantCode), JSON.stringify([]));
-      localStorage.setItem(getMerchantOrdersKey(merchantCode), JSON.stringify([]));
-      localStorage.setItem(
-        getMerchantMemosKey(merchantCode),
-        JSON.stringify(getStoredMerchantMemosForCode(merchantCode, initialProfile))
-      );
-      localStorage.setItem(getMerchantAsnsKey(merchantCode), JSON.stringify([]));
-      localStorage.setItem(getMerchantStockRequestsKey(merchantCode), JSON.stringify([]));
-
-      window.dispatchEvent(
-        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'MerchantRegister' } })
-      );
-    } catch {
-      // ignore storage errors
-    }
-  }
-
-  return { ok: true, merchant: newMerchantRecord };
 }
 
 /**
- * Authenticate a Merchant Login:
- * - Verifies email & password
- * - Checks if the merchant is approved (`Active`) in Admin Merchant Directory
- * - Blocks `Pending` or `Suspended` merchants with clear guidance
- * - Sets the active merchant session so `/merchant` loads that merchant's isolated portal
+ * Authenticate a Merchant Login strictly against the backend PostgreSQL database.
  */
 export async function authenticateMerchantLogin(
   emailInput: string,
@@ -733,160 +564,54 @@ export async function authenticateMerchantLogin(
   merchant?: MerchantRecord;
 }> {
   const cleanEmail = emailInput.trim().toLowerCase();
-  const directory = getStoredMerchantDirectory();
-  const credentials = getStoredMerchantCredentials();
-
-  // Check if user is logging in with the default demo preset (`merchant@urbanthreads.com` or `sabbir@example.com`)
-  const isDefaultDemoPreset =
-    cleanEmail === 'merchant@urbanthreads.com' || cleanEmail === 'sabbir@example.com';
-
-  let matchedMerchant = directory.find(
-    (m) =>
-      m.email.trim().toLowerCase() === cleanEmail ||
-      m.merchantCode.trim().toLowerCase() === cleanEmail
-  );
-
-  if (!matchedMerchant && isDefaultDemoPreset) {
-    matchedMerchant = directory.find((m) => m.merchantCode === 'MC-101') || MERCHANTS_DATA[0];
+  if (!cleanEmail || !passwordInput) {
+    return { ok: false, error: 'ইমেইল এবং পাসওয়ার্ড দিন।' };
   }
 
-  // Also check credentials if not found in directory yet
-  const matchedCred = credentials.find(
-    (c) =>
-      c.email.trim().toLowerCase() === cleanEmail ||
-      (matchedMerchant && c.merchantCode === matchedMerchant.merchantCode)
-  );
-
-  if (!matchedMerchant && !matchedCred) {
-    // Try backend login if running on localhost
-    try {
-      const res = await fetch(`${API_BASE}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: cleanEmail, password: passwordInput }),
-      });
-      if (res.status === 403) {
-        return {
-          ok: false,
-          error:
-            'আপনার একাউন্টটি এখনো এডমিন অনুমোদনের অপেক্ষায় আছে (Pending Approval)। এডমিন প্যানেল থেকে Approve করার পর লগইন করতে পারবেন।',
-        };
-      }
-      if (res.ok) {
-        const data = await res.json();
-        if (data?.accessToken) {
-          localStorage.setItem('fulfillio_token', data.accessToken);
-        }
-        const mCode = data?.user?.merchantCode || 'MC-101';
-        const session: ActiveMerchantSession = {
-          merchantCode: mCode,
-          email: data?.user?.email || cleanEmail,
-          storeName: data?.user?.businessName || data?.user?.name || 'Merchant Store',
-          ownerName: data?.user?.name || 'Merchant Owner',
-        };
-        setActiveMerchantSession(session);
-        return { ok: true, merchantCode: mCode };
-      }
-    } catch {
-      // Backend offline
-    }
-
-    return {
-      ok: false,
-      error:
-        'এই ইমেইলে কোনো মার্চেন্ট একাউন্ট পাওয়া যায়নি। নতুন মার্চেন্ট একাউন্ট খুলতে নিচের "এখানে একাউন্ট খুলুন" অপশনে যান।',
-    };
-  }
-
-  // Verify password if credential exists for this merchant
-  const isAzad = cleanEmail === 'azad@gmail.com' || (matchedMerchant && matchedMerchant.merchantCode === 'MC-105');
-  const isAzadPassword = isAzad && (passwordInput === 'Azad?1' || passwordInput.toLowerCase() === 'azad?1');
-  const isSupplyro = cleanEmail === 'supplyro@gmail.com' || (matchedMerchant && matchedMerchant.merchantCode === 'MC-106');
-  const isSupplyroPassword = isSupplyro && (passwordInput === 'Supplyro' || passwordInput.toLowerCase() === 'supplyro');
-  if (matchedCred && matchedCred.password !== passwordInput && !isAzadPassword && !isSupplyroPassword) {
-    return {
-      ok: false,
-      error: 'পাসওয়ার্ড সঠিক নয়। অনুগ্রহ করে সঠিক পাসওয়ার্ড দিয়ে চেষ্টা করুন।',
-    };
-  }
-  if (matchedCred && isSupplyroPassword) {
-    matchedCred.password = passwordInput;
-    try {
-      localStorage.setItem(STORAGE_KEY_MERCHANT_CREDENTIALS, JSON.stringify(credentials));
-    } catch {}
-  }
-
-  // Check Admin Approval / Account Status
-  const currentStatus = matchedMerchant?.status || 'Pending';
-  const storeLabel = matchedMerchant?.storeName || matchedCred?.storeName || 'আপনার স্টোর';
-  const codeLabel = matchedMerchant?.merchantCode || matchedCred?.merchantCode || '';
-
-  if (currentStatus === 'Pending') {
-    return {
-      ok: false,
-      error: `"${storeLabel}" (${codeLabel}) একাউন্টটি এখনো এডমিন অনুমোদনের অপেক্ষায় আছে (Pending Approval)। Admin Panel -> Merchants থেকে Approve করার পর লগইন করতে পারবেন।`,
-    };
-  }
-
-  if (currentStatus === 'Suspended') {
-    return {
-      ok: false,
-      error: `"${storeLabel}" (${codeLabel}) একাউন্টটি বর্তমানে স্থগিত (Suspended) রয়েছে। Admin Panel থেকে Active করার পর লগইন করতে পারবেন।`,
-    };
-  }
-
-  // Optional: also authenticate against localhost backend to obtain JWT if running locally
   try {
     const res = await fetch(`${API_BASE}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: cleanEmail, password: passwordInput }),
     });
-    if (res.ok) {
-      const data = await res.json();
-      if (data?.accessToken) {
-        localStorage.setItem('fulfillio_token', data.accessToken);
-      }
+
+    const data = await res.json().catch(() => ({}));
+
+    if (res.status === 403) {
+      return {
+        ok: false,
+        error:
+          data?.message ||
+          'আপনার একাউন্টটি এখনো এডমিন অনুমোদনের অপেক্ষায় আছে (Pending Approval)। এডমিন প্যানেল থেকে Approve করার পর লগইন করতে পারবেন।',
+      };
     }
-  } catch {
-    // ignore when backend is not running
-  }
 
-  const finalMerchantCode = matchedMerchant?.merchantCode || matchedCred?.merchantCode || 'MC-101';
-  const finalEmail = matchedMerchant?.email || matchedCred?.email || cleanEmail;
-  const finalStoreName =
-    matchedMerchant?.storeName || matchedCred?.storeName || INITIAL_MERCHANT_PROFILE.storeName;
-  const finalOwnerName =
-    matchedMerchant?.ownerName || matchedCred?.ownerName || INITIAL_MERCHANT_PROFILE.ownerName;
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: data?.message || 'ইমেইল বা পাসওয়ার্ড সঠিক নয়।',
+      };
+    }
 
-  // Ensure profile in storage reflects Active & Verified state
-  if (matchedMerchant && finalMerchantCode !== 'MC-101') {
-    const existingProf = getStoredMerchantProfileForCode(finalMerchantCode);
-    const updatedProf: MerchantProfileData = {
-      ...existingProf,
-      merchantCode: finalMerchantCode,
-      storeName: finalStoreName,
-      ownerName: finalOwnerName,
-      email: finalEmail,
-      phone: matchedMerchant.phone || existingProf.phone,
-      status: 'Active',
-      verified: true,
+    if (data?.accessToken) {
+      localStorage.setItem('fulfillio_token', data.accessToken);
+    }
+
+    const mCode = data?.user?.merchantCode || 'MC-101';
+    const session: ActiveMerchantSession = {
+      merchantCode: mCode,
+      email: data?.user?.email || cleanEmail,
+      storeName: data?.user?.businessName || data?.user?.name || 'Merchant Store',
+      ownerName: data?.user?.name || 'Merchant Owner',
     };
-    try {
-      localStorage.setItem(getMerchantProfileKey(finalMerchantCode), JSON.stringify(updatedProf));
-    } catch {
-      // ignore
-    }
+    setActiveMerchantSession(session);
+    return { ok: true, merchantCode: mCode };
+  } catch {
+    return {
+      ok: false,
+      error: 'সার্ভার বা ডাটাবেজের সাথে সংযোগ করা যাচ্ছে না। অনুগ্রহ করে নিশ্চিত করুন API সার্ভার চালু আছে।',
+    };
   }
-
-  setActiveMerchantSession({
-    merchantCode: finalMerchantCode,
-    email: finalEmail,
-    storeName: finalStoreName,
-    ownerName: finalOwnerName,
-  });
-
-  return { ok: true, merchantCode: finalMerchantCode, merchant: matchedMerchant };
 }
 
 /**
@@ -1010,7 +735,7 @@ export function convertMerchantProductToWarehouse(
     status,
     isDraft: status === 'DRAFT',
     submittedAt: 'Just now',
-    imageUrl: item.imageUrl || item.colors?.[0]?.imageUrl || PRESET_THUMBNAILS[0].url,
+    imageUrl: item.imageUrl || item.colors?.[0]?.imageUrl || PRESET_THUMBNAILS[0]?.url || '',
     images: item.images,
     barcode: item.barcode,
     description: item.description,
@@ -1509,7 +1234,7 @@ export function convertMerchantOrderToWarehouse(
       return {
         sku: itemFullSku,
         title: cleanTitle,
-        image: li.imageUrl || matchedProd?.imageUrl || primaryProduct?.imageUrl || PRESET_THUMBNAILS[0].url,
+        image: li.imageUrl || matchedProd?.imageUrl || primaryProduct?.imageUrl || PRESET_THUMBNAILS[0]?.url || '',
         color: itemColor,
         size: itemSize,
         qty: li.quantity || 1,
@@ -1537,7 +1262,7 @@ export function convertMerchantOrderToWarehouse(
       return {
         sku: parsedSku,
         title: title || 'Warehouse Order Item',
-        image: primaryLine?.imageUrl || primaryProduct?.imageUrl || PRESET_THUMBNAILS[0].url,
+        image: primaryLine?.imageUrl || primaryProduct?.imageUrl || PRESET_THUMBNAILS[0]?.url || '',
         color: parsedColor,
         size: parsedSize,
         qty: parsedQty,
@@ -1556,7 +1281,7 @@ export function convertMerchantOrderToWarehouse(
       {
         sku: fullSku,
         title: singleTitle,
-        image: primaryLine?.imageUrl || primaryProduct?.imageUrl || PRESET_THUMBNAILS[0].url,
+        image: primaryLine?.imageUrl || primaryProduct?.imageUrl || PRESET_THUMBNAILS[0]?.url || '',
         color,
         size,
         qty: order.qty || 1,
@@ -1618,7 +1343,7 @@ export function convertMerchantOrderToWarehouse(
     city,
     productTitle: cleanPrimaryTitle,
     productImage:
-      orderItems[0]?.image || primaryLine?.imageUrl || primaryProduct?.imageUrl || PRESET_THUMBNAILS[0].url,
+      orderItems[0]?.image || primaryLine?.imageUrl || primaryProduct?.imageUrl || PRESET_THUMBNAILS[0]?.url || '',
     bin: orderItems[0]?.bin || primaryProduct?.bin?.split('-').slice(0, 3).join('-') || 'A-01-02',
     color: orderItems[0]?.color || color,
     size: orderItems[0]?.size || size,
@@ -2154,14 +1879,14 @@ export interface SyncedAdminMemoItem {
 }
 
 export function getStoredMerchantMemos(): ResellerMemo[] {
-  if (typeof window === 'undefined') return INITIAL_MERCHANT_MEMOS;
+  if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY_MERCHANT_MEMOS);
-    if (!raw) return INITIAL_MERCHANT_MEMOS;
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_MERCHANT_MEMOS;
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return INITIAL_MERCHANT_MEMOS;
+    return [];
   }
 }
 
@@ -2536,7 +2261,7 @@ export function addAdminCatalogProductForMerchant(
       price: item.price,
       status: 'APPROVED',
       submittedAt: 'Added by admin',
-      imageUrl: item.imageUrl || PRESET_THUMBNAILS[0].url,
+      imageUrl: item.imageUrl || PRESET_THUMBNAILS[0]?.url || '',
       barcode: item.barcode,
     };
     const next = [created, ...current];
@@ -2584,7 +2309,7 @@ export function syncMerchantStockRequestToAdmin(
         destination: request.destination,
         trackingRef: request.trackingRef || `RET-${Date.now().toString().slice(-6)}`,
         submittedAt: 'Just now',
-        imageUrl: request.imageUrl || PRESET_THUMBNAILS[0].url,
+        imageUrl: request.imageUrl || PRESET_THUMBNAILS[0]?.url || '',
       };
       const next = existingIdx >= 0
         ? list.map((w, idx) => (idx === existingIdx ? withdrawalItem : w))
@@ -2613,7 +2338,7 @@ export function syncMerchantStockRequestToAdmin(
         note: request.note || 'Merchant inbound restock consignment',
         trackingRef: request.trackingRef || `INB-${Date.now().toString().slice(-6)}`,
         submittedAt: 'Just now',
-        imageUrl: request.imageUrl || PRESET_THUMBNAILS[0].url,
+        imageUrl: request.imageUrl || PRESET_THUMBNAILS[0]?.url || '',
       };
       const next = existingIdx >= 0
         ? list.map((r, idx) => (idx === existingIdx ? replenishmentItem : r))
@@ -3150,11 +2875,17 @@ export async function fetchOrdersFromDatabase(): Promise<WarehousePipelineOrder[
             : o.advancePayment > 0
             ? 'Partial'
             : 'Unpaid',
-        courier: (o.courierProvider as CourierPartner) || 'Steadfast',
+        courier: (() => {
+          const upper = String(o.courierProvider || '').toUpperCase();
+          if (upper === 'STEADFAST') return 'Steadfast';
+          if (upper === 'PATHAO') return 'Pathao';
+          if (upper === 'REDX') return 'RedX';
+          return '';
+        })() as CourierPartner,
         trackingCode: o.trackingCode || undefined,
         stage: dbStageMap[o.status] || 'PICK',
         isMemoPrinted: Boolean(o.isMemoPrinted),
-        isCourierBooked: Boolean(o.trackingCode || o.courierProvider),
+        isCourierBooked: Boolean(o.trackingCode),
       };
       return pipelineOrder;
     });

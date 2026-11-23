@@ -331,7 +331,7 @@ export function MerchantOverviewTab({
                   <span>COD Balance</span>
                 </div>
                 <div className="text-lg font-bold text-orange-600 dark:text-orange-400 tabular-nums">
-                  ৳{merchant.payoutAccount.availableBalance.toLocaleString()}
+                  ৳{(merchant.payoutAccount?.availableBalance ?? 0).toLocaleString()}
                 </div>
                 <span className="text-xs text-slate-600 dark:text-slate-300 group-hover:text-slate-700 dark:group-hover:text-slate-200">
                   Bank &amp; bKash setup →

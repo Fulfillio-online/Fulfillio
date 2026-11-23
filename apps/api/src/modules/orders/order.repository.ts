@@ -1,6 +1,18 @@
 import { Injectable } from '@nestjs/common';
+import { CourierProvider } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { OrderStatus, PackagingType } from '@fulfillio/contracts';
+
+function normalizeCourierProvider(raw?: string | null): CourierProvider | null {
+  const upper = (raw || '').trim().toUpperCase();
+  if (!upper) return null;
+  if (upper === 'STEADFAST') return CourierProvider.STEADFAST;
+  if (upper === 'PATHAO') return CourierProvider.PATHAO;
+  if (upper === 'REDX') return CourierProvider.REDX;
+  if (upper === 'PAPERFLY') return CourierProvider.PAPERFLY;
+  if (upper === 'CUSTOM') return CourierProvider.CUSTOM;
+  return null;
+}
 
 @Injectable()
 export class OrderRepository {
@@ -136,6 +148,7 @@ export class OrderRepository {
     customerAddress: string;
     city?: string;
     memoCode?: string;
+    courierProvider?: string;
     status: OrderStatus;
     customerRiskScore: number;
     customerRiskLevel: string;
@@ -176,7 +189,8 @@ export class OrderRepository {
           customerPhone: data.customerPhone,
           customerAddress: data.customerAddress,
           city: data.city || 'Dhaka',
-          memoCode: data.memoCode ? data.memoCode.toUpperCase() : 'MEMO-DEFAULT',
+          memoCode: data.memoCode ? data.memoCode.trim().toUpperCase() : null,
+          courierProvider: normalizeCourierProvider(data.courierProvider),
           status: data.status,
           customerRiskScore: data.customerRiskScore,
           customerRiskLevel: data.customerRiskLevel,
@@ -226,7 +240,8 @@ export class OrderRepository {
           customerPhone: data.customerPhone,
           customerAddress: data.customerAddress,
           city: data.city || 'Dhaka',
-          memoCode: data.memoCode ? data.memoCode.toUpperCase() : 'MEMO-DEFAULT',
+          memoCode: data.memoCode ? data.memoCode.trim().toUpperCase() : null,
+          courierProvider: normalizeCourierProvider(data.courierProvider),
           status: data.status,
           totalAmount,
           codAmount,
@@ -327,6 +342,21 @@ export class OrderRepository {
     return this.prisma.order.updateMany({
       where: { id: { in: orderIds } },
       data: { status },
+    });
+  }
+
+  async updateOrderCourier(orderId: string, courierProvider?: string | null) {
+    const normalized = normalizeCourierProvider(courierProvider);
+    const existing = await this.prisma.order.findFirst({
+      where: {
+        OR: [{ id: orderId }, { externalOrderId: orderId }],
+      },
+      select: { id: true },
+    });
+    if (!existing) return null;
+    return this.prisma.order.update({
+      where: { id: existing.id },
+      data: { courierProvider: normalized },
     });
   }
 }

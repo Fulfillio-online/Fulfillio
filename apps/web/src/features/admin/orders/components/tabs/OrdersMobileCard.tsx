@@ -174,6 +174,7 @@ export function OrdersMobileCard({
                 aria-label="Change Courier"
                 className="mt-1 text-xs font-bold px-2 py-1 rounded-lg bg-white dark:bg-navy-900 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-white/10"
               >
+                <option value="">Unassigned</option>
                 <option value="Steadfast">Steadfast</option>
                 <option value="Pathao">Pathao</option>
                 <option value="RedX">RedX</option>

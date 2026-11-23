@@ -394,9 +394,11 @@ export function ProductDetailsView({
   const isFirstTimePending = isPendingApproval && product.stockAccepted !== true;
   const isPublishPendingFromDraft = isPendingApproval && product.stockAccepted === true;
 
+  const isSuspended = Boolean((product as any).isSuspended);
   const isReadyToOrder =
     !isDraft &&
     !isPendingApproval &&
+    !isSuspended &&
     (product.stock || 0) > 0;
 
   const handleAddToCart = () => {
@@ -650,6 +652,8 @@ export function ProductDetailsView({
                       ? 'bg-amber-500/10 text-amber-500 dark:text-amber-400 border-amber-500/30'
                       : isDraft
                       ? 'bg-slate-500/10 text-slate-600 dark:text-slate-300 border-slate-500/30'
+                      : isSuspended
+                      ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30'
                       : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
                   }`}
                 >
@@ -657,6 +661,8 @@ export function ProductDetailsView({
                     ? 'Pending Approval'
                     : isDraft
                     ? 'Draft'
+                    : isSuspended
+                    ? 'Suspended'
                     : 'Published · Ready to Sell'}
                 </span>
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-navy-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/10">
@@ -911,6 +917,8 @@ export function ProductDetailsView({
                     <span className="truncate">
                       {isPendingApproval
                         ? 'Pending Approval'
+                        : isSuspended
+                        ? 'Product Suspended'
                         : currentVariantStock <= 0
                         ? 'Variant Out of Stock'
                         : `Add to Order List (৳${(product.price * orderQty).toLocaleString()})`}

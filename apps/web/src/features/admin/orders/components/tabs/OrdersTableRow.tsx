@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -55,20 +56,68 @@ export function OrdersTableRow({
   onViewOrder,
 }: OrdersTableRowProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
   const menuRef = useRef<HTMLDivElement>(null);
+  const portalRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
+  const updateMenuPosition = useCallback(() => {
+    if (!menuRef.current) return;
+    const rect = menuRef.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const estimatedMenuHeight = 260;
+    const openUpward = spaceBelow < estimatedMenuHeight && spaceAbove > spaceBelow;
+
+    setMenuStyle({
+      position: 'fixed',
+      right: Math.max(8, window.innerWidth - rect.right),
+      ...(openUpward
+        ? { bottom: Math.max(8, window.innerHeight - rect.top + 6) }
+        : { top: Math.max(8, rect.bottom + 6) }),
+      zIndex: 9999,
+    });
+  }, []);
+
+  const handleToggleMenu = () => {
+    if (!isMenuOpen) {
+      updateMenuPosition();
+      setIsMenuOpen(true);
+    } else {
+      setIsMenuOpen(false);
+    }
+  };
+
   useEffect(() => {
+    if (!isMenuOpen) return;
+
     const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        menuRef.current &&
+        !menuRef.current.contains(target) &&
+        (!portalRef.current || !portalRef.current.contains(target))
+      ) {
         setIsMenuOpen(false);
       }
     };
-    if (isMenuOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsMenuOpen(false);
+    };
+    const handleScrollOrResize = () => {
+      setIsMenuOpen(false);
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('scroll', handleScrollOrResize, true);
+    window.addEventListener('resize', handleScrollOrResize);
+
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+      window.removeEventListener('resize', handleScrollOrResize);
     };
   }, [isMenuOpen]);
 
@@ -167,6 +216,7 @@ export function OrdersTableRow({
             aria-label="Change Courier Partner"
             className="text-xs font-bold px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-navy-950 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-white/15 hover:border-orange-500/60 focus:outline-none focus:border-orange-500 cursor-pointer shadow-2xs"
           >
+            <option value="">Unassigned</option>
             <option value="Steadfast">Steadfast</option>
             <option value="Pathao">Pathao</option>
             <option value="RedX">RedX</option>
@@ -239,7 +289,7 @@ export function OrdersTableRow({
         <div className="relative inline-block text-left" ref={menuRef}>
           <button
             type="button"
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            onClick={handleToggleMenu}
             className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-bold text-navy-900 dark:text-slate-100 border border-slate-300 dark:border-white/15 inline-flex items-center gap-1 transition-colors cursor-pointer shadow-2xs whitespace-nowrap"
           >
             <span>Actions</span>
@@ -252,12 +302,14 @@ export function OrdersTableRow({
             />
           </button>
 
-          {isMenuOpen && (
-            <div
-              className={`absolute right-0 ${
-                isNearBottom ? 'bottom-full mb-1' : 'top-full mt-1'
-              } w-52 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-2xl py-1 z-[100] text-left font-sans text-xs`}
-            >
+          {isMenuOpen &&
+            typeof document !== 'undefined' &&
+            createPortal(
+              <div
+                ref={portalRef}
+                style={menuStyle}
+                className="w-52 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-2xl py-1 text-left font-sans text-xs"
+              >
               {/* Option 1: View Order Details */}
               <button
                 type="button"
@@ -383,8 +435,9 @@ export function OrdersTableRow({
                   </button>
                 </div>
               )}
-            </div>
-          )}
+              </div>,
+              document.body
+            )}
         </div>
       </td>
     </tr>

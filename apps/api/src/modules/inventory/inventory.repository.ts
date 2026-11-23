@@ -6,22 +6,9 @@ import { StockMovementReason } from '@fulfillio/contracts';
 export class InventoryRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  private isConnectionError(err: any): boolean {
-    return (
-      err?.name === 'PrismaClientInitializationError' ||
-      err?.name === 'PrismaClientRustPanicError' ||
-      err?.code === 'P1001' ||
-      err?.code === 'P1002' ||
-      err?.message?.includes("Can't reach database server") ||
-      err?.message?.includes('connect ECONNREFUSED')
-    );
-  }
 
   async findMerchantById(merchantId: string) {
     if (!merchantId) return null;
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.findMerchantById(merchantId) as any;
-    }
     const clean = merchantId.trim();
     try {
       return await this.prisma.merchant.findFirst({
@@ -34,16 +21,11 @@ export class InventoryRepository {
         },
       });
     } catch (err: any) {
-      if (this.isConnectionError(err)) {
-        this.prisma.isConnected = false;
-        return this.prisma.fallbackStore.findMerchantById(merchantId) as any;
-      }
       throw err;
     }
   }
 
   async ensureProductImagesColumn() {
-    if (this.prisma.isOffline()) return;
     try {
       await this.prisma.$executeRawUnsafe(
         `ALTER TABLE IF EXISTS "products" ADD COLUMN IF NOT EXISTS "images" text[] DEFAULT ARRAY[]::text[];
@@ -55,9 +37,6 @@ export class InventoryRepository {
   }
 
   async findProductByMerchantAndBaseSku(merchantId: string, baseSku: string) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.findProductByMerchantAndBaseSku(merchantId, baseSku) as any;
-    }
     try {
       return await this.prisma.product.findFirst({
         where: {
@@ -72,10 +51,6 @@ export class InventoryRepository {
         },
       });
     } catch (err: any) {
-      if (this.isConnectionError(err)) {
-        this.prisma.isConnected = false;
-        return this.prisma.fallbackStore.findProductByMerchantAndBaseSku(merchantId, baseSku) as any;
-      }
       if (err?.code === 'P2022') {
         await this.ensureProductImagesColumn();
         return await this.prisma.product.findFirst({
@@ -96,9 +71,6 @@ export class InventoryRepository {
   }
 
   async upsertMerchantStub(merchantCode: string) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.upsertMerchantStub(merchantCode) as any;
-    }
     const cleanCode = merchantCode.trim().toUpperCase();
     const safeEmail = `${cleanCode.toLowerCase().replace(/[^a-z0-9]/g, '')}@fulfillio.online`;
     try {
@@ -116,10 +88,6 @@ export class InventoryRepository {
         },
       });
     } catch (err: any) {
-      if (this.isConnectionError(err)) {
-        this.prisma.isConnected = false;
-        return this.prisma.fallbackStore.upsertMerchantStub(merchantCode) as any;
-      }
       throw err;
     }
   }
@@ -132,9 +100,6 @@ export class InventoryRepository {
     binCode: string;
     isDamaged?: boolean;
   }) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.upsertLocation(data) as any;
-    }
     try {
       return await this.prisma.inventoryLocation.upsert({
         where: { binCode: data.binCode.toUpperCase() },
@@ -149,10 +114,6 @@ export class InventoryRepository {
         },
       });
     } catch (err: any) {
-      if (this.isConnectionError(err)) {
-        this.prisma.isConnected = false;
-        return this.prisma.fallbackStore.upsertLocation(data) as any;
-      }
       throw err;
     }
   }
@@ -184,9 +145,6 @@ export class InventoryRepository {
       attributes?: Record<string, any>;
     }>;
   }) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.createProductWithVariants(data) as any;
-    }
 
     // Sanitize imageUrl to prevent PostgreSQL UTF-8 null byte error (0x00)
     const sanitizedImageUrl = data.imageUrl
@@ -334,10 +292,6 @@ export class InventoryRepository {
           console.error('[PostgreSQL Save Error] Retry after unique constraint resolve failed:', retryErr?.message || retryErr);
         }
       }
-      if (this.isConnectionError(err)) {
-        this.prisma.isConnected = false;
-        return this.prisma.fallbackStore.createProductWithVariants(data) as any;
-      }
       console.error('[PostgreSQL Save Error] Failed to create product with variants:', err?.message || err);
       throw new BadRequestException(`PostgreSQL Save Error: ${err?.message || 'Database transaction failed'}`);
     }
@@ -368,9 +322,6 @@ export class InventoryRepository {
       }>;
     },
   ) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.updateProductWithVariants(productId, data.merchantId || 'MC-101', data) as any;
-    }
     const searchConditions: any[] = [
       { id: productId },
       { baseSku: productId },
@@ -609,9 +560,6 @@ export class InventoryRepository {
             : rawStatus === 'STOCK_STORED'
               ? 'STOCK_STORED'
               : 'PUBLISHED';
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.updateProductWithVariants(productId, 'MC-101', { status: initialCleanStatus }) as any;
-    }
     await this.ensureProductImagesColumn();
 
     const searchConditions: any[] = [
@@ -707,14 +655,6 @@ export class InventoryRepository {
     const finalStock = isStockAccepted ? Math.max(0, Number(data.finalQty) || 0) : 0;
     const nextStatus = isStockAccepted && finalStock > 0 ? 'STOCK_STORED' : 'APPROVED';
 
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.approveProduct(productId, {
-        binCode,
-        finalQty: finalStock,
-        acceptStockNow: isStockAccepted,
-        variantStocks: data.variantStocks,
-      }) as any;
-    }
 
     await this.ensureProductImagesColumn();
 
@@ -847,14 +787,6 @@ export class InventoryRepository {
     const intakeQty = Math.max(1, Number(data.quantity) || 1);
     const binCode = (data.binCode || 'A-01-02').trim().toUpperCase();
 
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.acceptStock(productId, {
-        quantity: intakeQty,
-        binCode,
-        challanOrTracking: data.challanOrTracking,
-        note: data.note,
-      }) as any;
-    }
 
     await this.ensureProductImagesColumn();
 
@@ -961,9 +893,6 @@ export class InventoryRepository {
    * If even 1 unit exists in warehouse stock, deletion is strictly rejected.
    */
   async deleteProduct(productId: string) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.deleteProduct(productId) as any;
-    }
 
     const searchConditions: any[] = [
       { id: productId },
@@ -1036,9 +965,6 @@ export class InventoryRepository {
   }
 
   async findProducts(merchantId?: string) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.findProducts(merchantId) as any;
-    }
     const where: any = {};
     if (merchantId) {
       where.OR = [
@@ -1068,10 +994,6 @@ export class InventoryRepository {
         orderBy: { createdAt: 'desc' },
       });
     } catch (err: any) {
-      if (this.isConnectionError(err)) {
-        this.prisma.isConnected = false;
-        return this.prisma.fallbackStore.findProducts(merchantId) as any;
-      }
       if (err?.code === 'P2022') {
         await this.ensureProductImagesColumn();
         return await this.prisma.product.findMany({
@@ -1096,9 +1018,6 @@ export class InventoryRepository {
   }
 
   async findProductById(id: string, merchantId?: string) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.findProductById(id, merchantId) as any;
-    }
     const where: any = { id };
     if (merchantId) where.merchantId = merchantId;
 
@@ -1117,10 +1036,6 @@ export class InventoryRepository {
         },
       });
     } catch (err: any) {
-      if (this.isConnectionError(err)) {
-        this.prisma.isConnected = false;
-        return this.prisma.fallbackStore.findProductById(id, merchantId) as any;
-      }
       if (err?.code === 'P2022') {
         await this.ensureProductImagesColumn();
         return await this.prisma.product.findFirst({
@@ -1299,9 +1214,6 @@ export class InventoryRepository {
   // ============================================================================
 
   async submitApprovalRequest(productId: string, requestedBy?: string) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.submitApprovalRequest(productId, requestedBy);
-    }
     try {
       return await this.prisma.$transaction(async (tx) => {
         const product = await tx.product.findUnique({ where: { id: productId } });
@@ -1348,18 +1260,11 @@ export class InventoryRepository {
         return updated;
       });
     } catch (err: any) {
-      if (this.isConnectionError(err)) {
-        this.prisma.isConnected = false;
-        return this.prisma.fallbackStore.submitApprovalRequest(productId, requestedBy);
-      }
       throw err;
     }
   }
 
   async cancelApprovalRequest(productId: string, merchantId?: string) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.cancelApprovalRequest(productId, merchantId);
-    }
     try {
       return await this.prisma.$transaction(async (tx) => {
         const product = await tx.product.findUnique({ where: { id: productId } });
@@ -1390,18 +1295,11 @@ export class InventoryRepository {
         return updated;
       });
     } catch (err: any) {
-      if (this.isConnectionError(err)) {
-        this.prisma.isConnected = false;
-        return this.prisma.fallbackStore.cancelApprovalRequest(productId, merchantId);
-      }
       throw err;
     }
   }
 
   async approveSubmission(productId: string, adminId?: string, binCode?: string) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.approveSubmission(productId, adminId, binCode);
-    }
     try {
       return await this.prisma.$transaction(async (tx) => {
         const product = await tx.product.findUnique({
@@ -1460,18 +1358,11 @@ export class InventoryRepository {
         return updated;
       });
     } catch (err: any) {
-      if (this.isConnectionError(err)) {
-        this.prisma.isConnected = false;
-        return this.prisma.fallbackStore.approveSubmission(productId, adminId, binCode);
-      }
       throw err;
     }
   }
 
   async rejectSubmission(productId: string, adminId?: string, reason?: string) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.rejectSubmission(productId, adminId, reason);
-    }
     try {
       return await this.prisma.$transaction(async (tx) => {
         const product = await tx.product.findUnique({ where: { id: productId } });
@@ -1520,18 +1411,11 @@ export class InventoryRepository {
         return updated;
       });
     } catch (err: any) {
-      if (this.isConnectionError(err)) {
-        this.prisma.isConnected = false;
-        return this.prisma.fallbackStore.rejectSubmission(productId, adminId, reason);
-      }
       throw err;
     }
   }
 
   async receiveInitialStock(productId: string, data: any) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.receiveInitialStock(productId, data);
-    }
     try {
       return await this.prisma.$transaction(async (tx) => {
         const product = await tx.product.findUnique({
@@ -1628,18 +1512,11 @@ export class InventoryRepository {
         return product;
       });
     } catch (err: any) {
-      if (this.isConnectionError(err)) {
-        this.prisma.isConnected = false;
-        return this.prisma.fallbackStore.receiveInitialStock(productId, data);
-      }
       throw err;
     }
   }
 
   async requestEditAccess(productId: string, merchantId?: string, reason?: string) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.requestEditAccess(productId, merchantId, reason);
-    }
     try {
       return await this.prisma.$transaction(async (tx) => {
         const product = await tx.product.findUnique({ where: { id: productId } });
@@ -1686,18 +1563,11 @@ export class InventoryRepository {
         return updated;
       });
     } catch (err: any) {
-      if (this.isConnectionError(err)) {
-        this.prisma.isConnected = false;
-        return this.prisma.fallbackStore.requestEditAccess(productId, merchantId, reason);
-      }
       throw err;
     }
   }
 
   async reviewEditAccess(productId: string, adminId?: string, action: 'GRANT' | 'DENY' = 'GRANT', reason?: string) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.reviewEditAccess(productId, adminId, action, reason);
-    }
     try {
       return await this.prisma.$transaction(async (tx) => {
         const product = await tx.product.findUnique({ where: { id: productId } });
@@ -1736,18 +1606,11 @@ export class InventoryRepository {
         return updated;
       });
     } catch (err: any) {
-      if (this.isConnectionError(err)) {
-        this.prisma.isConnected = false;
-        return this.prisma.fallbackStore.reviewEditAccess(productId, adminId, action, reason);
-      }
       throw err;
     }
   }
 
   async submitRevision(productId: string, merchantId?: string, proposedSnapshot?: any) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.submitRevision(productId, merchantId, proposedSnapshot);
-    }
     try {
       return await this.prisma.$transaction(async (tx) => {
         const product = await tx.product.findUnique({ where: { id: productId } });
@@ -1794,18 +1657,11 @@ export class InventoryRepository {
         return updated;
       });
     } catch (err: any) {
-      if (this.isConnectionError(err)) {
-        this.prisma.isConnected = false;
-        return this.prisma.fallbackStore.submitRevision(productId, merchantId, proposedSnapshot);
-      }
       throw err;
     }
   }
 
   async reviewRevision(productId: string, adminId?: string, action: 'APPROVE' | 'REJECT' = 'APPROVE', reason?: string) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.reviewRevision(productId, adminId, action, reason);
-    }
     try {
       return await this.prisma.$transaction(async (tx) => {
         const product = await tx.product.findUnique({ where: { id: productId } });
@@ -1864,18 +1720,11 @@ export class InventoryRepository {
         return updated;
       });
     } catch (err: any) {
-      if (this.isConnectionError(err)) {
-        this.prisma.isConnected = false;
-        return this.prisma.fallbackStore.reviewRevision(productId, adminId, action, reason);
-      }
       throw err;
     }
   }
 
   async createRestockRequest(productId: string, merchantId: string, data: any) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.createRestockRequest(productId, merchantId, data);
-    }
     try {
       return await this.prisma.restockRequest.create({
         data: {
@@ -1888,18 +1737,11 @@ export class InventoryRepository {
         },
       });
     } catch (err: any) {
-      if (this.isConnectionError(err)) {
-        this.prisma.isConnected = false;
-        return this.prisma.fallbackStore.createRestockRequest(productId, merchantId, data);
-      }
       throw err;
     }
   }
 
   async reviewRestockRequest(requestId: string, adminId?: string, action: 'APPROVE' | 'REJECT' = 'APPROVE', approvedQty?: number, reason?: string) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.reviewRestockRequest(requestId, adminId, action, approvedQty, reason);
-    }
     try {
       return await this.prisma.restockRequest.update({
         where: { id: requestId },
@@ -1912,18 +1754,11 @@ export class InventoryRepository {
         },
       });
     } catch (err: any) {
-      if (this.isConnectionError(err)) {
-        this.prisma.isConnected = false;
-        return this.prisma.fallbackStore.reviewRestockRequest(requestId, adminId, action, approvedQty, reason);
-      }
       throw err;
     }
   }
 
   async receiveRestockStock(requestId: string, adminId: string, data: any) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.receiveRestockStock(requestId, adminId, data);
-    }
     try {
       return await this.prisma.$transaction(async (tx) => {
         const req = await tx.restockRequest.findUnique({ where: { id: requestId } });
@@ -2000,18 +1835,11 @@ export class InventoryRepository {
         return { product: p, request: updatedReq };
       });
     } catch (err: any) {
-      if (this.isConnectionError(err)) {
-        this.prisma.isConnected = false;
-        return this.prisma.fallbackStore.receiveRestockStock(requestId, adminId, data);
-      }
       throw err;
     }
   }
 
   async createReturnRequest(productId: string, merchantId: string, data: any) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.createReturnRequest(productId, merchantId, data);
-    }
     try {
       return await this.prisma.returnRequest.create({
         data: {
@@ -2024,18 +1852,11 @@ export class InventoryRepository {
         },
       });
     } catch (err: any) {
-      if (this.isConnectionError(err)) {
-        this.prisma.isConnected = false;
-        return this.prisma.fallbackStore.createReturnRequest(productId, merchantId, data);
-      }
       throw err;
     }
   }
 
   async reviewReturnRequest(requestId: string, adminId?: string, action: 'APPROVE' | 'REJECT' = 'APPROVE', approvedQty?: number, reason?: string) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.reviewReturnRequest(requestId, adminId, action, approvedQty, reason);
-    }
     try {
       return await this.prisma.returnRequest.update({
         where: { id: requestId },
@@ -2048,18 +1869,11 @@ export class InventoryRepository {
         },
       });
     } catch (err: any) {
-      if (this.isConnectionError(err)) {
-        this.prisma.isConnected = false;
-        return this.prisma.fallbackStore.reviewReturnRequest(requestId, adminId, action, approvedQty, reason);
-      }
       throw err;
     }
   }
 
   async dispatchReturnStock(requestId: string, adminId: string, data: any) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.dispatchReturnStock(requestId, adminId, data);
-    }
     try {
       return await this.prisma.$transaction(async (tx) => {
         const req = await tx.returnRequest.findUnique({ where: { id: requestId } });
@@ -2118,18 +1932,11 @@ export class InventoryRepository {
         return { product: p, request: updatedReq };
       });
     } catch (err: any) {
-      if (this.isConnectionError(err)) {
-        this.prisma.isConnected = false;
-        return this.prisma.fallbackStore.dispatchReturnStock(requestId, adminId, data);
-      }
       throw err;
     }
   }
 
   async suspendProduct(productId: string, adminId?: string, reason?: string) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.suspendProduct(productId, adminId, reason);
-    }
     try {
       return await this.prisma.product.update({
         where: { id: productId },
@@ -2140,18 +1947,11 @@ export class InventoryRepository {
         },
       });
     } catch (err: any) {
-      if (this.isConnectionError(err)) {
-        this.prisma.isConnected = false;
-        return this.prisma.fallbackStore.suspendProduct(productId, adminId, reason);
-      }
       throw err;
     }
   }
 
   async reactivateProduct(productId: string, adminId?: string) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.reactivateProduct(productId, adminId);
-    }
     try {
       return await this.prisma.product.update({
         where: { id: productId },
@@ -2162,18 +1962,11 @@ export class InventoryRepository {
         },
       });
     } catch (err: any) {
-      if (this.isConnectionError(err)) {
-        this.prisma.isConnected = false;
-        return this.prisma.fallbackStore.reactivateProduct(productId, adminId);
-      }
       throw err;
     }
   }
 
   async listApprovalRequests(merchantId?: string, status?: string) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.listApprovalRequests(merchantId, status);
-    }
     const where: any = {};
     if (merchantId) where.merchantId = merchantId;
     if (status) where.status = status;
@@ -2185,9 +1978,6 @@ export class InventoryRepository {
   }
 
   async listEditRequests(merchantId?: string, status?: string) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.listEditRequests(merchantId, status);
-    }
     const where: any = {};
     if (merchantId) where.merchantId = merchantId;
     if (status) where.status = status;
@@ -2199,9 +1989,6 @@ export class InventoryRepository {
   }
 
   async listRestockRequests(merchantId?: string, status?: string) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.listRestockRequests(merchantId, status);
-    }
     const where: any = {};
     if (merchantId) where.merchantId = merchantId;
     if (status) where.status = status;
@@ -2213,9 +2000,6 @@ export class InventoryRepository {
   }
 
   async listReturnRequests(merchantId?: string, status?: string) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.listReturnRequests(merchantId, status);
-    }
     const where: any = {};
     if (merchantId) where.merchantId = merchantId;
     if (status) where.status = status;
@@ -2227,9 +2011,6 @@ export class InventoryRepository {
   }
 
   async listInventoryTransactions(productId?: string, merchantId?: string) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.listInventoryTransactions(productId, merchantId);
-    }
     const where: any = {};
     if (productId) where.productId = productId;
     if (merchantId) where.merchantId = merchantId;
@@ -2240,9 +2021,6 @@ export class InventoryRepository {
   }
 
   async listActivityLogs(entityType?: string, entityId?: string) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.listActivityLogs(entityType, entityId);
-    }
     const where: any = {};
     if (entityType) where.entityType = entityType;
     if (entityId) where.entityId = entityId;
@@ -2254,9 +2032,6 @@ export class InventoryRepository {
   }
 
   async listNotifications(role?: string, merchantId?: string, isRead?: boolean) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.listNotifications(role, merchantId, isRead);
-    }
     const where: any = {};
     if (role) where.recipientRole = role;
     if (merchantId) where.merchantId = merchantId;
@@ -2268,9 +2043,6 @@ export class InventoryRepository {
   }
 
   async markNotificationRead(id: string) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.markNotificationRead(id);
-    }
     return this.prisma.inAppNotification.update({
       where: { id },
       data: { isRead: true },
@@ -2278,9 +2050,6 @@ export class InventoryRepository {
   }
 
   async markAllNotificationsRead(role?: string, merchantId?: string) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.markAllNotificationsRead(role, merchantId);
-    }
     const where: any = {};
     if (role) where.recipientRole = role;
     if (merchantId) where.merchantId = merchantId;
@@ -2290,7 +2059,37 @@ export class InventoryRepository {
     });
   }
 
-  checkOrderEligibility(productId: string, quantity: number = 1) {
-    return this.prisma.fallbackStore.checkOrderEligibility(productId, quantity);
+  async checkOrderEligibility(productId: string, quantity: number = 1): Promise<{ eligible: boolean; reason?: string }> {
+    const p = await this.prisma.product.findUnique({
+      where: { id: productId },
+      include: {
+        variants: {
+          include: { inventoryItems: true },
+        },
+      },
+    });
+    if (!p) return { eligible: false, reason: 'Product not found' };
+    if (p.lifecycleStatus !== 'ACTIVE') {
+      return { eligible: false, reason: `Product lifecycle status is '${p.lifecycleStatus}' (must be ACTIVE)` };
+    }
+    if (p.isSuspended) {
+      return { eligible: false, reason: `Product is suspended: ${p.suspendedReason || 'Admin restriction'}` };
+    }
+    if (p.editState === 'EDIT_APPROVAL_PENDING') {
+      return { eligible: false, reason: 'Product is currently undergoing revision review by Admin' };
+    }
+    const totalAvailable = p.variants.reduce(
+      (sum, v) => sum + v.inventoryItems.reduce((s, it) => s + (it.quantityAvailable || 0), 0),
+      0
+    );
+    const totalReserved = p.variants.reduce(
+      (sum, v) => sum + v.inventoryItems.reduce((s, it) => s + (it.quantityReserved || 0), 0),
+      0
+    );
+    const free = totalAvailable - totalReserved;
+    if (free < quantity) {
+      return { eligible: false, reason: `Insufficient stock (available: ${free}, requested: ${quantity})` };
+    }
+    return { eligible: true };
   }
 }

@@ -255,7 +255,13 @@ export function MerchantOrdersTab({
 
           <button
             type="button"
-            onClick={() => setIsCreateOrderOpen(true)}
+            onClick={() => {
+              if (!memoList || memoList.length === 0) {
+                onTriggerToast('Cannot create order: Please create a custom Memo Template in Memo Designer (/merchant/memos) first.');
+                return;
+              }
+              setIsCreateOrderOpen(true);
+            }}
             className="flex-1 sm:flex-initial px-4 py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-md shadow-orange-500/20 transition-all cursor-pointer active:scale-95"
           >
             <Plus className="h-4 w-4" />

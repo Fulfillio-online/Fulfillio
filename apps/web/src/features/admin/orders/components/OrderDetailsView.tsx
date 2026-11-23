@@ -321,7 +321,7 @@ export function OrderDetailsView({ orderId }: OrderDetailsViewProps) {
   const discount = order.discount ?? 0;
   const advancePayment = order.advancePayment ?? 0;
   const orderTotal = order.codAmount ?? Math.max(0, subtotal + deliveryFee - discount);
-  const codDue = Math.max(0, orderTotal - advancePayment);
+  const codAmount = order.codAmount ?? Math.max(0, orderTotal - (order.advancePayment || 0));
 
   // Customer initials
   const customerInitials =
@@ -657,7 +657,7 @@ export function OrderDetailsView({ orderId }: OrderDetailsViewProps) {
             <Banknote className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
           </div>
           <div className="text-2xl sm:text-3xl font-black text-navy-900 dark:text-white mt-2 tabular-nums">
-            ৳ {codDue.toLocaleString()}
+            ৳ {codAmount.toLocaleString()}
           </div>
           <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold mt-1 inline-block">
             Cash on Delivery Collection
@@ -831,7 +831,7 @@ export function OrderDetailsView({ orderId }: OrderDetailsViewProps) {
                   </span>
                 </div>
                 <span className="text-lg font-black text-emerald-600 dark:text-emerald-400 tabular-nums">
-                  ৳{codDue.toLocaleString()}
+                  ৳{codAmount.toLocaleString()}
                 </span>
               </div>
             </div>
@@ -875,7 +875,7 @@ export function OrderDetailsView({ orderId }: OrderDetailsViewProps) {
               <div className="p-3 rounded-xl bg-slate-50 dark:bg-navy-950/60 border border-slate-200/80 dark:border-white/10 space-y-0.5">
                 <span className="text-[11px] text-slate-400">Balance on Delivery</span>
                 <div className="font-bold text-emerald-600 dark:text-emerald-400">
-                  ৳{codDue.toLocaleString()}
+                  ৳{codAmount.toLocaleString()}
                 </div>
               </div>
             </div>

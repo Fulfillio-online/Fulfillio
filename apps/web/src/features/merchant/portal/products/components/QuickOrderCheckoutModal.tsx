@@ -50,8 +50,15 @@ export function QuickOrderCheckoutModal({
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
   const [city, setCity] = useState<'Dhaka' | 'Chattogram' | 'Sylhet' | 'Rajshahi' | 'Khulna' | 'Other'>('Dhaka');
-  const [courier, setCourier] = useState('Steadfast');
-  const [memoCode, setMemoCode] = useState(initialMemoCode || memos[0]?.code || 'MEMO-DEFAULT');
+  const [courier, setCourier] = useState('');
+  const [memoCode, setMemoCode] = useState(() => {
+    if (initialMemoCode) return initialMemoCode;
+    if (memos && memos.length > 0) {
+      const def = memos.find((m) => m.isDefault);
+      return def ? def.code : memos[0].code;
+    }
+    return '';
+  });
   const [deliveryFee, setDeliveryFee] = useState(80);
   const [discount, setDiscount] = useState(0);
   const [advancePayment, setAdvancePayment] = useState(0);
@@ -67,8 +74,15 @@ export function QuickOrderCheckoutModal({
   useEffect(() => {
     if (initialMemoCode) {
       setMemoCode(initialMemoCode);
+    } else if (memos && memos.length > 0) {
+      if (!memoCode || !memos.some((m) => m.code === memoCode)) {
+        const def = memos.find((m) => m.isDefault);
+        setMemoCode(def ? def.code : memos[0].code);
+      }
+    } else {
+      setMemoCode('');
     }
-  }, [initialMemoCode]);
+  }, [initialMemoCode, memos, memoCode]);
 
   useEffect(() => {
     // Auto-update delivery fee when city changes
@@ -100,6 +114,17 @@ export function QuickOrderCheckoutModal({
     }
     if (!customerAddress.trim()) {
       newErrors.customerAddress = 'Delivery address is required';
+    }
+
+    if (!memos || memos.length === 0) {
+      onTriggerToast('Cannot create order: You must create at least one custom Memo Template in Memo Designer first.');
+      return;
+    }
+
+    if (!memoCode || !memoCode.trim()) {
+      newErrors.memoCode = 'Please select a custom memo template';
+    } else if (!memos.some((m) => m.code === memoCode)) {
+      newErrors.memoCode = 'Selected memo is invalid. Please select one of your created memos.';
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -373,6 +398,7 @@ export function QuickOrderCheckoutModal({
                   onChange={(e) => setCourier(e.target.value)}
                   className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-navy-900 dark:text-white focus:outline-none focus:border-orange-500 cursor-pointer"
                 >
+                  <option value="">Select Courier (Optional)</option>
                   <option value="Steadfast">Steadfast Courier</option>
                   <option value="Pathao">Pathao Courier</option>
                   <option value="RedX">RedX Logistics</option>
@@ -390,26 +416,46 @@ export function QuickOrderCheckoutModal({
                   Required for print
                 </span>
               </label>
-              <div className="relative">
-                <select
-                  value={memoCode}
-                  onChange={(e) => setMemoCode(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-navy-900 dark:text-white focus:outline-none focus:border-orange-500 cursor-pointer font-medium"
-                >
-                  {memos && memos.length > 0 ? (
-                    memos.map((m) => (
-                      <option key={m.code} value={m.code}>
-                        {m.code} — {m.resellerName || m.name || merchantStoreName}
-                      </option>
-                    ))
-                  ) : (
-                    <option value="MEMO-DEFAULT">MEMO-DEFAULT (Standard Warehouse Slip)</option>
-                  )}
-                </select>
-              </div>
-              <p className="text-[10px] text-slate-400 mt-1">
-                The warehouse packing station will print this custom template when packing.
-              </p>
+              {memos && memos.length > 0 ? (
+                <>
+                  <div className="relative">
+                    <select
+                      value={memoCode}
+                      onChange={(e) => {
+                        setMemoCode(e.target.value);
+                        if (errors.memoCode) setErrors((prev) => ({ ...prev, memoCode: '' }));
+                      }}
+                      className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-navy-900 dark:text-white focus:outline-none focus:border-orange-500 cursor-pointer font-medium"
+                    >
+                      {memos.map((m) => (
+                        <option key={m.code} value={m.code}>
+                          {m.code} — {m.resellerName || m.name || merchantStoreName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {errors.memoCode && <p className="text-[11px] text-rose-500 mt-1">{errors.memoCode}</p>}
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    The warehouse packing station will print this custom template when packing.
+                  </p>
+                </>
+              ) : (
+                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 space-y-2">
+                  <div className="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400">
+                    <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                    <span>
+                      <strong>No Memo Template Found:</strong> You must create at least one custom memo template before placing orders.
+                    </span>
+                  </div>
+                  <a
+                    href="/merchant/memos"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs shadow-xs transition-colors"
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    <span>Create Memo Template</span>
+                  </a>
+                </div>
+              )}
             </div>
           </div>
 
@@ -496,11 +542,17 @@ export function QuickOrderCheckoutModal({
             </button>
             <button
               type="submit"
-              disabled={isSubmitting}
-              className="px-5 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold shadow-md shadow-orange-500/20 transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50"
+              disabled={isSubmitting || !memos || memos.length === 0}
+              className="px-5 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold shadow-md shadow-orange-500/20 transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Package className="h-4 w-4" />
-              <span>{isSubmitting ? 'Placing Order...' : 'Confirm & Place Order'}</span>
+              <span>
+                {isSubmitting
+                  ? 'Placing Order...'
+                  : !memos || memos.length === 0
+                  ? 'Create Memo to Place Order'
+                  : 'Confirm & Place Order'}
+              </span>
             </button>
           </div>
         </form>

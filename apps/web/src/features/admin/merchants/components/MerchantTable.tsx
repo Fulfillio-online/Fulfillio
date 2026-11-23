@@ -413,7 +413,7 @@ export function MerchantTable({
                             <span className="truncate">{merchant.payoutAccount.provider}</span>
                           </div>
                           <div className="text-[11px] text-orange-600 dark:text-orange-400 tabular-nums mt-0.5 truncate">
-                            A/C ••••{merchant.payoutAccount.accountNumber.slice(-4)} · bKash: {merchant.payoutAccount.bkashNumber}
+                            A/C ••••{(merchant.payoutAccount?.accountNumber || '').slice(-4)} · bKash: {merchant.payoutAccount?.bkashNumber || '—'}
                           </div>
                         </div>
                       </div>
@@ -610,7 +610,7 @@ export function MerchantTable({
                           </span>
                         </div>
                         <div className="text-xs text-slate-600 dark:text-slate-300 tabular-nums mt-0.5">
-                          A/C: ••••{merchant.payoutAccount.accountNumber.slice(-4)}
+                          A/C: ••••{(merchant.payoutAccount?.accountNumber || '').slice(-4)}
                         </div>
                         <div className="text-xs text-orange-600 dark:text-orange-400 tabular-nums font-medium">
                           bKash: {merchant.payoutAccount.bkashNumber}

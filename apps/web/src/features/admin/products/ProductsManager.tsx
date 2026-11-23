@@ -449,6 +449,7 @@ export function ProductsManager({
                   price: Number(firstVariant?.price) || 0,
                   status: computedStatus,
                   isDraft,
+                  isSuspended: Boolean(p.isSuspended),
                   submittedAt: new Date(p.createdAt || Date.now()).toLocaleDateString('en-GB', {
                     day: '2-digit',
                     month: 'short',
@@ -1759,16 +1760,14 @@ syncAdminProductsToMerchant(next);
   };
 
   const handleToggleSuspend = (productId: string) => {
-    let nextStatusText = '';
+    const target = products.find((p) => p.id === productId);
+    const willSuspend = target ? !target.isSuspended : true;
+    const nextStatusText = willSuspend ? 'suspended' : 'reactivated';
+
     setProducts((prev) => {
-      const next = prev.map((p) => {
-        if (p.id === productId) {
-          const willSuspend = !p.isSuspended;
-          nextStatusText = willSuspend ? 'suspended' : 'reactivated';
-          return { ...p, isSuspended: willSuspend };
-        }
-        return p;
-      });
+      const next = prev.map((p) =>
+        p.id === productId ? { ...p, isSuspended: willSuspend } : p
+      );
       try {
         localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
         syncAdminProductsToMerchant(next);
@@ -1777,6 +1776,16 @@ syncAdminProductsToMerchant(next);
       }
       return next;
     });
+
+    const endpoint = willSuspend
+      ? `${API_BASE}/inventory/products/${encodeURIComponent(productId)}/suspend`
+      : `${API_BASE}/inventory/products/${encodeURIComponent(productId)}/reactivate`;
+    fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: willSuspend ? JSON.stringify({ reason: 'Suspended by warehouse admin' }) : undefined,
+    }).catch(() => {});
+
     triggerToast(`Product has been ${nextStatusText}.`);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(

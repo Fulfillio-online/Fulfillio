@@ -2,17 +2,12 @@ import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { UserRole, MerchantStatus } from '@fulfillio/contracts';
 import * as bcrypt from 'bcrypt';
-import { FallbackStore } from './fallback-store';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
-  public isConnected = false;
-  public readonly fallbackStore = FallbackStore.getInstance();
-
   async onModuleInit() {
     try {
       await this.$connect();
-      this.isConnected = true;
       const dbUrl = process.env.DATABASE_URL || '';
       const isCloud = dbUrl.includes('neon.tech') || (!dbUrl.includes('localhost') && !dbUrl.includes('127.0.0.1'));
       console.log(
@@ -24,13 +19,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       await this.ensureOrderSchemaCompatibility();
       await this.ensureCoreSeedData();
     } catch (err: any) {
-      this.isConnected = false;
-      console.error('[Prisma] Failed to connect to PostgreSQL database:', err?.message || err);
+      console.error('[Prisma] FATAL: Failed to connect to PostgreSQL database:', err?.message || err);
+      throw err;
     }
-  }
-
-  isOffline(): boolean {
-    return false;
   }
 
   async runSelfHealingMigrations() {
@@ -104,63 +95,30 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         },
       });
 
-      const defaultMerchants = [
-        {
+      const demoMerchant = await this.merchant.upsert({
+        where: { merchantCode: 'MC-101' },
+        update: {},
+        create: {
           merchantCode: 'MC-101',
           businessName: "Sabbir's Store",
           email: 'sabbir@sabbirstore.com',
           phone: '01711-223344',
           location: 'Dhanmondi, Dhaka',
+          status: MerchantStatus.APPROVED,
         },
-        {
-          merchantCode: 'MC-102',
-          businessName: 'TechGear BD',
-          email: 'contact@techgearbd.com',
-          phone: '01911-889900',
-          location: 'Bashundhara City, Panthapath, Dhaka',
-        },
-        {
-          merchantCode: 'MC-103',
-          businessName: 'Modest Wear BD',
-          email: 'orders@modestwearbd.com',
-          phone: '01755-667788',
-          location: 'Shah Ali Plaza, Mirpur 10, Dhaka',
-        },
-        {
-          merchantCode: 'MC-106',
-          businessName: 'Fulfillio Partner Store',
-          email: 'merchant106@fulfillio.online',
-          phone: '01700-000106',
-          location: 'Dhaka, Bangladesh',
-        },
-      ];
+      });
 
-      for (const m of defaultMerchants) {
-        const merchant = await this.merchant.upsert({
-          where: { merchantCode: m.merchantCode },
-          update: {},
-          create: {
-            merchantCode: m.merchantCode,
-            businessName: m.businessName,
-            email: m.email,
-            phone: m.phone,
-            location: m.location,
-            status: MerchantStatus.APPROVED,
-          },
-        });
-
-        await this.user.upsert({
-          where: { email: m.email },
-          update: {},
-          create: {
-            name: m.businessName,
-            email: m.email,
-            passwordHash,
-            merchantId: merchant.id,
-            role: UserRole.MERCHANT,
-          },
-        });
-      }
+      await this.user.upsert({
+        where: { email: 'sabbir@sabbirstore.com' },
+        update: {},
+        create: {
+          name: "Sabbir's Store",
+          email: 'sabbir@sabbirstore.com',
+          passwordHash,
+          merchantId: demoMerchant.id,
+          role: UserRole.MERCHANT,
+        },
+      });
 
       await this.inventoryLocation.upsert({
         where: { binCode: 'A-01-01' },
@@ -175,7 +133,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         },
       });
 
-      console.log('[Prisma] Core merchants (MC-101, MC-102, MC-103, MC-106) and Super Admin verified in PostgreSQL.');
+      console.log('[Prisma] Core demo merchant (MC-101) and Super Admin verified in PostgreSQL.');
     } catch (err: any) {
       console.warn('[Prisma] Core seed check notice:', err?.message || err);
     }

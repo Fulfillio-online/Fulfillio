@@ -7,39 +7,17 @@ export class AuthRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async findUserByEmail(email: string) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.findUserByEmail(email) as any;
-    }
-    try {
-      return await this.prisma.user.findUnique({
-        where: { email },
-        include: { merchant: true },
-      });
-    } catch (err: any) {
-      if (err?.name === 'PrismaClientInitializationError' || err?.message?.includes("Can't reach database server")) {
-        this.prisma.isConnected = false;
-        return this.prisma.fallbackStore.findUserByEmail(email) as any;
-      }
-      throw err;
-    }
+    return this.prisma.user.findUnique({
+      where: { email },
+      include: { merchant: true },
+    });
   }
 
   async findUserById(id: string) {
-    if (this.prisma.isOffline()) {
-      return this.prisma.fallbackStore.findUserById(id) as any;
-    }
-    try {
-      return await this.prisma.user.findUnique({
-        where: { id },
-        include: { merchant: true },
-      });
-    } catch (err: any) {
-      if (err?.name === 'PrismaClientInitializationError' || err?.message?.includes("Can't reach database server")) {
-        this.prisma.isConnected = false;
-        return this.prisma.fallbackStore.findUserById(id) as any;
-      }
-      throw err;
-    }
+    return this.prisma.user.findUnique({
+      where: { id },
+      include: { merchant: true },
+    });
   }
 
   async findOperatorByCodeOrEmail(operatorCode: string) {

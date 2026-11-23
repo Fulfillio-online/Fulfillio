@@ -90,6 +90,17 @@ export class OrderController {
   }
 
   /**
+   * Update order courier provider (Admin Order Pipeline)
+   */
+  @Patch(':id/courier')
+  async updateCourier(
+    @Param('id') id: string,
+    @Body('courierProvider') courierProvider?: string | null,
+  ) {
+    return this.orderService.updateOrderCourier(id, courierProvider);
+  }
+
+  /**
    * Packing station line item barcode scan verification
    */
   @Post(':id/items/:itemId/verify')
