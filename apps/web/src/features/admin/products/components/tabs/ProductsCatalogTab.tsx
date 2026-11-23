@@ -767,7 +767,7 @@ export function ProductsCatalogTab({
                         {isPending && p.stockAccepted !== true ? (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-dashed border-amber-500/40">
                             <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                            Unassigned (Pending)
+                            Unassigned
                           </span>
                         ) : (
                           <div className="inline-block">
@@ -792,11 +792,11 @@ export function ProductsCatalogTab({
                         {isPending ? (
                           p.stockAccepted === true ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold tabular-nums bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30">
-                              {p.stock} <span className="text-[11px] font-normal">pcs (Stored)</span>
+                              {p.stock} <span className="text-[11px] font-normal">pcs</span>
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold tabular-nums bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30">
-                              {p.stock} <span className="text-[11px] font-normal">pcs (Requested)</span>
+                              {p.stock} <span className="text-[11px] font-normal">pcs</span>
                             </span>
                           )
                         ) : isOutOfStock ? (
@@ -826,7 +826,7 @@ export function ProductsCatalogTab({
                         {isPending ? (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
                             <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                            Pending Product
+                            Pending
                           </span>
                         ) : isDraft ? (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-500/30">

@@ -476,19 +476,27 @@ export function ProductsManager({
               });
 
               setProducts((prev) => {
-                const combined = [...prev];
-                for (const bp of mappedBackend) {
-                  const idx = combined.findIndex((cp) => cp.id === bp.id || cp.fullSku === bp.fullSku);
-                  if (idx >= 0) {
-                    combined[idx] = { ...combined[idx], ...bp, status: bp.status, isDraft: bp.isDraft };
-                  } else {
-                    combined.unshift(bp);
-                  }
-                }
+                // Keep only built-in demo products from INITIAL_PRODUCTS that aren't already in DB;
+                // all real DB products come strictly from PostgreSQL (mappedBackend) so deleted DB rows are purged.
+                const initialIds = new Set(INITIAL_PRODUCTS.map((ip) => ip.id));
+                const backendById = new Set(mappedBackend.map((bp) => bp.id));
+                const backendBySku = new Set(mappedBackend.map((bp) => bp.fullSku));
+                const retainedDemo = prev.filter(
+                  (cp) => initialIds.has(cp.id) && !backendById.has(cp.id) && !backendBySku.has(cp.fullSku)
+                );
+                const prevById = new Map(prev.map((cp) => [cp.id, cp]));
+                const mergedBackend = mappedBackend.map((bp) => {
+                  const existing = prevById.get(bp.id);
+                  return existing
+                    ? { ...existing, ...bp, status: bp.status, isDraft: bp.isDraft }
+                    : bp;
+                });
+                const next = [...mergedBackend, ...retainedDemo];
                 try {
-                  localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(combined));
+                  localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+                  syncAdminProductsToMerchant(next);
                 } catch {}
-                return combined;
+                return next;
               });
             }
           })
