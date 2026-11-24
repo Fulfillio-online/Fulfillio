@@ -1,46 +1,56 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import {
   Clock,
   XCircle,
-  Package,
   CheckCircle2,
   MapPin,
   ExternalLink,
-  ShieldCheck,
   RotateCcw,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react';
 import { CancelledOrderItemRecord } from '../types';
 
 interface CancelledOrdersTableProps {
   orders: CancelledOrderItemRecord[];
   availableBins: string[];
+  restockingId?: string | null;
   onRestockOrderToBin?: (order: CancelledOrderItemRecord, bin: string) => void;
 }
 
 export function CancelledOrdersTable({
   orders,
   availableBins,
+  restockingId = null,
   onRestockOrderToBin,
 }: CancelledOrdersTableProps) {
+  const [selectedBins, setSelectedBins] = useState<Record<string, string>>({});
+
   if (orders.length === 0) {
     return (
       <div className="bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl p-12 text-center shadow-xl">
         <XCircle className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
-        <h3 className="text-base font-bold text-navy-900 dark:text-white">No Cancelled Orders Recorded</h3>
+        <h3 className="text-base font-bold text-navy-900 dark:text-white">
+          No Cancelled Orders Recorded
+        </h3>
         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto">
-          When an order is cancelled from the Orders Pipeline or Merchant Portal, it will accumulate here automatically with its products, quantities, and restored stock accounting.
+          When an order is cancelled from the Orders Pipeline, it appears here as{' '}
+          <strong className="text-amber-600 dark:text-amber-400">Pending Restock</strong> so
+          warehouse staff can verify and restock units to a bin.
         </p>
       </div>
     );
   }
 
+  const binOptions = availableBins.length > 0 ? availableBins : ['A-01-01'];
+
   return (
     <div className="bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl overflow-hidden shadow-xl">
       <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[1040px]">
+        <table className="w-full text-left border-collapse min-w-[1080px]">
           <thead>
             <tr className="border-b border-slate-200 dark:border-white/10 text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 bg-slate-50/60 dark:bg-navy-950/60">
               <th className="py-3.5 px-4">Order ID &amp; Cancelled</th>
@@ -48,8 +58,8 @@ export function CancelledOrdersTable({
               <th className="py-3.5 px-4">Merchant</th>
               <th className="py-3.5 px-4">Customer &amp; COD</th>
               <th className="py-3.5 px-4">Stock Recovery Bin</th>
-              <th className="py-3.5 px-4 text-center">Stock Accounting</th>
-              <th className="py-3.5 px-4">Reason / Notes</th>
+              <th className="py-3.5 px-4 text-center">Restock Status</th>
+              <th className="py-3.5 px-4">Cancel Reason</th>
               <th className="py-3.5 px-4 text-right">Actions</th>
             </tr>
           </thead>
@@ -57,6 +67,16 @@ export function CancelledOrdersTable({
             {orders.map((item) => {
               const cleanId = (item.orderId || item.id || '').replace(/^#/, '').trim();
               const variantLabel = [item.color, item.size].filter(Boolean).join(' · ');
+              const chosenBin =
+                selectedBins[item.id] ||
+                item.restockedBin ||
+                item.targetBin ||
+                binOptions[0];
+              const isBusy = restockingId === item.id;
+
+              const rowBins = binOptions.includes(chosenBin)
+                ? binOptions
+                : [chosenBin, ...binOptions];
 
               return (
                 <tr
@@ -115,46 +135,92 @@ export function CancelledOrdersTable({
                       {item.customerPhone}
                     </div>
                     <div className="text-xs font-bold font-mono text-navy-900 dark:text-slate-200 mt-0.5">
-                      ৳{Number(item.codAmount || item.qty * item.unitPrice).toLocaleString()}
+                      ৳{Number(item.codAmount || item.qty * item.unitPrice || 0).toLocaleString()}
                     </div>
                   </td>
 
                   {/* Stock Recovery Bin */}
                   <td className="py-3.5 px-4">
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs font-mono font-bold text-navy-900 dark:text-slate-100">
-                      <MapPin className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400 shrink-0" />
-                      <span>{item.restockedBin || item.targetBin || 'A-01-01'}</span>
-                    </div>
+                    {item.isRestocked ? (
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-500/30 text-xs font-mono font-bold text-emerald-700 dark:text-emerald-300">
+                        <MapPin className="w-3.5 h-3.5 shrink-0" />
+                        <span>{item.restockedBin || item.targetBin || 'A-01-01'}</span>
+                      </div>
+                    ) : (
+                      <select
+                        value={chosenBin}
+                        onChange={(e) =>
+                          setSelectedBins((prev) => ({ ...prev, [item.id]: e.target.value }))
+                        }
+                        aria-label={`Select restock bin for order ${cleanId}`}
+                        className="px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/15 text-xs font-mono font-bold text-navy-900 dark:text-slate-100 focus:outline-none focus:border-orange-500 cursor-pointer"
+                      >
+                        {rowBins.map((b) => (
+                          <option key={b} value={b}>
+                            {b}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </td>
 
-                  {/* Stock Accounting Status */}
+                  {/* Restock Status */}
                   <td className="py-3.5 px-4 text-center">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                      <span>+{item.qty} Restored</span>
-                    </span>
-                    <span className="block text-[10px] text-slate-400 mt-0.5 font-mono">
-                      Available Stock Updated
-                    </span>
+                    {item.isRestocked ? (
+                      <>
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                          <span>+{item.qty} Restocked</span>
+                        </span>
+                        <span className="block text-[10px] text-slate-400 mt-0.5 font-mono">
+                          {item.restockedAt || 'Saved to DB'}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30">
+                          <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
+                          <span>Pending Restock</span>
+                        </span>
+                        <span className="block text-[10px] text-slate-400 mt-0.5 font-mono">
+                          Current Stock: {item.currentStockSnapshot ?? 0} pcs
+                        </span>
+                      </>
+                    )}
                   </td>
 
                   {/* Reason / Notes */}
                   <td className="py-3.5 px-4 max-w-xs">
                     <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2">
-                      {item.cancelReason || 'Order cancelled & reserved stock released back to warehouse bin.'}
+                      {item.cancelReason || 'Cancelled from Order Pipeline'}
                     </p>
                   </td>
 
                   {/* Actions */}
                   <td className="py-3.5 px-4 text-right">
                     <div className="flex items-center justify-end gap-1.5">
+                      {!item.isRestocked && onRestockOrderToBin && (
+                        <button
+                          type="button"
+                          disabled={isBusy}
+                          onClick={() => onRestockOrderToBin(item, chosenBin)}
+                          className="px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 disabled:opacity-60 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer whitespace-nowrap"
+                        >
+                          {isBusy ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <RotateCcw className="w-3.5 h-3.5" />
+                          )}
+                          <span>{isBusy ? 'Restocking...' : 'Restock to Bin'}</span>
+                        </button>
+                      )}
                       <Link
-                        href={`/admin/orders?search=${encodeURIComponent(cleanId)}`}
-                        className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-navy-800 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1 border border-slate-200/80 dark:border-white/10 transition-colors"
-                        title="View Order in Pipeline"
+                        href={`/admin/orders/${encodeURIComponent(cleanId)}`}
+                        className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-navy-800 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1 border border-slate-200/80 dark:border-white/10 transition-colors whitespace-nowrap"
+                        title="View Order Details"
                       >
                         <ExternalLink className="w-3.5 h-3.5" />
-                        <span>View Order</span>
+                        <span>View</span>
                       </Link>
                     </div>
                   </td>

@@ -17,6 +17,14 @@ interface ActionConfirmModalProps {
   ) => void;
 }
 
+const CANCEL_REASON_PRESETS = [
+  'Customer requested cancellation',
+  'Duplicate order',
+  'Customer unreachable / unverified address',
+  'Merchant requested cancellation',
+  'Out of stock / damaged unit',
+];
+
 export function ActionConfirmModal({
   isOpen,
   onClose,
@@ -24,6 +32,7 @@ export function ActionConfirmModal({
   onConfirm,
 }: ActionConfirmModalProps) {
   const [holdReasonInput, setHoldReasonInput] = useState<string>(HOLD_REASON_PRESETS[0]);
+  const [cancelReasonInput, setCancelReasonInput] = useState<string>(CANCEL_REASON_PRESETS[0]);
   const [courierOverride, setCourierOverride] = useState<'KEEP_ORDER_COURIER' | CourierPartner>(
     'KEEP_ORDER_COURIER'
   );
@@ -31,6 +40,9 @@ export function ActionConfirmModal({
   useEffect(() => {
     if (pendingAction?.type === 'MARK_WAITING') {
       setHoldReasonInput(HOLD_REASON_PRESETS[0]);
+    }
+    if (pendingAction?.type === 'CANCEL_ORDER') {
+      setCancelReasonInput(CANCEL_REASON_PRESETS[0]);
     }
     if (pendingAction?.type === 'BOOK_COURIER') {
       setCourierOverride(
@@ -61,7 +73,9 @@ export function ActionConfirmModal({
   };
 
   const handleProceed = () => {
-    onConfirm(pendingAction, holdReasonInput, courierOverride);
+    const reasonToPass =
+      pendingAction.type === 'CANCEL_ORDER' ? cancelReasonInput : holdReasonInput;
+    onConfirm(pendingAction, reasonToPass, courierOverride);
     onClose();
   };
 
@@ -100,7 +114,7 @@ export function ActionConfirmModal({
               {pendingAction.type === 'CONFIRM_HANDOVER' &&
                 `Confirm courier pickup rider handover for ${pendingAction.orders.length} parcel(s). They will leave the active warehouse pipeline and move to Dispatched & Delivery Tracker.`}
               {pendingAction.type === 'CANCEL_ORDER' &&
-                `Cancel order and immediately restore reserved inventory units back to the assigned warehouse bin.`}
+                `Cancel order(s) and move to Returns & Cancellations (Pending Restock) for manual warehouse bin restocking.`}
             </div>
           </div>
         </div>
@@ -140,6 +154,42 @@ export function ActionConfirmModal({
             </div>
           ))}
         </div>
+
+        {/* Extra Input: Cancel Reason */}
+        {pendingAction.type === 'CANCEL_ORDER' && (
+          <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-white/10">
+            <label className="block font-bold text-rose-700 dark:text-rose-300">
+              Cancellation Reason (Saved to Database &amp; Shown on Returns/Cancel Page):
+            </label>
+            <select
+              value={
+                CANCEL_REASON_PRESETS.includes(cancelReasonInput)
+                  ? cancelReasonInput
+                  : '__CUSTOM__'
+              }
+              onChange={(e) => {
+                if (e.target.value !== '__CUSTOM__') {
+                  setCancelReasonInput(e.target.value);
+                }
+              }}
+              className="w-full rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 px-3 py-2 text-navy-800 dark:text-white focus:outline-none focus:border-rose-500"
+            >
+              {CANCEL_REASON_PRESETS.map((preset) => (
+                <option key={preset} value={preset}>
+                  {preset}
+                </option>
+              ))}
+              <option value="__CUSTOM__">Custom reason...</option>
+            </select>
+            <input
+              type="text"
+              value={cancelReasonInput}
+              onChange={(e) => setCancelReasonInput(e.target.value)}
+              placeholder="Enter cancellation reason..."
+              className="w-full rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 px-3 py-2 text-navy-800 dark:text-white focus:outline-none focus:border-rose-500"
+            />
+          </div>
+        )}
 
         {/* Extra Input: Hold Reason */}
         {pendingAction.type === 'MARK_WAITING' && (

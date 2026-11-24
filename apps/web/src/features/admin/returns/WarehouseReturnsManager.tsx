@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
   RotateCcw,
@@ -23,13 +23,6 @@ import {
   CancelledOrderItemRecord,
   RecoveryLedgerEntry,
 } from './types';
-import {
-  AVAILABLE_BINS,
-  INITIAL_RETURNS,
-  INITIAL_CANCELLED_ORDERS,
-  INITIAL_RECOVERY_LEDGER,
-  STORAGE_KEY_RETURNS,
-} from './mockData';
 import { WarehouseProductItem } from '@/features/admin/products';
 import { ReturnsStatsCards } from './components/ReturnsStatsCards';
 import { ReturnsFiltersBar } from './components/ReturnsFiltersBar';
@@ -38,16 +31,8 @@ import { CancelledOrdersTable } from './components/CancelledOrdersTable';
 import { ReturnsStockLedgerTab } from './components/ReturnsStockLedgerTab';
 import { QcInspectionModal } from './components/modals/QcInspectionModal';
 import { LogNewReturnModal } from './components/modals/LogNewReturnModal';
-import { fetchOrdersFromDatabase } from '@/lib/warehouseSync';
-import { STORAGE_KEY_ORDERS } from '@/features/admin/orders/mockData';
-import { STORAGE_KEY_STOCK_LEDGER } from '@/features/admin/products/mockData';
 
-const MERCHANTS_LIST = [
-  { code: 'MC-101', name: "Sabbir's Store" },
-  { code: 'MC-102', name: 'Urban Threads BD' },
-  { code: 'MC-103', name: 'Apex Footwear Hub' },
-  { code: 'MC-104', name: 'Gadget Freak Online' },
-];
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 
 export function WarehouseReturnsManager({
   onOpenProducts,
@@ -55,19 +40,17 @@ export function WarehouseReturnsManager({
   onOpenProducts?: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<ReturnsTabMode>('ALL');
-  const [returnsList, setReturnsList] = useState<WarehouseReturnRecord[]>(INITIAL_RETURNS);
-  const [cancelledOrders, setCancelledOrders] = useState<CancelledOrderItemRecord[]>(INITIAL_CANCELLED_ORDERS);
-  const [ledgerEntries, setLedgerEntries] = useState<RecoveryLedgerEntry[]>(INITIAL_RECOVERY_LEDGER);
+  const [returnsList, setReturnsList] = useState<WarehouseReturnRecord[]>([]);
+  const [cancelledOrders, setCancelledOrders] = useState<CancelledOrderItemRecord[]>([]);
+  const [ledgerEntries, setLedgerEntries] = useState<RecoveryLedgerEntry[]>([]);
+  const [availableBins, setAvailableBins] = useState<string[]>(['A-01-01']);
+  const [merchantsList, setMerchantsList] = useState<Array<{ code: string; name: string }>>([]);
   const [liveProducts, setLiveProducts] = useState<WarehouseProductItem[]>([]);
   const [scanInput, setScanInput] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | ReturnStatus>('ALL');
   const [merchantFilter, setMerchantFilter] = useState<string>('ALL');
-  const [rowBinSelections, setRowBinSelections] = useState<Record<string, string>>({
-    'RTO-501': 'B-03-01',
-    'RTO-502': 'C-01-01',
-    'RTO-503': 'A-01-02',
-    'RTO-504': 'D-01-01',
-  });
+  const [rowBinSelections, setRowBinSelections] = useState<Record<string, string>>({});
+  const [restockingId, setRestockingId] = useState<string | null>(null);
 
   const [qcModal, setQcModal] = useState<{
     mode: 'RESTOCK' | 'DAMAGED';
@@ -86,198 +69,146 @@ export function WarehouseReturnsManager({
     }, 4500);
   };
 
-  // Reconcile and load data from PostgreSQL DB & LocalStorage
-  useEffect(() => {
-    const syncData = async () => {
-      try {
-        // 1. Returns list
-        const savedRet = localStorage.getItem(STORAGE_KEY_RETURNS);
-        if (savedRet) {
-          const parsed = JSON.parse(savedRet);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setReturnsList(parsed);
-          }
-        } else {
-          localStorage.setItem(STORAGE_KEY_RETURNS, JSON.stringify(INITIAL_RETURNS));
+  // Load all Returns, Cancelled Orders, Recovery Ledger, Bins, and Merchants directly from Neon PostgreSQL
+  const syncDataFromDatabase = useCallback(async () => {
+    try {
+      const [cancelledRes, returnsRes, ledgerRes, binsRes, merchantsRes] = await Promise.all([
+        fetch(`${API_BASE}/returns/cancelled`).catch(() => null),
+        fetch(`${API_BASE}/returns`).catch(() => null),
+        fetch(`${API_BASE}/returns/ledger`).catch(() => null),
+        fetch(`${API_BASE}/returns/bins`).catch(() => null),
+        fetch(`${API_BASE}/merchants/public-directory`).catch(() => null),
+      ]);
+
+      if (cancelledRes?.ok) {
+        const data = await cancelledRes.json();
+        if (Array.isArray(data)) {
+          setCancelledOrders(data);
         }
-
-        // 2. Warehouse Products (for live stock snapshot)
-        const savedProds = localStorage.getItem('fulfillio_warehouse_products_v1');
-        if (savedProds) {
-          const parsedProds = JSON.parse(savedProds);
-          if (Array.isArray(parsedProds)) {
-            setLiveProducts(parsedProds);
-          }
-        }
-
-        // 3. Cancelled orders from DB & localStorage
-        let loadedCancelled: CancelledOrderItemRecord[] = [...INITIAL_CANCELLED_ORDERS];
-        try {
-          const dbOrders = await fetchOrdersFromDatabase();
-          const dbCancelled = (dbOrders || []).filter(
-            (o: any) => o.stage === 'CANCELLED' || o.status === 'CANCELLED' || o.status === 'RETURNED'
-          );
-
-          if (dbCancelled.length > 0) {
-            const mappedDbCancelled: CancelledOrderItemRecord[] = dbCancelled.map((o: any) => {
-              const cleanId = String(o.id || '').replace(/^#/, '');
-              const firstItem = (o.items && o.items[0]) || {};
-              return {
-                id: cleanId,
-                orderId: o.id.startsWith('#') ? o.id : `#${o.id}`,
-                merchantCode: o.merchantCode || 'MC-101',
-                merchantName: o.merchantName || "Sabbir's Store",
-                customerName: o.customer?.name || o.customerName || 'Customer',
-                customerPhone: o.customer?.phone || o.customerPhone || 'N/A',
-                city: o.customer?.city || o.city || 'Dhaka',
-                productTitle: firstItem.title || firstItem.productTitle || 'Product Item',
-                fullSku: firstItem.sku || 'SKU-001',
-                color: firstItem.color || 'Standard',
-                size: firstItem.size || 'Standard',
-                qty: (o.items || []).reduce((sum: number, it: any) => sum + (it.qty || 1), 0) || 1,
-                unitPrice: firstItem.unitPrice || 1200,
-                codAmount: o.codAmount || o.totalAmount || 1200,
-                targetBin: firstItem.bin || 'A-01-01',
-                currentStockSnapshot: 15,
-                cancelledAt: 'Today',
-                cancelReason: o.internalNotes || 'Order cancelled — auto-restored stock to available pool',
-                isRestocked: true,
-                restockedAt: 'Automatic Reversal',
-                restockedBin: firstItem.bin || 'A-01-01',
-                imageUrl: firstItem.image || '',
-                items: o.items,
-              };
-            });
-
-            // Merge unique by orderId
-            for (const item of mappedDbCancelled) {
-              if (!loadedCancelled.some((c) => c.orderId === item.orderId || c.id === item.id)) {
-                loadedCancelled.unshift(item);
-              }
-            }
-          }
-
-          // Check localStorage orders
-          const storedOrders = localStorage.getItem(STORAGE_KEY_ORDERS);
-          if (storedOrders) {
-            const parsedOrders = JSON.parse(storedOrders);
-            if (Array.isArray(parsedOrders)) {
-              const localCancelled = parsedOrders.filter(
-                (o: any) => o.stage === 'CANCELLED' || o.status === 'CANCELLED'
-              );
-              for (const o of localCancelled) {
-                const cleanId = String(o.id || '').replace(/^#/, '');
-                const firstItem = (o.items && o.items[0]) || {};
-                if (!loadedCancelled.some((c) => c.orderId === o.id || c.id === cleanId)) {
-                  loadedCancelled.unshift({
-                    id: cleanId,
-                    orderId: o.id.startsWith('#') ? o.id : `#${o.id}`,
-                    merchantCode: o.merchantCode || 'MC-101',
-                    merchantName: o.merchantName || "Sabbir's Store",
-                    customerName: o.customer?.name || o.customerName || 'Customer',
-                    customerPhone: o.customer?.phone || o.customerPhone || 'N/A',
-                    city: o.customer?.city || o.city || 'Dhaka',
-                    productTitle: firstItem.title || firstItem.productTitle || 'Product Item',
-                    fullSku: firstItem.sku || 'SKU-001',
-                    color: firstItem.color || 'Standard',
-                    size: firstItem.size || 'Standard',
-                    qty: (o.items || []).reduce((sum: number, it: any) => sum + (it.qty || 1), 0) || 1,
-                    unitPrice: firstItem.unitPrice || 1200,
-                    codAmount: o.codAmount || o.totalAmount || 1200,
-                    targetBin: firstItem.bin || 'A-01-01',
-                    currentStockSnapshot: 15,
-                    cancelledAt: 'Recently',
-                    cancelReason: o.internalNotes || 'Order cancelled — auto-restored stock to available pool',
-                    isRestocked: true,
-                    restockedAt: 'Automatic Reversal',
-                    restockedBin: firstItem.bin || 'A-01-01',
-                    imageUrl: firstItem.image || '',
-                    items: o.items,
-                  });
-                }
-              }
-            }
-          }
-        } catch {
-          // fallback
-        }
-        setCancelledOrders(loadedCancelled);
-
-        // 4. Stock Ledger Movements
-        const savedLedger = localStorage.getItem(STORAGE_KEY_STOCK_LEDGER);
-        if (savedLedger) {
-          const parsed = JSON.parse(savedLedger);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            // Reconcile with recovery format
-            const dynamicMovements: RecoveryLedgerEntry[] = parsed
-              .filter(
-                (m: any) =>
-                  m.notes?.includes('cancel') ||
-                  m.notes?.includes('Return') ||
-                  m.notes?.includes('RTO') ||
-                  m.referenceDocType === 'INTERNAL_AUDIT' ||
-                  m.type === 'AUDIT_ADJUSTMENT' ||
-                  m.type === 'RESTOCK'
-              )
-              .map((m: any) => ({
-                id: m.id || `PRF-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-                timestamp: m.timestamp || '2026-11-22 14:00',
-                sourceType:
-                  m.type === 'INITIAL_INTAKE' ||
-                  m.sourceType === 'INITIAL_INTAKE' ||
-                  m.referenceDocType === 'INWARD_CHALLAN' ||
-                  (typeof m.referenceNumber === 'string' && m.referenceNumber.startsWith('CHL-')) ||
-                  m.carrierOrCourier?.toLowerCase().includes('initial catalog') ||
-                  m.notes?.toLowerCase().includes('catalog submission')
-                    ? 'INITIAL_INTAKE'
-                    : m.sourceType === 'ORDER_CANCELLED' ||
-                      m.type === 'ORDER_CANCELLED' ||
-                      m.notes?.toLowerCase().includes('cancel')
-                    ? 'ORDER_CANCELLED'
-                    : m.sourceType === 'DAMAGED_QUARANTINE' ||
-                      m.notes?.toLowerCase().includes('damage')
-                    ? 'DAMAGED_QUARANTINE'
-                    : 'COURIER_RETURN',
-                referenceId: m.referenceNumber || m.id,
-                merchantCode: m.merchantCode || 'MC-101',
-                merchantName: m.merchantName || "Sabbir's Store",
-                productTitle: m.productTitle || 'Product',
-                sku: m.sku || 'SKU',
-                deltaQty: Math.abs(m.deltaQty || 1),
-                previousStock: m.previousStock || 10,
-                newStock: m.newStock || 15,
-                binCode: m.binCode || 'A-01-02',
-                operator: m.operator || 'Admin',
-                digitalProofHash: m.digitalProofHash || 'FL-SHA256-PROOF',
-                notes: m.notes || 'Stock recovered & restored',
-              }));
-
-            const combined = [...INITIAL_RECOVERY_LEDGER];
-            for (const dm of dynamicMovements) {
-              if (!combined.some((c) => c.id === dm.id)) {
-                combined.unshift(dm);
-              }
-            }
-            setLedgerEntries(combined);
-          }
-        }
-      } catch {
-        // ignore storage errors
       }
-    };
 
-    syncData();
-    window.addEventListener('fulfillio-warehouse-sync', syncData);
-    return () => window.removeEventListener('fulfillio-warehouse-sync', syncData);
+      if (returnsRes?.ok) {
+        const data = await returnsRes.json();
+        if (Array.isArray(data)) {
+          const mappedReturns: WarehouseReturnRecord[] = data.map((r: any) => {
+            const firstItem = r.items?.[0] || {};
+            return {
+              id: `RTO-${r.id}`,
+              orderId: r.id?.startsWith('#') ? r.id : `#${r.id}`,
+              trackingCode: r.trackingCode || `TRK-${r.id}`,
+              courier: r.courier || 'Steadfast',
+              merchantCode: r.merchantCode || 'MC-101',
+              merchantName: r.merchantName || 'Merchant',
+              productTitle: firstItem.title || 'Returned Product',
+              fullSku: firstItem.sku || 'SKU-N/A',
+              qty: (r.items || []).reduce((s: number, it: any) => s + (it.qty || 1), 0) || 1,
+              targetBin: 'A-01-01',
+              currentStockSnapshot: 0,
+              returnReason: 'Courier RTO Return',
+              status: 'PENDING_INSPECTION',
+              receivedAt: r.returnedAt
+                ? new Date(r.returnedAt).toLocaleString('en-GB', {
+                    day: '2-digit',
+                    month: 'short',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })
+                : 'Recently',
+              imageUrl: '',
+            };
+          });
+          setReturnsList(mappedReturns);
+        }
+      }
+
+      if (ledgerRes?.ok) {
+        const data = await ledgerRes.json();
+        if (Array.isArray(data)) {
+          const mappedLedger: RecoveryLedgerEntry[] = data.map((m: any) => ({
+            id: m.id,
+            timestamp: m.timestamp,
+            sourceType: m.sourceType || 'ORDER_CANCELLED',
+            referenceId: m.orderId || '—',
+            merchantCode: m.merchantCode || 'MC-101',
+            merchantName: m.merchantName || 'Merchant',
+            productTitle: m.productTitle || 'Product',
+            sku: m.fullSku || 'SKU-N/A',
+            deltaQty: m.qty ?? 0,
+            previousStock: m.previousStock ?? 0,
+            newStock: m.newStock ?? 0,
+            binCode: m.binCode || 'A-01-01',
+            operator: m.operatorName || 'Warehouse Admin',
+            digitalProofHash: `DB-${String(m.id || '').slice(0, 8).toUpperCase()}`,
+            notes: m.notes || 'Stock recovery recorded in PostgreSQL',
+          }));
+          setLedgerEntries(mappedLedger);
+        }
+      }
+
+      if (binsRes?.ok) {
+        const data = await binsRes.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setAvailableBins(data);
+        }
+      }
+
+      if (merchantsRes?.ok) {
+        const data = await merchantsRes.json();
+        const items = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
+        setMerchantsList(
+          items.map((m: any) => ({
+            code: m.merchantCode || m.code || 'MC-101',
+            name: m.businessName || m.storeName || m.name || 'Merchant',
+          }))
+        );
+      }
+    } catch {
+      // keep current state on network failure
+    }
   }, []);
+
+  useEffect(() => {
+    syncDataFromDatabase();
+    window.addEventListener('fulfillio-warehouse-sync', syncDataFromDatabase);
+    return () => window.removeEventListener('fulfillio-warehouse-sync', syncDataFromDatabase);
+  }, [syncDataFromDatabase]);
+
+  const handleRestockCancelledOrder = async (
+    order: CancelledOrderItemRecord,
+    binCode: string
+  ) => {
+    const cleanId = (order.orderId || order.id || '').replace(/^#/, '').trim();
+    setRestockingId(order.id);
+    try {
+      const res = await fetch(
+        `${API_BASE}/returns/cancelled/${encodeURIComponent(cleanId)}/restock`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            binCode,
+            notes: `Manually restocked cancelled order #${cleanId} (+${order.qty} pcs) into Bin ${binCode}`,
+          }),
+        }
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        triggerToast(err?.message || `Failed to restock Order #${cleanId}.`);
+        return;
+      }
+      await syncDataFromDatabase();
+      triggerToast(
+        `Restocked +${order.qty} pcs of ${order.fullSku} (Order #${cleanId}) into Bin ${binCode} in PostgreSQL!`
+      );
+    } catch {
+      triggerToast(`Could not connect to API server to restock Order #${cleanId}.`);
+    } finally {
+      setRestockingId(null);
+    }
+  };
 
   const persistReturns = (updated: WarehouseReturnRecord[]) => {
     setReturnsList(updated);
-    try {
-      localStorage.setItem(STORAGE_KEY_RETURNS, JSON.stringify(updated));
-    } catch {
-      // ignore
-    }
   };
 
   const getLiveStockForSku = (fullSku: string, fallback: number): number => {
@@ -638,7 +569,7 @@ export function WarehouseReturnsManager({
           onMerchantFilterChange={setMerchantFilter}
           statusFilter={statusFilter}
           onStatusFilterChange={setStatusFilter}
-          merchants={MERCHANTS_LIST}
+          merchants={merchantsList}
         />
       )}
 
@@ -651,7 +582,7 @@ export function WarehouseReturnsManager({
               <div className="flex items-center gap-2">
                 <div className="w-2.5 h-2.5 rounded-full bg-rose-500" />
                 <h3 className="text-sm font-bold text-navy-900 dark:text-white uppercase tracking-wider">
-                  Cancelled Orders &mdash; Stock Automatically Restored ({filteredCancelled.length})
+                  Cancelled Orders &mdash; Warehouse Restock Queue ({filteredCancelled.length})
                 </h3>
               </div>
               <button
@@ -665,7 +596,9 @@ export function WarehouseReturnsManager({
             </div>
             <CancelledOrdersTable
               orders={filteredCancelled}
-              availableBins={AVAILABLE_BINS}
+              availableBins={availableBins}
+              restockingId={restockingId}
+              onRestockOrderToBin={handleRestockCancelledOrder}
             />
           </div>
 
@@ -689,7 +622,7 @@ export function WarehouseReturnsManager({
             </div>
             <ReturnsTable
               returns={filteredReturns}
-              availableBins={AVAILABLE_BINS}
+              availableBins={availableBins}
               rowBinSelections={rowBinSelections}
               onBinSelectionChange={(id, bin) =>
                 setRowBinSelections((prev) => ({ ...prev, [id]: bin }))
@@ -721,7 +654,7 @@ export function WarehouseReturnsManager({
                 Cancelled Customer Orders ({filteredCancelled.length})
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Orders cancelled from the order pipeline or merchant portal. Units are unreserved and returned directly to available warehouse stock.
+                Orders cancelled from the Orders Pipeline appear here as Pending Restock. Select a warehouse bin and click Restock to Bin to restore inventory in PostgreSQL.
               </p>
             </div>
             <Link
@@ -734,7 +667,9 @@ export function WarehouseReturnsManager({
           </div>
           <CancelledOrdersTable
             orders={filteredCancelled}
-            availableBins={AVAILABLE_BINS}
+            availableBins={availableBins}
+            restockingId={restockingId}
+            onRestockOrderToBin={handleRestockCancelledOrder}
           />
         </div>
       )}
@@ -762,7 +697,7 @@ export function WarehouseReturnsManager({
           </div>
           <ReturnsTable
             returns={filteredReturns}
-            availableBins={AVAILABLE_BINS}
+            availableBins={availableBins}
             rowBinSelections={rowBinSelections}
             onBinSelectionChange={(id, bin) =>
               setRowBinSelections((prev) => ({ ...prev, [id]: bin }))
@@ -788,14 +723,14 @@ export function WarehouseReturnsManager({
       {activeTab === 'STOCK_LEDGER' && (
         <ReturnsStockLedgerTab
           ledgerEntries={ledgerEntries}
-          merchants={MERCHANTS_LIST}
+          merchants={merchantsList}
         />
       )}
 
       {/* QC Decision Modal */}
       <QcInspectionModal
         modalState={qcModal}
-        availableBins={AVAILABLE_BINS}
+        availableBins={availableBins}
         currentLiveStock={
           qcModal ? getLiveStockForSku(qcModal.item.fullSku, qcModal.item.currentStockSnapshot) : 0
         }

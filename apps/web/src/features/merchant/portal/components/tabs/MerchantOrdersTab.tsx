@@ -21,7 +21,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { FraudRatioBadge } from '@/components/ui/FraudRatioBadge';
-import { MerchantOrderItem, MerchantProductItem, ResellerMemo } from '../../types';
+import { MerchantOrderItem, MerchantProductItem, ResellerMemo, isOrderCancellable } from '../../types';
 import { CreateManualOrderModal } from '../modals/CreateManualOrderModal';
 import { CancelOrderModal } from './order-details/CancelOrderModal';
 import { MerchantExpandableCard } from '../common/MerchantExpandableCard';
@@ -595,7 +595,7 @@ export function MerchantOrdersTab({
                       <span>Print 4x6" Memo</span>
                     </Link>
 
-                    {o.status !== 'CANCELLED' && o.status !== 'DELIVERED' && (
+                    {isOrderCancellable(o.status, o.courierStatus) && (
                       <button
                         type="button"
                         onClick={() => setCancellingOrder(o)}
@@ -716,7 +716,7 @@ export function MerchantOrdersTab({
                           <Printer className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" />
                           <span>Print</span>
                         </Link>
-                        {o.status !== 'CANCELLED' && o.status !== 'DELIVERED' && (
+                        {isOrderCancellable(o.status, o.courierStatus) && (
                           <button
                             type="button"
                             onClick={() => setCancellingOrder(o)}

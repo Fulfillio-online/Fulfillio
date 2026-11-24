@@ -33,15 +33,8 @@ import {
   CancelledOrderItemRecord,
   RecoveryLedgerEntry,
 } from '@/features/admin/returns/types';
-import {
-  INITIAL_RETURNS,
-  INITIAL_CANCELLED_ORDERS,
-  INITIAL_RECOVERY_LEDGER,
-  STORAGE_KEY_RETURNS,
-} from '@/features/admin/returns/mockData';
-import { fetchOrdersFromDatabase } from '@/lib/warehouseSync';
-import { STORAGE_KEY_ORDERS } from '@/features/admin/orders/mockData';
-import { STORAGE_KEY_STOCK_LEDGER } from '@/features/admin/products/mockData';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 
 interface MerchantReturnsTabProps {
   profile: MerchantProfileData;
@@ -70,186 +63,92 @@ export function MerchantReturnsTab({
 
   const merchantCode = profile.merchantCode || 'MC-101';
 
-  // Load and reconcile data strictly for this specific merchant
+  // Load live data directly from Neon PostgreSQL strictly for this merchant
   useEffect(() => {
     const syncData = async () => {
       try {
-        // 1. Courier returns for this merchant
-        let allReturns: WarehouseReturnRecord[] = INITIAL_RETURNS;
-        const savedReturns = localStorage.getItem(STORAGE_KEY_RETURNS);
-        if (savedReturns) {
-          const parsed = JSON.parse(savedReturns);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            allReturns = parsed;
-          }
-        }
-        const merchantReturns = allReturns.filter(
-          (r) => r.merchantCode === merchantCode || (!r.merchantCode && merchantCode === 'MC-101')
-        );
-        setReturnsList(merchantReturns);
+        const qs = `merchantCode=${encodeURIComponent(merchantCode)}`;
+        const [cancelledRes, returnsRes, ledgerRes] = await Promise.all([
+          fetch(`${API_BASE}/returns/cancelled?${qs}`).catch(() => null),
+          fetch(`${API_BASE}/returns?${qs}`).catch(() => null),
+          fetch(`${API_BASE}/returns/ledger?${qs}`).catch(() => null),
+        ]);
 
-        // 2. Cancelled orders for this merchant
-        let merchantCancelled: CancelledOrderItemRecord[] = INITIAL_CANCELLED_ORDERS.filter(
-          (c) => c.merchantCode === merchantCode || (!c.merchantCode && merchantCode === 'MC-101')
-        );
-
-        // Also check merchant orders state (orders with status === 'CANCELLED')
-        const contextCancelled = orders.filter((o) => o.status === 'CANCELLED');
-        for (const o of contextCancelled) {
-          const orderNum = o.orderNumber || o.id;
-          const cleanId = orderNum.replace(/^#/, '');
-          if (!merchantCancelled.some((c) => c.orderId === orderNum || c.id === cleanId)) {
-            const firstLine = ((o.lineItems && o.lineItems[0]) || {}) as any;
-            const vParts = (firstLine.variant || '').split('·');
-            merchantCancelled.unshift({
-              id: cleanId,
-              orderId: orderNum.startsWith('#') ? orderNum : `#${orderNum}`,
-              merchantCode,
-              merchantName: profile.storeName,
-              customerName: o.customer,
-              customerPhone: o.phone,
-              city: o.address ? o.address.split(',')[0].trim() : 'Dhaka',
-              productTitle: firstLine.title || o.items || 'Product Item',
-              fullSku: firstLine.sku || 'SKU-001',
-              color: vParts[0]?.trim() || 'Standard',
-              size: vParts[1]?.trim() || 'Standard',
-              qty: (o.lineItems || []).reduce((s, it) => s + (it.quantity || 1), 0) || o.qty || 1,
-              unitPrice: o.amount / Math.max(1, o.qty || 1),
-              codAmount: o.amount,
-              targetBin: 'A-01-02',
-              currentStockSnapshot: 15,
-              cancelledAt: o.date || 'Recently',
-              cancelReason: 'Order cancelled by merchant or customer — restored to stock',
-              isRestocked: true,
-              restockedAt: 'Automatic Reversal',
-              restockedBin: 'A-01-02',
-              imageUrl: firstLine.imageUrl || '',
-            });
+        if (cancelledRes?.ok) {
+          const data = await cancelledRes.json();
+          if (Array.isArray(data)) {
+            setCancelledOrders(data);
           }
         }
 
-        // Also check DB orders
-        try {
-          const dbOrders = await fetchOrdersFromDatabase();
-          const dbCancelled = (dbOrders || []).filter(
-            (o: any) =>
-              (o.merchantCode === merchantCode || (!o.merchantCode && merchantCode === 'MC-101')) &&
-              (o.stage === 'CANCELLED' || o.status === 'CANCELLED' || o.status === 'RETURNED')
-          );
-          for (const dbo of dbCancelled) {
-            const cleanId = String(dbo.id || '').replace(/^#/, '');
-            const orderNum = dbo.id.startsWith('#') ? dbo.id : `#${dbo.id}`;
-            if (!merchantCancelled.some((c) => c.orderId === orderNum || c.id === cleanId)) {
-              const firstIt = ((dbo.items && dbo.items[0]) || {}) as any;
-              merchantCancelled.unshift({
-                id: cleanId,
-                orderId: orderNum,
-                merchantCode,
-                merchantName: profile.storeName,
-                customerName: dbo.customerName || 'Customer',
-                customerPhone: dbo.customerPhone || 'N/A',
-                city: dbo.city || 'Dhaka',
-                productTitle: firstIt.title || dbo.productTitle || 'Product Item',
-                fullSku: firstIt.sku || dbo.sku || 'SKU-001',
-                color: firstIt.color || dbo.color || 'Standard',
-                size: firstIt.size || dbo.size || 'Standard',
-                qty: (dbo.items || []).reduce((s: number, it: any) => s + (it.qty || 1), 0) || dbo.qty || 1,
-                unitPrice: firstIt.unitPrice || 1200,
-                codAmount: dbo.codAmount || 1200,
-                targetBin: firstIt.bin || dbo.bin || 'A-01-02',
-                currentStockSnapshot: 15,
-                cancelledAt: 'Today',
-                cancelReason: dbo.holdReason || 'Order cancelled — auto-restored stock to available pool',
-                isRestocked: true,
-                restockedAt: 'Automatic Reversal',
-                restockedBin: firstIt.bin || dbo.bin || 'A-01-02',
-                imageUrl: firstIt.image || dbo.productImage || '',
-              });
-            }
-          }
-        } catch {
-          // fallback
-        }
-        setCancelledOrders(merchantCancelled);
-
-        // 3. Stock Recovery Ledger for this merchant
-        let allLedger: RecoveryLedgerEntry[] = INITIAL_RECOVERY_LEDGER;
-        const savedLedger = localStorage.getItem(STORAGE_KEY_STOCK_LEDGER);
-        if (savedLedger) {
-          const parsed = JSON.parse(savedLedger);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            const dynamic: RecoveryLedgerEntry[] = parsed
-              .filter(
-                (m: any) =>
-                  m.merchantCode === merchantCode ||
-                  (!m.merchantCode && merchantCode === 'MC-101')
-              )
-              .map((m: any) => {
-                let detectedSource: 'ORDER_CANCELLED' | 'COURIER_RETURN' | 'DAMAGED_QUARANTINE' | 'INITIAL_INTAKE' = 'COURIER_RETURN';
-
-                if (
-                  m.type === 'INITIAL_INTAKE' ||
-                  m.sourceType === 'INITIAL_INTAKE' ||
-                  m.referenceDocType === 'INWARD_CHALLAN' ||
-                  (typeof m.referenceNumber === 'string' && m.referenceNumber.startsWith('CHL-')) ||
-                  (typeof m.referenceId === 'string' && m.referenceId.startsWith('CHL-')) ||
-                  m.carrierOrCourier?.toLowerCase().includes('initial catalog') ||
-                  m.notes?.toLowerCase().includes('catalog submission')
-                ) {
-                  detectedSource = 'INITIAL_INTAKE';
-                } else if (
-                  m.sourceType === 'ORDER_CANCELLED' ||
-                  m.type === 'ORDER_CANCELLED' ||
-                  m.notes?.toLowerCase().includes('cancel')
-                ) {
-                  detectedSource = 'ORDER_CANCELLED';
-                } else if (
-                  m.sourceType === 'DAMAGED_QUARANTINE' ||
-                  m.notes?.toLowerCase().includes('damage')
-                ) {
-                  detectedSource = 'DAMAGED_QUARANTINE';
-                } else {
-                  detectedSource = 'COURIER_RETURN';
-                }
-
+        if (returnsRes?.ok) {
+          const data = await returnsRes.json();
+          if (Array.isArray(data)) {
+            setReturnsList(
+              data.map((r: any) => {
+                const firstItem = r.items?.[0] || {};
                 return {
-                  id: m.id || `PRF-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-                  timestamp: m.timestamp || '2026-11-22 14:00',
-                  sourceType: detectedSource,
-                  referenceId: m.referenceNumber || m.referenceId || m.id,
-                  merchantCode,
-                  merchantName: profile.storeName,
-                  productTitle: m.productTitle || 'Product',
-                  sku: m.sku || 'SKU',
-                  deltaQty: Math.abs(m.deltaQty || 1),
-                  previousStock: m.previousStock || 0,
-                  newStock: m.newStock || 15,
-                  binCode: m.binCode || 'A-01-02',
-                  operator: m.operator || 'Warehouse QC Station',
-                  digitalProofHash: m.digitalProofHash || 'FL-SHA256-PROOF',
-                  notes: m.notes || 'Stock intake & recorded',
+                  id: `RTO-${r.id}`,
+                  orderId: r.id?.startsWith('#') ? r.id : `#${r.id}`,
+                  trackingCode: r.trackingCode || `TRK-${r.id}`,
+                  courier: r.courier || 'Steadfast',
+                  merchantCode: r.merchantCode || merchantCode,
+                  merchantName: r.merchantName || profile.storeName,
+                  productTitle: firstItem.title || 'Returned Product',
+                  fullSku: firstItem.sku || 'SKU-N/A',
+                  qty: (r.items || []).reduce((s: number, it: any) => s + (it.qty || 1), 0) || 1,
+                  targetBin: 'A-01-01',
+                  currentStockSnapshot: 0,
+                  returnReason: 'Courier RTO Return',
+                  status: 'PENDING_INSPECTION',
+                  receivedAt: r.returnedAt
+                    ? new Date(r.returnedAt).toLocaleString('en-GB', {
+                        day: '2-digit',
+                        month: 'short',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })
+                    : 'Recently',
+                  imageUrl: '',
                 };
-              });
-
-            const combined = [...INITIAL_RECOVERY_LEDGER.filter((l) => l.merchantCode === merchantCode)];
-            for (const item of dynamic) {
-              if (!combined.some((c) => c.id === item.id)) {
-                combined.unshift(item);
-              }
-            }
-            allLedger = combined;
+              })
+            );
           }
         }
-        setLedgerEntries(allLedger.filter((l) => l.merchantCode === merchantCode));
+
+        if (ledgerRes?.ok) {
+          const data = await ledgerRes.json();
+          if (Array.isArray(data)) {
+            setLedgerEntries(
+              data.map((m: any) => ({
+                id: m.id,
+                timestamp: m.timestamp,
+                sourceType: m.sourceType || 'ORDER_CANCELLED',
+                referenceId: m.orderId || '—',
+                merchantCode: m.merchantCode || merchantCode,
+                merchantName: m.merchantName || profile.storeName,
+                productTitle: m.productTitle || 'Product',
+                sku: m.fullSku || 'SKU-N/A',
+                deltaQty: m.qty ?? 0,
+                previousStock: m.previousStock ?? 0,
+                newStock: m.newStock ?? 0,
+                binCode: m.binCode || 'A-01-01',
+                operator: m.operatorName || 'Warehouse Admin',
+                digitalProofHash: `DB-${String(m.id || '').slice(0, 8).toUpperCase()}`,
+                notes: m.notes || 'Stock recovery recorded in PostgreSQL',
+              }))
+            );
+          }
+        }
       } catch {
-        // ignore
+        // keep current state on network failure
       }
     };
 
     syncData();
     window.addEventListener('fulfillio-warehouse-sync', syncData);
     return () => window.removeEventListener('fulfillio-warehouse-sync', syncData);
-  }, [merchantCode, orders, profile.storeName]);
+  }, [merchantCode, profile.storeName]);
 
   // KPI Calculations
   const stats = useMemo(() => {

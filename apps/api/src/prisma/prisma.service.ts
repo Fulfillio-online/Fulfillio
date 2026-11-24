@@ -67,6 +67,11 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         ALTER TABLE "orders" ADD COLUMN IF NOT EXISTS "packagingCost" DECIMAL(10,2) DEFAULT 5.00;
         ALTER TABLE "orders" ADD COLUMN IF NOT EXISTS "customerRiskScore" INTEGER DEFAULT 92;
         ALTER TABLE "orders" ADD COLUMN IF NOT EXISTS "customerRiskLevel" TEXT DEFAULT 'SAFE';
+        ALTER TABLE "orders" ADD COLUMN IF NOT EXISTS "cancelReason" TEXT;
+        ALTER TABLE "orders" ADD COLUMN IF NOT EXISTS "cancelledAt" TIMESTAMP(3);
+        ALTER TABLE "orders" ADD COLUMN IF NOT EXISTS "isRestocked" BOOLEAN DEFAULT false;
+        ALTER TABLE "orders" ADD COLUMN IF NOT EXISTS "restockedAt" TIMESTAMP(3);
+        ALTER TABLE "orders" ADD COLUMN IF NOT EXISTS "restockedBin" TEXT;
 
         -- 3. Ensure order_items table columns
         ALTER TABLE "order_items" ADD COLUMN IF NOT EXISTS "productTitle" TEXT;

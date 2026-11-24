@@ -150,6 +150,48 @@ export interface MerchantOrderItem {
   timeline?: OrderTimelineEvent[];
 }
 
+/**
+ * An order cannot be cancelled once it is handed over to the courier (or is delivered, returned, or already cancelled).
+ * Cancellation is ONLY permitted when the order is in warehouse stages:
+ * PENDING, ALLOCATED, PICKING, PICKED, PROCESSING, PACKED.
+ */
+export function isOrderCancellable(status?: string, courierStatus?: string): boolean {
+  if (!status) return false;
+  const s = status.trim().toUpperCase();
+
+  // Terminal & non-cancellable states
+  if (s === 'CANCELLED' || s === 'DELIVERED' || s === 'RETURNED') {
+    return false;
+  }
+
+  // Courier handover & in-transit states: strictly locked
+  if (
+    s === 'DISPATCHED' ||
+    s === 'COURIER_BOOKED' ||
+    s === 'HANDOVER' ||
+    s === 'SHIPPED' ||
+    s === 'IN_TRANSIT'
+  ) {
+    return false;
+  }
+
+  // Also check courierStatus if provided
+  if (courierStatus) {
+    const cs = courierStatus.trim().toUpperCase();
+    if (
+      cs.includes('HANDOVER') ||
+      cs.includes('DISPATCH') ||
+      cs.includes('PICKED_UP') ||
+      cs.includes('TRANSIT') ||
+      cs.includes('DELIVER')
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export interface MerchantProductItem {
   id: string;
   title: string;

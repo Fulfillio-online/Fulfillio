@@ -575,21 +575,24 @@ export function OrdersPipelineManager({
         );
         break;
 
-      case 'CANCEL_ORDER':
-        action.orders.forEach((ord) => {
-          cancelOrderInDatabase(ord.id).catch(() => {});
-          restoreOrderStockAndLogLedger(ord);
-        });
+      case 'CANCEL_ORDER': {
+        const cancelReason = holdReasonInput?.trim() || 'Cancelled from Order Pipeline';
+        Promise.all(
+          action.orders.map((ord) => cancelOrderInDatabase(ord.id, cancelReason))
+        ).catch(() => {});
         updateOrdersAndPersist((prev) =>
           prev.map((o) =>
             ids.includes(o.id)
-              ? { ...o, stage: 'CANCELLED', stockAvailable: o.stockAvailable + o.qty }
+              ? { ...o, stage: 'CANCELLED', holdReason: cancelReason }
               : o
           )
         );
         setSelectedIds([]);
-        showToast(`Order ${ids.join(', ')} cancelled & stock restored to warehouse bin.`);
+        showToast(
+          `Order ${ids.join(', ')} cancelled and moved to Returns & Cancellations (Pending Restock).`
+        );
         break;
+      }
     }
   };
 

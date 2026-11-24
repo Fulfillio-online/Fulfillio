@@ -13,7 +13,7 @@ import {
   HelpCircle,
   Trash2,
 } from 'lucide-react';
-import { MerchantOrderItem } from '../../types';
+import { MerchantOrderItem, isOrderCancellable } from '../../types';
 import { OrderItemsCard } from './order-details/OrderItemsCard';
 import { OrderCustomerShippingCard } from './order-details/OrderCustomerShippingCard';
 import { OrderPaymentCard } from './order-details/OrderPaymentCard';
@@ -211,7 +211,7 @@ export function MerchantOrderDetailsTab({
             <span>Print Invoice Memo</span>
           </Link>
 
-          {order.status !== 'CANCELLED' && order.status !== 'DELIVERED' && (
+          {isOrderCancellable(order.status, order.courierStatus) && (
             <button
               type="button"
               onClick={() => setIsCancelConfirmOpen(true)}
@@ -278,27 +278,20 @@ export function MerchantOrderDetailsTab({
                     <span>Warehouse Support</span>
                   </button>
 
-                  <div className="h-px bg-slate-100 dark:bg-navy-800 my-1" />
-
-                  {order.status === 'DELIVERED' || order.status === 'DISPATCHED' ? (
-                    <div className="px-3 py-2 text-[11px] text-slate-500 leading-snug">
-                      Cannot cancel: Order is already {order.status.toLowerCase()}.
-                    </div>
-                  ) : order.status === 'CANCELLED' ? (
-                    <div className="px-3 py-2 text-[11px] text-slate-500 leading-snug">
-                      Order is already cancelled.
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        setIsDropdownOpen(false);
-                        setIsCancelConfirmOpen(true);
-                      }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-colors text-left font-semibold cursor-pointer"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      <span>Cancel Order</span>
-                    </button>
+                  {isOrderCancellable(order.status, order.courierStatus) && (
+                    <>
+                      <div className="h-px bg-slate-100 dark:bg-navy-800 my-1" />
+                      <button
+                        onClick={() => {
+                          setIsDropdownOpen(false);
+                          setIsCancelConfirmOpen(true);
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-rose-600 dark:text-rose-400 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors text-left font-semibold cursor-pointer"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        <span>Cancel Order</span>
+                      </button>
+                    </>
                   )}
                 </div>
               </>
@@ -329,7 +322,7 @@ export function MerchantOrderDetailsTab({
 
           {/* Step 4 on Desktop: Timeline stays in left column */}
           <div className="hidden lg:block">
-            <OrderTimelineCard timelineEvents={timelineEvents} />
+            <OrderTimelineCard order={order} timelineEvents={timelineEvents} />
           </div>
         </div>
 
@@ -348,7 +341,7 @@ export function MerchantOrderDetailsTab({
 
         {/* Step 4 on Mobile: Timeline rendered at the very bottom on mobile screens */}
         <div className="block lg:hidden w-full">
-          <OrderTimelineCard timelineEvents={timelineEvents} />
+          <OrderTimelineCard order={order} timelineEvents={timelineEvents} />
         </div>
       </div>
 

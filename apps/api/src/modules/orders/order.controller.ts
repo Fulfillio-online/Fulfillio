@@ -167,8 +167,11 @@ export class OrderController {
   }
 
   @Post(':id/cancel')
-  async cancelOrder(@Param('id') id: string) {
-    return this.orderService.cancelOrder(id);
+  async cancelOrder(
+    @Param('id') id: string,
+    @Body('reason') reason?: string,
+  ) {
+    return this.orderService.cancelOrder(id, reason);
   }
 
   /**

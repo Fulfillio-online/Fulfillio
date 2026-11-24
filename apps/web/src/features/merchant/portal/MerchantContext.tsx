@@ -9,6 +9,7 @@ import {
   ResellerMemo,
   MerchantCategoryItem,
   MerchantSubcategoryItem,
+  isOrderCancellable,
 } from './types';
 import { StockRequestItem } from './products/types';
 import { safeSetLocalStorage } from './products/utils/imageCompressor';
@@ -1110,6 +1111,12 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
 
     const cleanTargetId = target?.orderNumber || target?.id || cleanReqId;
     const displayOrderNum = cleanTargetId.startsWith('#') ? cleanTargetId : `#${cleanTargetId}`;
+
+    // Strict Rule: Once handed over to courier, order cannot be cancelled
+    if (target && !isOrderCancellable(target.status, target.courierStatus)) {
+      showToast(`Cannot cancel order ${displayOrderNum}: Parcel is already handed over to courier (${target.courier || 'partner'}) or in transit.`);
+      return false;
+    }
 
     // 2. Identify items to restore from target
     const itemsToRestore: Array<{ productId: string; qty: number; variantSku?: string; color?: string; size?: string }> = [];

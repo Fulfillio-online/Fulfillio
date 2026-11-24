@@ -2759,7 +2759,10 @@ export async function updateOrderStatusInDatabase(
 /**
  * Cancel order in PostgreSQL database: triggers atomic reserved stock release & audit log
  */
-export async function cancelOrderInDatabase(orderId: string): Promise<boolean> {
+export async function cancelOrderInDatabase(
+  orderId: string,
+  reason?: string
+): Promise<boolean> {
   if (!orderId) return false;
   const cleanId = orderId.replace(/^#/, '').trim();
   try {
@@ -2768,6 +2771,7 @@ export async function cancelOrderInDatabase(orderId: string): Promise<boolean> {
       headers: {
         'Content-Type': 'application/json',
       },
+      body: JSON.stringify({ reason: reason || '' }),
     });
     return res.ok;
   } catch (err) {

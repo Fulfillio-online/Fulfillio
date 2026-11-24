@@ -536,34 +536,70 @@ export class OrderService {
   }
 
   /**
-   * Cancel order and release reserved stock
+   * Cancel order (Manual Restock workflow: moves to Returns & Cancellations as Pending Restock)
    */
-  async cancelOrder(orderId: string) {
-    const order = await this.orderRepository.findById(orderId);
+  async cancelOrder(orderId: string, reason?: string) {
+    const cleanId = orderId.replace(/^#/, '').trim();
+    const order = await this.orderRepository.findById(cleanId);
 
     if (!order) {
       throw new NotFoundException(`Order '${orderId}' not found.`);
     }
 
-    if (order.status === OrderStatus.DISPATCHED || order.status === OrderStatus.DELIVERED) {
-      throw new BadRequestException(`Cannot cancel order in ${order.status} state.`);
+    if (order.status === OrderStatus.CANCELLED) {
+      return order;
     }
 
-    if (order.status !== OrderStatus.ON_HOLD_STOCK) {
-      const itemsWithVariants = order.items.filter((item) => Boolean(item.variantId));
-      if (itemsWithVariants.length > 0) {
-        await this.inventoryService.releaseReservedStock(
-          itemsWithVariants.map((item) => ({
-            variantId: item.variantId as string,
-            quantity: item.quantity,
-          })),
-          order.merchantId,
-          order.externalOrderId || order.id,
-        );
-      }
+    const nonCancellableStatuses = [
+      OrderStatus.DISPATCHED,
+      OrderStatus.DELIVERED,
+      OrderStatus.RETURNED,
+      OrderStatus.PARTIAL_DELIVERED,
+    ];
+    if (nonCancellableStatuses.includes(order.status as any)) {
+      throw new BadRequestException(
+        `Cannot cancel order '${order.externalOrderId || order.id}': Parcel has already been handed over to courier or completed (Status: ${order.status}).`,
+      );
     }
 
-    return this.orderRepository.updateStatus(order.id, OrderStatus.CANCELLED);
+    const finalReason = (reason || '').trim() || 'Cancelled from Order Pipeline — Pending Warehouse Restock';
+    const existingTimeline = Array.isArray((order as any).timeline) ? (order as any).timeline : [];
+    const nextTimeline = [
+      ...existingTimeline,
+      {
+        stage: 'CANCELLED',
+        timestamp: new Date().toISOString(),
+        note: finalReason,
+      },
+    ];
+
+    const updated = await this.prisma.order.update({
+      where: { id: order.id },
+      data: {
+        status: OrderStatus.CANCELLED,
+        timeline: nextTimeline,
+      },
+    });
+
+    // Persist cancel metadata columns directly (compatible even before prisma generate refresh)
+    await this.prisma.$executeRaw`
+      UPDATE "orders"
+      SET "cancelReason" = ${finalReason},
+          "cancelledAt" = NOW(),
+          "isRestocked" = false,
+          "restockedAt" = NULL,
+          "restockedBin" = NULL
+      WHERE "id" = ${order.id}
+    `;
+
+    return {
+      ...updated,
+      cancelReason: finalReason,
+      cancelledAt: new Date().toISOString(),
+      isRestocked: false,
+      restockedAt: null,
+      restockedBin: null,
+    };
   }
 
   /**
