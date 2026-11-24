@@ -6,6 +6,7 @@ import {
   MerchantOrderItem,
   MerchantProductItem,
   MerchantProfileData,
+  PayoutAccount,
   ResellerMemo,
   MerchantCategoryItem,
   MerchantSubcategoryItem,
@@ -19,6 +20,12 @@ import {
   INITIAL_MERCHANT_PROFILE, INITIAL_MERCHANT_PRODUCTS, INITIAL_MERCHANT_ORDERS, INITIAL_MERCHANT_MEMOS,
 } from './mockData';
 import { merchantApi } from './api';
+import {
+  buildRevisionSnapshotFromMerchantProduct,
+  computeRevisionDiff,
+  extractPendingEditFromApiProduct,
+  ProductPendingEditInfo,
+} from '@/lib/productRevision';
 import {
   getActiveMerchantSession,
   getMerchantAsnsKey,
@@ -37,7 +44,9 @@ import {
   syncMerchantOrderCreatedToAdmin,
   syncMerchantProductsAddedToAdmin,
   syncMerchantProductsDeletedToAdmin,
+  syncMerchantProfileToAdminDirectory,
   syncMerchantProductUpdatedToAdmin,
+  syncMerchantProductRevisionToAdmin,
   syncMerchantMemoToAdmin,
   syncMerchantMemoDeletedToAdmin,
   syncMerchantStockRequestToAdmin,
@@ -47,6 +56,40 @@ import {
   updateOrderStatusInDatabase,
   cancelOrderInDatabase,
 } from '@/lib/warehouseSync';
+
+function getPayoutTimestamp(p?: Partial<PayoutAccount> | null): number {
+  if (!p) return 0;
+  const raw = p.updatedAt || p.submittedAt || p.verifiedAt;
+  if (!raw) return 0;
+  const ms = Date.parse(raw);
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function hasPayoutCoordinates(p?: Partial<PayoutAccount> | null): boolean {
+  return Boolean(
+    p &&
+      (String(p.accountNumber || '').trim() ||
+        String(p.bkashMerchantNumber || '').trim())
+  );
+}
+
+function pickFresherPayout(localPayout: PayoutAccount, serverPayout?: PayoutAccount): PayoutAccount {
+  if (!serverPayout) return localPayout;
+  const localHas = hasPayoutCoordinates(localPayout);
+  const serverHas = hasPayoutCoordinates(serverPayout);
+  if (serverHas && !localHas) return serverPayout;
+  if (localHas && !serverHas) return localPayout;
+
+  const localTs = getPayoutTimestamp(localPayout);
+  const serverTs = getPayoutTimestamp(serverPayout);
+  if (serverTs > 0 && localTs > 0) {
+    return serverTs >= localTs ? serverPayout : localPayout;
+  }
+  if (serverTs > 0 && localTs === 0) return serverPayout;
+  if (localTs > 0 && serverTs === 0) return localPayout;
+  if (serverHas) return serverPayout;
+  return localPayout;
+}
 
 function safeLocalStorageSet(key: string, value: string): void {
   if (typeof window === 'undefined') return;
@@ -86,7 +129,9 @@ interface MerchantContextType {
   bulkDeleteProducts: (ids: string[]) => void;
   requestStockAdd: (productId: string, requestedQty: number, note?: string) => void;
   requestStockOperation: (payload: import("./products/modals/ManageStockModal").SubmitStockRequestPayload) => void;
+  manageProductVariantsAndStock: (payload: import("./products/types").ManageVariantsAndStockPayload) => Promise<{ ok: boolean; error?: string }>;
   requestEditAccess: (productId: string, reason: string) => Promise<boolean>;
+  cancelPendingEdit: (productId: string) => Promise<boolean>;
   approveStockRequest: (requestId: string) => void;
   cancelStockRequest: (requestId: string) => void;
   createOrder: (
@@ -153,10 +198,35 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       setProfile(prof);
 
       try {
-        const [serverProds, serverOrds] = await Promise.all([
+        const [serverProfile, serverProds, serverOrds] = await Promise.all([
+          merchantApi.getProfile(),
           merchantApi.getProducts(),
           merchantApi.getOrders(),
         ]);
+
+        if (serverProfile && serverProfile.merchantCode) {
+          const effectiveCode = serverProfile.merchantCode || code;
+          const reconciledPayout = pickFresherPayout(
+            prof.payoutAccount,
+            serverProfile.payoutAccount
+          );
+          const mergedProfile: MerchantProfileData = {
+            ...prof,
+            ...serverProfile,
+            merchantCode: effectiveCode,
+            storeName: serverProfile.storeName || prof.storeName || session.storeName || '',
+            ownerName: serverProfile.ownerName || prof.ownerName || session.ownerName || '',
+            email: serverProfile.email || prof.email || session.email || '',
+            payoutAccount: reconciledPayout,
+          };
+          setProfile(mergedProfile);
+          if (typeof window !== 'undefined') {
+            safeLocalStorageSet(
+              getMerchantProfileKey(effectiveCode),
+              JSON.stringify(mergedProfile)
+            );
+          }
+        }
         if (serverProds && serverProds.length > 0) {
           const localProds = getStoredMerchantProductsForCode(code);
           const reconciled = serverProds.map((sp) => {
@@ -212,10 +282,13 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
                 rejectionReason: isRejected
                   ? (sp.rejectionReason ?? localMatch.rejectionReason)
                   : undefined,
+                editState: sp.editState ?? null,
+                pendingEdit: sp.pendingEdit ?? null,
+                lastEditRejectionReason: sp.lastEditRejectionReason,
                 stock: sp.stock !== undefined ? sp.stock : localMatch.stock,
                 imageUrl: (sp.imageUrl && sp.imageUrl.trim()) ? sp.imageUrl : localMatch.imageUrl,
                 images: (sp.images && sp.images.length > 0) ? sp.images : (localMatch.images || []),
-                colors: (sp.colors && sp.colors.some((c) => c.imageUrl)) ? sp.colors : (localMatch.colors || sp.colors),
+                colors: (sp.colors && sp.colors.length > 0) ? sp.colors : (localMatch.colors || sp.colors),
               };
             }
             return sp;
@@ -318,14 +391,40 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
   const clearToast = () => setToastMessage(null);
 
   const updateProfile = (updated: Partial<MerchantProfileData>) => {
-    setProfile((prev) => {
-      const next = { ...prev, ...updated };
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(getMerchantProfileKey(next.merchantCode), JSON.stringify(next));
-      }
-      return next;
-    });
-    merchantApi.updateProfile(updated).catch(() => {});
+    const session = typeof window !== 'undefined' ? getActiveMerchantSession() : null;
+    const effectiveCode = profile.merchantCode || session?.merchantCode || 'MC-101';
+    const nowIso = new Date().toISOString();
+    const normalizedPayout: PayoutAccount | undefined = updated.payoutAccount
+      ? {
+          ...updated.payoutAccount,
+          status: 'PENDING_REVIEW',
+          submittedAt: updated.payoutAccount.submittedAt || nowIso,
+          updatedAt: nowIso,
+          rejectionReason: undefined,
+        }
+      : undefined;
+
+    const nextProfile: MerchantProfileData = {
+      ...profile,
+      ...updated,
+      merchantCode: effectiveCode,
+      ...(normalizedPayout ? { payoutAccount: normalizedPayout } : {}),
+    };
+
+    setProfile(nextProfile);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(getMerchantProfileKey(effectiveCode), JSON.stringify(nextProfile));
+      syncMerchantProfileToAdminDirectory(nextProfile);
+    }
+
+    merchantApi
+      .updateProfile({
+        ...updated,
+        merchantCode: effectiveCode,
+        ...(nextProfile.storeName ? { storeName: nextProfile.storeName } : {}),
+        ...(normalizedPayout ? { payoutAccount: normalizedPayout } : {}),
+      })
+      .catch(() => {});
   };
 
   const adjustStock = (id: string, delta: number) => {
@@ -465,11 +564,20 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     id: string,
     updated: Partial<MerchantProductItem>,
   ): Promise<{ ok: boolean; error?: string }> => {
-    let targetProduct = products.find((p) => p.id === id || p.sku === id);
+    const targetProduct = products.find((p) => p.id === id || p.sku === id);
 
-    // Security & Inventory Integrity Guard:
-    // Merchants can edit products while Draft or Pending Approval (before admin approves).
-    // Once approved/published by admin, direct editing is locked.
+    if (targetProduct?.isSuspended) {
+      const errorMsg = 'Cannot edit a suspended product. Please contact warehouse admin.';
+      showToast(errorMsg);
+      return { ok: false, error: errorMsg };
+    }
+
+    if (targetProduct?.status === 'REJECTED') {
+      const errorMsg = 'Rejected products cannot be edited directly.';
+      showToast(errorMsg);
+      return { ok: false, error: errorMsg };
+    }
+
     const isTargetDraft = targetProduct?.status === 'DRAFT' || Boolean(targetProduct?.isDraft);
     const isTargetPending =
       targetProduct &&
@@ -486,13 +594,77 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
         targetProduct?.status === 'APPROVED' ||
         targetProduct?.status === 'PUBLISHED' ||
         targetProduct?.stockAccepted === true);
-    const canEdit = !targetProduct || !isTargetApprovedOrPublished;
 
-    if (!canEdit) {
-      const errorMsg =
-        'Product editing is locked. This product has already been approved and published by the warehouse admin.';
-      showToast(errorMsg);
-      return { ok: false, error: errorMsg };
+    // Published / Approved Product Edit Flow:
+    // Live published product remains unchanged; edits wait in Pending Approval until Admin approves.
+    if (targetProduct && isTargetApprovedOrPublished) {
+      const mergedProduct: MerchantProductItem = {
+        ...targetProduct,
+        ...updated,
+        id: targetProduct.id,
+        sku: targetProduct.sku,
+        bin: targetProduct.bin,
+        stock: targetProduct.stock,
+        status: targetProduct.status,
+      };
+
+      const originalSnapshot = buildRevisionSnapshotFromMerchantProduct(targetProduct);
+      const proposedSnapshot = buildRevisionSnapshotFromMerchantProduct(mergedProduct);
+      const diff = computeRevisionDiff(originalSnapshot, proposedSnapshot);
+
+      if (!diff.hasChanges) {
+        const msg = 'No changes detected compared to the published product.';
+        showToast(msg);
+        return { ok: false, error: msg };
+      }
+
+      let pendingEdit: ProductPendingEditInfo = {
+        status: 'PENDING',
+        submittedAt: new Date().toISOString(),
+        changedFields: diff.changedFields,
+        originalSnapshot,
+        proposedSnapshot,
+      };
+
+      try {
+        const res = await merchantApi.submitProductRevision(targetProduct.id, proposedSnapshot);
+        if (res.ok && res.data) {
+          const extracted = extractPendingEditFromApiProduct(res.data);
+          if (extracted.pendingEdit) {
+            pendingEdit = extracted.pendingEdit;
+          }
+        }
+      } catch (err) {
+        console.warn('[MerchantContext] submitProductRevision network error:', err);
+      }
+
+      // Strictly preserve all live fields; only attach pendingEdit & editState
+      setProducts((prev) => {
+        const next = prev.map((p) =>
+          p.id === targetProduct.id
+            ? {
+                ...p,
+                editState: 'EDIT_APPROVAL_PENDING' as const,
+                pendingEdit,
+                lastEditRejectionReason: undefined,
+              }
+            : p
+        );
+        if (typeof window !== 'undefined') {
+          safeSetLocalStorage(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
+          syncMerchantProductRevisionToAdmin(
+            targetProduct.id,
+            pendingEdit,
+            'EDIT_APPROVAL_PENDING'
+          );
+        }
+        return next;
+      });
+
+      showToast(
+        'Product edits submitted for Admin Approval! Your published product stays live until approved.'
+      );
+      return { ok: true };
     }
 
     const mergedProduct: MerchantProductItem = {
@@ -825,6 +997,231 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const manageProductVariantsAndStock = async (
+    payload: import("./products/types").ManageVariantsAndStockPayload
+  ): Promise<{ ok: boolean; error?: string }> => {
+    const targetProduct = products.find((p) => p.id === payload.productId);
+    if (!targetProduct) {
+      return { ok: false, error: 'Product not found' };
+    }
+
+    let apiResult: { ok: boolean; data?: any; error?: string } = { ok: false };
+    try {
+      apiResult = await merchantApi.manageProductStock(payload.productId, {
+        newVariants: payload.newVariants,
+        adjustments: payload.adjustments.map((a) => ({
+          ...a,
+          reason: a.reason || payload.reason,
+        })),
+      });
+    } catch (err: any) {
+      apiResult = { ok: false, error: err?.message || 'Network error' };
+    }
+
+    if (!apiResult.ok && apiResult.error) {
+      if (/suspend|reject/i.test(apiResult.error)) {
+        showToast(apiResult.error);
+        return { ok: false, error: apiResult.error };
+      }
+      console.warn(
+        '[MerchantContext] manageProductStock server sync fallback to local cache:',
+        apiResult.error
+      );
+    }
+
+    // Update local state (preferring backend-returned variants if available)
+    setProducts((prev) => {
+      let updatedTarget: MerchantProductItem | null = null;
+      const next = prev.map((p) => {
+        if (p.id !== payload.productId) return p;
+
+        let nextVariants = [...(p.variantsList || [])];
+        let nextColors = [...(p.colors || [])];
+        let nextSizes = [...(p.sizes || [])];
+
+        if (apiResult.ok && apiResult.data?.variants && Array.isArray(apiResult.data.variants)) {
+          const remoteVariants = apiResult.data.variants;
+          const colorMap = new Map<string, { id: string; name: string; hex: string; imageUrl?: string; sizes: string[] }>();
+          nextColors.forEach((c) => {
+            colorMap.set(c.name.toLowerCase(), { ...c, sizes: [...(c.sizes || [])] });
+          });
+
+          nextVariants = remoteVariants.map((rv: any) => {
+            const cName = rv.attributes?.color || rv.title?.split('/')[0]?.trim() || '';
+            const sName = rv.attributes?.size || rv.title?.split('/')[1]?.trim() || '';
+            const cHex = rv.attributes?.hex || '#111827';
+            const vImg = rv.imageUrl || rv.attributes?.imageUrl;
+            const vPhysical = rv.inventoryItems?.[0]?.quantityAvailable ?? 0;
+            const vDeclared = Number(rv.attributes?.declaredStock ?? rv.attributes?.stock ?? 0);
+            const vStock = vPhysical > 0 ? vPhysical : vDeclared;
+
+            if (cName) {
+              const key = cName.toLowerCase();
+              if (!colorMap.has(key)) {
+                colorMap.set(key, {
+                  id: `c-${colorMap.size + 1}`,
+                  name: cName,
+                  hex: cHex,
+                  imageUrl: vImg,
+                  sizes: sName ? [sName] : [],
+                });
+              } else {
+                const entry = colorMap.get(key)!;
+                if (sName && !entry.sizes.includes(sName)) {
+                  entry.sizes.push(sName);
+                }
+              }
+            }
+            if (sName && !nextSizes.includes(sName)) {
+              nextSizes.push(sName);
+            }
+
+            return {
+              id: rv.id,
+              variantSku: rv.sku,
+              color: cName,
+              size: sName,
+              imageUrl: vImg,
+              attributeName: rv.attributes?.attributeName,
+              attributeValue: rv.attributes?.attributeValue,
+              stock: vStock,
+            };
+          });
+
+          nextColors = Array.from(colorMap.values());
+        } else {
+          // Offline / localStorage fallback
+          if (
+            nextVariants.length === 0 &&
+            payload.adjustments.length > 0 &&
+            payload.newVariants.length > 0
+          ) {
+            nextVariants.push({
+              id: `var-std-${Date.now()}`,
+              variantSku: `${p.sku}-STD`,
+              color: 'Standard',
+              size: 'Standard',
+              imageUrl: p.imageUrl,
+              stock: Math.max(0, Math.round(payload.adjustments[0].newQuantity)),
+            });
+          }
+
+          for (const adj of payload.adjustments) {
+            const idx = nextVariants.findIndex(
+              (v) =>
+                (adj.variantId && v.id === adj.variantId) ||
+                (adj.variantSku && v.variantSku === adj.variantSku) ||
+                (adj.color &&
+                  adj.size &&
+                  (v.color || '').toLowerCase() === adj.color.toLowerCase() &&
+                  (v.size || '').toLowerCase() === adj.size.toLowerCase())
+            );
+            if (idx >= 0) {
+              nextVariants[idx] = {
+                ...nextVariants[idx],
+                stock: Math.max(0, Math.round(adj.newQuantity)),
+              };
+            }
+          }
+
+          for (const nv of payload.newVariants) {
+            const cName = (nv.color || '').trim();
+            const sName = (nv.size || '').trim();
+            const qty = Math.max(0, Math.round(nv.stock || 0));
+            const varCode = [cName, sName].filter(Boolean).join('-').toUpperCase().replace(/[^A-Z0-9_-]/g, '-') || `V${nextVariants.length + 1}`;
+            const generatedSku = `${p.sku}-${varCode}`;
+
+            nextVariants.push({
+              id: `var-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              variantSku: generatedSku,
+              color: cName || undefined,
+              size: sName || undefined,
+              attributeName: nv.attributeName,
+              attributeValue: nv.attributeValue,
+              imageUrl: nv.imageUrl || p.imageUrl,
+              stock: qty,
+            });
+
+            if (cName) {
+              const existingColor = nextColors.find(
+                (c) => c.name.toLowerCase() === cName.toLowerCase()
+              );
+              if (!existingColor) {
+                nextColors.push({
+                  id: `c-${nextColors.length + 1}`,
+                  name: cName,
+                  hex: nv.hex || '#111827',
+                  imageUrl: nv.imageUrl,
+                  sizes: sName ? [sName] : [],
+                });
+              } else if (sName && !(existingColor.sizes || []).includes(sName)) {
+                existingColor.sizes = [...(existingColor.sizes || []), sName];
+              }
+            }
+            if (sName && !nextSizes.includes(sName)) {
+              nextSizes.push(sName);
+            }
+          }
+        }
+
+        const totalStock =
+          nextVariants.length > 0
+            ? nextVariants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0)
+            : payload.adjustments.length > 0
+            ? Math.max(0, Math.round(payload.adjustments[0].newQuantity))
+            : p.stock;
+
+        const nextVariantLabel =
+          nextVariants.length > 1
+            ? `${nextVariants.length} Variants`
+            : nextVariants.length === 1
+            ? [nextVariants[0].color, nextVariants[0].size].filter(Boolean).join(' / ') || 'Standard'
+            : p.variantLabel;
+
+        const nextStatus =
+          p.status === 'APPROVED' && totalStock > 0 ? ('STOCK_STORED' as const) : p.status;
+        const nextStockAccepted =
+          nextStatus === 'STOCK_STORED' ? true : p.stockAccepted;
+        const nextStockStatus =
+          nextStatus === 'STOCK_STORED' || nextStatus === 'PUBLISHED'
+            ? totalStock > 0
+              ? ('IN_STOCK' as const)
+              : ('OUT_OF_STOCK' as const)
+            : p.stockStatus;
+
+        updatedTarget = {
+          ...p,
+          variantLabel: nextVariantLabel,
+          stock: totalStock,
+          status: nextStatus,
+          stockAccepted: nextStockAccepted,
+          stockStatus: nextStockStatus,
+          variantsList: nextVariants,
+          colors: nextColors,
+          sizes: nextSizes,
+        };
+        return updatedTarget;
+      });
+
+      if (typeof window !== 'undefined') {
+        safeSetLocalStorage(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
+        if (updatedTarget) {
+          syncMerchantProductUpdatedToAdmin(updatedTarget, profile);
+        }
+      }
+      return next;
+    });
+
+    const addedCount = payload.newVariants.length;
+    const adjCount = payload.adjustments.length;
+    const summaryParts: string[] = [];
+    if (addedCount > 0) summaryParts.push(`${addedCount} new variant${addedCount > 1 ? 's' : ''} added`);
+    if (adjCount > 0) summaryParts.push(`${adjCount} quantity adjustment${adjCount > 1 ? 's' : ''} saved`);
+    showToast(summaryParts.length > 0 ? `Stock updated: ${summaryParts.join(' & ')}.` : 'Stock updated.');
+
+    return { ok: true };
+  };
+
   const approveStockRequest = (requestId: string) => {
     const req = stockRequests.find((r) => r.id === requestId);
     if (!req || req.status === 'APPROVED') return;
@@ -910,6 +1307,37 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     return true;
   };
 
+  const cancelPendingEdit = async (productId: string): Promise<boolean> => {
+    const target = products.find((p) => p.id === productId);
+    if (!target) return false;
+
+    try {
+      await merchantApi.cancelProductRevision(productId);
+    } catch {
+      // Fall back to local clear
+    }
+
+    setProducts((prev) => {
+      const next = prev.map((p) =>
+        p.id === productId
+          ? {
+              ...p,
+              editState: null,
+              pendingEdit: null,
+            }
+          : p
+      );
+      if (typeof window !== 'undefined') {
+        safeSetLocalStorage(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
+        syncMerchantProductRevisionToAdmin(productId, null, null);
+      }
+      return next;
+    });
+
+    showToast('Pending edit cancelled. Published product remains unchanged.');
+    return true;
+  };
+
   const createOrder = async (
     rawOrder: MerchantOrderItem,
     productIdOrItems?: string | { productId: string; qty: number }[],
@@ -959,12 +1387,6 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     for (const it of itemsToDeduct) {
       const prod = products.find((p) => p.id === it.productId);
       if (prod) {
-        if ((prod as any).editState === 'EDIT_APPROVAL_PENDING') {
-          const err = `Cannot order "${prod.title}": Product revisions are currently pending warehouse admin QA review. Orders are locked during edit review.`;
-          showToast(err);
-          return { ok: false, error: err };
-        }
-
         if (Boolean((prod as any).isSuspended)) {
           const err = `Cannot order "${prod.title}": Product is currently suspended by warehouse admin.`;
           showToast(err);
@@ -1501,7 +1923,9 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
         bulkDeleteProducts,
         requestStockAdd,
         requestStockOperation,
+        manageProductVariantsAndStock,
         requestEditAccess,
+        cancelPendingEdit,
         approveStockRequest,
         cancelStockRequest,
         createOrder,

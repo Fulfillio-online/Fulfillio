@@ -13,6 +13,7 @@ import {
   ProductStats,
   StockRequestItem,
   StockRequestType,
+  ManageStockMode,
 } from './types';
 import { SubmitStockRequestPayload } from './modals/ManageStockModal';
 import { ProductStatsGrid } from './components/ProductStatsGrid';
@@ -27,6 +28,7 @@ import { DeleteConfirmModal } from './modals/DeleteConfirmModal';
 import { PrintBarcodeModal } from '../components/modals/PrintBarcodeModal';
 import { ThermalStickerModal } from './modals/ThermalStickerModal';
 import { RequestEditModal } from './modals/RequestEditModal';
+import { ProductRevisionReviewModal } from '@/features/shared';
 
 const isProductDraft = (p: MerchantProductItem): boolean => {
   return p.status === 'DRAFT';
@@ -130,7 +132,7 @@ export function MerchantProductsTab({
 
   // Modals state for stock adjustment, delete confirmation & thermal barcode
   const [stockModalProduct, setStockModalProduct] = useState<MerchantProductItem | null>(null);
-  const [stockModalInitialMode, setStockModalInitialMode] = useState<StockRequestType>('RESTOCK');
+  const [stockModalInitialMode, setStockModalInitialMode] = useState<ManageStockMode>('ADJUST');
   const [isStockModalOpen, setIsStockModalOpen] = useState(false);
 
   const [deleteProductTarget, setDeleteProductTarget] = useState<MerchantProductItem | null>(null);
@@ -141,8 +143,14 @@ export function MerchantProductsTab({
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editModalProduct, setEditModalProduct] = useState<MerchantProductItem | null>(null);
+  const [pendingEditModalProduct, setPendingEditModalProduct] = useState<MerchantProductItem | null>(null);
 
-  const { categories: storeCategories = [], requestEditAccess } = useMerchant();
+  const {
+    categories: storeCategories = [],
+    requestEditAccess,
+    cancelPendingEdit,
+    manageProductVariantsAndStock,
+  } = useMerchant();
 
   // Category options extraction
   const categories = useMemo(() => {
@@ -160,6 +168,9 @@ export function MerchantProductsTab({
   const stats: ProductStats = useMemo(() => {
     const draftCount = products.filter(isProductDraft).length;
     const pendingApproval = products.filter(isPendingApprovalProduct).length;
+    const editApprovalPendingCount = products.filter(
+      (p) => p.editState === 'EDIT_APPROVAL_PENDING'
+    ).length;
     const activeProducts = products.filter((p) => isProductActive(p) && (p.stock || 0) > 0).length;
     const outOfStock = products.filter((p) => isProductActive(p) && (p.stock || 0) === 0).length;
     const totalWarehouseStock = products.reduce((sum, p) => sum + (p.stock || 0), 0);
@@ -175,7 +186,7 @@ export function MerchantProductsTab({
       pendingApproval,
       awaitingStock: 0,
       activeProducts,
-      editApprovalPending: 0,
+      editApprovalPending: editApprovalPendingCount,
       restockRequests: 0,
       returnRequests: 0,
       totalWarehouseStock,
@@ -188,11 +199,14 @@ export function MerchantProductsTab({
     };
   }, [products, orders]);
 
-  // Tab counts: All Items, Active, Pending, Drafts, Rejected, Out of Stock
+  // Tab counts: All Items, Active, Pending, Pending Edits, Drafts, Rejected, Out of Stock
   const counts = useMemo(() => {
     const draftCount = products.filter(isProductDraft).length;
     const rejectedCount = products.filter(isProductRejected).length;
     const pendingCount = products.filter(isPendingApprovalProduct).length;
+    const editApprovalPendingCount = products.filter(
+      (p) => p.editState === 'EDIT_APPROVAL_PENDING'
+    ).length;
     const activeCount = products.filter((p) => isProductActive(p) && (p.stock || 0) > 0).length;
     const outOfStockCount = products.filter((p) => isProductActive(p) && (p.stock || 0) === 0).length;
 
@@ -201,6 +215,7 @@ export function MerchantProductsTab({
       active: activeCount,
       published: activeCount,
       pendingApproval: pendingCount,
+      editApprovalPending: editApprovalPendingCount,
       draft: draftCount,
       rejected: rejectedCount,
       outOfStock: outOfStockCount,
@@ -223,6 +238,8 @@ export function MerchantProductsTab({
           if (!isRejected) return false;
         } else if (activeTab === 'PENDING_APPROVAL') {
           if (!isPending) return false;
+        } else if (activeTab === 'EDIT_APPROVAL_PENDING') {
+          if (p.editState !== 'EDIT_APPROVAL_PENDING') return false;
         } else if (activeTab === 'ACTIVE' || activeTab === 'PUBLISHED') {
           if (!isActive || isOutOfStock) return false;
         } else if (activeTab === 'OUT_OF_STOCK') {
@@ -303,7 +320,7 @@ export function MerchantProductsTab({
   };
 
   // Manage Stock Handler
-  const handleOpenManageStock = (p: MerchantProductItem, mode: StockRequestType = 'RESTOCK') => {
+  const handleOpenManageStock = (p: MerchantProductItem, mode: ManageStockMode = 'ADJUST') => {
     setStockModalProduct(p);
     setStockModalInitialMode(mode);
     setIsStockModalOpen(true);
@@ -453,6 +470,14 @@ export function MerchantProductsTab({
                   setEditModalProduct(product);
                   setIsEditModalOpen(true);
                 }}
+                onViewPendingEdit={(product) => {
+                  setPendingEditModalProduct(product);
+                }}
+                onCancelPendingEdit={async (productId) => {
+                  if (cancelPendingEdit) {
+                    await cancelPendingEdit(productId);
+                  }
+                }}
                 onPrintBarcode={handlePrintBarcode}
                 onRequestDelete={handleRequestDelete}
               />
@@ -579,13 +604,14 @@ export function MerchantProductsTab({
         }}
       />
 
-      {/* Manage Stock / Inbound Restock & Return Request Modal */}
+      {/* Manage Stock / Variants & Qty / Inbound Restock & Return Request Modal */}
       <ManageStockModal
         isOpen={isStockModalOpen}
         product={stockModalProduct}
         products={products}
         initialMode={stockModalInitialMode}
         onClose={() => setIsStockModalOpen(false)}
+        onManageVariantsAndStock={manageProductVariantsAndStock}
         onSubmitRequest={(payload) => {
           if (onRequestStockOperation) {
             onRequestStockOperation(payload);
@@ -623,6 +649,34 @@ export function MerchantProductsTab({
         onClose={() => {
           setIsBarcodeModalOpen(false);
           setBarcodeProduct(null);
+        }}
+      />
+
+      {/* Pending Revision Diff Preview Modal */}
+      <ProductRevisionReviewModal
+        isOpen={Boolean(pendingEditModalProduct && pendingEditModalProduct.pendingEdit)}
+        onClose={() => setPendingEditModalProduct(null)}
+        mode="MERCHANT"
+        product={
+          pendingEditModalProduct
+            ? {
+                id: pendingEditModalProduct.id,
+                title: pendingEditModalProduct.title,
+                sku: pendingEditModalProduct.sku,
+                imageUrl: pendingEditModalProduct.imageUrl,
+                stock: pendingEditModalProduct.stock,
+                bin: pendingEditModalProduct.bin,
+              }
+            : null
+        }
+        pendingEdit={pendingEditModalProduct?.pendingEdit ?? null}
+        onCancelPendingEdit={async (productId) => {
+          if (cancelPendingEdit) {
+            const ok = await cancelPendingEdit(productId);
+            if (ok) {
+              setPendingEditModalProduct(null);
+            }
+          }
         }}
       />
 

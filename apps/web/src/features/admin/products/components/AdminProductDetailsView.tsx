@@ -1,5 +1,7 @@
 'use client';
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -28,6 +30,7 @@ import {
   Maximize2,
   Filter,
   PackageCheck,
+  Eye,
 } from 'lucide-react';
 import { StatusBadge } from '@/components/ui';
 import { Modal } from '@/components/admin/AdminModal';
@@ -49,7 +52,13 @@ import {
   approveProductInDatabase,
   deleteProductFromDatabase,
   rejectProductInDatabase,
+  reviewProductRevisionInDatabase,
 } from '@/lib/warehouseSync';
+import {
+  extractPendingEditFromApiProduct,
+  applyRevisionSnapshotToWarehouseProduct,
+} from '@/lib/productRevision';
+import { ProductRevisionReviewModal } from '@/features/shared';
 import { WarehousePipelineOrder } from '@/features/admin/orders/types';
 
 interface AdminProductDetailsViewProps {
@@ -124,6 +133,10 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
     product: WarehouseProductItem;
     selectedBin: string;
   } | null>(null);
+  const [revisionModalState, setRevisionModalState] = useState<{
+    open: boolean;
+    rejectMode: boolean;
+  }>({ open: false, rejectMode: false });
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -131,8 +144,98 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Load product, orders & bins from localStorage and keep in sync
+  const handleApprovePendingEdit = async (targetProductId?: string) => {
+    const id = targetProductId || product?.id;
+    if (!id) return;
+    const isDemo = INITIAL_PRODUCTS.some((ip) => ip.id === id);
+    const res = await reviewProductRevisionInDatabase(id, 'APPROVE');
+    if (!res.ok && !isDemo) {
+      showToast(res.error || 'Failed to approve product edit.');
+      return;
+    }
+
+    try {
+      localStorage.removeItem(`fulfillio_variants_${id}`);
+    } catch {
+      // ignore
+    }
+
+    setProduct((prev) => {
+      if (!prev || prev.id !== id) return prev;
+      const proposed = prev.pendingEdit?.proposedSnapshot;
+      const applied = proposed
+        ? applyRevisionSnapshotToWarehouseProduct(prev, proposed)
+        : { ...prev };
+      const updated: WarehouseProductItem = {
+        ...applied,
+        editState: null,
+        pendingEdit: null,
+        lastEditRejectionReason: undefined,
+      };
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY_PRODUCTS);
+        const raw: WarehouseProductItem[] = stored ? JSON.parse(stored) : [];
+        const nextList = raw.map((rp) => (rp.id === id ? updated : rp));
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(nextList));
+        syncAdminProductsToMerchant(nextList);
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    setRevisionModalState({ open: false, rejectMode: false });
+    showToast('Product edit approved and applied to live product.');
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'AdminProductDetailsView' } })
+      );
+    }
+  };
+
+  const handleRejectPendingEdit = async (targetProductId: string, reason?: string) => {
+    const id = targetProductId || product?.id;
+    if (!id) return;
+    const isDemo = INITIAL_PRODUCTS.some((ip) => ip.id === id);
+    const rejectionReason = reason?.trim() || 'Changes rejected by admin';
+    const res = await reviewProductRevisionInDatabase(id, 'REJECT', rejectionReason);
+    if (!res.ok && !isDemo) {
+      showToast(res.error || 'Failed to reject product edit.');
+      return;
+    }
+
+    setProduct((prev) => {
+      if (!prev || prev.id !== id) return prev;
+      const updated: WarehouseProductItem = {
+        ...prev,
+        editState: null,
+        pendingEdit: null,
+        lastEditRejectionReason: rejectionReason,
+      };
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY_PRODUCTS);
+        const raw: WarehouseProductItem[] = stored ? JSON.parse(stored) : [];
+        const nextList = raw.map((rp) => (rp.id === id ? updated : rp));
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(nextList));
+        syncAdminProductsToMerchant(nextList);
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
+    setRevisionModalState({ open: false, rejectMode: false });
+    showToast('Product edit rejected. Live product remains unchanged.');
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'AdminProductDetailsView' } })
+      );
+    }
+  };
+
+  // Load product, orders & bins from localStorage and keep in sync with PostgreSQL
   useEffect(() => {
+    let cancelled = false;
     const loadProductAndOrders = () => {
       try {
         const storedProducts = localStorage.getItem(STORAGE_KEY_PRODUCTS);
@@ -167,12 +270,131 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
       }
     };
 
+    const fetchFreshProduct = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/inventory/products/${encodeURIComponent(productId)}`);
+        if (!res.ok) return;
+        const p = await res.json();
+        if (!p || cancelled) return;
+
+        const variantsList = Array.isArray(p.variants) ? p.variants : [];
+        const firstVariant = variantsList[0];
+        const revInfo = extractPendingEditFromApiProduct(p);
+        const rawAllColors = (firstVariant?.attributes as any)?.allColors;
+        const derivedColors =
+          Array.isArray(rawAllColors) && rawAllColors.length > 0
+            ? rawAllColors
+            : Array.from(
+                new Set(
+                  variantsList
+                    .map((v: any) => v.attributes?.color || v.title?.split('/')[0]?.trim() || '')
+                    .filter((c: string) => Boolean(c && c.trim()))
+                )
+              ).map((cName: any, idx: number) => ({
+                id: `c-${idx}`,
+                name: String(cName),
+                hex: '#64748b',
+              }));
+
+        const mappedVariants = variantsList.map((v: any) => {
+          const phys = v.inventoryItems?.[0]?.quantityAvailable ?? 0;
+          const decl = Number(v.attributes?.declaredStock ?? v.attributes?.stock ?? 0);
+          return {
+            id: v.id,
+            variantSku: v.sku,
+            color: v.attributes?.color || v.title?.split('/')[0]?.trim() || '',
+            size: v.attributes?.size || v.title?.split('/')[1]?.trim() || '',
+            stock: phys > 0 ? phys : decl,
+          };
+        });
+        const totalStock = mappedVariants.reduce((sum: number, v: any) => sum + (v.stock || 0), 0);
+        const rawDbStatus = (p.status || '').trim().toUpperCase();
+        const isDraft = rawDbStatus === 'DRAFT';
+        const isRejected = rawDbStatus === 'REJECTED';
+        const isPending = !isDraft && !isRejected && rawDbStatus === 'PENDING_APPROVAL';
+        const mCode = p.merchant?.merchantCode || 'MC-101';
+        const mName = p.merchant?.businessName || `Merchant (${mCode})`;
+        const hasValidAssignedBin =
+          Boolean(firstVariant?.defaultBinCode) &&
+          firstVariant.defaultBinCode !== 'Pending Approval' &&
+          firstVariant.defaultBinCode !== 'Assigned on intake';
+        const assignedBin = hasValidAssignedBin
+          ? firstVariant.defaultBinCode
+          : !isPending && !isRejected && !isDraft
+            ? 'A-01-02'
+            : 'Pending Approval';
+
+        setProduct((prev) => {
+          const fresh: WarehouseProductItem = {
+            ...(prev || {}),
+            id: p.id,
+            title: p.title,
+            category: (firstVariant?.attributes as any)?.category || prev?.category || 'Fashion',
+            merchantCode: mCode,
+            merchantName: mName,
+            shortSku: p.baseSku || prev?.shortSku || '',
+            fullSku: firstVariant?.sku || prev?.fullSku || `${mCode}-${p.baseSku}-STD`,
+            color: firstVariant?.attributes?.color || prev?.color || 'Standard',
+            size: firstVariant?.attributes?.size || prev?.size || 'Standard',
+            binCode:
+              prev?.binCode && prev.binCode !== 'Pending Approval' ? prev.binCode : assignedBin,
+            stock: totalStock || prev?.stock || 0,
+            price: Number(firstVariant?.price) || prev?.price || 0,
+            status: isDraft
+              ? ('DRAFT' as const)
+              : isRejected
+                ? ('REJECTED' as const)
+                : isPending
+                  ? ('PENDING_APPROVAL' as const)
+                  : ('STOCK_STORED' as const),
+            isDraft,
+            isSuspended: Boolean(p.isSuspended),
+            rejectionReason: p.rejectionReason || undefined,
+            submittedAt:
+              prev?.submittedAt ||
+              new Date(p.createdAt || Date.now()).toLocaleDateString('en-GB', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+              }),
+            imageUrl: p.imageUrl || prev?.imageUrl || '',
+            images: p.images || prev?.images || [],
+            barcode: firstVariant?.barcode || prev?.barcode || '',
+            description: p.description ?? prev?.description,
+            colors: derivedColors.length > 0 ? derivedColors : prev?.colors || [],
+            sizes: (firstVariant?.attributes as any)?.sizes || prev?.sizes || [],
+            variantsList: mappedVariants.length > 0 ? mappedVariants : prev?.variantsList,
+            editState: revInfo.editState,
+            pendingEdit: revInfo.pendingEdit,
+            lastEditRejectionReason: revInfo.lastEditRejectionReason,
+          };
+          try {
+            const stored = localStorage.getItem(STORAGE_KEY_PRODUCTS);
+            const raw: WarehouseProductItem[] = stored ? JSON.parse(stored) : [];
+            const exists = raw.some((rp) => rp.id === fresh.id);
+            const updatedList = exists
+              ? raw.map((rp) => (rp.id === fresh.id ? { ...rp, ...fresh } : rp))
+              : [fresh, ...raw];
+            localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(updatedList));
+            syncAdminProductsToMerchant(updatedList);
+          } catch {
+            // ignore
+          }
+          return fresh;
+        });
+      } catch {
+        // ignore network failures on fallback view
+      }
+    };
+
     loadProductAndOrders();
+    fetchFreshProduct();
 
     const handleSync = () => loadProductAndOrders();
     window.addEventListener('fulfillio-warehouse-sync', handleSync);
     window.addEventListener('storage', handleSync);
     return () => {
+      cancelled = true;
       window.removeEventListener('fulfillio-warehouse-sync', handleSync);
       window.removeEventListener('storage', handleSync);
     };
@@ -807,6 +1029,56 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
         )}
       </div>
 
+      {/* Pending Edit Approval Banner */}
+      {product.editState === 'EDIT_APPROVAL_PENDING' && product.pendingEdit && (
+        <div className="p-4 sm:p-5 rounded-2xl border border-amber-300 dark:border-amber-500/30 bg-amber-50/80 dark:bg-amber-950/25 flex flex-col lg:flex-row lg:items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 shrink-0">
+              <Clock className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-sm font-extrabold text-navy-900 dark:text-white">
+                  Pending Product Edit Requires Admin Approval
+                </h3>
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                  Live Version Active
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
+                The merchant submitted changes to this published product. The live catalog continues serving the approved version until you approve or reject this revision.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setRevisionModalState({ open: true, rejectMode: false })}
+              className="px-3.5 py-2 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/15 hover:bg-slate-100 dark:hover:bg-navy-800 text-xs font-bold text-navy-900 dark:text-white flex items-center gap-1.5 cursor-pointer transition-colors"
+            >
+              <Eye className="w-4 h-4 text-amber-500" />
+              <span>Review Changes</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleApprovePendingEdit(product.id)}
+              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm shadow-emerald-500/20 cursor-pointer transition-colors"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Approve Edit</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setRevisionModalState({ open: true, rejectMode: true })}
+              className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm shadow-rose-500/20 cursor-pointer transition-colors"
+            >
+              <XCircle className="w-4 h-4" />
+              <span>Reject Edit</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* TOP KPI CARDS: Total Sold, Orders, Delivered, Pending, Stock */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* 1. Total Units Sold */}
@@ -1161,9 +1433,9 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
             </div>
 
             <Link
-              href={`/admin/orders?search=${encodeURIComponent(orderSearchQuery)}`}
+              href={`/admin/orders/all?search=${encodeURIComponent(orderSearchQuery)}`}
               className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-xs font-bold text-white flex items-center gap-2 shadow-md shadow-orange-500/25 transition-all cursor-pointer shrink-0"
-              title="View all pipeline orders for this product"
+              title="View all historical orders for this product"
             >
               <Layers className="w-4 h-4" />
               <span>View All Orders for this SKU</span>
@@ -1476,6 +1748,26 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
         approvalData={approvalModalData}
         bins={bins}
         onConfirm={handleConfirmApprovalInDetails}
+      />
+
+      <ProductRevisionReviewModal
+        isOpen={revisionModalState.open && Boolean(product.pendingEdit)}
+        onClose={() => setRevisionModalState({ open: false, rejectMode: false })}
+        mode="ADMIN"
+        initialRejectMode={revisionModalState.rejectMode}
+        product={{
+          id: product.id,
+          title: product.title,
+          sku: product.fullSku,
+          imageUrl: product.imageUrl,
+          merchantName: product.merchantName,
+          merchantCode: product.merchantCode,
+          stock: product.stock,
+          bin: product.binCode,
+        }}
+        pendingEdit={product.pendingEdit ?? null}
+        onApprove={handleApprovePendingEdit}
+        onReject={handleRejectPendingEdit}
       />
     </div>
   );

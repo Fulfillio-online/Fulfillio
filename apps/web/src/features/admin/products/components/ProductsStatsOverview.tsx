@@ -22,7 +22,10 @@ export function ProductsStatsOverview({
   const pendingProducts = products.filter(
     (p) => p.status === 'PENDING_APPROVAL' && !p.isDraft
   );
-  const totalPendingInbound = pendingProducts.length + pendingRestockCount;
+  const pendingEdits = products.filter(
+    (p) => p.editState === 'EDIT_APPROVAL_PENDING'
+  ).length;
+  const totalPendingInbound = pendingProducts.length + pendingRestockCount + pendingEdits;
 
   const totalInStockUnits = approvedProducts.reduce((acc, p) => acc + p.stock, 0);
 
@@ -47,7 +50,7 @@ export function ProductsStatsOverview({
         value={totalPendingInbound}
         description={
           totalPendingInbound > 0
-            ? `${pendingProducts.length} new + ${pendingRestockCount} restock`
+            ? `${pendingProducts.length} new + ${pendingRestockCount} restock${pendingEdits > 0 ? ` + ${pendingEdits} edit${pendingEdits === 1 ? '' : 's'}` : ''}`
             : 'Queue clear'
         }
         trend={

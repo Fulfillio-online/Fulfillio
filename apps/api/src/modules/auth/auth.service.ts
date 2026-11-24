@@ -106,7 +106,7 @@ export class AuthService {
         'JWT_ACCESS_SECRET',
         'fulfillio_super_secret_access_key_change_in_production',
       ),
-      expiresIn: '15m',
+      expiresIn: '7d',
     });
 
     const refreshToken = await this.jwtService.signAsync(payload, {

@@ -89,10 +89,18 @@ const INITIAL_EARNINGS_ORDERS: EarningsOrderRow[] = [
 
 interface MerchantBillingTabProps {
   payoutAccount?: PayoutAccount;
+  onUpdatePayoutAccount?: (updated: PayoutAccount) => void;
 }
 
-export function MerchantBillingTab({ payoutAccount: initialAccount }: MerchantBillingTabProps) {
+export function MerchantBillingTab({
+  payoutAccount: initialAccount,
+  onUpdatePayoutAccount,
+}: MerchantBillingTabProps) {
   const [account, setAccount] = useState<PayoutAccount | undefined>(initialAccount);
+
+  useEffect(() => {
+    setAccount(initialAccount);
+  }, [initialAccount]);
   const [availableBalance, setAvailableBalance] = useState<number>(24500);
   const [allRequests, setAllRequests] = useState<PaymentRequest[]>(INITIAL_PAYMENT_REQUESTS);
 
@@ -230,7 +238,8 @@ export function MerchantBillingTab({ payoutAccount: initialAccount }: MerchantBi
 
   const handleSaveAccount = (updated: PayoutAccount) => {
     setAccount(updated);
-    triggerToast('Payout account settings updated successfully!');
+    onUpdatePayoutAccount?.(updated);
+    triggerToast('Payout account updated and submitted for Admin approval.');
   };
 
   return (

@@ -66,15 +66,22 @@ export function OrdersTableRow({
     const rect = menuRef.current.getBoundingClientRect();
     const spaceBelow = window.innerHeight - rect.bottom;
     const spaceAbove = rect.top;
-    const estimatedMenuHeight = 260;
-    const openUpward = spaceBelow < estimatedMenuHeight && spaceAbove > spaceBelow;
+    const estimatedMenuHeight = 230;
+    const openUpward = spaceBelow < estimatedMenuHeight && spaceAbove >= spaceBelow;
+    const rawTop = openUpward
+      ? rect.top - estimatedMenuHeight - 6
+      : rect.bottom + 6;
+    const clampedTop = Math.max(
+      10,
+      Math.min(rawTop, window.innerHeight - estimatedMenuHeight - 10)
+    );
 
     setMenuStyle({
       position: 'fixed',
-      right: Math.max(8, window.innerWidth - rect.right),
-      ...(openUpward
-        ? { bottom: Math.max(8, window.innerHeight - rect.top + 6) }
-        : { top: Math.max(8, rect.bottom + 6) }),
+      top: clampedTop,
+      right: Math.max(10, window.innerWidth - rect.right),
+      maxHeight: 'calc(100vh - 20px)',
+      overflowY: 'auto',
       zIndex: 9999,
     });
   }, []);
@@ -332,63 +339,73 @@ export function OrdersTableRow({
 
               <div className="border-t border-slate-100 dark:border-white/10 my-1" />
 
-              {/* Stage Transitions (English Only) */}
-              {order.stage !== 'PACK' && order.stage !== 'CANCELLED' && (
+              {/* Stage-Scoped Pipeline Transitions */}
+              {order.stage === 'PICK' && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      onMarkPicked(order);
+                    }}
+                    className="w-full px-3 py-2 text-left text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <PackageCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                    <span>Mark Picked → Move to Pack</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      onMarkWaiting(order);
+                    }}
+                    className="w-full px-3 py-2 text-left text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span>Put on Hold</span>
+                  </button>
+                </>
+              )}
+
+              {order.stage === 'WAITING' && (
                 <button
                   type="button"
                   onClick={() => {
                     setIsMenuOpen(false);
-                    if (onInlineStageChange) {
-                      onInlineStageChange(order.id, 'PACK');
-                    } else {
-                      onMarkPicked(order);
-                    }
+                    onResumePick(order);
                   }}
                   className="w-full px-3 py-2 text-left text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer"
                 >
-                  <PackageCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                  <span>Move to Pack</span>
+                  <CheckCircle2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                  <span>Resume to Pick List</span>
                 </button>
               )}
 
-              {order.stage !== 'WAITING' && order.stage !== 'CANCELLED' && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsMenuOpen(false);
-                    if (onInlineStageChange) {
-                      onInlineStageChange(
-                        order.id,
-                        'WAITING',
-                        'Awaiting merchant stock delivery'
-                      );
-                    } else {
-                      onMarkWaiting(order);
-                    }
-                  }}
-                  className="w-full px-3 py-2 text-left text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer"
-                >
-                  <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                  <span>Put on Hold</span>
-                </button>
-              )}
-
-              {order.stage !== 'DISPATCH' && order.stage !== 'CANCELLED' && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsMenuOpen(false);
-                    if (onInlineStageChange) {
-                      onInlineStageChange(order.id, 'DISPATCH');
-                    } else {
+              {order.stage === 'PACK' && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMenuOpen(false);
                       onPrintAndPack(order);
-                    }
-                  }}
-                  className="w-full px-3 py-2 text-left text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer"
-                >
-                  <Truck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  <span>Move to Dispatch</span>
-                </button>
+                    }}
+                    className="w-full px-3 py-2 text-left text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <Truck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span>Print 4x6&quot; &amp; Move to Dispatch</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      onMarkWaiting(order);
+                    }}
+                    className="w-full px-3 py-2 text-left text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span>Put on Hold</span>
+                  </button>
+                </>
               )}
 
               {order.stage === 'DISPATCH' && !order.isCourierBooked && (
@@ -419,7 +436,7 @@ export function OrdersTableRow({
                 </button>
               )}
 
-              {/* Cancel Order */}
+              {/* Cancel Order (Warehouse Exception) */}
               {order.stage !== 'CANCELLED' && order.stage !== 'HANDED_OVER' && (
                 <div className="border-t border-slate-100 dark:border-white/10 my-1 pt-1">
                   <button

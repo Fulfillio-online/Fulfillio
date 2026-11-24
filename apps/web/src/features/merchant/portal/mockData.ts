@@ -36,7 +36,7 @@ export const INITIAL_MERCHANT_PROFILE: MerchantProfileData = {
     branchName: '',
     routingNumber: '',
     frequency: 'Weekly',
-    status: 'PENDING_REVIEW',
+    status: 'UNVERIFIED',
     chequeLeafUrl: '',
   },
   kycData: {

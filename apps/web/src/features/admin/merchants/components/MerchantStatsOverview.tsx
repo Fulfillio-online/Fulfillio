@@ -13,6 +13,10 @@ export function MerchantStatsOverview({
 }: MerchantStatsOverviewProps) {
   const activeCount = merchants.filter((m) => m.status === 'Active').length;
   const pendingCount = merchants.filter((m) => m.status === 'Pending').length;
+  const pendingPayoutCount = merchants.filter(
+    (m) => m.payoutAccount?.status === 'PENDING_REVIEW'
+  ).length;
+  const totalPendingReview = pendingCount + pendingPayoutCount;
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -53,9 +57,13 @@ export function MerchantStatsOverview({
           </div>
         </div>
         <div className="text-2xl sm:text-3xl font-extrabold text-amber-700 dark:text-amber-300 mt-2 tabular-nums">
-          {pendingCount}
+          {totalPendingReview}
         </div>
-        <span className="text-xs text-amber-600 dark:text-amber-400 mt-1 block font-medium">Awaiting admin KYC check</span>
+        <span className="text-xs text-amber-600 dark:text-amber-400 mt-1 block font-medium">
+          {pendingPayoutCount > 0
+            ? `${pendingCount} store · ${pendingPayoutCount} payout KYC`
+            : 'Awaiting admin KYC check'}
+        </span>
       </div>
 
       {/* 4. Total Active SKUs */}

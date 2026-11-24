@@ -48,7 +48,13 @@ import {
   syncProductStatusToDatabase,
   deleteProductFromDatabase,
   rejectProductInDatabase,
+  reviewProductRevisionInDatabase,
 } from '@/lib/warehouseSync';
+import {
+  extractPendingEditFromApiProduct,
+  applyRevisionSnapshotToWarehouseProduct,
+} from '@/lib/productRevision';
+import { ProductRevisionReviewModal } from '@/features/shared';
 
 export interface ProductsManagerProps {
   activeTab?: WarehouseProductSubTab;
@@ -63,6 +69,7 @@ export function ProductsManager({
   const [catalogTab, setCatalogTab] = useState<any>(() => {
     const t = (activeTab || '').toUpperCase();
     if (t === 'APPROVAL') return 'APPROVAL';
+    if (t === 'EDIT_APPROVAL') return 'EDIT_APPROVAL';
     if (t === 'RESTOCK') return 'RESTOCK';
     if (t === 'PUBLIC') return 'PUBLIC';
     if (t === 'OUT_OF_STOCK') return 'OUT_OF_STOCK';
@@ -73,6 +80,7 @@ export function ProductsManager({
   useEffect(() => {
     const t = (activeTab || '').toUpperCase();
     if (t === 'APPROVAL') setCatalogTab('APPROVAL');
+    else if (t === 'EDIT_APPROVAL') setCatalogTab('EDIT_APPROVAL');
     else if (t === 'RESTOCK') setCatalogTab('RESTOCK');
     else if (t === 'PUBLIC') setCatalogTab('PUBLIC');
     else if (t === 'OUT_OF_STOCK') setCatalogTab('OUT_OF_STOCK');
@@ -318,6 +326,10 @@ export function ProductsManager({
   const [restockModalData, setRestockModalData] = useState<InboundStockReplenishment | null>(null);
   const [addProductModalOpen, setAddProductModalOpen] = useState(false);
   const [newBinModalOpen, setNewBinModalOpen] = useState(false);
+  const [revisionReviewTarget, setRevisionReviewTarget] = useState<{
+    product: WarehouseProductItem;
+    rejectMode: boolean;
+  } | null>(null);
 
   // Hydrate & sync with localStorage
   useEffect(() => {
@@ -427,6 +439,22 @@ export function ProductsManager({
                 const variantParts = (firstVariant?.title || '').split(/[/•·|-]/).map((s: string) => s.trim());
                 const color = firstVariant?.attributes?.color || variantParts[0] || 'Standard';
                 const size = firstVariant?.attributes?.size || variantParts[1] || 'Standard';
+                const revInfo = extractPendingEditFromApiProduct(p);
+                const rawAllColors = (firstVariant?.attributes as any)?.allColors;
+                const derivedColors =
+                  Array.isArray(rawAllColors) && rawAllColors.length > 0
+                    ? rawAllColors
+                    : Array.from(
+                        new Set(
+                          variants
+                            .map((v: any) => v.attributes?.color || v.title?.split('/')[0]?.trim() || '')
+                            .filter((c: string) => Boolean(c && c.trim()))
+                        )
+                      ).map((cName: any, idx: number) => ({
+                        id: `c-${idx}`,
+                        name: String(cName),
+                        hex: '#64748b',
+                      }));
 
                 return {
                   id: p.id,
@@ -447,6 +475,9 @@ export function ProductsManager({
                   isDraft,
                   isSuspended: Boolean(p.isSuspended),
                   rejectionReason: p.rejectionReason || undefined,
+                  editState: revInfo.editState,
+                  pendingEdit: revInfo.pendingEdit,
+                  lastEditRejectionReason: revInfo.lastEditRejectionReason,
                   submittedAt: new Date(p.createdAt || Date.now()).toLocaleDateString('en-GB', {
                     day: '2-digit',
                     month: 'short',
@@ -456,7 +487,7 @@ export function ProductsManager({
                   images: p.images || [],
                   barcode: firstVariant?.barcode || '',
                   description: p.description,
-                  colors: (firstVariant?.attributes as any)?.allColors || [],
+                  colors: derivedColors,
                   sizes: (firstVariant?.attributes as any)?.sizes || [],
                   variantsList: variants.map((v: any) => {
                     const phys = v.inventoryItems?.[0]?.quantityAvailable ?? 0;
@@ -486,7 +517,15 @@ export function ProductsManager({
                 const mergedBackend = mappedBackend.map((bp) => {
                   const existing = prevById.get(bp.id);
                   return existing
-                    ? { ...existing, ...bp, status: bp.status, isDraft: bp.isDraft }
+                    ? {
+                        ...existing,
+                        ...bp,
+                        status: bp.status,
+                        isDraft: bp.isDraft,
+                        editState: bp.editState ?? null,
+                        pendingEdit: bp.pendingEdit ?? null,
+                        lastEditRejectionReason: bp.lastEditRejectionReason,
+                      }
                     : bp;
                 });
                 const next = [...mergedBackend, ...retainedDemo];
@@ -1703,11 +1742,34 @@ syncAdminProductsToMerchant(next);
     }
   };
 
-  const handleApproveRevision = (productId: string) => {
+  const handleApproveRevision = async (productId: string) => {
+    const isDemo = INITIAL_PRODUCTS.some((ip) => ip.id === productId);
+    const res = await reviewProductRevisionInDatabase(productId, 'APPROVE');
+    if (!res.ok && !isDemo) {
+      triggerToast(res.error || 'Failed to approve product edit.');
+      return;
+    }
+
+    try {
+      localStorage.removeItem(`fulfillio_variants_${productId}`);
+    } catch {
+      // ignore
+    }
+
     setProducts((prev) => {
-      const next = prev.map((p) =>
-        p.id === productId ? { ...p, editState: null } : p
-      );
+      const next = prev.map((p) => {
+        if (p.id !== productId) return p;
+        const proposed = p.pendingEdit?.proposedSnapshot;
+        const updated = proposed
+          ? applyRevisionSnapshotToWarehouseProduct(p, proposed)
+          : { ...p };
+        return {
+          ...updated,
+          editState: null,
+          pendingEdit: null,
+          lastEditRejectionReason: undefined,
+        };
+      });
       try {
         localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
         syncAdminProductsToMerchant(next);
@@ -1716,7 +1778,9 @@ syncAdminProductsToMerchant(next);
       }
       return next;
     });
-    triggerToast('Product revision approved.');
+
+    setRevisionReviewTarget(null);
+    triggerToast('Product edit approved and applied to live product.');
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
@@ -1724,10 +1788,25 @@ syncAdminProductsToMerchant(next);
     }
   };
 
-  const handleRejectRevision = (productId: string) => {
+  const handleRejectRevision = async (productId: string, reason?: string) => {
+    const isDemo = INITIAL_PRODUCTS.some((ip) => ip.id === productId);
+    const rejectionReason = reason?.trim() || 'Changes rejected by admin';
+    const res = await reviewProductRevisionInDatabase(productId, 'REJECT', rejectionReason);
+    if (!res.ok && !isDemo) {
+      triggerToast(res.error || 'Failed to reject product edit.');
+      return;
+    }
+
     setProducts((prev) => {
       const next = prev.map((p) =>
-        p.id === productId ? { ...p, editState: null } : p
+        p.id === productId
+          ? {
+              ...p,
+              editState: null,
+              pendingEdit: null,
+              lastEditRejectionReason: rejectionReason,
+            }
+          : p
       );
       try {
         localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
@@ -1737,7 +1816,9 @@ syncAdminProductsToMerchant(next);
       }
       return next;
     });
-    triggerToast('Product revision rejected.');
+
+    setRevisionReviewTarget(null);
+    triggerToast('Product edit rejected. Live product remains unchanged.');
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
@@ -1882,6 +1963,9 @@ syncAdminProductsToMerchant(next);
         onDeleteProduct={handleDeleteProduct}
         onDeleteProducts={handleDeleteProducts}
         onAllowEdit={handleAllowEdit}
+        onReviewRevision={(product, rejectMode = false) =>
+          setRevisionReviewTarget({ product, rejectMode })
+        }
         onApproveRevision={handleApproveRevision}
         onRejectRevision={handleRejectRevision}
         onToggleSuspend={handleToggleSuspend}
@@ -1932,6 +2016,30 @@ syncAdminProductsToMerchant(next);
         onClose={() => setNewBinModalOpen(false)}
         bins={bins}
         onCreateBin={handleCreateBin}
+      />
+
+      <ProductRevisionReviewModal
+        isOpen={Boolean(revisionReviewTarget && revisionReviewTarget.product.pendingEdit)}
+        onClose={() => setRevisionReviewTarget(null)}
+        mode="ADMIN"
+        initialRejectMode={Boolean(revisionReviewTarget?.rejectMode)}
+        product={
+          revisionReviewTarget
+            ? {
+                id: revisionReviewTarget.product.id,
+                title: revisionReviewTarget.product.title,
+                sku: revisionReviewTarget.product.fullSku,
+                imageUrl: revisionReviewTarget.product.imageUrl,
+                merchantName: revisionReviewTarget.product.merchantName,
+                merchantCode: revisionReviewTarget.product.merchantCode,
+                stock: revisionReviewTarget.product.stock,
+                bin: revisionReviewTarget.product.binCode,
+              }
+            : null
+        }
+        pendingEdit={revisionReviewTarget?.product.pendingEdit ?? null}
+        onApprove={handleApproveRevision}
+        onReject={handleRejectRevision}
       />
     </div>
   );

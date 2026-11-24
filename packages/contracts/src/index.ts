@@ -307,17 +307,34 @@ export interface RequestProductEditDto {
 
 export interface SubmitProductRevisionDto {
   productId: string;
+  reason?: string;
   proposedSnapshot: {
     title?: string;
     description?: string;
+    sku?: string;
+    baseSku?: string;
     category?: string;
-    brand?: string;
+    subcategory?: string;
+    productType?: string;
+    price?: number;
+    costPrice?: number;
     purchasePrice?: number;
     sellingPrice?: number;
     weight?: string;
     dimensions?: string;
     imageUrl?: string;
     images?: string[];
+    keyFeatures?: string[];
+    colors?: Array<{
+      id: string;
+      name: string;
+      hex: string;
+      imageUrl?: string;
+      sizes?: string[];
+      originalName?: string;
+    }>;
+    sizes?: string[];
+    variantsList?: any[];
     variants?: any[];
   };
 }

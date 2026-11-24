@@ -1,3 +1,5 @@
+import type { ProductPendingEditInfo } from '@/lib/productRevision';
+
 export type MerchantTab =
   | 'overview'
   | 'products'
@@ -37,9 +39,13 @@ export interface PayoutAccount {
   branchName: string;
   routingNumber: string;
   frequency: string;
-  status: 'VERIFIED' | 'PENDING_REVIEW' | 'REJECTED';
+  status: 'VERIFIED' | 'PENDING_REVIEW' | 'REJECTED' | 'UNVERIFIED';
   chequeLeafUrl: string;
   bkashMerchantNumber?: string;
+  rejectionReason?: string;
+  submittedAt?: string;
+  updatedAt?: string;
+  verifiedAt?: string;
 }
 
 export interface KycDocumentData {
@@ -214,13 +220,15 @@ export interface MerchantProductItem {
   minPrice?: number;
   maxPrice?: number;
   keyFeatures?: string[];
-  colors?: { id: string; name: string; hex: string; imageUrl?: string; sizes?: string[] }[];
+  colors?: { id: string; name: string; hex: string; imageUrl?: string; sizes?: string[]; originalName?: string }[];
   sizes?: string[];
   variantsList?: {
     id: string;
     variantSku: string;
     color?: string;
+    originalColor?: string;
     size?: string;
+    originalSize?: string;
     imageUrl?: string;
     attributeName?: string;
     attributeValue?: string;
@@ -231,7 +239,9 @@ export interface MerchantProductItem {
   status?: 'PUBLISHED' | 'STOCK_STORED' | 'APPROVED' | 'DRAFT' | 'ARCHIVED' | 'PENDING_APPROVAL' | 'REJECTED';
   isDraft?: boolean;
   totalOrders?: number;
-  editState?: 'EDIT_ALLOWED' | 'EDIT_APPROVAL_PENDING' | 'EDIT_ACCESS_REQUESTED' | null;
+  editState?: 'NONE' | 'EDIT_REQUESTED' | 'EDIT_ALLOWED' | 'EDIT_APPROVAL_PENDING' | 'EDIT_ACCESS_REQUESTED' | null;
+  pendingEdit?: ProductPendingEditInfo | null;
+  lastEditRejectionReason?: string;
   isSuspended?: boolean;
   rejectionReason?: string;
 }

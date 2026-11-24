@@ -19,11 +19,15 @@ import {
   FileText,
   Clock,
   Lock,
+  XCircle,
+  Eye,
 } from 'lucide-react';
 import { MerchantProductItem, ResellerMemo, MerchantOrderItem } from '../../types';
+import { ManageVariantsAndStockPayload } from '../types';
 import { ProductOrderListSection } from './ProductOrderListSection';
 import { ManageStockModal, SubmitStockRequestPayload } from '../modals/ManageStockModal';
 import { PrintBarcodeModal } from '../../components/modals/PrintBarcodeModal';
+import { ProductRevisionReviewModal } from '@/features/shared';
 import { addToOrderCart } from '../lib/orderCartStorage';
 
 const COLOR_MAP: Record<string, string> = {
@@ -110,6 +114,8 @@ interface ProductDetailsViewProps {
   ) => void;
   onRequestStockAdd: (productId: string, qty: number, note?: string) => void;
   onRequestStockOperation?: (payload: SubmitStockRequestPayload) => void;
+  onManageVariantsAndStock?: (payload: ManageVariantsAndStockPayload) => Promise<{ ok: boolean; error?: string }>;
+  onCancelPendingEdit?: (productId: string) => Promise<boolean> | void;
   onTriggerToast: (msg: string) => void;
 }
 
@@ -121,10 +127,13 @@ export function ProductDetailsView({
   onCreateOrder,
   onRequestStockAdd,
   onRequestStockOperation,
+  onManageVariantsAndStock,
+  onCancelPendingEdit,
   onTriggerToast,
 }: ProductDetailsViewProps) {
   const [isStockModalOpen, setIsStockModalOpen] = useState(false);
   const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
+  const [isPendingEditModalOpen, setIsPendingEditModalOpen] = useState(false);
 
   // 1. Normalize colors list
   const productColors = useMemo(() => {
@@ -395,11 +404,37 @@ export function ProductDetailsView({
   const isPublishPendingFromDraft = isPendingApproval && product.stockAccepted === true;
 
   const isSuspended = Boolean((product as any).isSuspended);
+  const isRejected = product.status === 'REJECTED';
+  const isEditPending = product.editState === 'EDIT_APPROVAL_PENDING';
+  const canDirectEdit = !isSuspended && !isRejected && !isPublishPendingFromDraft;
+  const canManageStock = !isSuspended && !isRejected;
   const isReadyToOrder =
     !isDraft &&
+    !isRejected &&
     !isPendingApproval &&
     !isSuspended &&
     (product.stock || 0) > 0;
+
+  useEffect(() => {
+    if (productColors.length === 0) return;
+    const currentHasMatch = productColors.some(
+      (c) => c.name.toLowerCase() === selectedColor.toLowerCase()
+    );
+    const currentStock = currentHasMatch
+      ? colorStockMap.get(selectedColor.toLowerCase()) ?? 0
+      : 0;
+    if (!currentHasMatch || currentStock <= 0) {
+      const firstInStock = productColors.find(
+        (c) => (colorStockMap.get(c.name.toLowerCase()) ?? 0) > 0
+      );
+      const fallback = firstInStock || productColors[0];
+      if (fallback && fallback.name !== selectedColor) {
+        setSelectedColor(fallback.name);
+        const entry = colorToImageMap.get(fallback.name.toLowerCase());
+        if (entry?.url) setActiveImageUrl(entry.url);
+      }
+    }
+  }, [productColors, colorStockMap, selectedColor, colorToImageMap]);
 
   const handleAddToCart = () => {
     if (!isReadyToOrder || currentVariantStock <= 0 || orderQty <= 0) return;
@@ -440,13 +475,16 @@ export function ProductDetailsView({
   // Normalized display variants with Color, Size in letters (S, M, L, XL), Stock, and SKU
   const displayVariants = useMemo(() => {
     if (product.variantsList && product.variantsList.length > 0) {
-      return product.variantsList.map((v, idx) => ({
-        id: v.id || `var-${idx}`,
-        color: v.color || (v as any).variant || 'Standard',
-        size: formatSizeLetter(v.size || (v as any).attributeValue || 'M'),
-        stock: typeof v.stock === 'number' ? v.stock : 0,
-        sku: v.variantSku || `${product.sku}-${idx + 1}`,
-      }));
+      return product.variantsList.map((v, idx) => {
+        const rawSize = (v.size || (v as any).attributeValue || '').trim();
+        return {
+          id: v.id || `var-${idx}`,
+          color: v.color || (v as any).variant || 'Standard',
+          size: rawSize ? formatSizeLetter(rawSize) : 'Standard',
+          stock: typeof v.stock === 'number' ? v.stock : 0,
+          sku: v.variantSku || `${product.sku}-${idx + 1}`,
+        };
+      });
     }
 
     const colorsList = productColors.length > 0 ? productColors : [{ id: 'c-std', name: 'Standard', hex: '#64748b' }];
@@ -502,38 +540,38 @@ export function ProductDetailsView({
         </Link>
 
         <div className="flex items-center gap-2">
-          {isReadyToOrder && (
-            <>
-              <button
-                type="button"
-                onClick={() => setIsBarcodeModalOpen(true)}
-                className="px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-600/20 dark:hover:bg-indigo-600/30 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-              >
-                <Printer className="h-3.5 w-3.5" />
-                <span>Print Thermal Sticker</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsStockModalOpen(true)}
-                className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-navy-900 dark:bg-navy-800 dark:hover:bg-navy-700 dark:text-slate-200 border border-slate-200 dark:border-white/10 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-              >
-                <Layers className="h-3.5 w-3.5 text-emerald-500" />
-                <span>Manage Stock</span>
-              </button>
-            </>
+          {!isDraft && !isRejected && !isPendingApproval && !isSuspended && (
+            <button
+              type="button"
+              onClick={() => setIsBarcodeModalOpen(true)}
+              className="px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-600/20 dark:hover:bg-indigo-600/30 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+            >
+              <Printer className="h-3.5 w-3.5" />
+              <span>Print Thermal Sticker</span>
+            </button>
           )}
-          {isDraft || isFirstTimePending ? (
+          {canManageStock && (
+            <button
+              type="button"
+              onClick={() => setIsStockModalOpen(true)}
+              className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-navy-900 dark:bg-navy-800 dark:hover:bg-navy-700 dark:text-slate-200 border border-slate-200 dark:border-white/10 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+            >
+              <Layers className="h-3.5 w-3.5 text-emerald-500" />
+              <span>Manage Stock</span>
+            </button>
+          )}
+          {canDirectEdit ? (
             <Link
               href={`/merchant/products/${product.id}/edit`}
               className="px-3.5 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm shadow-orange-500/20 transition-colors cursor-pointer"
             >
               <Edit2 className="h-3.5 w-3.5" />
-              <span>Edit Product</span>
+              <span>{isEditPending ? 'Modify Pending Edit' : 'Edit Product'}</span>
             </Link>
           ) : (
             <div
-              className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 select-none bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30"
-              title="Product editing is locked because it has been approved and published by the warehouse admin."
+              className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 select-none bg-slate-100 dark:bg-navy-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/10"
+              title="Product editing is currently locked."
             >
               <Lock className="h-3.5 w-3.5" />
               <span>Product Editing Locked</span>
@@ -541,6 +579,70 @@ export function ProductDetailsView({
           )}
         </div>
       </div>
+
+      {/* Pending Edit Approval Banner (Live product stays published while changes wait for Admin approval) */}
+      {isEditPending && product.pendingEdit && (
+        <div className="p-4 rounded-2xl border border-amber-300 dark:border-amber-500/30 bg-amber-50/80 dark:bg-amber-950/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 shrink-0">
+              <Clock className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                  Changes Pending Admin Approval
+                </h3>
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                  Live Product Active
+                </span>
+              </div>
+              <p className="text-xs text-amber-800/80 dark:text-amber-200/80 mt-0.5 leading-relaxed">
+                Your proposed edit is waiting for Admin approval. The published version remains live and orderable until an administrator approves the changes.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsPendingEditModalOpen(true)}
+              className="px-3 py-1.5 rounded-lg bg-white dark:bg-navy-900 border border-amber-300 dark:border-amber-500/30 text-xs font-bold text-navy-900 dark:text-white hover:bg-amber-100/70 dark:hover:bg-navy-800 flex items-center gap-1.5 cursor-pointer transition-colors"
+            >
+              <Eye className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+              <span>Preview Changes</span>
+            </button>
+            <Link
+              href={`/merchant/products/${product.id}/edit`}
+              className="px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+            >
+              <Edit2 className="h-3.5 w-3.5" />
+              <span>Modify Edit</span>
+            </Link>
+            {onCancelPendingEdit && (
+              <button
+                type="button"
+                onClick={async () => {
+                  await onCancelPendingEdit(product.id);
+                }}
+                className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-xs font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1.5 cursor-pointer transition-colors"
+              >
+                <XCircle className="h-3.5 w-3.5" />
+                <span>Cancel Pending Edit</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Last Revision Rejection Notice */}
+      {product.lastEditRejectionReason && !isEditPending && (
+        <div className="p-4 rounded-2xl border border-rose-300 dark:border-rose-500/30 bg-rose-50/70 dark:bg-rose-950/20 flex items-start gap-3">
+          <AlertCircle className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
+          <div className="text-xs text-rose-700 dark:text-rose-300">
+            <span className="font-bold block">Last Proposed Edit Was Rejected</span>
+            <span className="opacity-90">{product.lastEditRejectionReason}</span>
+          </div>
+        </div>
+      )}
 
       {/* Modern E-Commerce Product Showcase (Gallery + Color & Size Switchers + Integrated Add-to-Order) */}
       <div className="p-6 rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-sm">
@@ -1086,14 +1188,26 @@ export function ProductDetailsView({
 
               {displayVariants.length > 0 && (
                 <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-navy-950/60 border border-slate-200 dark:border-white/10 space-y-2.5">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
                     <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                       <Layers className="h-3.5 w-3.5 text-orange-500" />
                       <span>Stock Details by Variant ({displayVariants.length} Variants)</span>
                     </span>
-                    <span className="text-xs font-mono font-bold text-orange-600 dark:text-orange-400">
-                      Total: {product.stock} units
-                    </span>
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-xs font-mono font-bold text-orange-600 dark:text-orange-400">
+                        Total: {product.stock} units
+                      </span>
+                      {canManageStock && (
+                        <button
+                          type="button"
+                          onClick={() => setIsStockModalOpen(true)}
+                          className="px-2.5 py-1 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-xs"
+                        >
+                          <Plus className="h-3 w-3" />
+                          <span>Manage Variants &amp; Stock</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 pt-1">
                     {displayVariants.map((v, idx) => (
@@ -1151,7 +1265,7 @@ export function ProductDetailsView({
                 </p>
               </div>
 
-              <div className="flex items-center gap-2 font-mono text-xs">
+              <div className="flex items-center gap-2 font-mono text-xs flex-wrap">
                 <div className="px-2.5 py-1 rounded-lg bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-2xs">
                   <span className="text-slate-400 text-[10px] block">TOTAL VARIANTS</span>
                   <span className="font-bold text-navy-900 dark:text-white">
@@ -1164,6 +1278,16 @@ export function ProductDetailsView({
                     {displayVariants.reduce((sum, v) => sum + v.stock, 0)} pcs
                   </span>
                 </div>
+                {canManageStock && (
+                  <button
+                    type="button"
+                    onClick={() => setIsStockModalOpen(true)}
+                    className="px-3 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-sans font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Manage Variants &amp; Stock</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1343,11 +1467,13 @@ export function ProductDetailsView({
         )}
       </div>
 
-      {/* Stock Management Modal (Restock & Return by Variant) */}
+      {/* Stock Management Modal (Variants & Qty, Restock & Return) */}
       <ManageStockModal
         isOpen={isStockModalOpen}
         product={product}
+        initialMode="ADJUST"
         onClose={() => setIsStockModalOpen(false)}
+        onManageVariantsAndStock={onManageVariantsAndStock}
         onSubmitRequest={(payload) => {
           if (onRequestStockOperation) {
             onRequestStockOperation(payload);
@@ -1364,6 +1490,32 @@ export function ProductDetailsView({
         storeName={storeName}
         onClose={() => setIsBarcodeModalOpen(false)}
         onTriggerToast={onTriggerToast}
+      />
+
+      {/* Pending Revision Diff Preview Modal */}
+      <ProductRevisionReviewModal
+        isOpen={isPendingEditModalOpen && Boolean(product.pendingEdit)}
+        onClose={() => setIsPendingEditModalOpen(false)}
+        mode="MERCHANT"
+        product={{
+          id: product.id,
+          title: product.title,
+          sku: product.sku,
+          imageUrl: product.imageUrl,
+          stock: product.stock,
+          bin: product.bin,
+        }}
+        pendingEdit={product.pendingEdit ?? null}
+        onCancelPendingEdit={
+          onCancelPendingEdit
+            ? async (productId) => {
+                const res = await onCancelPendingEdit(productId);
+                if (res !== false) {
+                  setIsPendingEditModalOpen(false);
+                }
+              }
+            : undefined
+        }
       />
     </div>
   );

@@ -104,10 +104,24 @@ export function EarningsWalletBanner({
             <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               Payout account
             </span>
-            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
-              <CheckCircle2 className="h-3 w-3" />
-              <span>Account verified</span>
-            </span>
+            {payoutAccount?.status === 'VERIFIED' ? (
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                <CheckCircle2 className="h-3 w-3" />
+                <span>Account verified</span>
+              </span>
+            ) : payoutAccount?.status === 'PENDING_REVIEW' ? (
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                <span>Pending Approval</span>
+              </span>
+            ) : payoutAccount?.status === 'REJECTED' ? (
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30 flex items-center gap-1">
+                <span>Rejected</span>
+              </span>
+            ) : (
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-navy-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/10 flex items-center gap-1">
+                <span>Not Configured</span>
+              </span>
+            )}
           </div>
 
           <div className="mt-4 flex items-center gap-3">

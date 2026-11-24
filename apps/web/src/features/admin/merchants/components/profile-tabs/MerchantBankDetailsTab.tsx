@@ -1,16 +1,163 @@
 import React, { useState } from 'react';
-import { Landmark, Eye } from 'lucide-react';
+import { Landmark, Eye, CheckCircle2, XCircle, Clock, AlertTriangle } from 'lucide-react';
 import { Modal } from '@/components/admin/AdminModal';
 import { MerchantRecord } from '../../types';
 
 export interface MerchantBankDetailsTabProps {
   merchant: MerchantRecord;
+  onApprovePayout?: () => void;
+  onRejectPayout?: (reason?: string) => void;
 }
 
-export function MerchantBankDetailsTab({ merchant }: MerchantBankDetailsTabProps) {
+export function MerchantBankDetailsTab({
+  merchant,
+  onApprovePayout,
+  onRejectPayout,
+}: MerchantBankDetailsTabProps) {
   const [isChequePreviewOpen, setIsChequePreviewOpen] = useState(false);
+  const [showRejectInput, setShowRejectInput] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+
+  const hasPayoutDetails = Boolean(
+    merchant.payoutAccount?.accountNumber?.trim() ||
+      merchant.payoutAccount?.bkashNumber?.trim()
+  );
+  const payoutStatus = hasPayoutDetails
+    ? merchant.payoutAccount?.status || 'PENDING_REVIEW'
+    : merchant.payoutAccount?.status === 'REJECTED'
+      ? 'REJECTED'
+      : 'UNVERIFIED';
+  const isPending = payoutStatus === 'PENDING_REVIEW';
+  const isRejected = payoutStatus === 'REJECTED';
+  const isUnverified = payoutStatus === 'UNVERIFIED';
 
   return (
+    <div className="space-y-5">
+      {/* Unconfigured / Not Yet Submitted Banner */}
+      {isUnverified && (
+        <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-navy-900/60 p-4 sm:p-5 flex items-start gap-3">
+          <div className="h-10 w-10 rounded-xl bg-slate-200/70 dark:bg-navy-800 border border-slate-300/70 dark:border-white/10 flex items-center justify-center text-slate-600 dark:text-slate-300 shrink-0">
+            <Landmark className="w-5 h-5" />
+          </div>
+          <div>
+            <h4 className="text-sm font-bold text-navy-900 dark:text-white">
+              No Payment Details Added Yet
+            </h4>
+            <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5 leading-relaxed">
+              This merchant has not submitted any Bank or MFS payout account details from their portal yet. Once submitted, they will appear here for Admin verification.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Pending Approval Action Banner */}
+      {isPending && (
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="h-10 w-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
+              <Clock className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-amber-900 dark:text-amber-200">
+                Payment Details Pending Admin Approval
+              </h4>
+              <p className="text-xs text-amber-800/80 dark:text-amber-300/80 mt-0.5 leading-relaxed">
+                This merchant submitted new or updated payout account details from their portal. Verify the bank/MFS details and cheque leaf before approving COD disbursements.
+              </p>
+            </div>
+          </div>
+          {(onApprovePayout || onRejectPayout) && (
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              {onApprovePayout && (
+                <button
+                  type="button"
+                  onClick={onApprovePayout}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-500/20 transition-all cursor-pointer"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Approve Payout Account</span>
+                </button>
+              )}
+              {onRejectPayout && (
+                <button
+                  type="button"
+                  onClick={() => setShowRejectInput((prev) => !prev)}
+                  className="px-3.5 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <XCircle className="w-4 h-4" />
+                  <span>Reject</span>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Rejected Banner */}
+      {isRejected && (
+        <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
+            <div>
+              <h4 className="text-sm font-bold text-rose-800 dark:text-rose-200">
+                Payout Account Rejected
+              </h4>
+              <p className="text-xs text-rose-700/80 dark:text-rose-300/80 mt-0.5">
+                {merchant.payoutAccount?.rejectionReason
+                  ? `Reason: ${merchant.payoutAccount.rejectionReason}`
+                  : 'Merchant must resubmit valid bank or MFS payout details.'}
+              </p>
+            </div>
+          </div>
+          {onApprovePayout && (
+            <button
+              type="button"
+              onClick={onApprovePayout}
+              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Approve Anyway</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Optional Rejection Reason Box */}
+      {showRejectInput && onRejectPayout && (
+        <div className="rounded-xl border border-rose-500/30 bg-white dark:bg-navy-900 p-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          <input
+            type="text"
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            placeholder="Enter rejection reason (e.g. Cheque leaf unclear / Account name mismatch)"
+            className="flex-1 px-3 py-2 rounded-lg bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs text-navy-900 dark:text-white focus:outline-none focus:border-rose-500"
+          />
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setShowRejectInput(false);
+                setRejectReason('');
+              }}
+              className="px-3 py-2 rounded-lg bg-slate-100 dark:bg-navy-800 text-xs font-semibold text-slate-600 dark:text-slate-300 cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onRejectPayout(rejectReason.trim() || 'Payout details verification failed');
+                setShowRejectInput(false);
+                setRejectReason('');
+              }}
+              className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold cursor-pointer"
+            >
+              Confirm Reject
+            </button>
+          </div>
+        </div>
+      )}
+
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
       {/* Left: Account Coordinates */}
       <div className="lg:col-span-7 rounded-2xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-navy-900/90 p-6 space-y-5 shadow-xl">
@@ -28,18 +175,34 @@ export function MerchantBankDetailsTab({ merchant }: MerchantBankDetailsTabProps
               </p>
             </div>
           </div>
-          <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
-            {merchant.payoutAccount.status}
+          <span
+            className={`px-3 py-1 rounded-full text-xs font-bold border ${
+              isPending
+                ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                : isRejected
+                ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
+                : isUnverified
+                ? 'bg-slate-100 dark:bg-navy-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-white/10'
+                : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+            }`}
+          >
+            {isPending
+              ? 'PENDING REVIEW'
+              : isRejected
+              ? 'REJECTED'
+              : isUnverified
+              ? 'NOT CONFIGURED'
+              : 'VERIFIED'}
           </span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
           <div className="rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 p-3.5">
             <span className="text-[11px] uppercase font-bold text-slate-500 dark:text-slate-400 block">
-              BANK NAME
+              BANK / MFS PROVIDER
             </span>
             <span className="font-bold text-navy-800 dark:text-white mt-0.5 block">
-              {merchant.payoutAccount.provider}
+              {merchant.payoutAccount?.provider || 'Not Configured'}
             </span>
           </div>
 
@@ -48,7 +211,7 @@ export function MerchantBankDetailsTab({ merchant }: MerchantBankDetailsTabProps
               ACCOUNT HOLDER
             </span>
             <span className="font-bold text-navy-800 dark:text-white mt-0.5 block">
-              {merchant.payoutAccount.accountHolder}
+              {merchant.payoutAccount?.accountHolder || '—'}
             </span>
           </div>
 
@@ -57,7 +220,7 @@ export function MerchantBankDetailsTab({ merchant }: MerchantBankDetailsTabProps
               ACCOUNT NUMBER
             </span>
             <span className="tabular-nums font-bold text-orange-600 dark:text-orange-400 mt-0.5 block">
-              {merchant.payoutAccount.accountNumber}
+              {merchant.payoutAccount?.accountNumber || '—'}
             </span>
           </div>
 
@@ -66,7 +229,8 @@ export function MerchantBankDetailsTab({ merchant }: MerchantBankDetailsTabProps
               BRANCH &amp; ROUTING NO
             </span>
             <span className="font-medium text-navy-800 dark:text-slate-100 mt-0.5 block">
-              {merchant.payoutAccount.branchName} ({merchant.payoutAccount.routingNumber})
+              {merchant.payoutAccount?.branchName || '—'}
+              {merchant.payoutAccount?.routingNumber ? ` (${merchant.payoutAccount.routingNumber})` : ''}
             </span>
           </div>
 
@@ -75,7 +239,7 @@ export function MerchantBankDetailsTab({ merchant }: MerchantBankDetailsTabProps
               BKASH MERCHANT NUMBER
             </span>
             <span className="tabular-nums font-bold text-pink-400 mt-0.5 block">
-              {merchant.payoutAccount.bkashNumber}
+              {merchant.payoutAccount?.bkashNumber || '—'}
             </span>
           </div>
 
@@ -84,21 +248,23 @@ export function MerchantBankDetailsTab({ merchant }: MerchantBankDetailsTabProps
               DISBURSEMENT SCHEDULE
             </span>
             <span className="font-bold text-indigo-600 dark:text-indigo-400 mt-0.5 block">
-              {merchant.payoutAccount.frequency}
+              {merchant.payoutAccount?.frequency || 'Weekly'}
             </span>
           </div>
         </div>
 
-        <div className="pt-2">
-          <button
-            type="button"
-            onClick={() => setIsChequePreviewOpen(true)}
-            className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-bold text-navy-800 dark:text-slate-100 flex items-center gap-2 cursor-pointer transition-colors"
-          >
-            <Eye className="w-4 h-4 text-orange-600 dark:text-orange-400" />
-            <span>View Verified Cheque Leaf</span>
-          </button>
-        </div>
+        {hasPayoutDetails && (
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={() => setIsChequePreviewOpen(true)}
+              className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-bold text-navy-800 dark:text-slate-100 flex items-center gap-2 cursor-pointer transition-colors"
+            >
+              <Eye className="w-4 h-4 text-orange-600 dark:text-orange-400" />
+              <span>View Cheque Leaf</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Right: Balance Ledger */}
@@ -160,10 +326,23 @@ export function MerchantBankDetailsTab({ merchant }: MerchantBankDetailsTabProps
 
           <div className="flex justify-between text-[11px] text-slate-400 dark:text-slate-500 border-t border-slate-400 dark:border-white/30 pt-2">
             <span>⑆{merchant.payoutAccount.routingNumber}⑆</span>
-            <span className="font-bold text-orange-600 dark:text-orange-500">FULFILLIO KYC VERIFIED</span>
+            <span className="font-bold text-orange-600 dark:text-orange-500">
+              {isPending ? 'PENDING VERIFICATION' : 'FULFILLIO KYC VERIFIED'}
+            </span>
           </div>
         </div>
+        {merchant.payoutAccount?.chequeLeafUrl && (
+          <div className="mt-4 rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden bg-slate-50 dark:bg-navy-950 p-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={merchant.payoutAccount.chequeLeafUrl}
+              alt="Uploaded Cheque Leaf"
+              className="w-full max-h-64 object-contain rounded-lg"
+            />
+          </div>
+        )}
       </Modal>
+    </div>
     </div>
   );
 }

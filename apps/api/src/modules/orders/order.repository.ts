@@ -18,18 +18,52 @@ function normalizeCourierProvider(raw?: string | null): CourierProvider | null {
 export class OrderRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findManyWithFilters(options: {
+  private parseDateBound(raw?: string, isEndOfDay = false): Date | undefined {
+    if (!raw) return undefined;
+    const trimmed = raw.trim();
+    if (!trimmed) return undefined;
+    const normalized = /^\d{4}-\d{2}-\d{2}$/.test(trimmed)
+      ? `${trimmed}${isEndOfDay ? 'T23:59:59.999Z' : 'T00:00:00.000Z'}`
+      : trimmed;
+    const parsed = new Date(normalized);
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+  }
+
+  private buildWhereClause(options: {
     merchantId?: string;
     status?: OrderStatus;
     search?: string;
-    limit?: number;
-    offset?: number;
+    dateFrom?: string;
+    dateTo?: string;
+    courier?: string;
   }) {
-    const { merchantId, status, search, limit = 50, offset = 0 } = options;
-
+    const { merchantId, status, search, dateFrom, dateTo, courier } = options;
     const where: any = {};
+
     if (merchantId) where.merchantId = merchantId;
     if (status) where.status = status;
+
+    if (courier && courier.trim()) {
+      const upperCourier = courier.trim().toUpperCase();
+      if (upperCourier === 'UNASSIGNED') {
+        where.courierProvider = null;
+      } else {
+        const normalizedCourier = normalizeCourierProvider(courier);
+        if (normalizedCourier) {
+          where.courierProvider = normalizedCourier;
+        }
+      }
+    }
+
+    const fromDate = this.parseDateBound(dateFrom, false);
+    const toDate = this.parseDateBound(dateTo, true);
+    if (fromDate || toDate) {
+      where.createdAt = {
+        ...(fromDate && { gte: fromDate }),
+        ...(toDate && { lte: toDate }),
+      };
+    }
+
     if (search) {
       where.OR = [
         { id: { contains: search, mode: 'insensitive' } },
@@ -38,8 +72,34 @@ export class OrderRepository {
         { customerPhone: { contains: search } },
         { trackingCode: { contains: search, mode: 'insensitive' } },
         { memoCode: { contains: search, mode: 'insensitive' } },
+        {
+          items: {
+            some: {
+              OR: [
+                { sku: { contains: search, mode: 'insensitive' } },
+                { productTitle: { contains: search, mode: 'insensitive' } },
+              ],
+            },
+          },
+        },
       ];
     }
+
+    return where;
+  }
+
+  async findManyWithFilters(options: {
+    merchantId?: string;
+    status?: OrderStatus;
+    search?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    courier?: string;
+    limit?: number;
+    offset?: number;
+  }) {
+    const { limit = 50, offset = 0 } = options;
+    const where = this.buildWhereClause(options);
 
     return this.prisma.order.findMany({
       where,
@@ -76,21 +136,11 @@ export class OrderRepository {
     merchantId?: string;
     status?: OrderStatus;
     search?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    courier?: string;
   }) {
-    const { merchantId, status, search } = options;
-    const where: any = {};
-    if (merchantId) where.merchantId = merchantId;
-    if (status) where.status = status;
-    if (search) {
-      where.OR = [
-        { id: { contains: search, mode: 'insensitive' } },
-        { externalOrderId: { contains: search, mode: 'insensitive' } },
-        { customerName: { contains: search, mode: 'insensitive' } },
-        { customerPhone: { contains: search } },
-        { trackingCode: { contains: search, mode: 'insensitive' } },
-        { memoCode: { contains: search, mode: 'insensitive' } },
-      ];
-    }
+    const where = this.buildWhereClause(options);
     return this.prisma.order.count({ where });
   }
 

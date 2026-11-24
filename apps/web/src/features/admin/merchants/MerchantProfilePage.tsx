@@ -24,6 +24,7 @@ export function MerchantProfilePage({ merchantId }: MerchantProfilePageProps) {
     hydrated,
     toastMessage,
     handleUpdateMerchant,
+    handleReviewPayoutAccount,
     handleAdjustStock,
     handleAddProduct,
     handleApproveProduct,
@@ -87,6 +88,7 @@ export function MerchantProfilePage({ merchantId }: MerchantProfilePageProps) {
         onBack={() => router.push('/admin/merchants')}
         onSwitchMerchant={(m) => router.push(`/admin/merchants/${encodeURIComponent(m.id)}`)}
         onUpdateMerchant={handleUpdateMerchant}
+        onReviewPayout={handleReviewPayoutAccount}
         onAdjustStock={handleAdjustStock}
         onAddProduct={handleAddProduct}
         onApproveProduct={handleApproveProduct}

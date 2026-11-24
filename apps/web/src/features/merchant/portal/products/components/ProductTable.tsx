@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import {
   Printer,
@@ -15,6 +16,7 @@ import {
   CheckCircle2,
   Clock,
   RotateCcw,
+  XCircle,
 } from "lucide-react";
 import { ProductTableProps } from "../types";
 import { MerchantExpandableCard } from "../../components/common/MerchantExpandableCard";
@@ -91,26 +93,107 @@ export function ProductTable({
   onViewDetails,
   onEditProduct,
   onRequestEdit,
+  onViewPendingEdit,
+  onCancelPendingEdit,
   onPrintBarcode,
   onRequestDelete,
 }: ProductTableProps) {
-  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [activeMenu, setActiveMenu] = useState<{
+    key: string;
+    product: MerchantProductItem;
+    anchorRect: { top: number; bottom: number; left: number; right: number };
+  } | null>(null);
+  const [menuCoords, setMenuCoords] = useState<{ top: number; left: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   const isAllSelected =
     products.length > 0 && selectedIds.length === products.length;
 
-  // Close dropdown on outside click (matching admin panel behavior)
+  const closeMenu = () => setActiveMenu(null);
+
+  const handleToggleMenu = (
+    key: string,
+    product: MerchantProductItem,
+    e: React.MouseEvent<HTMLButtonElement>,
+  ) => {
+    e.stopPropagation();
+    if (activeMenu?.key === key) {
+      setActiveMenu(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    setActiveMenu({
+      key,
+      product,
+      anchorRect: {
+        top: rect.top,
+        bottom: rect.bottom,
+        left: rect.left,
+        right: rect.right,
+      },
+    });
+  };
+
+  useLayoutEffect(() => {
+    if (!activeMenu) {
+      setMenuCoords(null);
+      return;
+    }
+    const menuWidth = 224;
+    const padding = 10;
+    const menuHeight = menuRef.current?.offsetHeight || 260;
+    const { anchorRect } = activeMenu;
+    const spaceBelow = window.innerHeight - anchorRect.bottom;
+    const spaceAbove = anchorRect.top;
+    const openUpwards = spaceBelow < menuHeight + 8 && spaceAbove >= spaceBelow;
+    const rawTop = openUpwards
+      ? anchorRect.top - menuHeight - 6
+      : anchorRect.bottom + 6;
+    const clampedTop = Math.max(
+      padding,
+      Math.min(rawTop, window.innerHeight - menuHeight - padding),
+    );
+    const rawLeft = anchorRect.right - menuWidth;
+    const clampedLeft = Math.max(
+      padding,
+      Math.min(rawLeft, window.innerWidth - menuWidth - padding),
+    );
+    setMenuCoords({ top: clampedTop, left: clampedLeft });
+  }, [activeMenu]);
+
+  // Close dropdown on outside click, scroll, or resize
   useEffect(() => {
-    if (!activeMenuId) return;
+    if (!activeMenu) return;
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (!target.closest("[data-dropdown-container]")) {
-        setActiveMenuId(null);
+      if (
+        !target.closest("[data-dropdown-container]") &&
+        !target.closest("[data-portal-dropdown]")
+      ) {
+        setActiveMenu(null);
       }
     };
+    const handleScroll = (e: Event) => {
+      if (
+        menuRef.current &&
+        e.target instanceof Node &&
+        menuRef.current.contains(e.target)
+      ) {
+        return;
+      }
+      setActiveMenu(null);
+    };
+    const handleResize = () => setActiveMenu(null);
+
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [activeMenuId]);
+    window.addEventListener("scroll", handleScroll, true);
+    window.addEventListener("resize", handleResize);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("scroll", handleScroll, true);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [activeMenu]);
 
   const renderDropdownItems = (p: MerchantProductItem) => {
     const isDraft = p.status === "DRAFT";
@@ -125,13 +208,27 @@ export function ProductTable({
       (p as any).editState === "EDIT_ACCESS_REQUESTED";
     const isSuspended = Boolean((p as any).isSuspended);
 
-    // DRAFT STAGE: Merchant can View, Edit Draft, Submit for Approval, Delete (stock = 0)
+    const manageStockItem = !isSuspended ? (
+      <button
+        type="button"
+        onClick={() => {
+          closeMenu();
+          onManageStock(p, "ADJUST");
+        }}
+        className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-semibold"
+      >
+        <Layers className="h-3.5 w-3.5 text-emerald-500" />
+        <span>Manage Stock &amp; Variants</span>
+      </button>
+    ) : null;
+
+    // DRAFT STAGE: Merchant can View, Edit Draft, Manage Stock & Variants, Submit for Approval, Delete (stock = 0)
     if (isDraft) {
       return (
         <>
           <Link
             href={`/merchant/products/${p.id}`}
-            onClick={() => setActiveMenuId(null)}
+            onClick={closeMenu}
             className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors"
           >
             <Eye className="h-3.5 w-3.5 text-sky-500" />
@@ -140,17 +237,19 @@ export function ProductTable({
 
           <Link
             href={`/merchant/products/${p.id}/edit`}
-            onClick={() => setActiveMenuId(null)}
+            onClick={closeMenu}
             className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-semibold"
           >
             <Edit2 className="h-3.5 w-3.5 text-orange-500" />
             <span>Edit Draft</span>
           </Link>
 
+          {manageStockItem}
+
           <button
             type="button"
             onClick={() => {
-              setActiveMenuId(null);
+              closeMenu();
               onToggleStatus(p.id);
             }}
             className="w-full px-3.5 py-2 text-xs text-emerald-600 dark:text-emerald-400 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-semibold"
@@ -164,7 +263,7 @@ export function ProductTable({
           <button
             type="button"
             onClick={() => {
-              setActiveMenuId(null);
+              closeMenu();
               onRequestDelete(p);
             }}
             className="w-full px-3.5 py-2 text-xs text-rose-500 hover:bg-rose-500/10 flex items-center gap-2 cursor-pointer transition-colors font-bold"
@@ -177,13 +276,13 @@ export function ProductTable({
     }
 
     // STAGE 1: Pending Approval (Awaiting Admin review)
-    // Merchant can: View Details, Edit (if stock === 0), Cancel Submission (moves to Draft), Delete (if stock === 0)
+    // Merchant can: View Details, Manage Stock & Variants, Edit (if stock === 0), Cancel Submission (moves to Draft), Delete (if stock === 0)
     if (isRejected) {
       return (
         <>
           <Link
             href={`/merchant/products/${p.id}`}
-            onClick={() => setActiveMenuId(null)}
+            onClick={closeMenu}
             className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors"
           >
             <Eye className="h-3.5 w-3.5 text-sky-500" />
@@ -200,7 +299,7 @@ export function ProductTable({
               <button
                 type="button"
                 onClick={() => {
-                  setActiveMenuId(null);
+                  closeMenu();
                   onRequestDelete(p);
                 }}
                 className="w-full px-3.5 py-2 text-xs text-rose-500 hover:bg-rose-500/10 flex items-center gap-2 cursor-pointer transition-colors font-bold"
@@ -219,17 +318,19 @@ export function ProductTable({
         <>
           <Link
             href={`/merchant/products/${p.id}`}
-            onClick={() => setActiveMenuId(null)}
+            onClick={closeMenu}
             className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors"
           >
             <Eye className="h-3.5 w-3.5 text-sky-500" />
             <span>View Product Details</span>
           </Link>
 
+          {manageStockItem}
+
           {p.stockAccepted !== true && (
             <Link
               href={`/merchant/products/${p.id}/edit`}
-              onClick={() => setActiveMenuId(null)}
+              onClick={closeMenu}
               className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-semibold"
             >
               <Edit2 className="h-3.5 w-3.5 text-orange-500" />
@@ -240,7 +341,7 @@ export function ProductTable({
           <button
             type="button"
             onClick={() => {
-              setActiveMenuId(null);
+              closeMenu();
               onToggleStatus(p.id);
             }}
             className="w-full px-3.5 py-2 text-xs text-amber-600 dark:text-amber-400 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-semibold"
@@ -256,7 +357,7 @@ export function ProductTable({
               <button
                 type="button"
                 onClick={() => {
-                  setActiveMenuId(null);
+                  closeMenu();
                   onRequestDelete(p);
                 }}
                 className="w-full px-3.5 py-2 text-xs text-rose-500 hover:bg-rose-500/10 flex items-center gap-2 cursor-pointer transition-colors font-bold"
@@ -271,23 +372,25 @@ export function ProductTable({
     }
 
     // STAGE 2: Awaiting Stock (Admin accepted product, waiting for physical stock to be received into warehouse)
-    // Rule: Merchant can cancel request (moves to draft) and view product only.
+    // Rule: Merchant can view product, manage stock & variants, or cancel request (moves to draft).
     if (isAwaitingStock) {
       return (
         <>
           <Link
             href={`/merchant/products/${p.id}`}
-            onClick={() => setActiveMenuId(null)}
+            onClick={closeMenu}
             className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-medium"
           >
             <Eye className="h-3.5 w-3.5 text-sky-500" />
             <span>View Product Details</span>
           </Link>
 
+          {manageStockItem}
+
           <button
             type="button"
             onClick={() => {
-              setActiveMenuId(null);
+              closeMenu();
               onToggleStatus(p.id);
             }}
             className="w-full px-3.5 py-2 text-xs text-amber-600 dark:text-amber-400 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-semibold"
@@ -301,24 +404,27 @@ export function ProductTable({
     }
 
     // STAGE 3: Stock Stored / Active in Warehouse
-    // Actions: View product, print thermal sticker, send edit request / edit product, request to return, request for restock, delete (if stock = 0)
+    // Actions: View product, manage stock & variants, print thermal sticker, send edit request / edit product, delete (if stock = 0)
     return (
       <>
         {/* View Product Details */}
         <Link
           href={`/merchant/products/${p.id}`}
-          onClick={() => setActiveMenuId(null)}
+          onClick={closeMenu}
           className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-medium"
         >
           <Eye className="h-3.5 w-3.5 text-sky-500" />
           <span>View Product Details</span>
         </Link>
 
+        {/* Manage Stock & Variants */}
+        {manageStockItem}
+
         {/* Print Thermal Barcode Sticker */}
         <button
           type="button"
           onClick={() => {
-            setActiveMenuId(null);
+            closeMenu();
             onPrintBarcode(p);
           }}
           className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-semibold"
@@ -327,38 +433,51 @@ export function ProductTable({
           <span>Print Thermal Sticker</span>
         </button>
 
-        {/* Edit Request / Edit Product Behavior */}
-        {isEditAllowed ? (
+        {/* Edit Product / Pending Revision Behavior */}
+        {isEditPending ? (
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                closeMenu();
+                if (onViewPendingEdit) onViewPendingEdit(p);
+              }}
+              className="w-full px-3.5 py-2 text-xs text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-bold"
+            >
+              <Clock className="h-3.5 w-3.5 text-amber-500" />
+              <span>View Pending Edit</span>
+            </button>
+            <Link
+              href={`/merchant/products/${p.id}/edit`}
+              onClick={closeMenu}
+              className="w-full px-3.5 py-2 text-xs text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-bold"
+            >
+              <Edit2 className="h-3.5 w-3.5 text-orange-500" />
+              <span>Modify Pending Edit</span>
+            </Link>
+            {onCancelPendingEdit && (
+              <button
+                type="button"
+                onClick={() => {
+                  closeMenu();
+                  onCancelPendingEdit(p.id);
+                }}
+                className="w-full px-3.5 py-2 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 flex items-center gap-2 cursor-pointer transition-colors font-semibold"
+              >
+                <XCircle className="h-3.5 w-3.5 text-rose-500" />
+                <span>Cancel Pending Edit</span>
+              </button>
+            )}
+          </>
+        ) : !isSuspended ? (
           <Link
             href={`/merchant/products/${p.id}/edit`}
-            onClick={() => setActiveMenuId(null)}
+            onClick={closeMenu}
             className="w-full px-3.5 py-2 text-xs text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-bold"
           >
             <Edit2 className="h-3.5 w-3.5 text-orange-500" />
             <span>Edit Product</span>
           </Link>
-        ) : isEditPending ? (
-          <div className="w-full px-3.5 py-1.5 text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold flex items-center gap-2 bg-indigo-50/50 dark:bg-navy-950/60">
-            <Clock className="h-3 w-3" />
-            <span>Revision in QA Review</span>
-          </div>
-        ) : isEditAccessRequested ? (
-          <div className="w-full px-3.5 py-1.5 text-[11px] text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-2 bg-amber-50/50 dark:bg-navy-950/60">
-            <Clock className="h-3 w-3" />
-            <span>Edit Access Requested</span>
-          </div>
-        ) : !isSuspended ? (
-          <button
-            type="button"
-            onClick={() => {
-              setActiveMenuId(null);
-              if (onRequestEdit) onRequestEdit(p);
-            }}
-            className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-semibold"
-          >
-            <Edit2 className="h-3.5 w-3.5 text-orange-500" />
-            <span>Send Edit Request</span>
-          </button>
         ) : null}
 
         <div className="border-t border-slate-100 dark:border-white/10 my-1" />
@@ -368,7 +487,7 @@ export function ProductTable({
           type="button"
           onClick={() => {
             if ((p.stock || 0) === 0) {
-              setActiveMenuId(null);
+              closeMenu();
               onRequestDelete(p);
             }
           }}
@@ -436,6 +555,8 @@ export function ProductTable({
             const isPublishPendingFromDraft =
               !isDraft && !isRejected && isPublishPendingFromDraftItem(p);
             const isAwaitingStock = isApprovedAwaitingStockProductItem(p);
+            const isSuspended = Boolean((p as any).isSuspended);
+            const isEditPending = (p as any).editState === "EDIT_APPROVAL_PENDING";
             const isOutOfStock = isAwaitingStock;
             const isLowStock =
               !isPendingApproval &&
@@ -451,29 +572,40 @@ export function ProductTable({
                 isSelected={isSelected}
                 onToggleSelect={() => onToggleSelect(p.id)}
                 statusBadge={
-                  <span
-                    className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border select-none ${
-                      isRejected
-                        ? "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30"
+                  <div className="inline-flex flex-col items-end gap-1">
+                    <span
+                      className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border select-none ${
+                        isRejected
+                          ? "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30"
+                          : isPendingApproval
+                            ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30"
+                            : isDraft
+                              ? "bg-slate-100 dark:bg-navy-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10"
+                              : isSuspended
+                                ? "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30"
+                                : isAwaitingStock
+                                  ? "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30"
+                                  : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+                      }`}
+                    >
+                      {isRejected
+                        ? "REJECTED"
                         : isPendingApproval
-                          ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30"
+                          ? "PENDING PRODUCT"
                           : isDraft
-                            ? "bg-slate-100 dark:bg-navy-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10"
-                            : isAwaitingStock
-                              ? "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30"
-                              : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
-                    }`}
-                  >
-                    {isRejected
-                      ? "REJECTED"
-                      : isPendingApproval
-                        ? "PENDING PRODUCT"
-                        : isDraft
-                          ? "DRAFT"
-                          : isAwaitingStock
-                            ? "WAITING FOR STOCK"
-                            : "PUBLISHED"}
-                  </span>
+                            ? "DRAFT"
+                            : isSuspended
+                              ? "SUSPENDED"
+                              : isAwaitingStock
+                                ? "WAITING FOR STOCK"
+                                : "PUBLISHED"}
+                    </span>
+                    {!isDraft && !isRejected && !isPendingApproval && isEditPending && (
+                      <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border select-none bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30">
+                        Edit Pending
+                      </span>
+                    )}
+                  </div>
                 }
                 row1={
                   <div className="space-y-1">
@@ -599,25 +731,12 @@ export function ProductTable({
                       >
                         <button
                           type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setActiveMenuId(
-                              activeMenuId === `mobile-${p.id}`
-                                ? null
-                                : `mobile-${p.id}`,
-                            );
-                          }}
+                          onClick={(e) => handleToggleMenu(`mobile-${p.id}`, p, e)}
                           className="px-3.5 py-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-200 dark:border-white/10"
                         >
                           <MoreVertical className="h-4 w-4" />
                           <span>Product Actions</span>
                         </button>
-
-                        {activeMenuId === `mobile-${p.id}` && (
-                          <div className="absolute right-0 top-0 -translate-y-full -mt-1.5 w-56 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-2xl py-1.5 z-[100] text-left font-sans text-xs pointer-events-auto">
-                            {renderDropdownItems(p)}
-                          </div>
-                        )}
                       </div>
                     </div>
                   </div>
@@ -652,11 +771,9 @@ export function ProductTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-white/5 text-xs text-slate-700 dark:text-slate-200">
-            {products.map((p, idx) => {
+            {products.map((p) => {
               const isSelected = selectedIds.includes(p.id);
-              const isMenuOpen = activeMenuId === `desktop-${p.id}`;
-              const isNearBottom =
-                products.length > 4 && idx >= products.length - 2;
+              const isMenuOpen = activeMenu?.key === `desktop-${p.id}`;
               const isDraft = p.status === "DRAFT";
               const isRejected = p.status === "REJECTED";
               const isPendingApproval =
@@ -667,6 +784,7 @@ export function ProductTable({
                 !isDraft && !isRejected && isPublishPendingFromDraftItem(p);
               const isAwaitingStock = false;
               const isSuspended = Boolean((p as any).isSuspended);
+              const isEditPending = (p as any).editState === "EDIT_APPROVAL_PENDING";
               const isOutOfStock =
                 !isDraft &&
                 !isRejected &&
@@ -768,29 +886,36 @@ export function ProductTable({
                         )}
                       </div>
                     ) : (
-                      <span
-                        className={`inline-flex items-center justify-center text-[11px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-full border select-none mx-auto ${
-                          isPendingApproval
-                            ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30"
-                            : isDraft
-                              ? "bg-slate-100 dark:bg-navy-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10"
-                              : isSuspended
-                                ? "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30"
-                                : isOutOfStock
+                      <div className="inline-flex flex-col items-center gap-1 mx-auto">
+                        <span
+                          className={`inline-flex items-center justify-center text-[11px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-full border select-none mx-auto ${
+                            isPendingApproval
+                              ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30"
+                              : isDraft
+                                ? "bg-slate-100 dark:bg-navy-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10"
+                                : isSuspended
                                   ? "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30"
-                                  : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
-                        }`}
-                      >
-                        {isPendingApproval
-                          ? "Pending Product"
-                          : isDraft
-                            ? "Draft"
-                            : isSuspended
-                              ? "Suspended"
-                              : isOutOfStock
-                                ? "Out of Stock"
-                                : "Published"}
-                      </span>
+                                  : isOutOfStock
+                                    ? "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30"
+                                    : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+                          }`}
+                        >
+                          {isPendingApproval
+                            ? "Pending Product"
+                            : isDraft
+                              ? "Draft"
+                              : isSuspended
+                                ? "Suspended"
+                                : isOutOfStock
+                                  ? "Out of Stock"
+                                  : "Published"}
+                        </span>
+                        {!isDraft && !isPendingApproval && isEditPending && (
+                          <span className="inline-flex items-center justify-center text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full border select-none bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30">
+                            Edit Pending
+                          </span>
+                        )}
+                      </div>
                     )}
                   </td>
 
@@ -802,12 +927,7 @@ export function ProductTable({
                     >
                       <button
                         type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setActiveMenuId(
-                            isMenuOpen ? null : `desktop-${p.id}`,
-                          );
-                        }}
+                        onClick={(e) => handleToggleMenu(`desktop-${p.id}`, p, e)}
                         className={`p-2 rounded-xl text-slate-500 hover:text-navy-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-navy-800 transition-colors cursor-pointer border border-transparent hover:border-slate-200 dark:hover:border-white/10 ${
                           isMenuOpen
                             ? "bg-slate-100 dark:bg-navy-800 text-orange-600 dark:text-orange-400 border-slate-200 dark:border-white/10"
@@ -818,18 +938,6 @@ export function ProductTable({
                       >
                         <MoreVertical className="h-4 w-4" />
                       </button>
-
-                      {isMenuOpen && (
-                        <div
-                          className={`absolute right-0 ${
-                            isNearBottom
-                              ? "top-0 -translate-y-full -mt-1.5"
-                              : "top-full mt-1.5"
-                          } w-56 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-2xl py-1.5 z-[100] text-left font-sans text-xs pointer-events-auto`}
-                        >
-                          {renderDropdownItems(p)}
-                        </div>
-                      )}
                     </div>
                   </td>
                 </tr>
@@ -838,6 +946,42 @@ export function ProductTable({
           </tbody>
         </table>
       </div>
+
+      {/* Portaled Floating Actions Menu (Viewport-Clamped) */}
+      {typeof document !== "undefined" &&
+        activeMenu &&
+        createPortal(
+          <div
+            ref={menuRef}
+            data-portal-dropdown
+            style={{
+              position: "fixed",
+              top:
+                menuCoords?.top ??
+                Math.max(
+                  10,
+                  Math.min(
+                    activeMenu.anchorRect.bottom + 6,
+                    window.innerHeight - 280 - 10,
+                  ),
+                ),
+              left:
+                menuCoords?.left ??
+                Math.max(
+                  10,
+                  Math.min(
+                    activeMenu.anchorRect.right - 224,
+                    window.innerWidth - 224 - 10,
+                  ),
+                ),
+              maxHeight: "calc(100vh - 20px)",
+            }}
+            className="w-56 overflow-y-auto rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-2xl py-1.5 z-[9999] text-left font-sans text-xs pointer-events-auto"
+          >
+            {renderDropdownItems(activeMenu.product)}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

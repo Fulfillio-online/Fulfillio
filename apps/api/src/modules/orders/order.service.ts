@@ -80,11 +80,14 @@ export class OrderService {
     merchantId?: string;
     status?: OrderStatus;
     search?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    courier?: string;
     page?: number;
     limit?: number;
   }) {
     const page = Math.max(1, Number(options.page || 1));
-    const limit = Math.min(100, Math.max(1, Number(options.limit || 20)));
+    const limit = Math.min(500, Math.max(1, Number(options.limit || 20)));
     const offset = (page - 1) * limit;
 
     const [items, total] = await Promise.all([
@@ -92,6 +95,9 @@ export class OrderService {
         merchantId: options.merchantId,
         status: options.status,
         search: options.search,
+        dateFrom: options.dateFrom,
+        dateTo: options.dateTo,
+        courier: options.courier,
         limit,
         offset,
       }),
@@ -99,6 +105,9 @@ export class OrderService {
         merchantId: options.merchantId,
         status: options.status,
         search: options.search,
+        dateFrom: options.dateFrom,
+        dateTo: options.dateTo,
+        courier: options.courier,
       }),
     ]);
 

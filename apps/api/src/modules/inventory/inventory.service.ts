@@ -304,6 +304,36 @@ export class InventoryService {
     return this.inventoryRepo.adjustStock(data);
   }
 
+  async manageProductStock(
+    productId: string,
+    merchantId: string | undefined,
+    payload: {
+      newVariants?: Array<{
+        title?: string;
+        color?: string;
+        hex?: string;
+        size?: string;
+        attributeName?: string;
+        attributeValue?: string;
+        variantCode?: string;
+        price?: number;
+        wholesalePrice?: number;
+        imageUrl?: string;
+        stock: number;
+      }>;
+      adjustments?: Array<{
+        variantId?: string;
+        variantSku?: string;
+        color?: string;
+        size?: string;
+        newQuantity: number;
+        reason?: string;
+      }>;
+    },
+  ) {
+    return this.inventoryRepo.manageProductStock(productId, merchantId, payload);
+  }
+
   /**
    * Atomically reserve stock for an order's line items and record audit trail.
    */
@@ -358,8 +388,12 @@ export class InventoryService {
     return this.inventoryRepo.reviewEditAccess(productId, adminId, action, reason);
   }
 
-  async submitRevision(productId: string, merchantId?: string, proposedSnapshot?: any) {
-    return this.inventoryRepo.submitRevision(productId, merchantId, proposedSnapshot);
+  async submitRevision(productId: string, merchantId?: string, proposedSnapshot?: any, reason?: string) {
+    return this.inventoryRepo.submitRevision(productId, merchantId, proposedSnapshot, reason);
+  }
+
+  async cancelRevision(productId: string, merchantId?: string) {
+    return this.inventoryRepo.cancelRevision(productId, merchantId);
   }
 
   async reviewRevision(productId: string, adminId?: string, action: 'APPROVE' | 'REJECT' = 'APPROVE', reason?: string) {

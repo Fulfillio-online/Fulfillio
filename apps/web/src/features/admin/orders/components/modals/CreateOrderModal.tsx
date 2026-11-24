@@ -160,9 +160,11 @@ export function CreateOrderModal({
     const sizeCode = newSize.toUpperCase().replace(/[^A-Z0-9]/g, '') || 'XXL';
     const variantSku = `${product.sku}-${colorCode}-${sizeCode}`;
 
+    const nowIso = new Date().toISOString();
     const created: WarehousePipelineOrder = {
       id: `ORD-${nextOrderNum}`,
       createdAt: 'Just now',
+      createdAtIso: nowIso,
       merchantCode: product.merchantCode,
       merchantName: product.merchantName,
       customerName: newCustomerName.trim(),

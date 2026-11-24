@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { CheckCircle2, Plus } from 'lucide-react';
+import Link from 'next/link';
+import { CheckCircle2, ListOrdered } from 'lucide-react';
 import {
   CourierPartner,
-  OrderStage,
   PendingConfirmationAction,
   PipelineMainTab,
   WarehousePipelineOrder,
@@ -12,12 +12,10 @@ import {
 import { INITIAL_PIPELINE_ORDERS, STORAGE_KEY_ORDERS } from './mockData';
 import { PipelineStageCards } from './components/PipelineStageCards';
 import { PipelineFiltersBar } from './components/PipelineFiltersBar';
-import { OrdersAllTab } from './components/tabs/OrdersAllTab';
 import { OrdersPickTab } from './components/tabs/OrdersPickTab';
 import { OrdersPackTab } from './components/tabs/OrdersPackTab';
 import { OrdersDispatchTab } from './components/tabs/OrdersDispatchTab';
 import { ActionConfirmModal } from './components/modals/ActionConfirmModal';
-import { CreateOrderModal } from './components/modals/CreateOrderModal';
 import { MemoPreviewModal } from './components/modals/MemoPreviewModal';
 import { IsolatedPrintPortal } from './components/print/IsolatedPrintPortal';
 import {
@@ -26,7 +24,6 @@ import {
   fetchOrdersFromDatabase,
   updateOrderStatusInDatabase,
   cancelOrderInDatabase,
-  restoreOrderStockAndLogLedger,
 } from '@/lib/warehouseSync';
 
 export interface OrdersPipelineManagerProps {
@@ -38,11 +35,10 @@ export interface OrdersPipelineManagerProps {
 }
 
 export function OrdersPipelineManager({
-  initialTab = 'all',
+  initialTab = 'pick',
   activeTab: controlledTab,
   initialSearch = '',
   onTabChange,
-  onOpenDeliveryTracker,
 }: OrdersPipelineManagerProps) {
   const [orders, setOrders] = useState<WarehousePipelineOrder[]>(INITIAL_PIPELINE_ORDERS);
   const [internalTab, setInternalTab] = useState<PipelineMainTab>(controlledTab ?? initialTab);
@@ -60,7 +56,6 @@ export function OrdersPipelineManager({
     }
   }, [initialSearch]);
   const [merchantFilter, setMerchantFilter] = useState<string>('ALL');
-  const [stageFilter, setStageFilter] = useState<'ALL' | OrderStage>('ALL');
   const [courierFilter, setCourierFilter] = useState<string>('ALL');
 
   // Pagination & Rows limit
@@ -73,7 +68,6 @@ export function OrdersPipelineManager({
   const [printMode, setPrintMode] = useState<'MEMOS' | 'PICK_SHEET' | 'MANIFEST' | null>(null);
   const [printingOrders, setPrintingOrders] = useState<WarehousePipelineOrder[]>([]);
   const [pendingAction, setPendingAction] = useState<PendingConfirmationAction | null>(null);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   // Hydrate orders from localStorage on mount & reconcile with Merchant orders
   useEffect(() => {
@@ -154,7 +148,7 @@ export function OrdersPipelineManager({
   useEffect(() => {
     setCurrentPage(1);
     setSelectedIds([]);
-  }, [searchQuery, merchantFilter, courierFilter, stageFilter, activeTab, pickSubFilter, pageSize]);
+  }, [searchQuery, merchantFilter, courierFilter, activeTab, pickSubFilter, pageSize]);
 
   // Sync tab props
   useEffect(() => {
@@ -200,22 +194,52 @@ export function OrdersPipelineManager({
     }
   };
 
-  // Filtered orders
-  const filteredOrders = useMemo(() => {
-    return orders.filter((o) => {
-      if (o.stage === 'HANDED_OVER') return false;
+  // Strictly active warehouse pipeline orders (exclude completed/handed-over & cancelled/returned)
+  const activePipelineOrders = useMemo(
+    () =>
+      orders.filter(
+        (o) =>
+          o.stage === 'PICK' ||
+          o.stage === 'WAITING' ||
+          o.stage === 'PACK' ||
+          o.stage === 'DISPATCH'
+      ),
+    [orders]
+  );
 
+  // Dynamic merchant options from active pipeline orders
+  const merchants = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const o of activePipelineOrders) {
+      if (o.merchantCode) {
+        map.set(o.merchantCode, o.merchantName || o.merchantCode);
+      }
+    }
+    return Array.from(map.entries())
+      .map(([code, name]) => ({ code, name }))
+      .sort((a, b) => a.code.localeCompare(b.code));
+  }, [activePipelineOrders]);
+
+  // Filtered pipeline orders for the active stage
+  const filteredOrders = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return activePipelineOrders.filter((o) => {
       const matchesMerchant = merchantFilter === 'ALL' || o.merchantCode === merchantFilter;
       const matchesCourier = courierFilter === 'ALL' || o.courier === courierFilter;
       const matchesSearch =
-        !searchQuery.trim() ||
-        o.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        o.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        o.customerPhone.includes(searchQuery) ||
-        o.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (o.productTitle && o.productTitle.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        o.bin.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        o.memoCode.toLowerCase().includes(searchQuery.toLowerCase());
+        !q ||
+        o.id.toLowerCase().includes(q) ||
+        o.customerName.toLowerCase().includes(q) ||
+        o.customerPhone.includes(searchQuery.trim()) ||
+        o.sku.toLowerCase().includes(q) ||
+        (o.productTitle && o.productTitle.toLowerCase().includes(q)) ||
+        (o.items &&
+          o.items.some(
+            (it) =>
+              it.sku.toLowerCase().includes(q) || it.title.toLowerCase().includes(q)
+          )) ||
+        o.bin.toLowerCase().includes(q) ||
+        o.memoCode.toLowerCase().includes(q);
 
       if (!matchesMerchant || !matchesCourier || !matchesSearch) return false;
 
@@ -223,24 +247,22 @@ export function OrdersPipelineManager({
         return pickSubFilter === 'READY' ? o.stage === 'PICK' : o.stage === 'WAITING';
       }
       if (activeTab === 'pack') return o.stage === 'PACK';
-      if (activeTab === 'dispatch') return o.stage === 'DISPATCH';
-
-      return stageFilter === 'ALL' || o.stage === stageFilter;
+      return o.stage === 'DISPATCH';
     });
-  }, [orders, activeTab, pickSubFilter, merchantFilter, courierFilter, searchQuery, stageFilter]);
+  }, [activePipelineOrders, activeTab, pickSubFilter, merchantFilter, courierFilter, searchQuery]);
 
   // Stage counts
   const counts = useMemo(
     () => ({
-      all: orders.filter((o) => o.stage !== 'HANDED_OVER').length,
-      pickReady: orders.filter((o) => o.stage === 'PICK').length,
-      pickWaiting: orders.filter((o) => o.stage === 'WAITING').length,
-      pack: orders.filter((o) => o.stage === 'PACK').length,
-      dispatch: orders.filter((o) => o.stage === 'DISPATCH').length,
-      dispatchBooked: orders.filter((o) => o.stage === 'DISPATCH' && o.isCourierBooked).length,
-      handedOver: orders.filter((o) => o.stage === 'HANDED_OVER').length,
+      pickReady: activePipelineOrders.filter((o) => o.stage === 'PICK').length,
+      pickWaiting: activePipelineOrders.filter((o) => o.stage === 'WAITING').length,
+      pack: activePipelineOrders.filter((o) => o.stage === 'PACK').length,
+      dispatch: activePipelineOrders.filter((o) => o.stage === 'DISPATCH').length,
+      dispatchBooked: activePipelineOrders.filter(
+        (o) => o.stage === 'DISPATCH' && o.isCourierBooked
+      ).length,
     }),
-    [orders]
+    [activePipelineOrders]
   );
 
   // Pagination calculations
@@ -285,175 +307,6 @@ export function OrdersPipelineManager({
         ? `Courier for ${orderId} updated to ${newCourier}.`
         : `Courier for ${orderId} cleared (Unassigned).`
     );
-  };
-
-  // Direct Inline Stage Change for single row
-  const handleInlineStageChange = (
-    orderId: string,
-    newStage: OrderStage | 'COURIER_BOOKED',
-    customHoldReason?: string
-  ) => {
-    // Sync to PostgreSQL backend
-    if (newStage === 'CANCELLED') {
-      cancelOrderInDatabase(orderId).catch(() => {});
-      const target = orders.find((o) => o.id === orderId);
-      if (target) {
-        restoreOrderStockAndLogLedger(target);
-      }
-    } else {
-      const stageToDbStatus: Record<string, string> = {
-        PICK: 'ALLOCATED',
-        WAITING: 'ON_HOLD_STOCK',
-        PACK: 'PACKED',
-        DISPATCH: 'DISPATCHED',
-        COURIER_BOOKED: 'DISPATCHED',
-        HANDED_OVER: 'DELIVERED',
-      };
-      const dbStatus = stageToDbStatus[newStage] || 'ALLOCATED';
-      updateOrderStatusInDatabase(orderId, dbStatus).catch(() => {});
-    }
-
-    updateOrdersAndPersist((prev) =>
-      prev.map((o) => {
-        if (o.id !== orderId) return o;
-        if (newStage === 'COURIER_BOOKED') {
-          if (!o.courier) return o;
-          const prefix = o.courier.slice(0, 3).toUpperCase();
-          const code =
-            o.trackingCode || `TRK-${prefix}-${Math.floor(100000 + Math.random() * 900000)}`;
-          return {
-            ...o,
-            stage: 'DISPATCH',
-            isCourierBooked: true,
-            trackingCode: code,
-            holdReason: undefined,
-          };
-        }
-        if (newStage === 'WAITING') {
-          return {
-            ...o,
-            stage: 'WAITING',
-            holdReason:
-              customHoldReason || o.holdReason || 'Awaiting merchant stock delivery',
-          };
-        }
-        if (newStage === 'PACK') {
-          return {
-            ...o,
-            stage: 'PACK',
-            holdReason: undefined,
-          };
-        }
-        if (newStage === 'DISPATCH') {
-          return {
-            ...o,
-            stage: 'DISPATCH',
-            isMemoPrinted: true,
-            holdReason: undefined,
-          };
-        }
-        if (newStage === 'CANCELLED') {
-          return {
-            ...o,
-            stage: 'CANCELLED',
-            stockAvailable: o.stockAvailable + o.qty,
-          };
-        }
-        return {
-          ...o,
-          stage: newStage,
-          holdReason: undefined,
-        };
-      })
-    );
-    showToast(`Order ${orderId} moved to ${newStage}.`);
-  };
-
-  // Bulk Stage Change for multiple selected rows
-  const handleBulkChangeStage = (
-    targetStage: OrderStage | 'COURIER_BOOKED',
-    holdReason?: string
-  ) => {
-    if (selectedIds.length === 0) return;
-    const count = selectedIds.length;
-
-    // Sync to PostgreSQL backend
-    selectedIds.forEach((id) => {
-      if (targetStage === 'CANCELLED') {
-        cancelOrderInDatabase(id).catch(() => {});
-        const target = orders.find((o) => o.id === id);
-        if (target) {
-          restoreOrderStockAndLogLedger(target);
-        }
-      } else {
-        const stageToDbStatus: Record<string, string> = {
-          PICK: 'ALLOCATED',
-          WAITING: 'ON_HOLD_STOCK',
-          PACK: 'PACKED',
-          DISPATCH: 'DISPATCHED',
-          COURIER_BOOKED: 'DISPATCHED',
-          HANDED_OVER: 'DELIVERED',
-        };
-        const dbStatus = stageToDbStatus[targetStage] || 'ALLOCATED';
-        updateOrderStatusInDatabase(id, dbStatus).catch(() => {});
-      }
-    });
-
-    updateOrdersAndPersist((prev) =>
-      prev.map((o) => {
-        if (!selectedIds.includes(o.id)) return o;
-        if (targetStage === 'COURIER_BOOKED') {
-          if (!o.courier) return o;
-          const prefix = o.courier.slice(0, 3).toUpperCase();
-          const code =
-            o.trackingCode || `TRK-${prefix}-${Math.floor(100000 + Math.random() * 900000)}`;
-          return {
-            ...o,
-            stage: 'DISPATCH',
-            isCourierBooked: true,
-            trackingCode: code,
-            holdReason: undefined,
-          };
-        }
-        if (targetStage === 'WAITING') {
-          return {
-            ...o,
-            stage: 'WAITING',
-            holdReason:
-              holdReason || o.holdReason || 'Awaiting merchant stock delivery',
-          };
-        }
-        if (targetStage === 'PACK') {
-          return {
-            ...o,
-            stage: 'PACK',
-            holdReason: undefined,
-          };
-        }
-        if (targetStage === 'DISPATCH') {
-          return {
-            ...o,
-            stage: 'DISPATCH',
-            isMemoPrinted: true,
-            holdReason: undefined,
-          };
-        }
-        if (targetStage === 'CANCELLED') {
-          return {
-            ...o,
-            stage: 'CANCELLED',
-            stockAvailable: o.stockAvailable + o.qty,
-          };
-        }
-        return {
-          ...o,
-          stage: targetStage,
-          holdReason: undefined,
-        };
-      })
-    );
-    setSelectedIds([]);
-    showToast(`${count} order(s) successfully moved to ${targetStage}!`);
   };
 
   // Execute Confirmed Stage Actions
@@ -614,25 +467,24 @@ export function OrdersPipelineManager({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-navy-900 dark:text-white">
-            Warehouse Orders Pipeline
+            Order Pipeline
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Active warehouse operations: Pick List (Bin Verified) → Pack &amp; 4x6&quot; Print → Courier Dispatch.
+            Active warehouse workflow: 1. Pick List (Bin Verified) → 2. Pack &amp; 4x6&quot; Print → 3. Courier Dispatch.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setIsCreateModalOpen(true)}
-            className="px-4 py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-md shadow-orange-500/20 transition-all cursor-pointer active:scale-95"
+          <Link
+            href="/admin/orders/all"
+            className="px-3.5 py-2 rounded-xl bg-white dark:bg-navy-900 hover:bg-slate-100 dark:hover:bg-navy-800 border border-slate-200 dark:border-white/10 text-xs font-semibold text-navy-800 dark:text-slate-100 flex items-center gap-2 shadow-2xs transition-colors"
           >
-            <Plus className="h-4 w-4" />
-            <span>Create Order</span>
-          </button>
+            <ListOrdered className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+            <span>All Orders History</span>
+          </Link>
         </div>
       </div>
 
-      {/* 4 Stage KPI Cards */}
+      {/* 3 Clickable Stage KPI Cards */}
       <PipelineStageCards
         activeTab={activeTab}
         onSelectTab={handleSelectTab}
@@ -643,12 +495,12 @@ export function OrdersPipelineManager({
       {searchQuery && (
         <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-orange-500/10 border border-orange-500/25 text-xs text-navy-900 dark:text-slate-100 shadow-2xs animate-in fade-in-50">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-bold text-orange-600 dark:text-orange-400">Filtering orders for product / query:</span>
+            <span className="font-bold text-orange-600 dark:text-orange-400">Filtering pipeline orders for:</span>
             <span className="font-mono font-bold px-2.5 py-0.5 rounded-md bg-white dark:bg-navy-800 text-orange-600 dark:text-orange-400 border border-orange-500/30">
               {searchQuery}
             </span>
             <span className="text-slate-500 dark:text-slate-400">
-              ({filteredOrders.length} matching order{filteredOrders.length !== 1 ? 's' : ''} found in pipeline)
+              ({filteredOrders.length} matching order{filteredOrders.length !== 1 ? 's' : ''} in this stage)
             </span>
           </div>
           <button
@@ -661,28 +513,23 @@ export function OrdersPipelineManager({
         </div>
       )}
 
-      {/* Filters & Bulk Action Bar */}
+      {/* Filters & Stage-Scoped Bulk Action Bar */}
       <PipelineFiltersBar
         activeTab={activeTab}
-        onTabChange={handleSelectTab}
-        counts={counts}
+        pickSubFilter={pickSubFilter}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         merchantFilter={merchantFilter}
         onMerchantFilterChange={setMerchantFilter}
+        merchants={merchants}
         courierFilter={courierFilter}
         onCourierFilterChange={setCourierFilter}
-        stageFilter={stageFilter}
-        onStageFilterChange={setStageFilter}
         onResetFilters={() => {
           setSearchQuery('');
           setMerchantFilter('ALL');
           setCourierFilter('ALL');
-          setStageFilter('ALL');
         }}
-        pickSubFilter={pickSubFilter}
         selectedOrders={selectedOrders}
-        filteredOrders={filteredOrders}
         onPrintPickSheet={() =>
           triggerIsolatedPrint('PICK_SHEET', selectedOrders.length > 0 ? selectedOrders : filteredOrders)
         }
@@ -697,43 +544,11 @@ export function OrdersPipelineManager({
         onConfirmHandover={() =>
           setPendingAction({ type: 'CONFIRM_HANDOVER', orders: selectedOrders })
         }
-        onBulkChangeStage={handleBulkChangeStage}
         onPrintMemos={() => triggerIsolatedPrint('MEMOS', selectedOrders)}
-        onClearSelection={() => setSelectedIds([])}
         onCancelSelected={() => setPendingAction({ type: 'CANCEL_ORDER', orders: selectedOrders })}
       />
 
-      {/* Tab Views */}
-      {activeTab === 'all' && (
-        <OrdersAllTab
-          orders={paginatedOrders}
-          selectedIds={selectedIds}
-          onToggleSelectRow={toggleSelectRow}
-          onToggleSelectAll={toggleSelectAll}
-          allVisibleSelected={allVisibleSelected}
-          onClearSelection={() => setSelectedIds([])}
-          totalItems={totalItems}
-          startIndex={startIndex}
-          pageSize={pageSize}
-          safePage={safePage}
-          totalPages={totalPages}
-          onPageSizeChange={setPageSize}
-          onPageChange={setCurrentPage}
-          onPreviewMemo={(ord) => setPreviewMemoOrder(ord)}
-          onInlineCourierChange={handleInlineCourierChange}
-          onInlineStageChange={handleInlineStageChange}
-          onMarkWaiting={(ord) => setPendingAction({ type: 'MARK_WAITING', orders: [ord] })}
-          onMarkPicked={(ord) => setPendingAction({ type: 'MARK_PICKED', orders: [ord] })}
-          onResumePick={(ord) => setPendingAction({ type: 'RESUME_PICK', orders: [ord] })}
-          onPrintAndPack={(ord) => setPendingAction({ type: 'PRINT_AND_PACK', orders: [ord] })}
-          onBookCourier={(ord) => setPendingAction({ type: 'BOOK_COURIER', orders: [ord] })}
-          onConfirmHandover={(ord) =>
-            setPendingAction({ type: 'CONFIRM_HANDOVER', orders: [ord] })
-          }
-          onCancelOrder={(ord) => setPendingAction({ type: 'CANCEL_ORDER', orders: [ord] })}
-        />
-      )}
-
+      {/* Pipeline Stage Views (Pick -> Pack -> Dispatch) */}
       {activeTab === 'pick' && (
         <OrdersPickTab
           orders={paginatedOrders}
@@ -757,7 +572,6 @@ export function OrdersPipelineManager({
           onPageChange={setCurrentPage}
           onPreviewMemo={(ord) => setPreviewMemoOrder(ord)}
           onInlineCourierChange={handleInlineCourierChange}
-          onInlineStageChange={handleInlineStageChange}
           onMarkWaiting={(ord) => setPendingAction({ type: 'MARK_WAITING', orders: [ord] })}
           onMarkPicked={(ord) => setPendingAction({ type: 'MARK_PICKED', orders: [ord] })}
           onResumePick={(ord) => setPendingAction({ type: 'RESUME_PICK', orders: [ord] })}
@@ -787,7 +601,6 @@ export function OrdersPipelineManager({
           onPageChange={setCurrentPage}
           onPreviewMemo={(ord) => setPreviewMemoOrder(ord)}
           onInlineCourierChange={handleInlineCourierChange}
-          onInlineStageChange={handleInlineStageChange}
           onMarkWaiting={(ord) => setPendingAction({ type: 'MARK_WAITING', orders: [ord] })}
           onMarkPicked={(ord) => setPendingAction({ type: 'MARK_PICKED', orders: [ord] })}
           onResumePick={(ord) => setPendingAction({ type: 'RESUME_PICK', orders: [ord] })}
@@ -817,7 +630,6 @@ export function OrdersPipelineManager({
           onPageChange={setCurrentPage}
           onPreviewMemo={(ord) => setPreviewMemoOrder(ord)}
           onInlineCourierChange={handleInlineCourierChange}
-          onInlineStageChange={handleInlineStageChange}
           onMarkWaiting={(ord) => setPendingAction({ type: 'MARK_WAITING', orders: [ord] })}
           onMarkPicked={(ord) => setPendingAction({ type: 'MARK_PICKED', orders: [ord] })}
           onResumePick={(ord) => setPendingAction({ type: 'RESUME_PICK', orders: [ord] })}
@@ -830,18 +642,7 @@ export function OrdersPipelineManager({
         />
       )}
 
-
-
       {/* Modals */}
-      <CreateOrderModal
-        isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
-        ordersCount={orders.length}
-        onCreateOrder={(newOrder) => {
-          updateOrdersAndPersist((prev) => [newOrder, ...prev]);
-          showToast(`Order ${newOrder.id} created & sent to 1. Pick List!`);
-        }}
-      />
       <ActionConfirmModal
         isOpen={Boolean(pendingAction)}
         onClose={() => setPendingAction(null)}

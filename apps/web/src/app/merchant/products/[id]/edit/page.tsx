@@ -46,26 +46,38 @@ export default function EditProductPage({ params }: EditProductPageProps) {
   }
 
   // Security & Inventory Integrity Guard:
-  // Merchants can edit products while Draft or Pending Approval (before admin approves).
-  // Once approved/published by admin, direct editing is locked.
+  // Merchants can edit Draft, First-Time Pending Approval, AND Published/Approved products
+  // (Published product edits wait in Pending Approval without altering the live published product).
+  // Only Suspended, Rejected, or Draft-to-Publish intake-pending products are blocked.
   const isDraft = product.status === 'DRAFT' || Boolean(product.isDraft);
+  const isRejected = !isDraft && product.status === 'REJECTED';
   const isPending =
     !isDraft &&
+    !isRejected &&
     (product.status === 'PENDING_APPROVAL' ||
       !product.bin ||
       product.bin === 'Pending Approval' ||
       product.bin === 'Assigned on intake');
   const isApprovedOrPublished =
     !isDraft &&
+    !isRejected &&
     !isPending &&
     (product.status === 'STOCK_STORED' ||
       product.status === 'APPROVED' ||
       product.status === 'PUBLISHED' ||
       product.stockAccepted === true);
-  const canEdit = !isApprovedOrPublished;
+  const isSuspended = Boolean(product.isSuspended);
+  const canEdit =
+    !isSuspended &&
+    !isRejected &&
+    (isDraft || (isPending && product.stockAccepted !== true) || isApprovedOrPublished);
 
   if (!canEdit) {
-    const currentStatusLabel = `Published (${product.stock} pcs)`;
+    const currentStatusLabel = isSuspended
+      ? 'Suspended'
+      : isRejected
+      ? 'Rejected'
+      : `Pending Publish (${product.stock} pcs)`;
 
     return (
       <div className="rounded-2xl border border-slate-200 dark:border-white/10 p-8 sm:p-12 text-center max-w-xl mx-auto my-12 bg-white dark:bg-navy-900/60 shadow-lg">
@@ -80,7 +92,11 @@ export default function EditProductPage({ params }: EditProductPageProps) {
           <strong className="text-navy-900 dark:text-white">{currentStatusLabel}</strong> status.
         </p>
         <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">
-          This product has already been approved and published by the warehouse admin. Product editing is locked.
+          {isSuspended
+            ? 'Suspended products cannot be edited until reactivated by warehouse admin.'
+            : isRejected
+            ? 'Rejected products cannot be edited directly.'
+            : 'This product is awaiting warehouse publish approval.'}
         </p>
         <div className="mt-6 flex items-center justify-center gap-3">
           <Link
@@ -105,9 +121,10 @@ export default function EditProductPage({ params }: EditProductPageProps) {
   return (
     <div className="py-2 sm:py-4">
       <ProductForm
-        key={product.id}
+        key={`${product.id}-${product.editState || 'none'}`}
         initialProduct={product}
         merchantCode={profile.merchantCode}
+        isPublishedEditMode={isApprovedOrPublished}
         onSave={async (updated) => {
           return await updateProduct(product.id, updated);
         }}

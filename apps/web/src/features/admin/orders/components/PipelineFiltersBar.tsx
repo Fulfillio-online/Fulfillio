@@ -1,37 +1,26 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Printer,
   FileText,
   RotateCcw,
 } from 'lucide-react';
 import { SearchInput } from '@/components/ui';
-import { CourierPartner, OrderStage, PipelineMainTab, WarehousePipelineOrder } from '../types';
+import { PipelineMainTab, WarehousePipelineOrder } from '../types';
 
 interface PipelineFiltersBarProps {
   activeTab: PipelineMainTab;
-  onTabChange?: (tab: PipelineMainTab) => void;
-  counts?: {
-    all: number;
-    pickReady: number;
-    pickWaiting: number;
-    pack: number;
-    dispatch: number;
-  };
+  pickSubFilter: 'READY' | 'WAITING';
   searchQuery: string;
   onSearchChange: (query: string) => void;
   merchantFilter: string;
   onMerchantFilterChange: (code: string) => void;
+  merchants: Array<{ code: string; name: string }>;
   courierFilter: string;
   onCourierFilterChange: (courier: string) => void;
-  stageFilter: 'ALL' | OrderStage;
-  onStageFilterChange: (stage: 'ALL' | OrderStage) => void;
   onResetFilters: () => void;
-  // Stage actions
-  pickSubFilter: 'READY' | 'WAITING';
   selectedOrders: WarehousePipelineOrder[];
-  filteredOrders: WarehousePipelineOrder[];
   onPrintPickSheet: () => void;
   onMarkWaiting: () => void;
   onMarkPicked: () => void;
@@ -40,58 +29,100 @@ interface PipelineFiltersBarProps {
   onPrintManifest: () => void;
   onBookCourier: () => void;
   onConfirmHandover: () => void;
-  onBulkChangeStage?: (newStage: OrderStage | 'COURIER_BOOKED', reason?: string) => void;
-  onPrintMemos?: () => void;
-  onCancelSelected?: () => void;
-  onClearSelection?: () => void;
+  onPrintMemos: () => void;
+  onCancelSelected: () => void;
 }
 
 export function PipelineFiltersBar({
   activeTab,
-  onTabChange,
-  counts,
+  pickSubFilter,
   searchQuery,
   onSearchChange,
   merchantFilter,
   onMerchantFilterChange,
+  merchants,
   courierFilter,
   onCourierFilterChange,
-  stageFilter,
-  onStageFilterChange,
   onResetFilters,
   selectedOrders,
   onPrintPickSheet,
+  onMarkWaiting,
+  onMarkPicked,
+  onResumePick,
+  onPrintAndPack,
   onPrintManifest,
   onBookCourier,
   onConfirmHandover,
-  onBulkChangeStage,
   onPrintMemos,
   onCancelSelected,
-  onClearSelection,
 }: PipelineFiltersBarProps) {
   const [bulkAction, setBulkAction] = useState<string>('');
 
-  const hasActiveFilters =
-    searchQuery || merchantFilter !== 'ALL' || courierFilter !== 'ALL' || stageFilter !== 'ALL';
+  useEffect(() => {
+    setBulkAction('');
+  }, [activeTab, pickSubFilter]);
+
+  const hasActiveFilters = Boolean(
+    searchQuery || merchantFilter !== 'ALL' || courierFilter !== 'ALL'
+  );
+
+  const stageBulkOptions = useMemo(() => {
+    if (activeTab === 'pick') {
+      if (pickSubFilter === 'WAITING') {
+        return [
+          { value: 'RESUME_PICK', label: 'Resume to Pick List' },
+          { value: 'CANCEL', label: 'Cancel Orders' },
+        ];
+      }
+      return [
+        { value: 'MARK_PICKED', label: 'Mark Picked → Move to Pack' },
+        { value: 'MARK_WAITING', label: 'Put on Hold / Not in Bin' },
+        { value: 'PRINT_PICK_SHEET', label: 'Print Pick Sheet' },
+        { value: 'CANCEL', label: 'Cancel Orders' },
+      ];
+    }
+
+    if (activeTab === 'pack') {
+      return [
+        { value: 'PRINT_AND_PACK', label: 'Print 4x6" & Move to Dispatch' },
+        { value: 'PRINT_MEMOS', label: 'Print 4x6" Memos Only' },
+        { value: 'MARK_WAITING', label: 'Put on Hold' },
+        { value: 'CANCEL', label: 'Cancel Orders' },
+      ];
+    }
+
+    return [
+      { value: 'BOOK_COURIER', label: 'Book Courier API' },
+      { value: 'PRINT_MANIFEST', label: 'Print Handover Sheet' },
+      { value: 'CONFIRM_HANDOVER', label: 'Confirm Handover to Driver' },
+      { value: 'CANCEL', label: 'Cancel Orders' },
+    ];
+  }, [activeTab, pickSubFilter]);
 
   const handleApplyBulkAction = () => {
     if (!bulkAction || selectedOrders.length === 0) return;
 
     switch (bulkAction) {
-      case 'PACK':
-        onBulkChangeStage?.('PACK');
+      case 'MARK_PICKED':
+        onMarkPicked();
         break;
-      case 'DISPATCH':
-        onBulkChangeStage?.('DISPATCH');
+      case 'MARK_WAITING':
+        onMarkWaiting();
         break;
-      case 'WAITING':
-        onBulkChangeStage?.('WAITING', 'Awaiting merchant stock delivery');
+      case 'RESUME_PICK':
+        onResumePick();
         break;
-      case 'PICK':
-        onBulkChangeStage?.('PICK');
+      case 'PRINT_PICK_SHEET':
+        onPrintPickSheet();
+        break;
+      case 'PRINT_AND_PACK':
+        onPrintAndPack();
         break;
       case 'PRINT_MEMOS':
-        onPrintMemos?.();
+        onPrintMemos();
+        break;
+      case 'PRINT_MANIFEST':
+        onPrintManifest();
         break;
       case 'BOOK_COURIER':
         onBookCourier();
@@ -100,7 +131,7 @@ export function PipelineFiltersBar({
         onConfirmHandover();
         break;
       case 'CANCEL':
-        onCancelSelected?.();
+        onCancelSelected();
         break;
     }
     setBulkAction('');
@@ -108,7 +139,7 @@ export function PipelineFiltersBar({
 
   return (
     <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-navy-900/90 p-3 sm:p-4 shadow-sm space-y-3">
-      {/* Row 1: Dedicated Search Bar (spacious, standalone row) & Quick Tab Actions */}
+      {/* Row 1: Dedicated Search Bar & Stage-Specific Print Utility */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
         <div className="flex-1 w-full min-w-0">
           <SearchInput
@@ -120,10 +151,9 @@ export function PipelineFiltersBar({
           />
         </div>
 
-        {/* Quick Tab Utilities (Compact print sheets for Pick & Dispatch) */}
-        {(activeTab === 'pick' || activeTab === 'dispatch') && (
+        {((activeTab === 'pick' && pickSubFilter === 'READY') || activeTab === 'dispatch') && (
           <div className="flex items-center gap-2 shrink-0">
-            {activeTab === 'pick' && (
+            {activeTab === 'pick' && pickSubFilter === 'READY' && (
               <button
                 type="button"
                 onClick={onPrintPickSheet}
@@ -148,9 +178,8 @@ export function PipelineFiltersBar({
         )}
       </div>
 
-      {/* Row 2: Bulk Actions -> Apply -> All Orders -> All Merchants -> All Couriers -> All Stages -> Reset */}
+      {/* Row 2: Stage-Scoped Bulk Actions -> Apply -> Merchant Filter -> Courier Filter -> Reset */}
       <div className="flex flex-wrap items-center gap-2 pt-2.5 border-t border-slate-100 dark:border-white/5">
-        {/* 1. Bulk Actions Dropdown */}
         <select
           value={bulkAction}
           onChange={(e) => setBulkAction(e.target.value)}
@@ -158,17 +187,13 @@ export function PipelineFiltersBar({
           className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs font-semibold text-navy-800 dark:text-slate-100 focus:outline-none focus:border-orange-500 cursor-pointer shadow-2xs"
         >
           <option value="">Bulk Actions</option>
-          <option value="PACK">Move to Pack</option>
-          <option value="DISPATCH">Move to Dispatch</option>
-          <option value="WAITING">Put on Hold</option>
-          <option value="PICK">Move to Pick</option>
-          <option value="PRINT_MEMOS">Print 4x6" Memos</option>
-          <option value="BOOK_COURIER">Book Courier</option>
-          <option value="CONFIRM_HANDOVER">Confirm Handover</option>
-          <option value="CANCEL">Cancel Orders</option>
+          {stageBulkOptions.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
         </select>
 
-        {/* 2. Apply Button */}
         <button
           type="button"
           onClick={handleApplyBulkAction}
@@ -182,30 +207,6 @@ export function PipelineFiltersBar({
           Apply
         </button>
 
-        {/* 3. All Orders (Pipeline Stage Tabs Dropdown) */}
-        {onTabChange && (
-          <select
-            value={activeTab}
-            onChange={(e) => onTabChange(e.target.value as PipelineMainTab)}
-            aria-label="Filter by Pipeline Stage"
-            className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs font-bold text-orange-600 dark:text-orange-400 focus:outline-none focus:border-orange-500 cursor-pointer shadow-2xs"
-          >
-            <option value="all">
-              All Orders {counts ? `(${counts.all})` : ''}
-            </option>
-            <option value="pick">
-              1. Pick List {counts ? `(${counts.pickReady + counts.pickWaiting})` : ''}
-            </option>
-            <option value="pack">
-              2. Pack &amp; Print {counts ? `(${counts.pack})` : ''}
-            </option>
-            <option value="dispatch">
-              3. Courier Dispatch {counts ? `(${counts.dispatch})` : ''}
-            </option>
-          </select>
-        )}
-
-        {/* 4. All Merchants Dropdown */}
         <select
           value={merchantFilter}
           onChange={(e) => onMerchantFilterChange(e.target.value)}
@@ -213,12 +214,16 @@ export function PipelineFiltersBar({
           className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs font-semibold text-navy-800 dark:text-slate-100 focus:outline-none focus:border-orange-500 cursor-pointer shadow-2xs"
         >
           <option value="ALL">All Merchants</option>
-          <option value="MC-101">MC-101 — Sabbir&apos;s Store</option>
-          <option value="MC-102">MC-102 — Urban Threads BD</option>
-          <option value="MC-103">MC-103 — Apex Footwear Hub</option>
+          {merchants.map((m) => (
+            <option key={m.code} value={m.code}>
+              {m.code} — {m.name}
+            </option>
+          ))}
+          {merchantFilter !== 'ALL' && !merchants.some((m) => m.code === merchantFilter) && (
+            <option value={merchantFilter}>{merchantFilter}</option>
+          )}
         </select>
 
-        {/* 5. All Couriers Dropdown */}
         <select
           value={courierFilter}
           onChange={(e) => onCourierFilterChange(e.target.value)}
@@ -231,28 +236,6 @@ export function PipelineFiltersBar({
           <option value="RedX">RedX</option>
         </select>
 
-        {/* 6. All Stages Dropdown */}
-        <select
-          value={stageFilter}
-          onChange={(e) => {
-            const val = e.target.value as 'ALL' | OrderStage;
-            onStageFilterChange(val);
-            if (activeTab !== 'all' && val !== 'ALL') {
-              onTabChange?.('all');
-            }
-          }}
-          aria-label="Filter by Stage"
-          className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 text-xs font-semibold text-navy-800 dark:text-slate-100 focus:outline-none focus:border-orange-500 cursor-pointer shadow-2xs"
-        >
-          <option value="ALL">All Stages</option>
-          <option value="PICK">To Pick</option>
-          <option value="WAITING">On Hold</option>
-          <option value="PACK">To Pack</option>
-          <option value="DISPATCH">Ready Dispatch</option>
-          <option value="CANCELLED">Cancelled</option>
-        </select>
-
-        {/* 7. Reset Button (Hidden by default; appears when any filter is selected) */}
         {hasActiveFilters && (
           <button
             type="button"

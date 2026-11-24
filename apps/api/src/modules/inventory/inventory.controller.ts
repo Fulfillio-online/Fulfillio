@@ -273,6 +273,48 @@ export class InventoryController {
     });
   }
 
+  /**
+   * Add new variants and/or adjust variant & size quantities from Merchant Portal Manage Stock
+   */
+  @Post('products/:id/manage-stock')
+  async manageProductStock(
+    @Param('id') id: string,
+    @Request() req: any,
+    @Body()
+    body: {
+      merchantId?: string;
+      merchantCode?: string;
+      newVariants?: Array<{
+        title?: string;
+        color?: string;
+        hex?: string;
+        size?: string;
+        attributeName?: string;
+        attributeValue?: string;
+        variantCode?: string;
+        price?: number;
+        wholesalePrice?: number;
+        imageUrl?: string;
+        stock: number;
+      }>;
+      adjustments?: Array<{
+        variantId?: string;
+        variantSku?: string;
+        color?: string;
+        size?: string;
+        newQuantity: number;
+        reason?: string;
+      }>;
+    },
+  ) {
+    const effectiveMerchant =
+      req.user?.merchantId ||
+      body.merchantId ||
+      body.merchantCode ||
+      req.headers['x-merchant-code'];
+    return this.inventoryService.manageProductStock(id, effectiveMerchant, body);
+  }
+
   // ============================================================================
   // WORKFLOW 1: SUBMIT DRAFT FOR APPROVAL
   // ============================================================================
@@ -367,10 +409,16 @@ export class InventoryController {
   async submitRevision(
     @Param('id') id: string,
     @Request() req: any,
-    @Body() body: { proposedSnapshot: any },
+    @Body() body: { proposedSnapshot: any; reason?: string },
   ) {
     const merchantId = req.user?.merchantId || req.headers['x-merchant-code'];
-    return this.inventoryService.submitRevision(id, merchantId, body.proposedSnapshot);
+    return this.inventoryService.submitRevision(id, merchantId, body.proposedSnapshot, body.reason);
+  }
+
+  @Post('products/:id/cancel-revision')
+  async cancelRevision(@Param('id') id: string, @Request() req: any) {
+    const merchantId = req.user?.merchantId || req.headers['x-merchant-code'];
+    return this.inventoryService.cancelRevision(id, merchantId);
   }
 
   @Post('products/:id/review-revision')

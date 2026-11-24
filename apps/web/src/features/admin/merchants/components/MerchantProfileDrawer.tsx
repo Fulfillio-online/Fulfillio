@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import {
   ArrowLeft,
   Camera,
@@ -40,11 +40,22 @@ export interface MerchantProfileDrawerProps {
   onBack: () => void;
   onSwitchMerchant: (merchant: MerchantRecord) => void;
   onUpdateMerchant: (updated: MerchantRecord) => void;
+  onReviewPayout?: (merchantId: string, action: 'APPROVE' | 'REJECT', rejectionReason?: string) => void;
   onAdjustStock: (productId: string, delta: number) => void;
   onAddProduct: (newProduct: MerchantProductItem) => void;
   onApproveProduct: (productId: string, finalQty: number, finalBin: string) => void;
   onRejectProduct: (productId: string) => void;
 }
+
+const VALID_SUB_TABS: MerchantSubTab[] = [
+  'overview',
+  'profile',
+  'orders',
+  'products',
+  'payout',
+  'ledger',
+  'memo',
+];
 
 export function MerchantProfileDrawer({
   merchant,
@@ -55,6 +66,7 @@ export function MerchantProfileDrawer({
   onBack,
   onSwitchMerchant,
   onUpdateMerchant,
+  onReviewPayout,
   onAdjustStock,
   onAddProduct,
   onApproveProduct,
@@ -64,6 +76,14 @@ export function MerchantProfileDrawer({
   const [orderPeriodFilter, setOrderPeriodFilter] = useState<OrderPeriodFilter>('ALL');
   const [orderStatusFilter, setOrderStatusFilter] = useState<string>('ALL');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const tabParam = new URLSearchParams(window.location.search).get('tab') as MerchantSubTab | null;
+    if (tabParam && VALID_SUB_TABS.includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, [merchant.id]);
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -321,7 +341,12 @@ export function MerchantProfileDrawer({
               count: merchantProductsCount,
               pendingCount: merchantPendingCount,
             },
-            { id: 'payout' as const, label: 'Payout Info', icon: <CreditCard className="w-4 h-4" /> },
+            {
+              id: 'payout' as const,
+              label: 'Payout Info',
+              icon: <CreditCard className="w-4 h-4" />,
+              pendingCount: merchant.payoutAccount?.status === 'PENDING_REVIEW' ? 1 : 0,
+            },
             { id: 'ledger' as const, label: 'Stock Proof Ledger', icon: <ShieldCheck className="w-4 h-4" /> },
             {
               id: 'memo' as const,
@@ -407,7 +432,15 @@ export function MerchantProfileDrawer({
       )}
 
       {activeTab === 'payout' && (
-        <MerchantBankDetailsTab merchant={merchant} />
+        <MerchantBankDetailsTab
+          merchant={merchant}
+          onApprovePayout={
+            onReviewPayout ? () => onReviewPayout(merchant.id, 'APPROVE') : undefined
+          }
+          onRejectPayout={
+            onReviewPayout ? (reason) => onReviewPayout(merchant.id, 'REJECT', reason) : undefined
+          }
+        />
       )}
 
       {activeTab === 'ledger' && (

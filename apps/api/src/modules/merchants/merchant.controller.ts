@@ -39,6 +39,21 @@ export class MerchantController {
   }
 
   /**
+   * Approve or Reject merchant payout account details from Admin console
+   */
+  @Patch(':id/payout-status')
+  async updatePayoutStatus(
+    @Param('id') merchantId: string,
+    @Body()
+    body: {
+      status: 'VERIFIED' | 'REJECTED' | 'PENDING_REVIEW';
+      rejectionReason?: string;
+    },
+  ) {
+    return this.merchantService.updatePayoutStatus(merchantId, body);
+  }
+
+  /**
    * Super Admin: List all registered merchants with stats
    */
   @Get()
@@ -68,25 +83,78 @@ export class MerchantController {
     return this.merchantService.getMerchantDetail(id);
   }
 
+  private resolveMerchantIdentifier(req: any, body?: any, queryCode?: string): string {
+    if (req.user?.merchantId) {
+      return req.user.merchantId;
+    }
+
+    let decodedMerchantId: string | undefined;
+    let decodedMerchantCode: string | undefined;
+    const authHeader = req?.headers?.authorization;
+    if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.slice(7).trim();
+        const parts = token.split('.');
+        if (parts.length === 3) {
+          const decodedJson = Buffer.from(parts[1], 'base64url').toString('utf8');
+          const payload = JSON.parse(decodedJson);
+          if (payload?.merchantId) decodedMerchantId = String(payload.merchantId);
+          if (payload?.merchantCode) decodedMerchantCode = String(payload.merchantCode);
+        }
+      } catch {
+        // Ignore invalid/malformed bearer token and fall back to explicit identifier
+      }
+    }
+
+    const headerCode = req?.headers?.['x-merchant-code'];
+    const explicitIdentifier =
+      body?.merchantId ||
+      body?.merchantCode ||
+      queryCode ||
+      (Array.isArray(headerCode) ? headerCode[0] : headerCode);
+
+    return decodedMerchantId || explicitIdentifier || decodedMerchantCode || 'MC-101';
+  }
+
   @Get('profile')
-  @UseGuards(JwtAuthGuard)
-  async getProfile(@Request() req: any) {
-    return this.merchantService.getProfile(req.user.merchantId);
+  async getProfile(
+    @Request() req: any,
+    @Query('merchantCode') merchantCode?: string,
+  ) {
+    return this.merchantService.getProfile(
+      this.resolveMerchantIdentifier(req, undefined, merchantCode),
+    );
   }
 
   @Patch('profile')
-  @UseGuards(JwtAuthGuard)
-  async updateProfile(@Request() req: any, @Body() body: any) {
-    return this.merchantService.updateProfile(req.user.merchantId, body);
+  async updateProfile(
+    @Request() req: any,
+    @Query('merchantCode') merchantCode: string | undefined,
+    @Body() body: any,
+  ) {
+    return this.merchantService.updateProfile(
+      this.resolveMerchantIdentifier(req, body, merchantCode),
+      body,
+    );
   }
 
   @Post('profile/upload')
-  @UseGuards(JwtAuthGuard)
   async uploadDocument(
     @Request() req: any,
-    @Body() body: { fileName: string; fileType?: string; base64Data?: string }
+    @Query('merchantCode') merchantCode: string | undefined,
+    @Body()
+    body: {
+      fileName: string;
+      fileType?: string;
+      base64Data?: string;
+      merchantId?: string;
+      merchantCode?: string;
+    },
   ) {
-    return this.merchantService.saveUploadedDocument(req.user.merchantId, body);
+    return this.merchantService.saveUploadedDocument(
+      this.resolveMerchantIdentifier(req, body, merchantCode),
+      body,
+    );
   }
 
   @Patch(':id/status-and-rates')

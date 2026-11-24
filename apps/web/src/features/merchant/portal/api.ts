@@ -6,6 +6,10 @@ import {
   getStoredMerchantProfileForCode,
 } from '@/lib/warehouseSync';
 import {
+  extractPendingEditFromApiProduct,
+  ProductRevisionSnapshot,
+} from '@/lib/productRevision';
+import {
   MerchantAsnRecord,
   MerchantOrderItem,
   OrderLineItem,
@@ -81,37 +85,107 @@ export const merchantApi = {
   async getProfile(): Promise<MerchantProfileData> {
     const session = typeof window !== 'undefined' ? getActiveMerchantSession() : null;
     const code = session?.merchantCode || 'MC-101';
-    const remote = await safeFetch<MerchantProfileData>('/merchants/profile');
-    if (remote && remote.storeName && remote.merchantCode) return remote;
+    const remote = await safeFetch<any>(`/merchants/profile?merchantCode=${encodeURIComponent(code)}`);
+    if (remote && (remote.storeName || remote.businessName) && remote.merchantCode) {
+      const rawPayout = remote.payoutAccount || {};
+      const hasCoords = Boolean(
+        String(rawPayout.accountNumber || '').trim() ||
+          String(rawPayout.bkashMerchantNumber || '').trim() ||
+          String(rawPayout.bkashNumber || '').trim()
+      );
+      return {
+        ...remote,
+        storeName: remote.storeName || remote.businessName,
+        ownerName: remote.ownerName || session?.ownerName || remote.businessName || '',
+        logoUrl: remote.logoUrl || undefined,
+        payoutMethod: remote.payoutMethod || 'Bank Transfer / bKash',
+        payoutSchedule: remote.payoutSchedule || rawPayout.frequency || 'Weekly',
+        payoutAccount: {
+          provider: rawPayout.provider || '',
+          accountHolder: rawPayout.accountHolder || remote.ownerName || '',
+          accountNumber: rawPayout.accountNumber || '',
+          branchName: rawPayout.branchName || '',
+          routingNumber: rawPayout.routingNumber || '',
+          bkashMerchantNumber: rawPayout.bkashMerchantNumber || rawPayout.bkashNumber || '',
+          chequeLeafUrl: rawPayout.chequeLeafUrl || '',
+          frequency: rawPayout.frequency || 'Weekly',
+          status: hasCoords
+            ? rawPayout.status || 'PENDING_REVIEW'
+            : rawPayout.status === 'REJECTED'
+              ? 'REJECTED'
+              : 'UNVERIFIED',
+          rejectionReason: rawPayout.rejectionReason || undefined,
+          submittedAt: rawPayout.submittedAt,
+          updatedAt: rawPayout.updatedAt || rawPayout.submittedAt,
+          verifiedAt: rawPayout.verifiedAt,
+        },
+        socialChannels: Array.isArray(remote.socialChannels) ? remote.socialChannels : [],
+      } as MerchantProfileData;
+    }
     if (typeof window !== 'undefined') {
       const local = localStorage.getItem(getMerchantProfileKey(code));
       if (local) {
         try {
           const parsed = JSON.parse(local);
-          if (parsed && typeof parsed === 'object') return parsed;
+          if (parsed && typeof parsed === 'object') {
+            return {
+              ...INITIAL_MERCHANT_PROFILE,
+              ...parsed,
+              merchantCode: parsed.merchantCode || code,
+            };
+          }
         } catch {}
       }
       return getStoredMerchantProfileForCode(code);
     }
-    return INITIAL_MERCHANT_PROFILE;
+    return { ...INITIAL_MERCHANT_PROFILE, merchantCode: code };
   },
 
   async updateProfile(updates: Partial<MerchantProfileData>): Promise<MerchantProfileData> {
     const session = typeof window !== 'undefined' ? getActiveMerchantSession() : null;
-    const code = session?.merchantCode || 'MC-101';
-    const remote = await safeFetch<MerchantProfileData>('/merchants/profile', {
+    const code = updates.merchantCode || session?.merchantCode || 'MC-101';
+    const payload = {
+      ...updates,
+      merchantCode: code,
+      ...(updates.storeName ? { businessName: updates.storeName } : {}),
+    };
+    const remote = await safeFetch<any>('/merchants/profile', {
       method: 'PATCH',
-      body: JSON.stringify(updates),
+      body: JSON.stringify(payload),
     });
     if (typeof window !== 'undefined') {
       const key = getMerchantProfileKey(code);
       const prev = getStoredMerchantProfileForCode(code);
-      const next = { ...prev, ...updates };
+      const serverPayout = remote?.payoutAccount || remote?.merchant?.payoutAccount;
+      const nextPayout = updates.payoutAccount
+        ? {
+            ...prev.payoutAccount,
+            ...updates.payoutAccount,
+            ...(serverPayout ? serverPayout : {}),
+            rejectionReason:
+              (serverPayout?.status || updates.payoutAccount.status) === 'REJECTED'
+                ? serverPayout?.rejectionReason || updates.payoutAccount.rejectionReason
+                : undefined,
+          }
+        : prev.payoutAccount;
+      const next: MerchantProfileData = {
+        ...prev,
+        ...updates,
+        merchantCode: code,
+        payoutAccount: nextPayout,
+      };
       try {
         localStorage.setItem(key, JSON.stringify(next));
       } catch {}
+      if (remote) return next;
     }
-    if (remote) return remote;
+    if (remote?.merchant) {
+      return {
+        ...remote.merchant,
+        storeName: remote.merchant.businessName,
+        payoutAccount: remote.payoutAccount || remote.merchant.payoutAccount,
+      } as MerchantProfileData;
+    }
     return updates as MerchantProfileData;
   },
 
@@ -202,15 +276,49 @@ export const merchantApi = {
         });
 
         const storedColors = variants[0]?.attributes?.allColors;
-        const colors = (Array.isArray(storedColors) && storedColors.length > 0)
-          ? storedColors
-          : (p.attributes?.colors || Array.from(colorMap.values()));
-        const sizes = p.attributes?.sizes || Array.from(sizeSet);
+        const mergedColorMap = new Map<string, { id: string; name: string; hex: string; imageUrl?: string; sizes: string[] }>();
+        if (Array.isArray(storedColors) && storedColors.length > 0) {
+          for (const sc of storedColors) {
+            if (sc?.name) {
+              mergedColorMap.set(sc.name.toLowerCase(), {
+                id: sc.id || `c-${mergedColorMap.size + 1}`,
+                name: sc.name,
+                hex: sc.hex || '#111827',
+                imageUrl: sc.imageUrl,
+                sizes: Array.isArray(sc.sizes) ? [...sc.sizes] : [],
+              });
+            }
+          }
+        }
+        for (const cm of colorMap.values()) {
+          const key = cm.name.toLowerCase();
+          if (!mergedColorMap.has(key)) {
+            mergedColorMap.set(key, cm);
+          } else {
+            const existingEntry = mergedColorMap.get(key)!;
+            for (const sz of cm.sizes) {
+              if (!existingEntry.sizes.includes(sz)) {
+                existingEntry.sizes.push(sz);
+              }
+            }
+            if (!existingEntry.imageUrl && cm.imageUrl) {
+              existingEntry.imageUrl = cm.imageUrl;
+            }
+          }
+        }
+        const colors = mergedColorMap.size > 0
+          ? Array.from(mergedColorMap.values())
+          : (p.attributes?.colors || []);
+        const sizes = Array.from(new Set([...(p.attributes?.sizes || []), ...Array.from(sizeSet)]));
 
         const price = minPrice || Number(firstVariant?.price) || 0;
-        const costPrice = Math.round(price * 0.52);
+        const costPrice =
+          p.purchasePrice !== undefined && p.purchasePrice !== null
+            ? Number(p.purchasePrice)
+            : Math.round(price * 0.52);
         const profit = price - costPrice;
         const profitMargin = price > 0 ? Math.round((profit / price) * 100) : 0;
+        const revisionMeta = extractPendingEditFromApiProduct(p);
 
         const dbStatus = (p.status || '').trim().toUpperCase();
         const lifecycleStatus = (p.lifecycleStatus || '').trim().toUpperCase();
@@ -275,6 +383,9 @@ export const merchantApi = {
           maxPrice,
           bin: resolvedBin,
           status: resolvedStatus,
+          editState: revisionMeta.editState,
+          pendingEdit: revisionMeta.pendingEdit,
+          lastEditRejectionReason: revisionMeta.lastEditRejectionReason,
           isSuspended: Boolean(p.isSuspended),
             imageUrl: p.imageUrl,
             images: p.images && p.images.length > 0 ? p.images : (p.imageUrl ? [p.imageUrl] : []),
@@ -761,6 +872,134 @@ export const merchantApi = {
       return { ok: true, data };
     } catch {
       return await this.updateProduct(productId, { status });
+    }
+  },
+
+  async submitProductRevision(
+    productId: string,
+    proposedSnapshot: ProductRevisionSnapshot,
+    reason?: string
+  ): Promise<{ ok: boolean; data?: any; error?: string }> {
+    const session = typeof window !== 'undefined' ? getActiveMerchantSession() : null;
+    const code = session?.merchantCode || 'MC-101';
+    try {
+      const res = await fetchWithTimeout(
+        `${API_BASE}/inventory/products/${encodeURIComponent(productId)}/submit-revision`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-merchant-code': code,
+            ...getAuthHeader(),
+          },
+          body: JSON.stringify({ proposedSnapshot, reason }),
+        },
+        15000
+      );
+
+      if (!res.ok) {
+        let errMessage = `HTTP ${res.status}`;
+        try {
+          const errData = await res.json();
+          if (errData?.message) {
+            errMessage = Array.isArray(errData.message) ? errData.message.join(', ') : errData.message;
+          }
+        } catch {}
+        return { ok: false, error: errMessage };
+      }
+
+      const data = await res.json();
+      return { ok: true, data };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Network request failed' };
+    }
+  },
+
+  async cancelProductRevision(productId: string): Promise<{ ok: boolean; data?: any; error?: string }> {
+    const session = typeof window !== 'undefined' ? getActiveMerchantSession() : null;
+    const code = session?.merchantCode || 'MC-101';
+    try {
+      const res = await fetchWithTimeout(
+        `${API_BASE}/inventory/products/${encodeURIComponent(productId)}/cancel-revision`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-merchant-code': code,
+            ...getAuthHeader(),
+          },
+        },
+        15000
+      );
+      if (!res.ok) {
+        return { ok: false, error: `HTTP ${res.status}` };
+      }
+      const data = await res.json();
+      return { ok: true, data };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Network request failed' };
+    }
+  },
+
+  async manageProductStock(
+    productId: string,
+    payload: {
+      newVariants?: Array<{
+        title?: string;
+        color?: string;
+        hex?: string;
+        size?: string;
+        attributeName?: string;
+        attributeValue?: string;
+        variantCode?: string;
+        price?: number;
+        wholesalePrice?: number;
+        imageUrl?: string;
+        stock: number;
+      }>;
+      adjustments?: Array<{
+        variantId?: string;
+        variantSku?: string;
+        color?: string;
+        size?: string;
+        newQuantity: number;
+        reason?: string;
+      }>;
+    }
+  ): Promise<{ ok: boolean; data?: any; error?: string }> {
+    const session = typeof window !== 'undefined' ? getActiveMerchantSession() : null;
+    const code = session?.merchantCode || 'MC-101';
+    try {
+      const res = await fetchWithTimeout(
+        `${API_BASE}/inventory/products/${encodeURIComponent(productId)}/manage-stock`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-merchant-code': code,
+            ...getAuthHeader(),
+          },
+          body: JSON.stringify({
+            merchantCode: code,
+            ...payload,
+          }),
+        },
+        15000
+      );
+      if (!res.ok) {
+        let errMessage = `HTTP ${res.status}`;
+        try {
+          const errData = await res.json();
+          if (errData?.message) {
+            errMessage = Array.isArray(errData.message) ? errData.message.join(', ') : errData.message;
+          }
+        } catch {}
+        return { ok: false, error: errMessage };
+      }
+      const data = await res.json();
+      return { ok: true, data };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Network request failed' };
     }
   },
 

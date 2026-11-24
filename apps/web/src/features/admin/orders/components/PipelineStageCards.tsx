@@ -1,37 +1,36 @@
 'use client';
 
 import React from 'react';
-import { Boxes, ClipboardList, PackageCheck, Truck } from 'lucide-react';
+import { ClipboardList, PackageCheck, Truck } from 'lucide-react';
 import { PipelineMainTab } from '../types';
 
 interface PipelineStageCardsProps {
-  activeTab?: PipelineMainTab;
-  onSelectTab?: (tab: PipelineMainTab) => void;
+  activeTab: PipelineMainTab;
+  onSelectTab: (tab: PipelineMainTab) => void;
   counts: {
-    all: number;
     pickReady: number;
     pickWaiting: number;
     pack: number;
     dispatch: number;
     dispatchBooked: number;
-    handedOver: number;
   };
 }
 
-export function PipelineStageCards({ counts }: PipelineStageCardsProps) {
-  const cards = [
-    {
-      id: 'all',
-      label: 'All Active Orders',
-      count: counts.all,
-      subtitle: `${counts.handedOver} handed over to courier`,
-      icon: Boxes,
-      containerClass:
-        'border-orange-500/25 bg-gradient-to-br from-orange-500/10 via-white dark:via-navy-900 to-transparent',
-      iconBoxClass:
-        'bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/30',
-      badgeClass: 'text-orange-600 dark:text-orange-400',
-    },
+export function PipelineStageCards({
+  activeTab,
+  onSelectTab,
+  counts,
+}: PipelineStageCardsProps) {
+  const cards: Array<{
+    id: PipelineMainTab;
+    label: string;
+    count: number;
+    subtitle: string;
+    icon: React.ComponentType<{ className?: string }>;
+    containerClass: string;
+    iconBoxClass: string;
+    badgeClass: string;
+  }> = [
     {
       id: 'pick',
       label: '1. Pick List (Bin Verified)',
@@ -74,18 +73,35 @@ export function PipelineStageCards({ counts }: PipelineStageCardsProps) {
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
       {cards.map((card) => {
         const Icon = card.icon;
+        const isActive = activeTab === card.id;
         return (
-          <div
+          <button
             key={card.id}
-            className={`rounded-2xl border p-5 sm:p-6 flex items-center justify-between gap-4 shadow-sm select-none transition-all ${card.containerClass}`}
+            type="button"
+            onClick={() => onSelectTab(card.id)}
+            aria-pressed={isActive}
+            className={`text-left rounded-2xl border p-5 sm:p-6 flex items-center justify-between gap-4 shadow-sm select-none transition-all cursor-pointer active:scale-[0.99] ${
+              card.containerClass
+            } ${
+              isActive
+                ? 'ring-2 ring-orange-500 border-orange-500 shadow-md shadow-orange-500/10'
+                : 'hover:border-orange-500/40 hover:shadow-md'
+            }`}
           >
             <div className="space-y-1.5 min-w-0 flex-1">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block truncate">
-                {card.label}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block truncate">
+                  {card.label}
+                </span>
+                {isActive && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-orange-600 text-white shrink-0">
+                    Active
+                  </span>
+                )}
+              </div>
               <div className="text-2xl sm:text-3xl font-black text-navy-900 dark:text-white mt-1 tabular-nums tracking-tight">
                 {card.count.toLocaleString()}
               </div>
@@ -94,11 +110,15 @@ export function PipelineStageCards({ counts }: PipelineStageCardsProps) {
               </span>
             </div>
             <div
-              className={`h-12 w-12 rounded-2xl flex items-center justify-center shrink-0 shadow-xs ${card.iconBoxClass}`}
+              className={`h-12 w-12 rounded-2xl flex items-center justify-center shrink-0 shadow-xs ${
+                isActive
+                  ? 'bg-orange-600 text-white border border-orange-500'
+                  : card.iconBoxClass
+              }`}
             >
               <Icon className="w-6 h-6" />
             </div>
-          </div>
+          </button>
         );
       })}
     </div>

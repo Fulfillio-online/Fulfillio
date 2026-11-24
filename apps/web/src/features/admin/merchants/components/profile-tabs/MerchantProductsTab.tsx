@@ -28,7 +28,13 @@ import {
   acceptStockInDatabase,
   deleteProductFromDatabase,
   rejectProductInDatabase,
+  reviewProductRevisionInDatabase,
 } from '@/lib/warehouseSync';
+import {
+  extractPendingEditFromApiProduct,
+  applyRevisionSnapshotToWarehouseProduct,
+} from '@/lib/productRevision';
+import { ProductRevisionReviewModal } from '@/features/shared';
 import { MerchantRecord, MerchantProductItem } from '../../types';
 
 export interface MerchantProductsTabProps {
@@ -78,6 +84,10 @@ export function MerchantProductsTab({
     selectedBin: string;
   } | null>(null);
   const [addProductModalOpen, setAddProductModalOpen] = useState(false);
+  const [revisionReviewTarget, setRevisionReviewTarget] = useState<{
+    product: WarehouseProductItem;
+    rejectMode: boolean;
+  } | null>(null);
 
   // Reload handler from storage (with draft-preserving healing identical to ProductsManager)
   const reloadFromStorage = useCallback(() => {
@@ -188,6 +198,22 @@ export function MerchantProductsTab({
             const variantParts = (firstVariant?.title || '').split(/[/|-]/).map((s: string) => s.trim());
             const color = firstVariant?.attributes?.color || variantParts[0] || 'Standard';
             const size = firstVariant?.attributes?.size || variantParts[1] || 'Standard';
+            const revInfo = extractPendingEditFromApiProduct(p);
+            const rawAllColors = (firstVariant?.attributes as any)?.allColors;
+            const derivedColors =
+              Array.isArray(rawAllColors) && rawAllColors.length > 0
+                ? rawAllColors
+                : Array.from(
+                    new Set(
+                      variants
+                        .map((v: any) => v.attributes?.color || v.title?.split('/')[0]?.trim() || '')
+                        .filter((c: string) => Boolean(c && c.trim()))
+                    )
+                  ).map((cName: any, idx: number) => ({
+                    id: `c-${idx}`,
+                    name: String(cName),
+                    hex: '#64748b',
+                  }));
 
             return {
               id: p.id,
@@ -206,6 +232,11 @@ export function MerchantProductsTab({
               price: Number(firstVariant?.price) || 0,
               status: computedStatus,
               isDraft,
+              isSuspended: Boolean(p.isSuspended),
+              rejectionReason: p.rejectionReason || undefined,
+              editState: revInfo.editState,
+              pendingEdit: revInfo.pendingEdit,
+              lastEditRejectionReason: revInfo.lastEditRejectionReason,
               submittedAt: new Date(p.createdAt || Date.now()).toLocaleDateString('en-GB', {
                 day: '2-digit',
                 month: 'short',
@@ -215,15 +246,14 @@ export function MerchantProductsTab({
               images: p.images || [],
               barcode: firstVariant?.barcode || '',
               description: p.description,
-              colors: (firstVariant?.attributes as any)?.allColors || [],
+              colors: derivedColors,
               sizes: (firstVariant?.attributes as any)?.sizes || [],
               variantsList: variants.map((v: any) => ({
                 id: v.id,
-                sku: v.sku,
+                variantSku: v.sku,
                 color: v.attributes?.color || v.title?.split('/')[0]?.trim() || '',
                 size: v.attributes?.size || v.title?.split('/')[1]?.trim() || '',
                 stock: v.inventoryItems?.[0]?.quantityAvailable ?? 0,
-                imageUrl: v.imageUrl || p.imageUrl || '',
               })),
             };
           });
@@ -246,6 +276,9 @@ export function MerchantProductsTab({
                   ...bp,
                   status: bp.status,
                   isDraft: bp.isDraft,
+                  editState: bp.editState ?? null,
+                  pendingEdit: bp.pendingEdit ?? null,
+                  lastEditRejectionReason: bp.lastEditRejectionReason,
                 };
               } else {
                 combined.unshift(bp);
@@ -687,6 +720,83 @@ export function MerchantProductsTab({
     setAddProductModalOpen(false);
   };
 
+  // 9. Revision Review Handlers
+  const handleApproveRevision = async (productId: string) => {
+    const isDemo = INITIAL_PRODUCTS.some((ip) => ip.id === productId);
+    const res = await reviewProductRevisionInDatabase(productId, 'APPROVE');
+    if (!res.ok && !isDemo) return;
+
+    try {
+      localStorage.removeItem(`fulfillio_variants_${productId}`);
+    } catch {
+      // ignore
+    }
+
+    setProducts((prev) => {
+      const next = prev.map((p) => {
+        if (p.id !== productId) return p;
+        const proposed = p.pendingEdit?.proposedSnapshot;
+        const applied = proposed
+          ? applyRevisionSnapshotToWarehouseProduct(p, proposed)
+          : { ...p };
+        return {
+          ...applied,
+          editState: null,
+          pendingEdit: null,
+          lastEditRejectionReason: undefined,
+        };
+      });
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+
+    setRevisionReviewTarget(null);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'AdminMerchantProductsTab' } })
+      );
+    }
+  };
+
+  const handleRejectRevision = async (productId: string, reason?: string) => {
+    const isDemo = INITIAL_PRODUCTS.some((ip) => ip.id === productId);
+    const rejectionReason = reason?.trim() || 'Changes rejected by admin';
+    const res = await reviewProductRevisionInDatabase(productId, 'REJECT', rejectionReason);
+    if (!res.ok && !isDemo) return;
+
+    setProducts((prev) => {
+      const next = prev.map((p) =>
+        p.id === productId
+          ? {
+              ...p,
+              editState: null,
+              pendingEdit: null,
+              lastEditRejectionReason: rejectionReason,
+            }
+          : p
+      );
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+
+    setRevisionReviewTarget(null);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'AdminMerchantProductsTab' } })
+      );
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* 1. Summary Stats Cards (Same to Same as /admin/products, Display-Only StatCards) */}
@@ -721,6 +831,11 @@ export function MerchantProductsTab({
         onBulkPermanentDelete={handleDeleteProducts}
         onDeleteProduct={handleDeleteProduct}
         onDeleteProducts={handleDeleteProducts}
+        onReviewRevision={(product, rejectMode = false) =>
+          setRevisionReviewTarget({ product, rejectMode })
+        }
+        onApproveRevision={handleApproveRevision}
+        onRejectRevision={handleRejectRevision}
       />
 
       {/* 3. Modals (Matching /admin/products) */}
@@ -753,6 +868,30 @@ export function MerchantProductsTab({
         onClose={() => setAddProductModalOpen(false)}
         bins={bins}
         onAddProduct={handleAddProduct}
+      />
+
+      <ProductRevisionReviewModal
+        isOpen={Boolean(revisionReviewTarget && revisionReviewTarget.product.pendingEdit)}
+        onClose={() => setRevisionReviewTarget(null)}
+        mode="ADMIN"
+        initialRejectMode={Boolean(revisionReviewTarget?.rejectMode)}
+        product={
+          revisionReviewTarget
+            ? {
+                id: revisionReviewTarget.product.id,
+                title: revisionReviewTarget.product.title,
+                sku: revisionReviewTarget.product.fullSku,
+                imageUrl: revisionReviewTarget.product.imageUrl,
+                merchantName: revisionReviewTarget.product.merchantName,
+                merchantCode: revisionReviewTarget.product.merchantCode,
+                stock: revisionReviewTarget.product.stock,
+                bin: revisionReviewTarget.product.binCode,
+              }
+            : null
+        }
+        pendingEdit={revisionReviewTarget?.product.pendingEdit ?? null}
+        onApprove={handleApproveRevision}
+        onReject={handleRejectRevision}
       />
     </div>
   );

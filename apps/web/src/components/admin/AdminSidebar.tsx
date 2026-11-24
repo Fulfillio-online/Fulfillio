@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -17,6 +17,9 @@ import {
   Settings,
   HandCoins,
   LogOut,
+  ChevronDown,
+  Layers,
+  ListOrdered,
 } from 'lucide-react';
 
 interface AdminSidebarProps {
@@ -26,6 +29,14 @@ interface AdminSidebarProps {
 
 export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
   const pathname = usePathname();
+  const isOrdersSection = pathname.startsWith('/admin/orders');
+  const [ordersOpen, setOrdersOpen] = useState(isOrdersSection);
+
+  useEffect(() => {
+    if (isOrdersSection) {
+      setOrdersOpen(true);
+    }
+  }, [isOrdersSection]);
 
   const isCurrent = (path: string, exact = false) => {
     if (exact) return pathname === path;
@@ -180,24 +191,71 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                 </span>
               </Link>
 
-              {/* Orders Single Link */}
-              <Link
-                href="/admin/orders"
-                onClick={onClose}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  isCurrent('/admin/orders')
-                    ? 'bg-orange-600 text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-slate-100 hover:bg-slate-100/60 dark:hover:bg-navy-800/60'
-                }`}
-              >
-                <span className="flex items-center gap-3">
-                  <Boxes className="h-4 w-4" />
-                  <span>Orders</span>
-                </span>
-                <span className="text-[11px] tabular-nums px-1.5 py-0.5 rounded bg-black/20">
-                  Pipeline
-                </span>
-              </Link>
+              {/* Orders Collapsible Dropdown */}
+              <div className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() => setOrdersOpen((prev) => !prev)}
+                  aria-expanded={ordersOpen}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+                    isOrdersSection && !ordersOpen
+                      ? 'bg-orange-600 text-white shadow-sm'
+                      : isOrdersSection
+                      ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/20'
+                      : 'text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-slate-100 hover:bg-slate-100/60 dark:hover:bg-navy-800/60'
+                  }`}
+                >
+                  <span className="flex items-center gap-3">
+                    <Boxes className="h-4 w-4" />
+                    <span>Orders</span>
+                  </span>
+                  <ChevronDown
+                    className={`h-4 w-4 transition-transform duration-200 ${
+                      ordersOpen ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+
+                {ordersOpen && (
+                  <div className="mt-1 ml-3 pl-3 border-l border-slate-200 dark:border-white/10 space-y-1">
+                    <Link
+                      href="/admin/orders"
+                      onClick={onClose}
+                      className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                        pathname === '/admin/orders'
+                          ? 'bg-orange-600 text-white shadow-sm'
+                          : 'text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-slate-100 hover:bg-slate-100/60 dark:hover:bg-navy-800/60'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <Layers className="h-3.5 w-3.5" />
+                        <span>Order Pipeline</span>
+                      </span>
+                      <span className="text-[10px] tabular-nums px-1.5 py-0.5 rounded bg-black/20">
+                        Pipeline
+                      </span>
+                    </Link>
+
+                    <Link
+                      href="/admin/orders/all"
+                      onClick={onClose}
+                      className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                        pathname === '/admin/orders/all'
+                          ? 'bg-orange-600 text-white shadow-sm'
+                          : 'text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-slate-100 hover:bg-slate-100/60 dark:hover:bg-navy-800/60'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <ListOrdered className="h-3.5 w-3.5" />
+                        <span>All Orders</span>
+                      </span>
+                      <span className="text-[10px] tabular-nums px-1.5 py-0.5 rounded bg-black/20">
+                        History
+                      </span>
+                    </Link>
+                  </div>
+                )}
+              </div>
 
               {/* Delivery & Dispatch Tracker */}
               <Link

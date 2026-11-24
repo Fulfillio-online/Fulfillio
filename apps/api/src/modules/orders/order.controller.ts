@@ -31,6 +31,9 @@ export class OrderController {
     @Query('search') search?: string,
     @Query('merchantId') merchantIdQuery?: string,
     @Query('merchantCode') merchantCodeQuery?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+    @Query('courier') courier?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
@@ -52,6 +55,9 @@ export class OrderController {
       merchantId: effectiveMerchantId,
       status,
       search,
+      dateFrom,
+      dateTo,
+      courier,
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 50,
     });

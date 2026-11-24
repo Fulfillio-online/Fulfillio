@@ -25,6 +25,7 @@ import {
 } from '@/features/merchant/portal/mockData';
 import { MerchantMemoItem } from '@/features/admin/merchants/types';
 import { ALL_MEMOS, STORAGE_KEY as STORAGE_KEY_MERCHANTS_DIRECTORY } from '@/features/admin/merchants/mockData';
+import type { ProductPendingEditInfo } from '@/lib/productRevision';
 
 export const STORAGE_KEY_ADMIN_MEMOS = 'fulfillio_admin_memos_v1';
 import { StockMovementRecord, WarehouseProductItem, InboundStockReplenishment, StockWithdrawalRequest } from '@/features/admin/products/types';
@@ -147,8 +148,175 @@ export function getMerchantCategoriesKey(merchantCode = 'MC-101'): string {
     : `${STORAGE_KEY_MERCHANT_CATEGORIES}_${code}`;
 }
 
+function getTimestampMs(value?: string): number {
+  if (!value) return 0;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function hasPortalPayoutDetails(payout?: MerchantProfileData['payoutAccount'] | null): boolean {
+  return Boolean(
+    payout &&
+      (String(payout.accountNumber || '').trim() ||
+        String(payout.bkashMerchantNumber || '').trim())
+  );
+}
+
+function hasAdminPayoutDetails(payout?: MerchantRecord['payoutAccount'] | null): boolean {
+  return Boolean(
+    payout &&
+      (String(payout.accountNumber || '').trim() ||
+        String(payout.bkashNumber || '').trim())
+  );
+}
+
+function mapProfileToMerchantRecord(
+  profile: MerchantProfileData,
+  existing?: MerchantRecord
+): MerchantRecord {
+  const hasDetails = hasPortalPayoutDetails(profile.payoutAccount);
+  const statusNorm = (profile.status || '').toUpperCase();
+  const mappedStatus: MerchantRecord['status'] =
+    statusNorm === 'SUSPENDED'
+      ? 'Suspended'
+      : statusNorm === 'PENDING'
+      ? 'Pending'
+      : existing?.status || 'Active';
+
+  return {
+    id: existing?.id || profile.id || `m-${profile.merchantCode.toLowerCase()}`,
+    merchantCode: profile.merchantCode,
+    storeName: profile.storeName || existing?.storeName || 'Merchant Store',
+    ownerName: profile.ownerName || existing?.ownerName || 'Store Owner',
+    email: profile.email || existing?.email || '',
+    phone: profile.phone || existing?.phone || '',
+    location: profile.location || existing?.location || 'Dhaka, Bangladesh',
+    deliveryArea: existing?.deliveryArea || 'Nationwide Bangladesh',
+    status: mappedStatus,
+    verified: profile.verified !== undefined ? Boolean(profile.verified) : Boolean(existing?.verified),
+    joinedDate:
+      existing?.joinedDate ||
+      new Date().toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      }),
+    avatarInitials:
+      existing?.avatarInitials ||
+      (profile.storeName || 'MC').slice(0, 2).toUpperCase(),
+    avatarBg: existing?.avatarBg || 'from-orange-500 to-amber-600',
+    avatarUrl: profile.logoUrl || existing?.avatarUrl,
+    payoutAccount: {
+      provider: profile.payoutAccount?.provider || existing?.payoutAccount?.provider || '',
+      accountHolder:
+        profile.payoutAccount?.accountHolder ||
+        existing?.payoutAccount?.accountHolder ||
+        profile.ownerName ||
+        '',
+      accountNumber:
+        profile.payoutAccount?.accountNumber || existing?.payoutAccount?.accountNumber || '',
+      branchName: profile.payoutAccount?.branchName || existing?.payoutAccount?.branchName || '',
+      routingNumber:
+        profile.payoutAccount?.routingNumber || existing?.payoutAccount?.routingNumber || '',
+      bkashNumber:
+        profile.payoutAccount?.bkashMerchantNumber ||
+        existing?.payoutAccount?.bkashNumber ||
+        '',
+      frequency:
+        profile.payoutAccount?.frequency ||
+        profile.payoutSchedule ||
+        existing?.payoutAccount?.frequency ||
+        'Weekly (Every Friday)',
+      status: hasDetails
+        ? profile.payoutAccount?.status || existing?.payoutAccount?.status || 'PENDING_REVIEW'
+        : profile.payoutAccount?.status === 'REJECTED'
+          ? 'REJECTED'
+          : existing?.payoutAccount?.status || 'UNVERIFIED',
+      chequeLeafUrl:
+        profile.payoutAccount?.chequeLeafUrl || existing?.payoutAccount?.chequeLeafUrl || '',
+      rejectionReason:
+        (profile.payoutAccount?.status || existing?.payoutAccount?.status) === 'REJECTED'
+          ? profile.payoutAccount?.rejectionReason || existing?.payoutAccount?.rejectionReason
+          : undefined,
+      submittedAt: profile.payoutAccount?.submittedAt || existing?.payoutAccount?.submittedAt,
+      updatedAt:
+        profile.payoutAccount?.updatedAt ||
+        profile.payoutAccount?.submittedAt ||
+        existing?.payoutAccount?.updatedAt,
+      availableBalance: existing?.payoutAccount?.availableBalance ?? 0,
+      lastPayoutAmount: existing?.payoutAccount?.lastPayoutAmount ?? 0,
+    },
+  };
+}
+
 export function getStoredMerchantDirectory(): MerchantRecord[] {
-  return [];
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_MERCHANT_DIRECTORY);
+    const list: MerchantRecord[] = raw ? JSON.parse(raw) : [];
+    const safeList = Array.isArray(list) ? list : [];
+
+    const merged = safeList.map((m) => {
+      if (!m?.merchantCode) return m;
+      try {
+        const pRaw = localStorage.getItem(getMerchantProfileKey(m.merchantCode));
+        if (!pRaw) return m;
+        const parsedProfile: MerchantProfileData = JSON.parse(pRaw);
+        if (!parsedProfile?.payoutAccount) return m;
+        const profTs = getTimestampMs(
+          parsedProfile.payoutAccount.updatedAt || parsedProfile.payoutAccount.submittedAt
+        );
+        const dirTs = getTimestampMs(
+          m.payoutAccount?.updatedAt || m.payoutAccount?.submittedAt
+        );
+        const profHas = hasPortalPayoutDetails(parsedProfile.payoutAccount);
+        const dirHas = hasAdminPayoutDetails(m.payoutAccount);
+
+        if ((profHas && !dirHas) || (profTs > dirTs && profTs > 0)) {
+          return mapProfileToMerchantRecord(
+            { ...parsedProfile, merchantCode: parsedProfile.merchantCode || m.merchantCode },
+            m
+          );
+        }
+      } catch {
+        // ignore invalid per-merchant profile JSON
+      }
+      return m;
+    });
+
+    try {
+      const session = getActiveMerchantSession();
+      const sCode = (session?.merchantCode || '').trim().toUpperCase();
+      if (sCode) {
+        const pRaw = localStorage.getItem(getMerchantProfileKey(sCode));
+        if (pRaw) {
+          const parsedProfile: MerchantProfileData = JSON.parse(pRaw);
+          if (parsedProfile && typeof parsedProfile === 'object') {
+            const existsInList = merged.some(
+              (m) => m.merchantCode?.toUpperCase() === sCode
+            );
+            if (!existsInList && (parsedProfile.merchantCode || hasPortalPayoutDetails(parsedProfile.payoutAccount))) {
+              merged.unshift(
+                mapProfileToMerchantRecord({
+                  ...parsedProfile,
+                  merchantCode: parsedProfile.merchantCode || sCode,
+                  storeName: parsedProfile.storeName || session.storeName,
+                  ownerName: parsedProfile.ownerName || session.ownerName,
+                  email: parsedProfile.email || session.email,
+                })
+              );
+            }
+          }
+        }
+      }
+    } catch {
+      // ignore session fallback errors
+    }
+
+    return merged;
+  } catch {
+    return [];
+  }
 }
 
 export const INITIAL_MERCHANT_CREDENTIALS: MerchantCredentialRecord[] = [];
@@ -211,7 +379,9 @@ export function clearActiveMerchantSession(): void {
 }
 
 export function buildProfileFromMerchantRecord(record: MerchantRecord): MerchantProfileData {
+  const hasDetails = hasAdminPayoutDetails(record.payoutAccount);
   return {
+    id: record.id,
     merchantCode: record.merchantCode,
     ownerName: record.ownerName,
     storeName: record.storeName,
@@ -224,15 +394,28 @@ export function buildProfileFromMerchantRecord(record: MerchantRecord): Merchant
     payoutMethod: 'Bank Transfer / bKash',
     payoutSchedule: record.payoutAccount.frequency || 'Weekly (Every Friday)',
     payoutAccount: {
-      provider: record.payoutAccount.provider,
-      accountHolder: record.payoutAccount.accountHolder,
-      accountNumber: record.payoutAccount.accountNumber,
-      branchName: record.payoutAccount.branchName,
-      routingNumber: record.payoutAccount.routingNumber,
-      bkashMerchantNumber: record.payoutAccount.bkashNumber,
-      chequeLeafUrl: '',
-      frequency: 'Weekly',
-      status: record.payoutAccount.status === 'VERIFIED' ? 'VERIFIED' : 'PENDING_REVIEW',
+      provider: record.payoutAccount.provider || '',
+      accountHolder: record.payoutAccount.accountHolder || record.ownerName || '',
+      accountNumber: record.payoutAccount.accountNumber || '',
+      branchName: record.payoutAccount.branchName || '',
+      routingNumber: record.payoutAccount.routingNumber || '',
+      bkashMerchantNumber: record.payoutAccount.bkashNumber || '',
+      chequeLeafUrl: record.payoutAccount.chequeLeafUrl || '',
+      frequency: record.payoutAccount.frequency || 'Weekly',
+      status: hasDetails
+        ? record.payoutAccount.status || 'PENDING_REVIEW'
+        : record.payoutAccount.status === 'REJECTED'
+          ? 'REJECTED'
+          : 'UNVERIFIED',
+      ...(record.payoutAccount.status === 'REJECTED' && record.payoutAccount.rejectionReason
+        ? { rejectionReason: record.payoutAccount.rejectionReason }
+        : {}),
+      ...(record.payoutAccount.submittedAt
+        ? { submittedAt: record.payoutAccount.submittedAt }
+        : {}),
+      ...(record.payoutAccount.updatedAt
+        ? { updatedAt: record.payoutAccount.updatedAt }
+        : {}),
     },
     kycData: {
       tradeLicenseNo: '',
@@ -250,7 +433,17 @@ export function getStoredMerchantProfileForCode(merchantCode: string): MerchantP
       const raw = localStorage.getItem(getMerchantProfileKey(code));
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed && parsed.merchantCode) return parsed;
+        if (parsed && typeof parsed === 'object') {
+          return {
+            ...INITIAL_MERCHANT_PROFILE,
+            ...parsed,
+            merchantCode: parsed.merchantCode || code,
+            payoutAccount: {
+              ...INITIAL_MERCHANT_PROFILE.payoutAccount,
+              ...(parsed.payoutAccount || {}),
+            },
+          };
+        }
       }
     } catch {
       // ignore
@@ -258,21 +451,29 @@ export function getStoredMerchantProfileForCode(merchantCode: string): MerchantP
 
     try {
       const session = getActiveMerchantSession();
-      if (session && session.merchantCode.toUpperCase() === code && session.email) {
+      if (session && session.merchantCode.toUpperCase() === code) {
         const directory = getStoredMerchantDirectory();
         const dirMatch = directory.find(
           (m) =>
-            m.email.trim().toLowerCase() === session.email.trim().toLowerCase() ||
+            (session.email && m.email.trim().toLowerCase() === session.email.trim().toLowerCase()) ||
             m.merchantCode.toUpperCase() === code
         );
         if (dirMatch) {
           return {
             ...buildProfileFromMerchantRecord(dirMatch),
+            merchantCode: code,
             storeName: session.storeName || dirMatch.storeName,
             ownerName: session.ownerName || dirMatch.ownerName,
-            email: session.email,
+            email: session.email || dirMatch.email,
           };
         }
+        return {
+          ...INITIAL_MERCHANT_PROFILE,
+          merchantCode: code,
+          storeName: session.storeName || INITIAL_MERCHANT_PROFILE.storeName,
+          ownerName: session.ownerName || INITIAL_MERCHANT_PROFILE.ownerName,
+          email: session.email || INITIAL_MERCHANT_PROFILE.email,
+        };
       }
     } catch {
       // ignore
@@ -281,10 +482,13 @@ export function getStoredMerchantProfileForCode(merchantCode: string): MerchantP
   const dirMatch = getStoredMerchantDirectory().find(
     (m) => m.merchantCode.toUpperCase() === code
   );
-  if (dirMatch && code !== 'MC-101') {
+  if (dirMatch) {
     return buildProfileFromMerchantRecord(dirMatch);
   }
-  return INITIAL_MERCHANT_PROFILE;
+  return {
+    ...INITIAL_MERCHANT_PROFILE,
+    merchantCode: code,
+  };
 }
 
 export function getStoredMerchantProductsForCode(merchantCode = 'MC-101'): MerchantProductItem[] {
@@ -628,6 +832,7 @@ export function syncMerchantDirectoryToProfiles(merchants: MerchantRecord[]): vo
         const parsed: MerchantProfileData = JSON.parse(raw);
         const updated: MerchantProfileData = {
           ...parsed,
+          merchantCode: parsed.merchantCode || m.merchantCode,
           storeName: m.storeName,
           ownerName: m.ownerName,
           email: m.email,
@@ -636,14 +841,150 @@ export function syncMerchantDirectoryToProfiles(merchants: MerchantRecord[]): vo
           status: m.status,
           verified: m.verified,
           logoUrl: m.avatarUrl || parsed.logoUrl,
+          payoutAccount: m.payoutAccount
+            ? {
+                ...(parsed.payoutAccount || {}),
+                provider: m.payoutAccount.provider ?? parsed.payoutAccount?.provider ?? '',
+                accountHolder:
+                  m.payoutAccount.accountHolder ?? parsed.payoutAccount?.accountHolder ?? m.ownerName,
+                accountNumber:
+                  m.payoutAccount.accountNumber ?? parsed.payoutAccount?.accountNumber ?? '',
+                branchName: m.payoutAccount.branchName ?? parsed.payoutAccount?.branchName ?? '',
+                routingNumber:
+                  m.payoutAccount.routingNumber ?? parsed.payoutAccount?.routingNumber ?? '',
+                bkashMerchantNumber:
+                  m.payoutAccount.bkashNumber ?? parsed.payoutAccount?.bkashMerchantNumber ?? '',
+                chequeLeafUrl:
+                  m.payoutAccount.chequeLeafUrl ?? parsed.payoutAccount?.chequeLeafUrl ?? '',
+                frequency:
+                  (m.payoutAccount.frequency as any) ||
+                  parsed.payoutAccount?.frequency ||
+                  'Weekly',
+                status: m.payoutAccount.status,
+                submittedAt: m.payoutAccount.submittedAt || parsed.payoutAccount?.submittedAt,
+                updatedAt: m.payoutAccount.updatedAt || parsed.payoutAccount?.updatedAt,
+                rejectionReason:
+                  m.payoutAccount.status === 'REJECTED'
+                    ? m.payoutAccount.rejectionReason
+                    : undefined,
+              }
+            : parsed.payoutAccount,
         };
         localStorage.setItem(key, JSON.stringify(updated));
-      } else if (m.merchantCode !== 'MC-101') {
+      } else {
         localStorage.setItem(key, JSON.stringify(buildProfileFromMerchantRecord(m)));
       }
     }
     window.dispatchEvent(
       new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'AdminMerchantDirectory' } })
+    );
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Sync Merchant Portal profile & payout account updates to the Admin Merchant Directory.
+ */
+export function syncMerchantProfileToAdminDirectory(profile: MerchantProfileData): void {
+  if (typeof window === 'undefined' || !profile?.merchantCode) return;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_MERCHANT_DIRECTORY);
+    const list: MerchantRecord[] = raw ? JSON.parse(raw) : [...MERCHANTS_DATA];
+    const codeLower = profile.merchantCode.trim().toLowerCase();
+    const emailLower = (profile.email || '').trim().toLowerCase();
+
+    const idx = list.findIndex(
+      (m) =>
+        m.merchantCode.toLowerCase() === codeLower ||
+        (emailLower && m.email.toLowerCase() === emailLower)
+    );
+
+    const hasDetails = hasPortalPayoutDetails(profile.payoutAccount);
+    const buildUpdatedPayout = (
+      existing?: MerchantRecord['payoutAccount']
+    ): MerchantRecord['payoutAccount'] => {
+      const nextStatus: MerchantRecord['payoutAccount']['status'] = hasDetails
+        ? profile.payoutAccount?.status || existing?.status || 'PENDING_REVIEW'
+        : profile.payoutAccount?.status === 'REJECTED'
+          ? 'REJECTED'
+          : existing?.status || 'UNVERIFIED';
+
+      return {
+        provider: profile.payoutAccount?.provider ?? existing?.provider ?? '',
+        accountHolder:
+          profile.payoutAccount?.accountHolder ??
+          existing?.accountHolder ??
+          profile.ownerName,
+        accountNumber: profile.payoutAccount?.accountNumber ?? existing?.accountNumber ?? '',
+        branchName: profile.payoutAccount?.branchName ?? existing?.branchName ?? '',
+        routingNumber: profile.payoutAccount?.routingNumber ?? existing?.routingNumber ?? '',
+        bkashNumber:
+          profile.payoutAccount?.bkashMerchantNumber ?? existing?.bkashNumber ?? '',
+        frequency:
+          profile.payoutAccount?.frequency ||
+          profile.payoutSchedule ||
+          existing?.frequency ||
+          'Weekly (Every Friday)',
+        status: nextStatus,
+        chequeLeafUrl: profile.payoutAccount?.chequeLeafUrl ?? existing?.chequeLeafUrl ?? '',
+        rejectionReason:
+          nextStatus === 'REJECTED'
+            ? profile.payoutAccount?.rejectionReason || existing?.rejectionReason
+            : undefined,
+        submittedAt: profile.payoutAccount?.submittedAt || existing?.submittedAt,
+        updatedAt:
+          profile.payoutAccount?.updatedAt ||
+          profile.payoutAccount?.submittedAt ||
+          existing?.updatedAt,
+        availableBalance: existing?.availableBalance ?? 0,
+        lastPayoutAmount: existing?.lastPayoutAmount ?? 0,
+      };
+    };
+
+    if (idx >= 0) {
+      const existing = list[idx];
+      list[idx] = {
+        ...existing,
+        storeName: profile.storeName || existing.storeName,
+        ownerName: profile.ownerName || existing.ownerName,
+        phone: profile.phone || existing.phone,
+        location: profile.location || existing.location,
+        avatarUrl: profile.logoUrl || existing.avatarUrl,
+        payoutAccount: buildUpdatedPayout(existing.payoutAccount),
+      };
+    } else {
+      list.unshift({
+        id: profile.id || `m-${profile.merchantCode.toLowerCase()}`,
+        merchantCode: profile.merchantCode,
+        storeName: profile.storeName || 'Merchant Store',
+        ownerName: profile.ownerName || 'Store Owner',
+        email: profile.email || '',
+        phone: profile.phone || '',
+        location: profile.location || 'Dhaka, Bangladesh',
+        deliveryArea: 'Nationwide Bangladesh',
+        status:
+          profile.status === 'Suspended' || profile.status === 'SUSPENDED'
+            ? 'Suspended'
+            : profile.status === 'Pending' || profile.status === 'PENDING'
+            ? 'Pending'
+            : 'Active',
+        verified: Boolean(profile.verified),
+        joinedDate: new Date().toLocaleDateString('en-GB', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        }),
+        avatarInitials: (profile.storeName || 'MC').slice(0, 2).toUpperCase(),
+        avatarBg: 'from-orange-500 to-amber-600',
+        avatarUrl: profile.logoUrl,
+        payoutAccount: buildUpdatedPayout(),
+      });
+    }
+
+    localStorage.setItem(STORAGE_KEY_MERCHANT_DIRECTORY, JSON.stringify(list));
+    window.dispatchEvent(
+      new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'MerchantProfileUpdate' } })
     );
   } catch {
     // ignore
@@ -742,6 +1083,10 @@ export function convertMerchantProductToWarehouse(
     colors: item.colors,
     sizes: item.sizes,
     variantsList: item.variantsList,
+    editState: item.editState ?? null,
+    pendingEdit: item.pendingEdit ?? null,
+    lastEditRejectionReason: item.lastEditRejectionReason,
+    isSuspended: item.isSuspended,
     rejectionReason: item.rejectionReason,
   };
 }
@@ -952,6 +1297,12 @@ export function syncMerchantProductUpdatedToAdmin(
         colors: updatedItem.colors ?? ap.colors,
         sizes: updatedItem.sizes ?? ap.sizes,
         variantsList: updatedItem.variantsList ?? ap.variantsList,
+        editState: updatedItem.editState !== undefined ? updatedItem.editState : ap.editState,
+        pendingEdit: updatedItem.pendingEdit !== undefined ? updatedItem.pendingEdit : ap.pendingEdit,
+        lastEditRejectionReason:
+          updatedItem.lastEditRejectionReason !== undefined
+            ? updatedItem.lastEditRejectionReason
+            : ap.lastEditRejectionReason,
       };
     });
 
@@ -1043,6 +1394,7 @@ export function syncAdminProductsToMerchant(
         return {
           ...mp,
           title: matchedAdmin.title,
+          category: matchedAdmin.category ?? mp.category,
           stock: matchedAdmin.stock,
           stockAccepted: matchedAdmin.stockAccepted ?? false,
           stockStatus:
@@ -1057,6 +1409,10 @@ export function syncAdminProductsToMerchant(
           sizes: matchedAdmin.sizes ?? mp.sizes,
           variantsList: matchedAdmin.variantsList ?? mp.variantsList,
           description: matchedAdmin.description ?? mp.description,
+          editState: matchedAdmin.editState ?? null,
+          pendingEdit: matchedAdmin.pendingEdit ?? null,
+          lastEditRejectionReason: matchedAdmin.lastEditRejectionReason,
+          isSuspended: matchedAdmin.isSuspended ?? mp.isSuspended,
           bin:
             matchedAdmin.status === 'APPROVED' ||
             matchedAdmin.status === 'STOCK_STORED' ||
@@ -1114,6 +1470,10 @@ export function syncAdminProductsToMerchant(
           sizes: ap.sizes,
           variantsList: ap.variantsList,
           description: ap.description,
+          editState: ap.editState ?? null,
+          pendingEdit: ap.pendingEdit ?? null,
+          lastEditRejectionReason: ap.lastEditRejectionReason,
+          isSuspended: ap.isSuspended,
           rejectionReason: ap.rejectionReason,
         }));
         merchantProducts = [...converted, ...merchantProducts];
@@ -1351,10 +1711,25 @@ export function convertMerchantOrderToWarehouse(
     );
 
   const cleanOrderId = (order.id || order.orderNumber || `ORD-${Date.now()}`).replace(/^#/, '').trim();
+  const parsedDate = (() => {
+    const raw = (order.date || '').trim();
+    if (!raw || raw.toLowerCase().includes('just now') || raw.toLowerCase().includes('today')) {
+      return new Date();
+    }
+    if (raw.toLowerCase().includes('yesterday')) {
+      const d = new Date();
+      d.setDate(d.getDate() - 1);
+      return d;
+    }
+    const d = new Date(raw);
+    return Number.isNaN(d.getTime()) ? new Date() : d;
+  })();
 
   return {
     id: cleanOrderId,
     createdAt: order.date || 'Just now',
+    createdAtIso: parsedDate.toISOString(),
+    dbStatus: order.status,
     merchantCode,
     merchantName,
     customerName: order.customer,
@@ -2682,6 +3057,79 @@ export async function syncProductStatusToDatabase(
 }
 
 /**
+ * Merchant -> Admin: Sync a pending product edit (or cancellation) without mutating live product fields.
+ */
+export function syncMerchantProductRevisionToAdmin(
+  productId: string,
+  pendingEdit: ProductPendingEditInfo | null,
+  editState: 'EDIT_APPROVAL_PENDING' | null,
+  lastEditRejectionReason?: string
+): void {
+  if (typeof window === 'undefined' || !productId) return;
+  try {
+    const currentAdmin = getStoredAdminProducts();
+    let changed = false;
+    const nextAdmin = currentAdmin.map((ap) => {
+      if (ap.id !== productId && ap.shortSku !== productId && ap.fullSku !== productId) {
+        return ap;
+      }
+      changed = true;
+      return {
+        ...ap,
+        editState,
+        pendingEdit,
+        lastEditRejectionReason,
+      };
+    });
+    if (changed) {
+      localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(nextAdmin));
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'MerchantContext' } })
+      );
+    }
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Admin reviews a pending product edit (APPROVE applies snapshot to live product; REJECT discards edit).
+ */
+export async function reviewProductRevisionInDatabase(
+  productId: string,
+  action: 'APPROVE' | 'REJECT',
+  reason?: string
+): Promise<{ ok: boolean; data?: any; error?: string }> {
+  if (!productId) return { ok: false, error: 'Missing product ID' };
+  try {
+    const res = await fetch(
+      `${API_BASE}/inventory/products/${encodeURIComponent(productId)}/review-revision`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action, reason }),
+      }
+    );
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return {
+        ok: false,
+        error: Array.isArray(data?.message)
+          ? data.message.join(', ')
+          : data?.message || `HTTP ${res.status}`,
+      };
+    }
+    const data = await res.json().catch(() => null);
+    return { ok: true, data };
+  } catch (err: any) {
+    console.warn('[Sync] Failed to review product revision in PostgreSQL:', err);
+    return { ok: false, error: err?.message || 'Network request failed' };
+  }
+}
+
+/**
  * Persist product rejection state and reason to PostgreSQL (pgAdmin) database
  */
 export async function rejectProductInDatabase(
@@ -2849,9 +3297,28 @@ export async function cancelOrderInDatabase(
 /**
  * Fetch all warehouse orders directly from PostgreSQL database
  */
-export async function fetchOrdersFromDatabase(): Promise<WarehousePipelineOrder[]> {
+export async function fetchOrdersFromDatabase(params?: {
+  dateFrom?: string;
+  dateTo?: string;
+  search?: string;
+  status?: string;
+  merchantCode?: string;
+  courier?: string;
+  limit?: number;
+}): Promise<WarehousePipelineOrder[]> {
   try {
-    const res = await fetch(`${API_BASE}/orders?limit=100`, {
+    const qs = new URLSearchParams();
+    qs.set('limit', String(params?.limit ?? 500));
+    if (params?.dateFrom) qs.set('dateFrom', params.dateFrom);
+    if (params?.dateTo) qs.set('dateTo', params.dateTo);
+    if (params?.search) qs.set('search', params.search);
+    if (params?.status) qs.set('status', params.status);
+    if (params?.merchantCode && params.merchantCode !== 'ALL') {
+      qs.set('merchantCode', params.merchantCode);
+    }
+    if (params?.courier && params.courier !== 'ALL') qs.set('courier', params.courier);
+
+    const res = await fetch(`${API_BASE}/orders?${qs.toString()}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -2914,6 +3381,8 @@ export async function fetchOrdersFromDatabase(): Promise<WarehousePipelineOrder[
       const pipelineOrder: WarehousePipelineOrder = {
         id: cleanId,
         createdAt: o.createdAt ? new Date(o.createdAt).toLocaleString() : 'Today',
+        createdAtIso: o.createdAt ? new Date(o.createdAt).toISOString() : undefined,
+        dbStatus: o.status || undefined,
         merchantCode: o.merchant?.merchantCode || 'MC-101',
         merchantName: o.merchant?.businessName || "Sabbir's Store",
         customerName: o.customerName || 'Customer',

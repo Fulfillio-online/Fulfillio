@@ -9,6 +9,8 @@ import {
   Truck,
   ChevronDown,
   PackageCheck,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
 import { CourierPartner, OrderStage, WarehousePipelineOrder, formatOrderDate } from '../../types';
 
@@ -39,7 +41,13 @@ export function OrdersMobileCard({
   onToggleSelect,
   onPreviewMemo,
   onInlineCourierChange,
-  onInlineStageChange,
+  onMarkWaiting,
+  onMarkPicked,
+  onResumePick,
+  onPrintAndPack,
+  onBookCourier,
+  onConfirmHandover,
+  onCancelOrder,
   onViewOrder,
 }: OrdersMobileCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -201,42 +209,91 @@ export function OrdersMobileCard({
             </div>
           </div>
 
-          {/* Quick Stage Action Pills (English Only) */}
+          {/* Stage-Scoped Pipeline Action Pills */}
           <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-200/50 dark:border-white/5">
-            {order.stage !== 'PACK' && order.stage !== 'CANCELLED' && (
+            {order.stage === 'PICK' && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onMarkPicked(order)}
+                  className="px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  <PackageCheck className="w-3 h-3" />
+                  <span>Mark Picked → Pack</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onMarkWaiting(order)}
+                  className="px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  <AlertTriangle className="w-3 h-3" />
+                  <span>Put on Hold</span>
+                </button>
+              </>
+            )}
+
+            {order.stage === 'WAITING' && (
               <button
                 type="button"
-                onClick={() => onInlineStageChange?.(order.id, 'PACK')}
-                className="px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20 text-[11px] font-bold flex items-center gap-1"
+                onClick={() => onResumePick(order)}
+                className="px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
               >
-                <PackageCheck className="w-3 h-3" />
-                <span>Move to Pack</span>
+                <CheckCircle2 className="w-3 h-3" />
+                <span>Resume Pick</span>
               </button>
             )}
-            {order.stage !== 'WAITING' && order.stage !== 'CANCELLED' && (
-              <button
-                type="button"
-                onClick={() =>
-                  onInlineStageChange?.(
-                    order.id,
-                    'WAITING',
-                    'Awaiting merchant stock delivery'
-                  )
-                }
-                className="px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 text-[11px] font-bold flex items-center gap-1"
-              >
-                <AlertTriangle className="w-3 h-3" />
-                <span>Put on Hold</span>
-              </button>
+
+            {order.stage === 'PACK' && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onPrintAndPack(order)}
+                  className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  <Truck className="w-3 h-3" />
+                  <span>Print &amp; Dispatch</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onMarkWaiting(order)}
+                  className="px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  <AlertTriangle className="w-3 h-3" />
+                  <span>Put on Hold</span>
+                </button>
+              </>
             )}
-            {order.stage !== 'DISPATCH' && order.stage !== 'CANCELLED' && (
+
+            {order.stage === 'DISPATCH' && !order.isCourierBooked && (
               <button
                 type="button"
-                onClick={() => onInlineStageChange?.(order.id, 'DISPATCH')}
-                className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 text-[11px] font-bold flex items-center gap-1"
+                onClick={() => onBookCourier(order)}
+                className="px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
               >
                 <Truck className="w-3 h-3" />
-                <span>Move to Dispatch</span>
+                <span>Book Courier</span>
+              </button>
+            )}
+
+            {order.stage === 'DISPATCH' && order.isCourierBooked && (
+              <button
+                type="button"
+                onClick={() => onConfirmHandover(order)}
+                className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+              >
+                <CheckCircle2 className="w-3 h-3" />
+                <span>Confirm Handover</span>
+              </button>
+            )}
+
+            {order.stage !== 'CANCELLED' && order.stage !== 'HANDED_OVER' && (
+              <button
+                type="button"
+                onClick={() => onCancelOrder(order)}
+                className="px-2.5 py-1 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+              >
+                <XCircle className="w-3 h-3" />
+                <span>Cancel</span>
               </button>
             )}
           </div>

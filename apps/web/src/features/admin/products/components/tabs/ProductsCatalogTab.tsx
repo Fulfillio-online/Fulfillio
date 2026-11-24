@@ -34,6 +34,7 @@ import {
 export type ProductCatalogFilterTab =
   | "ALL"
   | "APPROVAL"
+  | "EDIT_APPROVAL"
   | "PUBLIC"
   | "OUT_OF_STOCK"
   | "DRAFT"
@@ -69,8 +70,9 @@ export interface ProductsCatalogTabProps {
   onDeleteProduct?: (productId: string) => void;
   onDeleteProducts?: (productIds: string[]) => void;
   onAllowEdit?: (productId: string) => void;
+  onReviewRevision?: (product: WarehouseProductItem, rejectMode?: boolean) => void;
   onApproveRevision?: (productId: string) => void;
-  onRejectRevision?: (productId: string) => void;
+  onRejectRevision?: (productId: string, reason?: string) => void;
   onToggleSuspend?: (productId: string) => void;
 }
 
@@ -100,6 +102,7 @@ export function ProductsCatalogTab({
   onDeleteProduct,
   onDeleteProducts,
   onAllowEdit,
+  onReviewRevision,
   onApproveRevision,
   onRejectRevision,
   onToggleSuspend,
@@ -199,6 +202,9 @@ export function ProductsCatalogTab({
     const approvalCount = basePool.filter(
       (p) => p.status === "PENDING_APPROVAL" && !p.isDraft,
     ).length;
+    const editApprovalCount = basePool.filter(
+      (p) => p.editState === "EDIT_APPROVAL_PENDING",
+    ).length;
     const publicCount = basePool.filter(
       (p) =>
         (p.status === "STOCK_STORED" || p.status === "APPROVED") &&
@@ -220,6 +226,7 @@ export function ProductsCatalogTab({
     return {
       allCount,
       approvalCount,
+      editApprovalCount,
       publicCount,
       outOfStockCount,
       draftCount,
@@ -238,6 +245,8 @@ export function ProductsCatalogTab({
       const isPublic = !isDraft && !isPending && !isRejected && p.stock > 0;
 
       if (activeCatalogTab === "APPROVAL") return isPending;
+      if (activeCatalogTab === "EDIT_APPROVAL")
+        return p.editState === "EDIT_APPROVAL_PENDING";
       if (activeCatalogTab === "PUBLIC") return isPublic;
       if (activeCatalogTab === "OUT_OF_STOCK") return isOutOfStock;
       if (activeCatalogTab === "DRAFT") return isDraft;
@@ -610,6 +619,28 @@ export function ProductsCatalogTab({
               }`}
             >
               {catalogCounts.approvalCount}
+            </span>
+          </button>
+          <span className="text-slate-300 dark:text-slate-700">|</span>
+
+          <button
+            type="button"
+            onClick={() => handleTabSwitch("EDIT_APPROVAL")}
+            className={`cursor-pointer transition-colors px-2.5 py-1 rounded-lg flex items-center gap-1.5 ${
+              activeCatalogTab === "EDIT_APPROVAL"
+                ? "bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300 font-bold border border-orange-500/30"
+                : "text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white font-medium"
+            }`}
+          >
+            <span>Pending Edits</span>
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[11px] font-bold tabular-nums ${
+                catalogCounts.editApprovalCount > 0
+                  ? "bg-orange-500 text-white font-bold"
+                  : "text-slate-400 dark:text-slate-500"
+              }`}
+            >
+              {catalogCounts.editApprovalCount}
             </span>
           </button>
           <span className="text-slate-300 dark:text-slate-700">|</span>
@@ -1007,20 +1038,41 @@ export function ProductsCatalogTab({
                             Draft
                           </span>
                         ) : p.isSuspended ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
-                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                            Suspended
-                          </span>
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30 select-none">
+                              <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                              Suspended
+                            </span>
+                            {p.editState === "EDIT_APPROVAL_PENDING" && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 select-none">
+                                Edit Pending
+                              </span>
+                            )}
+                          </div>
                         ) : isOutOfStock ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
-                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                            Out of Stock
-                          </span>
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30 select-none">
+                              <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                              Out of Stock
+                            </span>
+                            {p.editState === "EDIT_APPROVAL_PENDING" && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 select-none">
+                                Edit Pending
+                              </span>
+                            )}
+                          </div>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            Published
-                          </span>
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 select-none">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                              Published
+                            </span>
+                            {p.editState === "EDIT_APPROVAL_PENDING" && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 select-none">
+                                Edit Pending
+                              </span>
+                            )}
+                          </div>
                         )}
                       </td>
 
@@ -1133,23 +1185,38 @@ export function ProductsCatalogTab({
                                         type="button"
                                         onClick={() => {
                                           setActiveMenuId(null);
-                                          onApproveRevision?.(p.id);
+                                          onReviewRevision?.(p, false);
                                         }}
-                                        className="w-full px-3.5 py-2 text-left text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 flex items-center gap-2.5 font-bold cursor-pointer"
+                                        className="w-full px-3.5 py-2 text-left text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 flex items-center gap-2.5 font-bold cursor-pointer"
                                       >
-                                        <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
-                                        <span>Approve Revision</span>
+                                        <Eye className="w-4 h-4 shrink-0 text-amber-500" />
+                                        <span>Review Pending Edit</span>
                                       </button>
                                       <button
                                         type="button"
                                         onClick={() => {
                                           setActiveMenuId(null);
-                                          onRejectRevision?.(p.id);
+                                          onApproveRevision?.(p.id);
+                                        }}
+                                        className="w-full px-3.5 py-2 text-left text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 flex items-center gap-2.5 font-bold cursor-pointer"
+                                      >
+                                        <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
+                                        <span>Approve Edit</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setActiveMenuId(null);
+                                          if (onReviewRevision) {
+                                            onReviewRevision(p, true);
+                                          } else {
+                                            onRejectRevision?.(p.id);
+                                          }
                                         }}
                                         className="w-full px-3.5 py-2 text-left text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex items-center gap-2.5 font-semibold cursor-pointer"
                                       >
                                         <XCircle className="w-4 h-4 shrink-0 text-rose-500" />
-                                        <span>Reject Revision</span>
+                                        <span>Reject Edit</span>
                                       </button>
                                     </>
                                   )}
@@ -1339,31 +1406,36 @@ export function ProductsCatalogTab({
                         <span className="text-xs font-semibold">
                           Stock: {p.stock} pcs
                         </span>
-                        <div>
+                        <div className="flex flex-wrap items-center justify-end gap-1.5">
                           {isPending ? (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 select-none">
                               Pending Approval
                             </span>
                           ) : isRejected ? (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-700 dark:text-rose-300">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-700 dark:text-rose-300 select-none">
                               Rejected
                             </span>
                           ) : isDraft ? (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-500/15 text-slate-700 dark:text-slate-300">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-500/15 text-slate-700 dark:text-slate-300 select-none">
                               Draft
                             </span>
                           ) : p.isSuspended ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30 select-none">
                               <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
                               Suspended
                             </span>
                           ) : isOutOfStock ? (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/15 text-sky-700 dark:text-sky-400">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/15 text-sky-700 dark:text-sky-400 select-none">
                               Approved
                             </span>
                           ) : (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 select-none">
                               Stock Stored ({p.stock})
+                            </span>
+                          )}
+                          {!isPending && !isRejected && !isDraft && p.editState === "EDIT_APPROVAL_PENDING" && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 select-none">
+                              Edit Pending
                             </span>
                           )}
                         </div>

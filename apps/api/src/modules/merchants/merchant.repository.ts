@@ -77,6 +77,39 @@ export class MerchantRepository {
     });
   }
 
+  async findByIdOrCode(idOrCode: string) {
+    const clean = (idOrCode || '').trim();
+    if (!clean) return null;
+
+    const codeCandidate = clean.toUpperCase();
+    const codeFromLocalId = clean.toLowerCase().startsWith('m-')
+      ? `MC-${clean.slice(2)}`.toUpperCase()
+      : codeCandidate;
+
+    return this.prisma.merchant.findFirst({
+      where: {
+        OR: [
+          { id: clean },
+          { merchantCode: { equals: codeCandidate, mode: 'insensitive' } },
+          { merchantCode: { equals: codeFromLocalId, mode: 'insensitive' } },
+          { email: clean.toLowerCase() },
+        ],
+      },
+      include: {
+        users: { select: { name: true, email: true, role: true } },
+        memoTemplates: true,
+        _count: {
+          select: {
+            orders: true,
+            products: true,
+            settlements: true,
+            inboundShipments: true,
+          },
+        },
+      },
+    });
+  }
+
   async findByCode(merchantCode: string) {
     return this.prisma.merchant.findUnique({
       where: { merchantCode },

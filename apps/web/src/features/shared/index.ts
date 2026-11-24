@@ -4,3 +4,4 @@
  */
 
 export * from './thermal-print/UnifiedThermalSticker';
+export * from './product-revision/ProductRevisionReviewModal';

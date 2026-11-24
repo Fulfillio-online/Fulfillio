@@ -27,8 +27,20 @@ import {
   MERCHANT_FINANCIAL_PROFILES,
 } from '../billing/mockData';
 import { SettlementTransaction } from '../billing/types';
+import { useMerchantDirectory } from '../merchants/useMerchantDirectory';
+import { PendingPayoutApprovalsPanel } from '../merchants/components/PendingPayoutApprovalsPanel';
 
 export function PaymentRequestsManager() {
+  const {
+    merchants: directoryMerchants,
+    handleReviewPayoutAccount,
+    toastMessage: directoryToast,
+  } = useMerchantDirectory();
+  const pendingPayoutMerchants = useMemo(
+    () => directoryMerchants.filter((m) => m.payoutAccount?.status === 'PENDING_REVIEW'),
+    [directoryMerchants]
+  );
+
   const [requests, setRequests] = useState<PaymentRequest[]>(INITIAL_PAYMENT_REQUESTS);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
@@ -317,13 +329,15 @@ export function PaymentRequestsManager() {
     );
   };
 
+  const activeToast = toast || directoryToast;
+
   return (
     <div className="space-y-6">
       {/* Toast Notification */}
-      {toast && (
+      {activeToast && (
         <div className="fixed top-6 right-6 z-50 bg-orange-600 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 text-xs font-bold animate-in fade-in">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
-          <span>{toast}</span>
+          <span>{activeToast}</span>
         </div>
       )}
 
@@ -351,6 +365,14 @@ export function PaymentRequestsManager() {
           <span>View Billing &amp; COD Statement</span>
         </Link>
       </div>
+
+      {/* Pending Merchant Payout Account Verification Requests */}
+      <PendingPayoutApprovalsPanel
+        pendingMerchants={pendingPayoutMerchants}
+        title="Payment Account Verification Requests"
+        subtitle="Merchants awaiting Admin verification for newly added or updated bank/MFS payout details."
+        onReviewPayout={handleReviewPayoutAccount}
+      />
 
       {/* 4 KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">

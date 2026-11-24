@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowLeft,
   Printer,
@@ -56,6 +56,10 @@ interface OrderDetailsViewProps {
 
 export function OrderDetailsView({ orderId }: OrderDetailsViewProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const fromAllOrders = searchParams.get('from') === 'all';
+  const backHref = fromAllOrders ? '/admin/orders/all' : '/admin/orders';
+  const backLabel = fromAllOrders ? 'All Orders' : 'Order Pipeline';
   const [order, setOrder] = useState<WarehousePipelineOrder | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [previewMemo, setPreviewMemo] = useState<WarehousePipelineOrder | null>(null);
@@ -276,11 +280,11 @@ export function OrderDetailsView({ orderId }: OrderDetailsViewProps) {
           No order matching ID &ldquo;{orderId}&rdquo; was found in the warehouse system.
         </p>
         <Link
-          href="/admin/orders"
+          href={backHref}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-orange-600 text-white font-bold text-xs"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Return to Orders Pipeline</span>
+          <span>Return to {backLabel}</span>
         </Link>
       </div>
     );
@@ -463,8 +467,8 @@ export function OrderDetailsView({ orderId }: OrderDetailsViewProps) {
           Overview
         </Link>
         <span>&gt;</span>
-        <Link href="/admin/orders" className="hover:text-orange-600 transition-colors">
-          Orders Pipeline
+        <Link href={backHref} className="hover:text-orange-600 transition-colors">
+          {backLabel}
         </Link>
         <span>&gt;</span>
         <span className="text-navy-900 dark:text-slate-200 font-mono font-bold">
@@ -478,9 +482,9 @@ export function OrderDetailsView({ orderId }: OrderDetailsViewProps) {
           <div className="flex items-center gap-3 flex-wrap">
             <button
               type="button"
-              onClick={() => router.push('/admin/orders')}
+              onClick={() => router.push(backHref)}
               className="p-1.5 hover:bg-slate-100 dark:hover:bg-navy-800 rounded-lg text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white transition-colors cursor-pointer"
-              title="Back to Orders Pipeline"
+              title={`Back to ${backLabel}`}
             >
               <ArrowLeft className="h-5 w-5" />
             </button>

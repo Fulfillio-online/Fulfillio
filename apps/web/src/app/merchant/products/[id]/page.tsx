@@ -17,9 +17,11 @@ export default function ProductDetailsPage({ params }: ProductDetailsPageProps) 
     profile,
     requestStockAdd,
     requestStockOperation,
+    manageProductVariantsAndStock,
     showToast,
     createOrder,
     memoList,
+    cancelPendingEdit,
   } = useMerchant();
 
   const product = products.find((p) => p.id === id);
@@ -53,6 +55,8 @@ export default function ProductDetailsPage({ params }: ProductDetailsPageProps) 
         onCreateOrder={createOrder}
         onRequestStockAdd={requestStockAdd}
         onRequestStockOperation={requestStockOperation}
+        onManageVariantsAndStock={manageProductVariantsAndStock}
+        onCancelPendingEdit={cancelPendingEdit}
         onTriggerToast={showToast}
       />
     </div>

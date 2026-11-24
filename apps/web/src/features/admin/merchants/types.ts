@@ -100,7 +100,11 @@ export interface MerchantRecord {
     routingNumber: string;
     bkashNumber: string;
     frequency: string;
-    status: 'VERIFIED' | 'PENDING_REVIEW';
+    status: 'VERIFIED' | 'PENDING_REVIEW' | 'REJECTED' | 'UNVERIFIED';
+    chequeLeafUrl?: string;
+    rejectionReason?: string;
+    submittedAt?: string;
+    updatedAt?: string;
     availableBalance: number;
     lastPayoutAmount: number;
   };

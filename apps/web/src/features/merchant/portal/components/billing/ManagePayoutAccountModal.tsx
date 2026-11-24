@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { X, Building2, Smartphone, CheckCircle2, Save } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Building2, Smartphone, AlertCircle, Save } from 'lucide-react';
 import { PayoutAccount } from '../../types';
 
 interface ManagePayoutAccountModalProps {
@@ -17,22 +17,39 @@ export function ManagePayoutAccountModal({
   payoutAccount,
   onSave,
 }: ManagePayoutAccountModalProps) {
-  const [providerType, setProviderType] = useState<'BKASH' | 'NAGAD' | 'BANK'>(
-    payoutAccount?.provider?.toLowerCase().includes('bkash')
+  const resolveType = (p?: PayoutAccount): 'BKASH' | 'NAGAD' | 'BANK' =>
+    p?.provider?.toLowerCase().includes('bkash')
       ? 'BKASH'
-      : payoutAccount?.provider?.toLowerCase().includes('nagad')
+      : p?.provider?.toLowerCase().includes('nagad')
       ? 'NAGAD'
-      : 'BANK'
-  );
+      : 'BANK';
 
-  const [provider, setProvider] = useState(payoutAccount?.provider || 'bKash Personal');
-  const [accountHolder, setAccountHolder] = useState(payoutAccount?.accountHolder || 'Tariqul Rahman');
-  const [accountNumber, setAccountNumber] = useState(
-    payoutAccount?.bkashMerchantNumber || payoutAccount?.accountNumber || '01711-234567'
+  const [providerType, setProviderType] = useState<'BKASH' | 'NAGAD' | 'BANK'>(
+    resolveType(payoutAccount)
   );
-  const [branchName, setBranchName] = useState(payoutAccount?.branchName || 'Banani Branch');
-  const [routingNumber, setRoutingNumber] = useState(payoutAccount?.routingNumber || '060261122');
+  const [provider, setProvider] = useState(payoutAccount?.provider || 'BRAC Bank PLC');
+  const [accountHolder, setAccountHolder] = useState(payoutAccount?.accountHolder || '');
+  const [accountNumber, setAccountNumber] = useState(
+    payoutAccount?.bkashMerchantNumber || payoutAccount?.accountNumber || ''
+  );
+  const [branchName, setBranchName] = useState(payoutAccount?.branchName || '');
+  const [routingNumber, setRoutingNumber] = useState(payoutAccount?.routingNumber || '');
   const [frequency, setFrequency] = useState(payoutAccount?.frequency || 'Weekly (Every Friday)');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const type = resolveType(payoutAccount);
+    setProviderType(type);
+    setProvider(
+      payoutAccount?.provider ||
+        (type === 'BKASH' ? 'bKash Personal' : type === 'NAGAD' ? 'Nagad Commercial' : 'BRAC Bank PLC')
+    );
+    setAccountHolder(payoutAccount?.accountHolder || '');
+    setAccountNumber(payoutAccount?.bkashMerchantNumber || payoutAccount?.accountNumber || '');
+    setBranchName(payoutAccount?.branchName || '');
+    setRoutingNumber(payoutAccount?.routingNumber || '');
+    setFrequency(payoutAccount?.frequency || 'Weekly (Every Friday)');
+  }, [isOpen, payoutAccount]);
 
   if (!isOpen) return null;
 
@@ -40,29 +57,33 @@ export function ManagePayoutAccountModal({
     setProviderType(type);
     if (type === 'BKASH') {
       setProvider('bKash Personal');
-      setAccountNumber(payoutAccount?.bkashMerchantNumber || '01711-234567');
+      setAccountNumber(payoutAccount?.bkashMerchantNumber || accountNumber || '');
     } else if (type === 'NAGAD') {
       setProvider('Nagad Commercial');
-      setAccountNumber('01912-334455');
+      setAccountNumber(accountNumber || '');
     } else {
       setProvider('BRAC Bank PLC');
-      setAccountNumber(payoutAccount?.accountNumber || '1501204892019001');
+      setAccountNumber(payoutAccount?.accountNumber || accountNumber || '');
     }
   };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    const nowIso = new Date().toISOString();
 
     const updated: PayoutAccount = {
       provider: providerType === 'BKASH' ? 'bKash Personal' : providerType === 'NAGAD' ? 'Nagad' : provider,
-      accountHolder,
-      accountNumber,
-      branchName: providerType === 'BANK' ? branchName : 'N/A',
-      routingNumber: providerType === 'BANK' ? routingNumber : 'N/A',
+      accountHolder: accountHolder.trim(),
+      accountNumber: accountNumber.trim(),
+      branchName: providerType === 'BANK' ? branchName.trim() : 'MFS Wallet',
+      routingNumber: providerType === 'BANK' ? routingNumber.trim() : '—',
       frequency,
-      status: 'VERIFIED',
+      status: 'PENDING_REVIEW',
       chequeLeafUrl: payoutAccount?.chequeLeafUrl || '',
-      bkashMerchantNumber: providerType === 'BKASH' ? accountNumber : undefined,
+      bkashMerchantNumber: providerType === 'BKASH' ? accountNumber.trim() : undefined,
+      submittedAt: nowIso,
+      updatedAt: nowIso,
+      rejectionReason: undefined,
     };
 
     onSave(updated);
@@ -70,24 +91,24 @@ export function ManagePayoutAccountModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-50 dark:bg-navy-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 bg-slate-950/60 dark:bg-navy-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
       <div className="w-full max-w-lg rounded-2xl bg-white dark:bg-navy-900 border border-slate-200/80 dark:border-white/10 shadow-2xl p-5 sm:p-6 space-y-5">
         <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-white/10 pb-3">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-              <CheckCircle2 className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600 dark:text-amber-400">
+              <AlertCircle className="w-4 h-4" />
             </div>
             <div>
               <h3 className="font-bold text-base text-navy-900 dark:text-white">Manage Payout Account</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Configure your verified bank or mobile wallet for automatic disbursements.
+                Changes are submitted to the Admin Panel for verification before payouts disburse.
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:text-slate-200 hover:bg-slate-100 dark:bg-navy-800 transition-colors"
+            className="p-1 rounded-lg text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-navy-800 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>

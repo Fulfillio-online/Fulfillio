@@ -1,4 +1,6 @@
-export type WarehouseProductSubTab = 'all' | 'approval' | 'bins' | 'ledger' | 'public' | 'out_of_stock' | 'draft' | 'ALL' | 'APPROVAL' | 'PUBLIC' | 'OUT_OF_STOCK' | 'DRAFT' | string;
+import type { ProductPendingEditInfo } from '@/lib/productRevision';
+
+export type WarehouseProductSubTab = 'all' | 'approval' | 'bins' | 'ledger' | 'public' | 'out_of_stock' | 'draft' | 'edit_approval' | 'ALL' | 'APPROVAL' | 'PUBLIC' | 'OUT_OF_STOCK' | 'DRAFT' | 'EDIT_APPROVAL' | string;
 
 export type InboundApprovalType = 'NEW_PRODUCT' | 'RESTOCK' | 'WITHDRAWAL';
 
@@ -75,7 +77,9 @@ export interface WarehouseProductItem {
     attributeValue?: string;
     stock: number;
   }[];
-  editState?: 'EDIT_ALLOWED' | 'EDIT_APPROVAL_PENDING' | 'EDIT_ACCESS_REQUESTED' | null;
+  editState?: 'NONE' | 'EDIT_REQUESTED' | 'EDIT_ALLOWED' | 'EDIT_APPROVAL_PENDING' | 'EDIT_ACCESS_REQUESTED' | null;
+  pendingEdit?: ProductPendingEditInfo | null;
+  lastEditRejectionReason?: string;
   isSuspended?: boolean;
   rejectionReason?: string;
 }

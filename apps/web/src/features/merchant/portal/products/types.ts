@@ -13,13 +13,16 @@ export interface ColorSwatch {
   hex: string;
   imageUrl?: string;
   sizes?: string[];
+  originalName?: string;
 }
 
 export interface ProductVariantConfig {
   id: string;
   variantSku: string;
   color?: string;
+  originalColor?: string;
   size?: string;
+  originalSize?: string;
   imageUrl?: string;
   attributeName?: string;
   attributeValue?: string;
@@ -69,6 +72,35 @@ export interface ProductStats {
 
 export type StockRequestType = 'RESTOCK' | 'RETURN';
 
+export type ManageStockMode = StockRequestType | 'ADJUST';
+
+export interface NewVariantStockInput {
+  color?: string;
+  hex?: string;
+  size?: string;
+  attributeName?: string;
+  attributeValue?: string;
+  price?: number;
+  imageUrl?: string;
+  stock: number;
+}
+
+export interface VariantQuantityAdjustmentInput {
+  variantId?: string;
+  variantSku?: string;
+  color?: string;
+  size?: string;
+  newQuantity: number;
+  reason?: string;
+}
+
+export interface ManageVariantsAndStockPayload {
+  productId: string;
+  newVariants: NewVariantStockInput[];
+  adjustments: VariantQuantityAdjustmentInput[];
+  reason?: string;
+}
+
 export interface StockRequestItem {
   id: string;
   productId: string;
@@ -98,10 +130,12 @@ export interface ProductTableProps {
   onToggleSelect: (id: string) => void;
   onToggleSelectAll: () => void;
   onToggleStatus: (id: string) => void;
-  onManageStock: (product: MerchantProductItem, initialMode?: StockRequestType) => void;
+  onManageStock: (product: MerchantProductItem, initialMode?: ManageStockMode) => void;
   onViewDetails: (product: MerchantProductItem) => void;
   onEditProduct: (product: MerchantProductItem) => void;
   onRequestEdit?: (product: MerchantProductItem) => void;
+  onViewPendingEdit?: (product: MerchantProductItem) => void;
+  onCancelPendingEdit?: (productId: string) => void;
   onPrintBarcode: (product: MerchantProductItem) => void;
   onRequestDelete: (product: MerchantProductItem) => void;
 }

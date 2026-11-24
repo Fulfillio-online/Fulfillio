@@ -8,6 +8,7 @@ import {
   FileText,
   AlertCircle,
   XCircle,
+  Edit2,
 } from 'lucide-react';
 import { ProductFilterTab } from '../types';
 
@@ -62,6 +63,13 @@ export function ProductStatusTabs({
       count: counts.pendingApproval,
       icon: <Clock className="h-3.5 w-3.5 text-amber-500" />,
       badgeStyle: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
+    },
+    {
+      id: 'EDIT_APPROVAL_PENDING',
+      label: 'Pending Edits',
+      count: counts.editApprovalPending ?? 0,
+      icon: <Edit2 className="h-3.5 w-3.5 text-orange-500" />,
+      badgeStyle: 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20',
     },
     {
       id: 'DRAFT',

@@ -14,13 +14,14 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { MerchantProductItem } from '../../types';
+import { ManageStockMode } from '../types';
 
 interface ProductGridProps {
   products: MerchantProductItem[];
   selectedIds: string[];
   onToggleSelect: (id: string) => void;
   onToggleStatus: (id: string) => void;
-  onManageStock: (product: MerchantProductItem) => void;
+  onManageStock: (product: MerchantProductItem, initialMode?: ManageStockMode) => void;
   onViewDetails: (product: MerchantProductItem) => void;
   onEditProduct: (product: MerchantProductItem) => void;
   onPrintBarcode: (product: MerchantProductItem) => void;
@@ -59,6 +60,7 @@ export function ProductGrid({
         const isPublished = isStockStored;
         const isLowStock = !isDraft && isStockStored && p.stock <= 30 && p.stock > 0;
         const isSuspended = Boolean((p as any).isSuspended);
+        const isEditPending = (p as any).editState === 'EDIT_APPROVAL_PENDING';
         const isOutOfStock = !isDraft && !isPendingApproval && (p.stock || 0) === 0;
 
         return (
@@ -113,7 +115,7 @@ export function ProductGrid({
               </div>
 
               {/* Status Badge: Non-clickable pure text badge */}
-              <div className="absolute top-2 right-2 z-10">
+              <div className="absolute top-2 right-2 z-10 flex flex-col items-end gap-1">
                 <span
                   className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border backdrop-blur shadow-xs select-none ${
                     isPendingApproval
@@ -137,6 +139,11 @@ export function ProductGrid({
                     ? 'Out of Stock'
                     : 'Published'}
                 </span>
+                {!isDraft && !isPendingApproval && isEditPending && (
+                  <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border backdrop-blur shadow-xs select-none bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/30">
+                    Edit Pending
+                  </span>
+                )}
               </div>
             </div>
 
@@ -232,11 +239,23 @@ export function ProductGrid({
                   </button>
                 )}
 
-                {isFirstTimePending && (
+                {!isSuspended && p.status !== 'REJECTED' && (
+                  <button
+                    type="button"
+                    onClick={() => onManageStock(p, 'ADJUST')}
+                    className="p-1.5 rounded-lg border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 transition-colors cursor-pointer"
+                    title="Manage Stock & Variants"
+                    aria-label={`Manage Stock & Variants for ${p.title}`}
+                  >
+                    <Layers className="h-4 w-4" />
+                  </button>
+                )}
+
+                {(isFirstTimePending || (isStockStored && !isSuspended)) && (
                   <Link
                     href={`/merchant/products/${p.id}/edit`}
                     className="p-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
-                    title="Edit Product"
+                    title={isEditPending ? 'Modify Pending Edit' : 'Edit Product'}
                   >
                     <Edit2 className="h-4 w-4" />
                   </Link>

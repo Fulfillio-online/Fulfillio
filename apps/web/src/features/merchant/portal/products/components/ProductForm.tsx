@@ -43,17 +43,44 @@ import { MerchantCategoryItem } from '../../types';
 interface ProductFormProps {
   initialProduct?: MerchantProductItem | null;
   merchantCode: string;
+  isPublishedEditMode?: boolean;
   onSave: (product: MerchantProductItem) => Promise<{ ok: boolean; error?: string } | void> | void;
 }
 
 export function ProductForm({
   initialProduct,
   merchantCode,
+  isPublishedEditMode,
   onSave,
 }: ProductFormProps) {
   const router = useRouter();
   const isEdit = Boolean(initialProduct);
   const { categories } = useMerchant();
+
+  // Identify stage & whether this is an edit to an already-published product
+  const isInitialDraft = initialProduct?.status === 'DRAFT' || Boolean(initialProduct?.isDraft);
+  const isInitialPending =
+    !isInitialDraft &&
+    (initialProduct?.status === 'PENDING_APPROVAL' ||
+      !initialProduct?.bin ||
+      initialProduct?.bin === 'Pending Approval' ||
+      initialProduct?.bin === 'Assigned on intake');
+  const isPublishedEdit =
+    Boolean(isPublishedEditMode) ||
+    (Boolean(isEdit) &&
+      !isInitialDraft &&
+      !isInitialPending &&
+      (initialProduct?.status === 'APPROVED' ||
+        initialProduct?.status === 'STOCK_STORED' ||
+        initialProduct?.status === 'PUBLISHED' ||
+        initialProduct?.stockAccepted === true));
+  const pendingEditSnapshot =
+    isPublishedEdit &&
+    initialProduct?.editState === 'EDIT_APPROVAL_PENDING' &&
+    initialProduct?.pendingEdit?.status === 'PENDING'
+      ? initialProduct.pendingEdit.proposedSnapshot
+      : null;
+  const editSeed = pendingEditSnapshot || initialProduct;
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -65,40 +92,51 @@ export function ProductForm({
   const [activeColorUploadId, setActiveColorUploadId] = useState<string | null>(null);
 
   // 1. Core Identification
-  const [title, setTitle] = useState(initialProduct?.title || '');
+  const [title, setTitle] = useState(editSeed?.title || '');
   const [masterSku, setMasterSku] = useState(
     initialProduct?.sku || `${merchantCode}-PRD-${Math.floor(100 + Math.random() * 900)}`
   );
-  const [category, setCategory] = useState(initialProduct?.category || 'Fashion');
-  const [subcategory, setSubcategory] = useState(initialProduct?.subcategory || 'Hoodie');
-  const [description, setDescription] = useState(initialProduct?.description || '');
+  const [category, setCategory] = useState(editSeed?.category || 'Fashion');
+  const [subcategory, setSubcategory] = useState(
+    (editSeed as any)?.subcategory || initialProduct?.subcategory || 'Hoodie'
+  );
+  const [description, setDescription] = useState(editSeed?.description || '');
 
   // 2. Valuation & Commercials
-  const [declaredValue, setDeclaredValue] = useState(String(initialProduct?.price || 850));
-  const [costPrice, setCostPrice] = useState(String(initialProduct?.costPrice || 600));
+  const [declaredValue, setDeclaredValue] = useState(String(editSeed?.price || 850));
+  const [costPrice, setCostPrice] = useState(
+    String(editSeed?.costPrice || initialProduct?.costPrice || 600)
+  );
 
   // 3. Archetype
   const [productType, setProductType] = useState<ProductType>(
-    initialProduct?.productType || 'FASHION'
+    ((editSeed as any)?.productType as ProductType) || initialProduct?.productType || 'FASHION'
   );
 
   // 4. Variants: Colors & Sizes
-  const [colors, setColors] = useState<ColorSwatch[]>(
-    initialProduct?.colors && initialProduct.colors.length > 0
-      ? initialProduct.colors
-      : [
-          {
-            id: 'c-1',
-            name: 'Jet Black',
-            hex: '#111827',
-            imageUrl: '',
-            sizes: ['S', 'M', 'L', 'XL', 'XXL'],
-          },
-        ]
-  );
+  const [colors, setColors] = useState<ColorSwatch[]>(() => {
+    const seedColors =
+      editSeed?.colors && editSeed.colors.length > 0
+        ? editSeed.colors
+        : initialProduct?.colors && initialProduct.colors.length > 0
+        ? initialProduct.colors
+        : [
+            {
+              id: 'c-1',
+              name: 'Jet Black',
+              hex: '#111827',
+              imageUrl: '',
+              sizes: ['S', 'M', 'L', 'XL', 'XXL'],
+            },
+          ];
+    return seedColors.map((c) => ({
+      ...c,
+      originalName: (c as any).originalName || c.name,
+    }));
+  });
   const [allSizes, setAllSizes] = useState<string[]>(() => {
     const defaults = ['S', 'M', 'L', 'XL', 'XXL', '3XL'];
-    const existing = initialProduct?.sizes || [];
+    const existing = editSeed?.sizes || initialProduct?.sizes || [];
     const merged = [...defaults];
     existing.forEach((sz) => {
       if (!merged.includes(sz)) merged.push(sz);
@@ -119,6 +157,21 @@ export function ProductForm({
   // Bulk Stock Setter
   const [bulkStockValue, setBulkStockValue] = useState<string>('20');
 
+  // Lookup live initial variants by (color, size) so DB IDs & stocks stay intact across edits
+  const initialVariantsLookup = useMemo(() => {
+    const map = new Map<string, { id: string; variantSku: string; stock: number }>();
+    (initialProduct?.variantsList || []).forEach((v) => {
+      const cKey = (v.color || 'Standard').trim().toLowerCase();
+      const sKey = (v.size || v.attributeValue || 'Standard').trim().toLowerCase();
+      map.set(`${cKey}::${sKey}`, {
+        id: v.id,
+        variantSku: v.variantSku,
+        stock: typeof v.stock === 'number' ? v.stock : 0,
+      });
+    });
+    return map;
+  }, [initialProduct?.variantsList]);
+
   // Variant Stock Map
   const [variantStockMap, setVariantStockMap] = useState<Record<string, number>>(() => {
     const initialMap: Record<string, number> = {};
@@ -133,13 +186,11 @@ export function ProductForm({
   const [standardStock, setStandardStock] = useState(String(initialProduct?.stock || 30));
 
   // 5. Visual Media
-  const [imageUrl, setImageUrl] = useState(initialProduct?.imageUrl || '');
+  const [imageUrl, setImageUrl] = useState(editSeed?.imageUrl ?? initialProduct?.imageUrl ?? '');
   const [galleryImages, setGalleryImages] = useState<string[]>(() => {
-    if (initialProduct?.images && initialProduct.images.length > 0) {
-      const main = initialProduct.imageUrl || '';
-      return initialProduct.images.filter((img) => img !== main);
-    }
-    return [];
+    const imgs = editSeed?.images || initialProduct?.images || [];
+    const main = editSeed?.imageUrl ?? initialProduct?.imageUrl ?? '';
+    return imgs.filter((img) => img !== main);
   });
   const [imageInputMode, setImageInputMode] = useState<'UPLOAD' | 'URL' | 'PRESET'>('UPLOAD');
   const [urlInput, setUrlInput] = useState('');
@@ -147,7 +198,9 @@ export function ProductForm({
 
   // 6. Features & Highlights
   const [features, setFeatures] = useState<string[]>(
-    initialProduct?.keyFeatures && initialProduct.keyFeatures.length > 0
+    editSeed?.keyFeatures && editSeed.keyFeatures.length > 0
+      ? editSeed.keyFeatures
+      : initialProduct?.keyFeatures && initialProduct.keyFeatures.length > 0
       ? initialProduct.keyFeatures
       : [
           'Heavyweight cotton-blend fleece',
@@ -165,7 +218,7 @@ export function ProductForm({
 
   // 8. Visibility Status
   const [status, setStatus] = useState<'PUBLISHED' | 'DRAFT'>(
-    initialProduct?.status === 'PUBLISHED' ? 'PUBLISHED' : 'DRAFT'
+    initialProduct?.status === 'PUBLISHED' || isPublishedEdit ? 'PUBLISHED' : 'DRAFT'
   );
 
   // Categories helper
@@ -184,35 +237,51 @@ export function ProductForm({
   // Sync state when initialProduct updates
   useEffect(() => {
     if (!initialProduct) return;
-    setTitle(initialProduct.title || '');
+    const seed =
+      isPublishedEdit &&
+      initialProduct.editState === 'EDIT_APPROVAL_PENDING' &&
+      initialProduct.pendingEdit?.status === 'PENDING'
+        ? initialProduct.pendingEdit.proposedSnapshot
+        : initialProduct;
+
+    setTitle(seed?.title || '');
     setMasterSku(initialProduct.sku || '');
-    setCategory(initialProduct.category || 'Fashion');
-    setSubcategory(initialProduct.subcategory || 'Hoodie');
-    setDescription(initialProduct.description || '');
-    setDeclaredValue(String(initialProduct.price || 850));
-    setCostPrice(String(initialProduct.costPrice || Math.round((initialProduct.price || 850) * 0.7)));
-    setProductType(initialProduct.productType || 'FASHION');
-    setImageUrl(initialProduct.imageUrl || '');
-    if (initialProduct.images && initialProduct.images.length > 0) {
-      const main = initialProduct.imageUrl || '';
-      setGalleryImages(initialProduct.images.filter((img) => img !== main));
+    setCategory(seed?.category || 'Fashion');
+    setSubcategory((seed as any)?.subcategory || initialProduct.subcategory || 'Hoodie');
+    setDescription(seed?.description || '');
+    setDeclaredValue(String(seed?.price || 850));
+    setCostPrice(
+      String(seed?.costPrice || initialProduct.costPrice || Math.round((seed?.price || 850) * 0.7))
+    );
+    setProductType(((seed as any)?.productType as ProductType) || initialProduct.productType || 'FASHION');
+    const nextMain = seed?.imageUrl ?? initialProduct.imageUrl ?? '';
+    setImageUrl(nextMain);
+    if (seed?.images && seed.images.length > 0) {
+      setGalleryImages(seed.images.filter((img) => img !== nextMain));
+    } else if (initialProduct.images && initialProduct.images.length > 0) {
+      setGalleryImages(initialProduct.images.filter((img) => img !== nextMain));
     } else {
       setGalleryImages([]);
     }
-    if (initialProduct.colors && initialProduct.colors.length > 0) {
-      setColors(initialProduct.colors);
+    if (seed?.colors && seed.colors.length > 0) {
+      setColors(
+        seed.colors.map((c) => ({
+          ...c,
+          originalName: (c as any).originalName || c.name,
+        }))
+      );
     }
-    if (initialProduct.sizes && initialProduct.sizes.length > 0) {
-      setAllSizes(initialProduct.sizes);
+    if (seed?.sizes && seed.sizes.length > 0) {
+      setAllSizes((prev) => Array.from(new Set([...prev, ...seed.sizes!])));
     }
-    if (initialProduct.keyFeatures && initialProduct.keyFeatures.length > 0) {
-      setFeatures(initialProduct.keyFeatures);
+    if (seed?.keyFeatures && seed.keyFeatures.length > 0) {
+      setFeatures(seed.keyFeatures);
     }
     if (initialProduct.stock !== undefined) {
       setStandardStock(String(initialProduct.stock));
     }
-    setStatus(initialProduct.status === 'PUBLISHED' ? 'PUBLISHED' : 'DRAFT');
-  }, [initialProduct]);
+    setStatus(initialProduct.status === 'PUBLISHED' || isPublishedEdit ? 'PUBLISHED' : 'DRAFT');
+  }, [initialProduct, isPublishedEdit]);
 
   // Archetype change handler
   const handleProductTypeChange = (type: ProductType) => {
@@ -240,12 +309,14 @@ export function ProductForm({
   // Generate dynamic variants
   const generatedVariants: ProductVariantConfig[] = useMemo(() => {
     const baseSkuClean = masterSku.trim() || 'SKU';
+    const defaultNewStock = isPublishedEdit ? 0 : 15;
 
     if (productType === 'FASHION') {
       const list: ProductVariantConfig[] = [];
       colors.forEach((c, cIdx) => {
         const colorSizes = c.sizes && c.sizes.length > 0 ? c.sizes : allSizes;
         const colorNameClean = (c.name || '').trim();
+        const origColorName = (c.originalName || colorNameClean || `Color ${cIdx + 1}`).trim();
         const cleanAlpha = colorNameClean.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
         const colorCode =
           cleanAlpha.length >= 3
@@ -255,15 +326,22 @@ export function ProductForm({
             : `C${cIdx + 1}`;
 
         colorSizes.forEach((s) => {
-          const id = `${c.id}-${s.toLowerCase()}`;
+          const liveMatch =
+            initialVariantsLookup.get(`${origColorName.toLowerCase()}::${s.trim().toLowerCase()}`) ||
+            initialVariantsLookup.get(
+              `${(colorNameClean || `Color ${cIdx + 1}`).toLowerCase()}::${s.trim().toLowerCase()}`
+            );
+          const id = liveMatch?.id || `${c.id}-${s.toLowerCase()}`;
           if (excludedVariantIds.includes(id)) return;
-          const variantSku = `${baseSkuClean}-${colorCode}-${s}`;
-          const stock = variantStockMap[id] ?? 15;
+          const variantSku = liveMatch?.variantSku || `${baseSkuClean}-${colorCode}-${s}`;
+          const stock = variantStockMap[id] ?? liveMatch?.stock ?? defaultNewStock;
           list.push({
             id,
             variantSku,
             color: colorNameClean || `Color ${cIdx + 1}`,
+            originalColor: origColorName,
             size: s,
+            originalSize: s,
             imageUrl: c.imageUrl || '',
             stock,
           });
@@ -275,18 +353,28 @@ export function ProductForm({
     if (productType === 'ELECTRONICS') {
       const list: ProductVariantConfig[] = [];
       colors.forEach((c) => {
+        const origColorName = (c.originalName || c.name || 'Standard').trim();
         electronicStorages.forEach((storage) => {
-          const id = `${c.name.toLowerCase().replace(/\s+/g, '-')}-${storage.toLowerCase()}`;
+          const liveMatch =
+            initialVariantsLookup.get(`${origColorName.toLowerCase()}::${storage.toLowerCase()}`) ||
+            initialVariantsLookup.get(`${c.name.trim().toLowerCase()}::${storage.toLowerCase()}`);
+          const id =
+            liveMatch?.id ||
+            `${c.name.toLowerCase().replace(/\s+/g, '-')}-${storage.toLowerCase()}`;
           if (excludedVariantIds.includes(id)) return;
-          const variantSku = `${baseSkuClean}-${storage}-${c.name.substring(0, 3).toUpperCase()}`;
-          const stock = variantStockMap[id] ?? 10;
+          const variantSku =
+            liveMatch?.variantSku ||
+            `${baseSkuClean}-${storage}-${c.name.substring(0, 3).toUpperCase()}`;
+          const stock = variantStockMap[id] ?? liveMatch?.stock ?? (isPublishedEdit ? 0 : 10);
           list.push({
             id,
             variantSku,
             color: c.name,
+            originalColor: origColorName,
             imageUrl: c.imageUrl || '',
             attributeName: 'Storage',
             attributeValue: storage,
+            originalSize: storage,
             stock,
           });
         });
@@ -298,16 +386,26 @@ export function ProductForm({
       const list: ProductVariantConfig[] = [];
       beautyVolumes.forEach((vol) => {
         colors.forEach((c) => {
-          const id = `${vol.toLowerCase()}-${c.name.toLowerCase().replace(/\s+/g, '-')}`;
+          const origColorName = (c.originalName || c.name || 'Standard').trim();
+          const liveMatch =
+            initialVariantsLookup.get(`${origColorName.toLowerCase()}::${vol.toLowerCase()}`) ||
+            initialVariantsLookup.get(`${c.name.trim().toLowerCase()}::${vol.toLowerCase()}`);
+          const id =
+            liveMatch?.id ||
+            `${vol.toLowerCase()}-${c.name.toLowerCase().replace(/\s+/g, '-')}`;
           if (excludedVariantIds.includes(id)) return;
-          const variantSku = `${baseSkuClean}-${vol}-${c.name.substring(0, 3).toUpperCase()}`;
-          const stock = variantStockMap[id] ?? 15;
+          const variantSku =
+            liveMatch?.variantSku ||
+            `${baseSkuClean}-${vol}-${c.name.substring(0, 3).toUpperCase()}`;
+          const stock = variantStockMap[id] ?? liveMatch?.stock ?? defaultNewStock;
           list.push({
             id,
             variantSku,
             attributeName: 'Volume',
             attributeValue: vol,
+            originalSize: vol,
             color: c.name,
+            originalColor: origColorName,
             imageUrl: c.imageUrl || '',
             stock,
           });
@@ -319,15 +417,17 @@ export function ProductForm({
     if (productType === 'GROCERY') {
       const list: ProductVariantConfig[] = [];
       groceryPacks.forEach((pack) => {
-        const id = `pack-${pack.toLowerCase()}`;
+        const liveMatch = initialVariantsLookup.get(`standard::${pack.toLowerCase()}`);
+        const id = liveMatch?.id || `pack-${pack.toLowerCase()}`;
         if (excludedVariantIds.includes(id)) return;
-        const variantSku = `${baseSkuClean}-${pack}`;
-        const stock = variantStockMap[id] ?? 25;
+        const variantSku = liveMatch?.variantSku || `${baseSkuClean}-${pack}`;
+        const stock = variantStockMap[id] ?? liveMatch?.stock ?? (isPublishedEdit ? 0 : 25);
         list.push({
           id,
           variantSku,
           attributeName: 'Pack Size',
           attributeValue: pack,
+          originalSize: pack,
           stock,
         });
       });
@@ -345,6 +445,8 @@ export function ProductForm({
     groceryPacks,
     variantStockMap,
     excludedVariantIds,
+    initialVariantsLookup,
+    isPublishedEdit,
   ]);
 
   // Total stock calculation
@@ -589,29 +691,17 @@ export function ProductForm({
   }, [initialProduct?.barcode]);
 
   // Product Stage & Admin Acceptance Identification
-  const isInitialDraft = initialProduct?.status === 'DRAFT' || Boolean(initialProduct?.isDraft);
-  const isInitialPending =
-    !isInitialDraft &&
-    (initialProduct?.status === 'PENDING_APPROVAL' ||
-      !initialProduct?.bin ||
-      initialProduct?.bin === 'Pending Approval' ||
-      initialProduct?.bin === 'Assigned on intake');
   const isFirstTimePending = isInitialPending && initialProduct?.stockAccepted !== true;
-  const isEditAllowed = (initialProduct as any)?.editState === 'EDIT_ALLOWED';
-  const isAcceptedByAdmin =
-    Boolean(isEdit) &&
-    !isInitialDraft &&
-    !isInitialPending &&
-    (initialProduct?.status === 'APPROVED' ||
-      initialProduct?.status === 'STOCK_STORED' ||
-      initialProduct?.status === 'PUBLISHED' ||
-      initialProduct?.stockAccepted === true ||
-      (Boolean(initialProduct?.bin) &&
-        initialProduct?.bin !== 'Pending Approval' &&
-        initialProduct?.bin !== 'Assigned on intake'));
-  const canDirectEdit = !isEdit || isInitialDraft || isFirstTimePending || isEditAllowed;
+  const isAcceptedByAdmin = isPublishedEdit;
+  const isBlockedFromEdit = Boolean(
+    isEdit &&
+      (initialProduct?.isSuspended ||
+        initialProduct?.status === 'REJECTED' ||
+        (isInitialPending && initialProduct?.stockAccepted === true))
+  );
+  const canDirectEdit = !isBlockedFromEdit;
 
-  // Submit Handler: Supports both "Save as Draft" and "Save to Publish" (Submit for Approval)
+  // Submit Handler: Supports "Save as Draft", "Save to Publish", and "Submit Edit for Approval"
   const handleSubmit = useCallback(
     async (actionType: 'DRAFT' | 'PENDING_APPROVAL' = 'PENDING_APPROVAL', e?: React.FormEvent) => {
       if (e) e.preventDefault();
@@ -620,7 +710,7 @@ export function ProductForm({
       // Security & Inventory Integrity Guard:
       if (isEdit && isAcceptedByAdmin && actionType === 'DRAFT') {
         setSubmitError(
-          'Action Blocked: After warehouse admin accepts a product, it cannot be drafted or directly edited.'
+          'Action Blocked: Published products cannot be moved directly to Draft.'
         );
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
@@ -628,11 +718,11 @@ export function ProductForm({
 
       if (isEdit && !canDirectEdit) {
         setSubmitError(
-          isAcceptedByAdmin
-            ? 'Action Blocked: This product has been accepted by the warehouse admin. Direct editing is locked. Please use "Request Edit Access" from the products catalog.'
-            : (initialProduct?.stock || 0) > 0
-            ? 'This product already has stock stored in the warehouse and is waiting for publish approval from Draft. Direct editing is locked.'
-            : 'Merchants can strictly only edit products in Draft or First-Time Pending Approval status.'
+          initialProduct?.isSuspended
+            ? 'Action Blocked: Suspended products cannot be edited.'
+            : initialProduct?.status === 'REJECTED'
+            ? 'Action Blocked: Rejected products cannot be edited directly.'
+            : 'This product already has stock stored in the warehouse and is waiting for publish approval from Draft.'
         );
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
@@ -689,11 +779,13 @@ export function ProductForm({
       });
 
       const finalProductStatus: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'STOCK_STORED' =
-        actionType === 'DRAFT'
-          ? 'DRAFT'
-          : isApprovedByAdmin
-            ? (status === 'PUBLISHED' ? ((initialProduct?.stock || 0) > 0 ? 'STOCK_STORED' : 'APPROVED') : 'DRAFT')
-            : 'PENDING_APPROVAL';
+        isPublishedEdit
+          ? ((initialProduct?.status as any) || 'STOCK_STORED')
+          : actionType === 'DRAFT'
+            ? 'DRAFT'
+            : isApprovedByAdmin
+              ? (status === 'PUBLISHED' ? ((initialProduct?.stock || 0) > 0 ? 'STOCK_STORED' : 'APPROVED') : 'DRAFT')
+              : 'PENDING_APPROVAL';
 
       const productPayload: MerchantProductItem = {
         id: initialProduct?.id || `p-${Date.now()}`,
@@ -701,14 +793,18 @@ export function ProductForm({
         variantLabel: initialProduct?.variantLabel || 'Standard',
         sku: masterSku.trim(),
         barcode: activeBarcodeString,
-        bin: finalProductStatus === 'DRAFT' || !isApprovedByAdmin ? 'Pending Approval' : initialProduct.bin,
+        bin: isPublishedEdit
+          ? initialProduct?.bin || 'A-01-01'
+          : finalProductStatus === 'DRAFT' || !isApprovedByAdmin
+          ? 'Pending Approval'
+          : initialProduct.bin,
         category,
         subcategory,
         productType,
         description,
         price: numValue,
         costPrice: numCost,
-        stock: computedTotalStock,
+        stock: isPublishedEdit ? initialProduct?.stock || computedTotalStock : computedTotalStock,
         stockAccepted: isAcceptedByAdmin ? (initialProduct?.stockAccepted ?? true) : false,
         stockStatus: isAcceptedByAdmin ? (initialProduct?.stockStatus || 'IN_STOCK') : 'AWAITING_STOCK',
         reserved: initialProduct?.reserved || 0,
@@ -720,6 +816,7 @@ export function ProductForm({
         colors: colors.map((c) => ({
           ...c,
           imageUrl: (c.imageUrl || '').trim(),
+          ...(isPublishedEdit && c.originalName ? { originalName: c.originalName } : {}),
         })),
         sizes: allActiveSizes.length > 0 ? allActiveSizes : allSizes,
         variantsList: cleanedVariants,
@@ -733,7 +830,7 @@ export function ProductForm({
           setIsSubmitting(false);
           return;
         }
-        if (typeof window !== 'undefined') {
+        if (typeof window !== 'undefined' && !isPublishedEdit) {
           sessionStorage.setItem(
             'fulfillio_products_initial_tab',
             finalProductStatus === 'DRAFT' ? 'DRAFT' : 'PENDING_APPROVAL'
@@ -756,6 +853,9 @@ export function ProductForm({
       imageUrl,
       galleryImages,
       isEdit,
+      isAcceptedByAdmin,
+      isPublishedEdit,
+      canDirectEdit,
       initialProduct,
       generatedVariants,
       category,
@@ -811,15 +911,22 @@ export function ProductForm({
                 </h1>
                 <span
                   className={`inline-flex items-center text-[10px] uppercase font-bold tracking-wider px-2.5 py-0.5 rounded-full border ${
-                    !isApprovedByAdmin
+                    isPublishedEdit
+                      ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20'
+                      : !isApprovedByAdmin
                       ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20'
                       : status === 'PUBLISHED'
                       ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20'
                       : 'bg-slate-100 dark:bg-navy-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-white/10'
                   }`}
                 >
-                  {!isApprovedByAdmin ? 'Pending Approval' : status}
+                  {isPublishedEdit ? 'Published' : !isApprovedByAdmin ? 'Pending Approval' : status}
                 </span>
+                {isPublishedEdit && initialProduct?.editState === 'EDIT_APPROVAL_PENDING' && (
+                  <span className="inline-flex items-center text-[10px] uppercase font-bold tracking-wider px-2.5 py-0.5 rounded-full border bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30">
+                    Pending Edit Review
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-mono">
                 {masterSku} · {merchantCode}
@@ -849,15 +956,17 @@ export function ProductForm({
               </button>
             )}
 
-            {/* Option 2: Save to Publish / Submit for Approval */}
+            {/* Option 2: Save to Publish / Submit for Approval / Submit Edit for Approval */}
             <button
               type="button"
               onClick={() => handleSubmit('PENDING_APPROVAL')}
-              disabled={isSubmitting || (isAcceptedByAdmin && !isEditAllowed)}
+              disabled={isSubmitting || isBlockedFromEdit}
               className="px-4 sm:px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white text-xs font-bold shadow-[0_1px_2px_rgba(242,107,29,0.25)] transition-all flex items-center gap-1.5 cursor-pointer active:scale-[0.98]"
               title={
-                isAcceptedByAdmin && !isEditAllowed
-                  ? 'Product is accepted by warehouse admin. Direct editing is locked.'
+                isBlockedFromEdit
+                  ? 'Product editing is currently locked.'
+                  : isPublishedEdit
+                  ? 'Submit edits for admin approval without affecting your live published product'
                   : 'Save and submit for warehouse admin approval'
               }
             >
@@ -870,10 +979,12 @@ export function ProductForm({
                 <>
                   <Check className="h-4 w-4 stroke-[2.5] shrink-0" />
                   <span>
-                    {isAcceptedByAdmin && !isEditAllowed
-                      ? 'Editing Locked (Approved)'
-                      : isAcceptedByAdmin && isEditAllowed
-                      ? 'Submit Revisions'
+                    {isBlockedFromEdit
+                      ? 'Editing Locked'
+                      : isPublishedEdit
+                      ? initialProduct?.editState === 'EDIT_APPROVAL_PENDING'
+                        ? 'Update Pending Edit'
+                        : 'Submit Edit for Approval'
                       : isInitialDraft
                       ? 'Save to Publish'
                       : 'Save Changes'}
@@ -900,12 +1011,22 @@ export function ProductForm({
         </div>
       )}
 
-      {/* Admin Accepted Guard Banner */}
-      {isAcceptedByAdmin && !isEditAllowed && (
-        <div className="mb-8 p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs flex items-center gap-3 shadow-xs">
-          <AlertCircle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-          <div className="flex-1">
-            <span className="font-bold">Locked by Warehouse:</span> This product has been accepted and approved by the warehouse admin. Direct editing and moving to Draft are locked. If revisions are required, please use &ldquo;Request Edit Access&rdquo; from the products table.
+      {/* Pending Admin Approval Mode Banner for Published Product Edits */}
+      {isPublishedEdit && (
+        <div className="mb-8 p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-500/30 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-3 shadow-xs">
+          <AlertCircle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+          <div className="flex-1 space-y-1 leading-relaxed">
+            <div className="font-bold">
+              Pending Admin Approval Mode — Live Published Product Remains Active
+            </div>
+            <p className="text-amber-800/90 dark:text-amber-300/90">
+              Any edits you submit here (e.g., color changes, price, title, or photos) will NOT overwrite your live published product immediately. Your product stays published as before while your changes wait in Pending Approval until an Admin approves them.
+            </p>
+            {initialProduct?.editState === 'EDIT_APPROVAL_PENDING' && (
+              <p className="font-semibold text-orange-700 dark:text-orange-300">
+                Note: You currently have a pending edit in review — the form below shows your pending changes, and saving will update your pending edit request.
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -965,23 +1086,30 @@ export function ProductForm({
                       )}
                       <span>{copiedSku ? 'Copied' : 'Copy'}</span>
                     </button>
-                    <button
-                      type="button"
-                      onClick={handleGenerateNewSku}
-                      className="text-xs text-slate-500 hover:text-orange-600 flex items-center gap-1 transition-colors cursor-pointer"
-                    >
-                      <RefreshCw className="h-3 w-3" />
-                      <span>Generate</span>
-                    </button>
+                    {!isPublishedEdit && (
+                      <button
+                        type="button"
+                        onClick={handleGenerateNewSku}
+                        className="text-xs text-slate-500 hover:text-orange-600 flex items-center gap-1 transition-colors cursor-pointer"
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                        <span>Generate</span>
+                      </button>
+                    )}
                   </div>
                 </div>
                 <input
                   type="text"
                   required
+                  disabled={isPublishedEdit}
                   value={masterSku}
                   onChange={(e) => setMasterSku(e.target.value.toUpperCase())}
                   placeholder="e.g. MC-101-PRD-820"
-                  className="w-full px-4 py-3 bg-white dark:bg-navy-950/60 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-mono font-bold text-slate-900 dark:text-white tracking-wider focus:outline-none focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all shadow-xs"
+                  className={`w-full px-4 py-3 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-mono font-bold tracking-wider transition-all shadow-xs ${
+                    isPublishedEdit
+                      ? 'bg-slate-100 dark:bg-navy-800/80 text-slate-500 cursor-not-allowed'
+                      : 'bg-white dark:bg-navy-950/60 text-slate-900 dark:text-white focus:outline-none focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500'
+                  }`}
                 />
               </div>
 
@@ -1828,7 +1956,8 @@ export function ProductForm({
           </div>
         </section>
 
-        {/* Section 7: Storefront Visibility Status */}
+        {/* Section 7: Storefront Visibility Status (hidden for published product pending edits) */}
+        {!isPublishedEdit && (
         <section className="bg-white dark:bg-navy-900/90 rounded-2xl border border-slate-200/80 dark:border-white/10 p-6 sm:p-8 shadow-[0_1px_3px_rgba(0,0,0,0.04)] space-y-4">
           <h2 className="text-base font-bold text-slate-900 dark:text-white">
             Publishing Status
@@ -1868,6 +1997,7 @@ export function ProductForm({
             </div>
           )}
         </section>
+        )}
 
         {/* Bottom Actions */}
         <div className="flex items-center justify-end gap-3 pt-4">
@@ -1892,15 +2022,17 @@ export function ProductForm({
             </button>
           )}
 
-          {/* Option 2: Save to Publish / Submit for Approval */}
+          {/* Option 2: Save to Publish / Submit for Approval / Submit Edit for Approval */}
           <button
             type="button"
             onClick={() => handleSubmit('PENDING_APPROVAL')}
-            disabled={isSubmitting || (isAcceptedByAdmin && !isEditAllowed)}
+            disabled={isSubmitting || isBlockedFromEdit}
             className="px-6 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white text-xs font-bold shadow-[0_1px_2px_rgba(242,107,29,0.25)] transition-all flex items-center gap-2 cursor-pointer active:scale-[0.98]"
             title={
-              isAcceptedByAdmin && !isEditAllowed
-                ? 'Product is accepted by warehouse admin. Direct editing is locked.'
+              isBlockedFromEdit
+                ? 'Product editing is currently locked.'
+                : isPublishedEdit
+                ? 'Submit edits for admin approval without affecting your live published product'
                 : 'Save and submit for warehouse admin approval'
             }
           >
@@ -1913,10 +2045,12 @@ export function ProductForm({
               <>
                 <Check className="h-4 w-4 stroke-[2.5]" />
                 <span>
-                  {isAcceptedByAdmin && !isEditAllowed
-                    ? 'Editing Locked (Approved)'
-                    : isAcceptedByAdmin && isEditAllowed
-                    ? 'Submit Revisions'
+                  {isBlockedFromEdit
+                    ? 'Editing Locked'
+                    : isPublishedEdit
+                    ? initialProduct?.editState === 'EDIT_APPROVAL_PENDING'
+                      ? 'Update Pending Edit'
+                      : 'Submit Edit for Approval'
                     : isInitialDraft
                     ? 'Save to Publish'
                     : 'Save Changes'}

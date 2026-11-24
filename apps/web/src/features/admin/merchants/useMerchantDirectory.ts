@@ -22,9 +22,47 @@ import {
   approveAdminProductSubmission,
   getSyncedMerchantDirectoryLists,
   getSyncedMerchantMemos,
+  getStoredMerchantDirectory,
   rejectAdminProductSubmission,
   syncMerchantDirectoryToProfiles,
 } from '@/lib/warehouseSync';
+
+function hasPayoutCoords(p?: MerchantRecord['payoutAccount'] | null): boolean {
+  return Boolean(
+    p &&
+      (String(p.accountNumber || '').trim() ||
+        String(p.bkashNumber || '').trim())
+  );
+}
+
+function getPayoutTime(p?: MerchantRecord['payoutAccount'] | null): number {
+  if (!p) return 0;
+  const raw = p.updatedAt || p.submittedAt;
+  if (!raw) return 0;
+  const ms = Date.parse(raw);
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function pickFresherAdminPayout(
+  localPayout?: MerchantRecord['payoutAccount'],
+  dbPayout?: MerchantRecord['payoutAccount'],
+): MerchantRecord['payoutAccount'] {
+  if (!localPayout) return dbPayout!;
+  if (!dbPayout) return localPayout;
+  const localHas = hasPayoutCoords(localPayout);
+  const dbHas = hasPayoutCoords(dbPayout);
+  if (localHas && !dbHas) return localPayout;
+  if (dbHas && !localHas) return dbPayout;
+
+  const localTs = getPayoutTime(localPayout);
+  const dbTs = getPayoutTime(dbPayout);
+  if (dbTs > 0 && localTs > 0) {
+    return dbTs >= localTs ? dbPayout : localPayout;
+  }
+  if (dbTs > 0) return dbPayout;
+  if (localTs > 0) return localPayout;
+  return dbPayout;
+}
 
 /**
  * Shared data layer for the admin merchant list page and the dedicated
@@ -92,7 +130,7 @@ export function useMerchantDirectory() {
         avatarUrl: existing.avatarUrl || dbItem.avatarUrl,
         avatarBg: existing.avatarBg || dbItem.avatarBg,
         avatarInitials: existing.avatarInitials || dbItem.avatarInitials,
-        payoutAccount: existing.payoutAccount || dbItem.payoutAccount,
+        payoutAccount: pickFresherAdminPayout(existing.payoutAccount, dbItem.payoutAccount),
         status: dbItem.status || existing.status,
         verified: dbItem.verified !== undefined ? dbItem.verified : existing.verified,
       };
@@ -150,8 +188,11 @@ export function useMerchantDirectory() {
 
   /** Apply localStorage + last backend snapshot synchronously in ONE commit. */
   const applyLocal = useCallback(() => {
-    if (dbMerchantsRef.current) {
-      setIfChanged(setMerchants, dbMerchantsRef.current);
+    const localMerchants = getStoredMerchantDirectory();
+    if (dbMerchantsRef.current && dbMerchantsRef.current.length > 0) {
+      setIfChanged(setMerchants, mergeMerchants(localMerchants, dbMerchantsRef.current));
+    } else if (localMerchants && localMerchants.length > 0) {
+      setIfChanged(setMerchants, localMerchants);
     }
 
     const { products, orders } = getSyncedMerchantDirectoryLists(ALL_PRODUCTS, ALL_ORDERS);
@@ -177,37 +218,69 @@ export function useMerchantDirectory() {
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
           if (!data?.items || !Array.isArray(data.items)) return;
-          dbMerchantsRef.current = data.items.map((m: any) => ({
-            id: m.id,
-            merchantCode: m.merchantCode,
-            storeName: m.businessName,
-            ownerName: m.ownerName || m.users?.[0]?.name || 'Store Owner',
-            email: m.email,
-            phone: m.phone || '01700-000000',
-            location: m.location || 'Dhaka, Bangladesh',
-            deliveryArea: 'Nationwide Bangladesh',
-            status: m.status === 'APPROVED' ? 'Active' : m.status === 'SUSPENDED' ? 'Suspended' : 'Pending',
-            verified: m.status === 'APPROVED',
-            joinedDate: new Date(m.createdAt).toLocaleDateString('en-GB', {
-              day: '2-digit',
-              month: 'short',
-              year: 'numeric',
-            }),
-            avatarInitials: (m.businessName || 'MC').slice(0, 2).toUpperCase(),
-            avatarBg: 'from-orange-500 to-amber-600',
-            payoutAccount: {
-              provider: m.payoutAccount?.provider || m.payoutAccount?.bankName || m.payoutAccount?.method || 'Pending Bank Setup',
-              accountHolder: m.payoutAccount?.accountHolder || m.payoutAccount?.accountName || m.ownerName || m.businessName || 'Store Owner',
-              accountNumber: String(m.payoutAccount?.accountNumber || ''),
-              branchName: m.payoutAccount?.branchName || 'Dhaka Main Branch',
-              routingNumber: m.payoutAccount?.routingNumber || '—',
-              bkashNumber: m.payoutAccount?.bkashNumber || (m.payoutAccount?.method === 'BKASH' ? m.payoutAccount?.accountNumber : '') || m.phone || '',
-              frequency: m.payoutAccount?.frequency || 'Weekly (Every Friday)',
-              status: m.payoutAccount?.status || (m.status === 'APPROVED' ? 'VERIFIED' : 'PENDING_REVIEW'),
-              availableBalance: Number(m.payoutAccount?.availableBalance ?? 0),
-              lastPayoutAmount: Number(m.payoutAccount?.lastPayoutAmount ?? 0),
-            },
-          }));
+          dbMerchantsRef.current = data.items.map((m: any) => {
+            const rawPayout = m.payoutAccount;
+            const hasPayoutDetails = Boolean(
+              rawPayout &&
+                (String(rawPayout.accountNumber || '').trim() ||
+                  String(rawPayout.bkashNumber || '').trim() ||
+                  String(rawPayout.bkashMerchantNumber || '').trim())
+            );
+            const payoutStatus: MerchantRecord['payoutAccount']['status'] = hasPayoutDetails
+              ? rawPayout.status || 'PENDING_REVIEW'
+              : rawPayout?.status === 'REJECTED'
+                ? 'REJECTED'
+                : 'UNVERIFIED';
+
+            return {
+              id: m.id,
+              merchantCode: m.merchantCode,
+              storeName: m.businessName,
+              ownerName: m.ownerName || m.users?.[0]?.name || 'Store Owner',
+              email: m.email,
+              phone: m.phone || '01700-000000',
+              location: m.location || 'Dhaka, Bangladesh',
+              deliveryArea: 'Nationwide Bangladesh',
+              status: m.status === 'APPROVED' ? 'Active' : m.status === 'SUSPENDED' ? 'Suspended' : 'Pending',
+              verified: m.status === 'APPROVED',
+              joinedDate: new Date(m.createdAt).toLocaleDateString('en-GB', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+              }),
+              avatarInitials: (m.businessName || 'MC').slice(0, 2).toUpperCase(),
+              avatarBg: 'from-orange-500 to-amber-600',
+              payoutAccount: {
+                provider:
+                  rawPayout?.provider ||
+                  rawPayout?.bankName ||
+                  rawPayout?.method ||
+                  (hasPayoutDetails ? 'Bank / MFS Account' : 'Not Configured'),
+                accountHolder:
+                  rawPayout?.accountHolder ||
+                  rawPayout?.accountName ||
+                  m.ownerName ||
+                  m.businessName ||
+                  'Store Owner',
+                accountNumber: String(rawPayout?.accountNumber || ''),
+                branchName: rawPayout?.branchName || (hasPayoutDetails ? '—' : ''),
+                routingNumber: rawPayout?.routingNumber || (hasPayoutDetails ? '—' : ''),
+                bkashNumber:
+                  rawPayout?.bkashNumber ||
+                  rawPayout?.bkashMerchantNumber ||
+                  (rawPayout?.method === 'BKASH' ? rawPayout?.accountNumber : '') ||
+                  '',
+                frequency: rawPayout?.frequency || 'Weekly (Every Friday)',
+                status: payoutStatus,
+                chequeLeafUrl: rawPayout?.chequeLeafUrl || '',
+                rejectionReason: rawPayout?.rejectionReason || undefined,
+                submittedAt: rawPayout?.submittedAt,
+                updatedAt: rawPayout?.updatedAt || rawPayout?.submittedAt,
+                availableBalance: Number(rawPayout?.availableBalance ?? 0),
+                lastPayoutAmount: Number(rawPayout?.lastPayoutAmount ?? 0),
+              },
+            };
+          });
         })
         .catch(() => {});
 
@@ -304,7 +377,8 @@ export function useMerchantDirectory() {
       if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
       reloadTimerRef.current = setTimeout(() => {
         reloadTimerRef.current = null;
-        reload();
+        applyLocal();
+        fetchBackend(true);
       }, 200);
     };
     window.addEventListener('fulfillio-warehouse-sync', onSync);
@@ -437,6 +511,68 @@ export function useMerchantDirectory() {
     triggerToast(`Rejected product submission "${rejected.title}" (${rejected.fullSku}).`);
   };
 
+  const handleReviewPayoutAccount = (
+    merchantId: string,
+    action: 'APPROVE' | 'REJECT',
+    rejectionReason?: string,
+  ) => {
+    const nextStatus: 'VERIFIED' | 'REJECTED' = action === 'APPROVE' ? 'VERIFIED' : 'REJECTED';
+    const nowIso = new Date().toISOString();
+    const target = merchants.find((m) => m.id === merchantId || m.merchantCode === merchantId);
+    const updated = merchants.map((m) =>
+      m.id === merchantId || m.merchantCode === merchantId
+        ? {
+            ...m,
+            payoutAccount: {
+              ...m.payoutAccount,
+              status: nextStatus,
+              updatedAt: nowIso,
+              ...(nextStatus === 'REJECTED'
+                ? { rejectionReason: rejectionReason || 'Payout details verification failed' }
+                : { rejectionReason: undefined }),
+            },
+          }
+        : m,
+    );
+
+    if (dbMerchantsRef.current) {
+      dbMerchantsRef.current = dbMerchantsRef.current.map((m) =>
+        m.id === merchantId || m.merchantCode === merchantId
+          ? {
+              ...m,
+              payoutAccount: {
+                ...m.payoutAccount,
+                status: nextStatus,
+                updatedAt: nowIso,
+                ...(nextStatus === 'REJECTED'
+                  ? { rejectionReason: rejectionReason || 'Payout details verification failed' }
+                  : { rejectionReason: undefined }),
+              },
+            }
+          : m,
+      );
+    }
+
+    setMerchants(updated);
+    syncMerchantDirectoryToProfiles(updated);
+
+    const targetIdentifier = target?.merchantCode || target?.id || merchantId;
+    fetch(`${API_BASE}/merchants/${encodeURIComponent(targetIdentifier)}/payout-status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: nextStatus,
+        ...(rejectionReason ? { rejectionReason } : {}),
+      }),
+    }).catch(() => {});
+
+    triggerToast(
+      action === 'APPROVE'
+        ? `Payout account for "${target?.storeName || targetIdentifier}" verified!`
+        : `Payout account for "${target?.storeName || targetIdentifier}" rejected.`,
+    );
+  };
+
   return {
     merchants,
     productsList,
@@ -448,6 +584,7 @@ export function useMerchantDirectory() {
     handleToggleStatus,
     handleBulkUpdateStatus,
     handleUpdateMerchant,
+    handleReviewPayoutAccount,
     handleAdjustStock,
     handleAddProduct,
     handleApproveProduct,

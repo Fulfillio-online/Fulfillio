@@ -976,21 +976,29 @@ export class InventoryRepository {
       where.status = { not: 'DRAFT' };
     }
 
+    const productInclude = {
+      merchant: {
+        select: { merchantCode: true, businessName: true },
+      },
+      variants: {
+        orderBy: { createdAt: 'asc' as const },
+        include: {
+          inventoryItems: {
+            include: { location: true },
+          },
+        },
+      },
+      editRequests: {
+        where: { requestType: 'REVISION_APPROVAL' as const },
+        orderBy: { createdAt: 'desc' as const },
+        take: 2,
+      },
+    };
+
     try {
       return await this.prisma.product.findMany({
         where,
-        include: {
-          merchant: {
-            select: { merchantCode: true, businessName: true },
-          },
-          variants: {
-            include: {
-              inventoryItems: {
-                include: { location: true },
-              },
-            },
-          },
-        },
+        include: productInclude,
         orderBy: { createdAt: 'desc' },
       });
     } catch (err: any) {
@@ -998,18 +1006,7 @@ export class InventoryRepository {
         await this.ensureProductImagesColumn();
         return await this.prisma.product.findMany({
           where,
-          include: {
-            merchant: {
-              select: { merchantCode: true, businessName: true },
-            },
-            variants: {
-              include: {
-                inventoryItems: {
-                  include: { location: true },
-                },
-              },
-            },
-          },
+          include: productInclude,
           orderBy: { createdAt: 'desc' },
         });
       }
@@ -1021,35 +1018,34 @@ export class InventoryRepository {
     const where: any = { id };
     if (merchantId) where.merchantId = merchantId;
 
+    const productInclude = {
+      merchant: true,
+      variants: {
+        orderBy: { createdAt: 'asc' as const },
+        include: {
+          inventoryItems: {
+            include: { location: true },
+          },
+        },
+      },
+      editRequests: {
+        where: { requestType: 'REVISION_APPROVAL' as const },
+        orderBy: { createdAt: 'desc' as const },
+        take: 2,
+      },
+    };
+
     try {
       return await this.prisma.product.findFirst({
         where,
-        include: {
-          merchant: true,
-          variants: {
-            include: {
-              inventoryItems: {
-                include: { location: true },
-              },
-            },
-          },
-        },
+        include: productInclude,
       });
     } catch (err: any) {
       if (err?.code === 'P2022') {
         await this.ensureProductImagesColumn();
         return await this.prisma.product.findFirst({
           where,
-          include: {
-            merchant: true,
-            variants: {
-              include: {
-                inventoryItems: {
-                  include: { location: true },
-                },
-              },
-            },
-          },
+          include: productInclude,
         });
       }
       throw err;
@@ -1610,52 +1606,349 @@ export class InventoryRepository {
     }
   }
 
-  async submitRevision(productId: string, merchantId?: string, proposedSnapshot?: any) {
-    try {
-      return await this.prisma.$transaction(async (tx) => {
-        const product = await tx.product.findUnique({ where: { id: productId } });
-        if (!product) throw new BadRequestException(`Product '${productId}' not found`);
+  private sanitizeText(value?: string | null): string | undefined {
+    if (value === undefined || value === null) return undefined;
+    return String(value)
+      .replace(/\0/g, '')
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+      .trim();
+  }
 
-        const updated = await tx.product.update({
+  private sanitizeSnapshot(snap: any): Record<string, any> {
+    if (!snap || typeof snap !== 'object') return {};
+    const sanitizedColors = Array.isArray(snap.colors)
+      ? snap.colors.map((c: any, idx: number) => ({
+          id: this.sanitizeText(c?.id) || `c-${idx + 1}`,
+          name: this.sanitizeText(c?.name) || 'Standard',
+          hex: this.sanitizeText(c?.hex) || '#111827',
+          ...(this.sanitizeText(c?.imageUrl) ? { imageUrl: this.sanitizeText(c.imageUrl) } : {}),
+          ...(Array.isArray(c?.sizes)
+            ? { sizes: c.sizes.map((s: any) => this.sanitizeText(s)).filter(Boolean) }
+            : {}),
+          ...(this.sanitizeText(c?.originalName) ? { originalName: this.sanitizeText(c.originalName) } : {}),
+        }))
+      : undefined;
+
+    const sanitizedVariants = Array.isArray(snap.variantsList)
+      ? snap.variantsList.map((v: any) => ({
+          ...(v?.id ? { id: v.id } : {}),
+          ...(this.sanitizeText(v?.variantSku) ? { variantSku: this.sanitizeText(v.variantSku) } : {}),
+          ...(this.sanitizeText(v?.sku) ? { sku: this.sanitizeText(v.sku) } : {}),
+          ...(this.sanitizeText(v?.variantCode) ? { variantCode: this.sanitizeText(v.variantCode) } : {}),
+          ...(this.sanitizeText(v?.title) ? { title: this.sanitizeText(v.title) } : {}),
+          ...(this.sanitizeText(v?.color) ? { color: this.sanitizeText(v.color) } : {}),
+          ...(this.sanitizeText(v?.originalColor) ? { originalColor: this.sanitizeText(v.originalColor) } : {}),
+          ...(this.sanitizeText(v?.hex) ? { hex: this.sanitizeText(v.hex) } : {}),
+          ...(this.sanitizeText(v?.size) ? { size: this.sanitizeText(v.size) } : {}),
+          ...(this.sanitizeText(v?.originalSize) ? { originalSize: this.sanitizeText(v.originalSize) } : {}),
+          ...(v?.price !== undefined ? { price: Number(v.price) || 0 } : {}),
+          ...(v?.imageUrl !== undefined ? { imageUrl: this.sanitizeText(v.imageUrl) || '' } : {}),
+          ...(this.sanitizeText(v?.attributeName) ? { attributeName: this.sanitizeText(v.attributeName) } : {}),
+          ...(this.sanitizeText(v?.attributeValue) ? { attributeValue: this.sanitizeText(v.attributeValue) } : {}),
+          ...(v?.stock !== undefined ? { stock: Math.max(0, Number(v.stock) || 0) } : {}),
+        }))
+      : undefined;
+
+    const primaryImage = this.sanitizeText(snap.imageUrl);
+    const images = Array.isArray(snap.images)
+      ? Array.from(
+          new Set(
+            [
+              primaryImage,
+              ...snap.images.map((u: any) => this.sanitizeText(u)),
+              ...(sanitizedColors || []).map((c: any) => this.sanitizeText(c.imageUrl)),
+            ].filter((u): u is string => Boolean(u)),
+          ),
+        )
+      : undefined;
+
+    return {
+      ...snap,
+      ...(snap.title !== undefined ? { title: this.sanitizeText(snap.title) || '' } : {}),
+      ...(snap.description !== undefined ? { description: this.sanitizeText(snap.description) || '' } : {}),
+      ...(snap.category !== undefined ? { category: this.sanitizeText(snap.category) || '' } : {}),
+      ...(snap.subcategory !== undefined ? { subcategory: this.sanitizeText(snap.subcategory) || '' } : {}),
+      ...(snap.brand !== undefined ? { brand: this.sanitizeText(snap.brand) || '' } : {}),
+      ...(snap.imageUrl !== undefined ? { imageUrl: primaryImage || '' } : {}),
+      ...(images !== undefined ? { images } : {}),
+      ...(Array.isArray(snap.keyFeatures)
+        ? { keyFeatures: snap.keyFeatures.map((f: any) => this.sanitizeText(f)).filter(Boolean) }
+        : {}),
+      ...(sanitizedColors !== undefined ? { colors: sanitizedColors } : {}),
+      ...(Array.isArray(snap.sizes)
+        ? { sizes: snap.sizes.map((s: any) => this.sanitizeText(s)).filter(Boolean) }
+        : {}),
+      ...(sanitizedVariants !== undefined ? { variantsList: sanitizedVariants } : {}),
+    };
+  }
+
+  private buildLiveProductSnapshot(product: any): Record<string, any> {
+    const variants = Array.isArray(product?.variants) ? product.variants : [];
+    const firstVariant = variants[0];
+    const firstAttrs = (firstVariant?.attributes as Record<string, any>) || {};
+    const minPrice =
+      variants.length > 0
+        ? Math.min(...variants.map((v: any) => Number(v.price) || 0))
+        : Number(product?.sellingPrice) || 0;
+
+    let colors: any[] = [];
+    if (Array.isArray(firstAttrs.allColors) && firstAttrs.allColors.length > 0) {
+      colors = firstAttrs.allColors;
+    } else {
+      const colorMap = new Map<string, any>();
+      for (const v of variants) {
+        const vAttrs = (v.attributes as Record<string, any>) || {};
+        const colorName = this.sanitizeText(vAttrs.color || v.title?.split('/')?.[0]);
+        const sizeName = this.sanitizeText(vAttrs.size || v.title?.split('/')?.[1]);
+        if (!colorName) continue;
+        const key = colorName.toLowerCase();
+        if (!colorMap.has(key)) {
+          colorMap.set(key, {
+            id: `c-${colorMap.size + 1}`,
+            name: colorName,
+            hex: this.sanitizeText(vAttrs.hex) || '#111827',
+            imageUrl: this.sanitizeText(v.imageUrl || vAttrs.imageUrl) || undefined,
+            sizes: sizeName ? [sizeName] : [],
+          });
+        } else {
+          const entry = colorMap.get(key)!;
+          if (!entry.imageUrl && (v.imageUrl || vAttrs.imageUrl)) {
+            entry.imageUrl = this.sanitizeText(v.imageUrl || vAttrs.imageUrl);
+          }
+          if (sizeName && !entry.sizes.includes(sizeName)) {
+            entry.sizes.push(sizeName);
+          }
+        }
+      }
+      colors = Array.from(colorMap.values());
+    }
+
+    const sizesSet = new Set<string>();
+    const variantsList = variants.map((v: any) => {
+      const vAttrs = (v.attributes as Record<string, any>) || {};
+      const color = this.sanitizeText(vAttrs.color || v.title?.split('/')?.[0]) || 'Standard';
+      const size = this.sanitizeText(vAttrs.size || v.title?.split('/')?.[1]) || 'Standard';
+      if (size) sizesSet.add(size);
+      const phys = (v.inventoryItems || []).reduce(
+        (sum: number, it: any) => sum + (it.quantityAvailable || 0),
+        0,
+      );
+      const decl = Number(vAttrs.declaredStock ?? vAttrs.stock ?? 0);
+      return {
+        id: v.id,
+        variantSku: v.sku,
+        sku: v.sku,
+        title: v.title,
+        color,
+        hex: this.sanitizeText(vAttrs.hex) || '#111827',
+        size,
+        price: Number(v.price) || minPrice,
+        imageUrl: this.sanitizeText(v.imageUrl || vAttrs.imageUrl) || undefined,
+        attributeName: vAttrs.attributeName,
+        attributeValue: vAttrs.attributeValue,
+        stock: phys > 0 ? phys : decl,
+      };
+    });
+
+    const sizes =
+      Array.isArray(firstAttrs.sizes) && firstAttrs.sizes.length > 0
+        ? firstAttrs.sizes
+        : Array.from(sizesSet);
+
+    return {
+      title: product.title,
+      description: product.description || '',
+      sku: product.baseSku,
+      baseSku: product.baseSku,
+      category: firstAttrs.category || product.category || 'Fashion',
+      subcategory: firstAttrs.subcategory || 'Apparel',
+      productType: firstAttrs.productType || 'FASHION',
+      brand: product.brand || undefined,
+      price: Number(product.sellingPrice) || minPrice || 0,
+      costPrice:
+        product.purchasePrice !== undefined && product.purchasePrice !== null
+          ? Number(product.purchasePrice)
+          : undefined,
+      sellingPrice: product.sellingPrice ? Number(product.sellingPrice) : minPrice,
+      purchasePrice: product.purchasePrice ? Number(product.purchasePrice) : undefined,
+      weight: product.weight || undefined,
+      dimensions: product.dimensions || undefined,
+      imageUrl: product.imageUrl || '',
+      images: Array.isArray(product.images) ? product.images : [],
+      keyFeatures: Array.isArray(firstAttrs.keyFeatures) ? firstAttrs.keyFeatures : [],
+      colors,
+      sizes,
+      variantsList,
+    };
+  }
+
+  private computeChangedFields(originalSnap: any, proposedSnap: any): string[] {
+    const changed: string[] = [];
+    if ((originalSnap?.title || '') !== (proposedSnap?.title || '')) changed.push('Product Title');
+    if (Number(originalSnap?.price || 0) !== Number(proposedSnap?.price ?? proposedSnap?.sellingPrice ?? 0)) {
+      changed.push('Declare Price');
+    }
+    if ((originalSnap?.category || '') !== (proposedSnap?.category || '')) changed.push('Category');
+    if ((originalSnap?.subcategory || '') !== (proposedSnap?.subcategory || '')) changed.push('Subcategory');
+    if ((originalSnap?.description || '') !== (proposedSnap?.description || '')) changed.push('Description');
+    if ((originalSnap?.imageUrl || '') !== (proposedSnap?.imageUrl || '')) {
+      changed.push('Photos');
+    } else if (JSON.stringify(originalSnap?.images || []) !== JSON.stringify(proposedSnap?.images || [])) {
+      changed.push('Photos');
+    }
+    if (JSON.stringify(originalSnap?.colors || []) !== JSON.stringify(proposedSnap?.colors || [])) {
+      changed.push('Colors');
+    }
+    if (JSON.stringify(originalSnap?.sizes || []) !== JSON.stringify(proposedSnap?.sizes || [])) {
+      changed.push('Sizes');
+    }
+    if (JSON.stringify(originalSnap?.keyFeatures || []) !== JSON.stringify(proposedSnap?.keyFeatures || [])) {
+      changed.push('Key Features');
+    }
+    return changed;
+  }
+
+  async submitRevision(productId: string, merchantId?: string, proposedSnapshot?: any, reason?: string) {
+    try {
+      const updatedId = await this.prisma.$transaction(async (tx) => {
+        const includeSpec = {
+          variants: {
+            orderBy: { createdAt: 'asc' as const },
+            include: { inventoryItems: true },
+          },
+        };
+        let product = await tx.product.findUnique({
           where: { id: productId },
+          include: includeSpec,
+        });
+        if (!product) {
+          product = await tx.product.findFirst({
+            where: { baseSku: productId },
+            include: includeSpec,
+          });
+        }
+        if (!product) throw new BadRequestException(`Product '${productId}' not found`);
+        if (product.isSuspended) {
+          throw new BadRequestException(`Cannot submit edit for suspended product '${product.title}'.`);
+        }
+
+        const originalSnapshot = this.buildLiveProductSnapshot(product);
+        const cleanProposed = this.sanitizeSnapshot(proposedSnapshot || {});
+        const changedFields = this.computeChangedFields(originalSnapshot, cleanProposed);
+
+        const existingPending = await tx.productEditRequest.findFirst({
+          where: {
+            productId: product.id,
+            requestType: 'REVISION_APPROVAL',
+            status: 'PENDING',
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        if (existingPending) {
+          await tx.productEditRequest.update({
+            where: { id: existingPending.id },
+            data: {
+              reason: reason || existingPending.reason,
+              requestedChanges: { changedFields },
+              originalSnapshot,
+              proposedSnapshot: cleanProposed,
+              createdAt: new Date(),
+            },
+          });
+        } else {
+          await tx.productEditRequest.create({
+            data: {
+              productId: product.id,
+              merchantId: product.merchantId,
+              requestType: 'REVISION_APPROVAL',
+              status: 'PENDING',
+              reason,
+              requestedChanges: { changedFields },
+              originalSnapshot,
+              proposedSnapshot: cleanProposed,
+            },
+          });
+        }
+
+        // Keep live published product fields & status untouched; only mark editState as pending approval
+        await tx.product.update({
+          where: { id: product.id },
           data: { editState: 'EDIT_APPROVAL_PENDING' },
         });
 
-        await tx.productEditRequest.create({
-          data: {
-            productId,
-            merchantId: product.merchantId,
-            requestType: 'REVISION_APPROVAL',
-            status: 'PENDING',
-            originalSnapshot: {
-              title: product.title,
-              description: product.description,
-              category: product.category,
-              brand: product.brand,
-              sellingPrice: product.sellingPrice ? Number(product.sellingPrice) : undefined,
-              purchasePrice: product.purchasePrice ? Number(product.purchasePrice) : undefined,
-              weight: product.weight,
-              dimensions: product.dimensions,
-              imageUrl: product.imageUrl,
-              images: product.images,
-            },
-            proposedSnapshot: proposedSnapshot || {},
-          },
-        });
+        const fieldsSummary = changedFields.length > 0 ? changedFields.join(', ') : 'Product details';
 
         await tx.inAppNotification.create({
           data: {
             recipientRole: 'SUPER_ADMIN',
             merchantId: product.merchantId,
-            title: 'Product Revision Submitted',
-            message: `Merchant submitted revisions for "${product.title}". Ordering paused during review.`,
+            title: 'Product Edit Pending Approval',
+            message: `Merchant submitted edits (${fieldsSummary}) for published product "${product.title}". Live product stays published until approved.`,
             type: 'REVISION_SUBMITTED',
             linkUrl: '/admin/products?tab=EDIT_APPROVAL',
           },
         });
 
-        return updated;
+        await tx.activityLog.create({
+          data: {
+            action: 'SUBMIT_PRODUCT_REVISION',
+            entityType: 'PRODUCT',
+            entityId: product.id,
+            previousValues: originalSnapshot,
+            newValues: cleanProposed,
+            notes: `Pending edit submitted for "${product.title}" (${fieldsSummary})`,
+          },
+        });
+
+        return product.id;
       });
+
+      return this.findProductById(updatedId);
+    } catch (err: any) {
+      throw err;
+    }
+  }
+
+  async cancelRevision(productId: string, merchantId?: string) {
+    try {
+      const updatedId = await this.prisma.$transaction(async (tx) => {
+        let product = await tx.product.findUnique({ where: { id: productId } });
+        if (!product) {
+          product = await tx.product.findFirst({ where: { baseSku: productId } });
+        }
+        if (!product) throw new BadRequestException(`Product '${productId}' not found`);
+
+        await tx.product.update({
+          where: { id: product.id },
+          data: { editState: 'NONE' },
+        });
+
+        await tx.productEditRequest.updateMany({
+          where: {
+            productId: product.id,
+            requestType: 'REVISION_APPROVAL',
+            status: 'PENDING',
+          },
+          data: {
+            status: 'CANCELLED',
+            reviewedAt: new Date(),
+          },
+        });
+
+        await tx.activityLog.create({
+          data: {
+            action: 'CANCEL_PRODUCT_REVISION',
+            entityType: 'PRODUCT',
+            entityId: product.id,
+            notes: `Merchant cancelled pending edit for "${product.title}"`,
+          },
+        });
+
+        return product.id;
+      });
+
+      return this.findProductById(updatedId);
     } catch (err: any) {
       throw err;
     }
@@ -1663,62 +1956,429 @@ export class InventoryRepository {
 
   async reviewRevision(productId: string, adminId?: string, action: 'APPROVE' | 'REJECT' = 'APPROVE', reason?: string) {
     try {
-      return await this.prisma.$transaction(async (tx) => {
-        const product = await tx.product.findUnique({ where: { id: productId } });
+      const updatedId = await this.prisma.$transaction(async (tx) => {
+        const includeSpec = {
+          merchant: true,
+          variants: {
+            orderBy: { createdAt: 'asc' as const },
+            include: {
+              inventoryItems: true,
+              orderItems: { select: { id: true } },
+              inboundItems: { select: { id: true } },
+            },
+          },
+        };
+        let product = await tx.product.findUnique({
+          where: { id: productId },
+          include: includeSpec,
+        });
+        if (!product) {
+          product = await tx.product.findFirst({
+            where: { baseSku: productId },
+            include: includeSpec,
+          });
+        }
         if (!product) throw new BadRequestException(`Product '${productId}' not found`);
 
         const pendingRev = await tx.productEditRequest.findFirst({
-          where: { productId, requestType: 'REVISION_APPROVAL', status: 'PENDING' },
+          where: { productId: product.id, requestType: 'REVISION_APPROVAL', status: 'PENDING' },
+          orderBy: { createdAt: 'desc' },
         });
 
-        let updateData: any = { editState: 'NONE' };
-        if (action === 'APPROVE' && pendingRev?.proposedSnapshot) {
-          const snap = pendingRev.proposedSnapshot as any;
-          if (snap.title) updateData.title = snap.title;
-          if (snap.description !== undefined) updateData.description = snap.description;
-          if (snap.category) updateData.category = snap.category;
-          if (snap.brand !== undefined) updateData.brand = snap.brand;
-          if (snap.purchasePrice !== undefined) updateData.purchasePrice = snap.purchasePrice;
-          if (snap.sellingPrice !== undefined) updateData.sellingPrice = snap.sellingPrice;
-          if (snap.weight !== undefined) updateData.weight = snap.weight;
-          if (snap.dimensions !== undefined) updateData.dimensions = snap.dimensions;
-          if (snap.imageUrl) updateData.imageUrl = snap.imageUrl;
-          if (snap.images) updateData.images = snap.images;
+        if (action === 'REJECT') {
+          await tx.product.update({
+            where: { id: product.id },
+            data: { editState: 'NONE' },
+          });
+
+          const rejectionNote = this.sanitizeText(reason) || 'Edit rejected by admin';
+          if (pendingRev) {
+            await tx.productEditRequest.update({
+              where: { id: pendingRev.id },
+              data: {
+                status: 'REJECTED',
+                adminId,
+                rejectionReason: rejectionNote,
+                reviewedAt: new Date(),
+              },
+            });
+          }
+
+          await tx.productEditRequest.updateMany({
+            where: {
+              productId: product.id,
+              requestType: 'REVISION_APPROVAL',
+              status: 'PENDING',
+            },
+            data: { status: 'CANCELLED', reviewedAt: new Date() },
+          });
+
+          await tx.inAppNotification.create({
+            data: {
+              recipientRole: 'MERCHANT',
+              merchantId: product.merchantId,
+              title: 'Product Edit Rejected',
+              message: `Pending edits for "${product.title}" were rejected: ${rejectionNote}. Your published product remains unchanged.`,
+              type: 'REVISION_REJECTED',
+              linkUrl: `/merchant/products/${product.id}`,
+            },
+          });
+
+          await tx.activityLog.create({
+            data: {
+              action: 'REJECT_PRODUCT_REVISION',
+              entityType: 'PRODUCT',
+              entityId: product.id,
+              userId: adminId,
+              notes: `Rejected pending edit for "${product.title}": ${rejectionNote}`,
+            },
+          });
+
+          return product.id;
         }
 
-        const updated = await tx.product.update({
-          where: { id: productId },
-          data: updateData,
-        });
+        // APPROVE: Apply proposedSnapshot onto live product & variants while preserving status, bin, and warehouse stock
+        const updateData: any = { editState: 'NONE' };
+        if (pendingRev?.proposedSnapshot) {
+          const snap = this.sanitizeSnapshot(pendingRev.proposedSnapshot as any);
+          const proposedColors: any[] = Array.isArray(snap.colors) ? snap.colors : [];
+          const cleanProposedColors = proposedColors.map(({ originalName: _orig, ...rest }) => rest);
+
+          const primaryImage = this.sanitizeText(snap.imageUrl);
+          const allImages = Array.from(
+            new Set(
+              [
+                primaryImage,
+                ...(Array.isArray(snap.images) ? snap.images.map((u: any) => this.sanitizeText(u)) : []),
+                ...cleanProposedColors.map((c: any) => this.sanitizeText(c.imageUrl)),
+                ...(Array.isArray(snap.variantsList)
+                  ? snap.variantsList.map((v: any) => this.sanitizeText(v.imageUrl))
+                  : []),
+              ].filter((u): u is string => Boolean(u)),
+            ),
+          );
+
+          if (snap.title) updateData.title = snap.title;
+          if (snap.description !== undefined) updateData.description = snap.description || null;
+          if (snap.category) updateData.category = snap.category;
+          if (snap.brand !== undefined) updateData.brand = snap.brand || null;
+
+          const nextPurchasePrice = snap.purchasePrice ?? snap.costPrice;
+          if (nextPurchasePrice !== undefined && !Number.isNaN(Number(nextPurchasePrice))) {
+            updateData.purchasePrice = Number(nextPurchasePrice);
+          }
+          const nextSellingPrice = snap.sellingPrice ?? snap.price;
+          if (nextSellingPrice !== undefined && !Number.isNaN(Number(nextSellingPrice))) {
+            updateData.sellingPrice = Number(nextSellingPrice);
+          }
+          if (snap.weight !== undefined) updateData.weight = snap.weight;
+          if (snap.dimensions !== undefined) updateData.dimensions = snap.dimensions;
+          if (snap.imageUrl !== undefined) updateData.imageUrl = primaryImage || allImages[0] || null;
+          if (allImages.length > 0 || Array.isArray(snap.images)) updateData.images = allImages;
+
+          await tx.product.update({
+            where: { id: product.id },
+            data: updateData,
+          });
+
+          const firstRealBinVariant = (product.variants || []).find(
+            (v) =>
+              v.defaultBinCode &&
+              v.defaultBinCode !== 'Pending Approval' &&
+              v.defaultBinCode !== 'Assigned on intake',
+          );
+          const existingBin =
+            firstRealBinVariant?.defaultBinCode || product.variants?.[0]?.defaultBinCode || 'A-01-01';
+          let existingLocationId = (product.variants || []).flatMap((v) => v.inventoryItems || [])[0]
+            ?.locationId;
+          if (!existingLocationId) {
+            const binCodeUpper = existingBin.toUpperCase();
+            const parts = binCodeUpper.split('-');
+            const loc = await tx.inventoryLocation.upsert({
+              where: { binCode: binCodeUpper },
+              update: {},
+              create: {
+                zone: parts[0] || 'A',
+                aisle: parts[1] || '01',
+                rack: parts[2] || '01',
+                shelf: parts[3] || '01',
+                binCode: binCodeUpper,
+              },
+            });
+            existingLocationId = loc.id;
+          }
+
+          const merchantPrefix = (product.merchant?.merchantCode || 'MC-101').trim().toUpperCase();
+          const proposedVariants: any[] = Array.isArray(snap.variantsList) ? snap.variantsList : [];
+
+          if (proposedVariants.length > 0) {
+            const matchedExistingIds = new Set<string>();
+
+            for (let idx = 0; idx < proposedVariants.length; idx++) {
+              const pv = proposedVariants[idx];
+              const pvColor = this.sanitizeText(pv.color) || 'Standard';
+              const matchedColorObj = proposedColors.find(
+                (c) => (c.name || '').trim().toLowerCase() === pvColor.toLowerCase(),
+              );
+              const pvOrigColor =
+                this.sanitizeText(pv.originalColor) ||
+                this.sanitizeText(matchedColorObj?.originalName);
+              const pvSize = this.sanitizeText(pv.size || pv.attributeValue) || 'Standard';
+              const pvOrigSize = this.sanitizeText(pv.originalSize) || pvSize;
+              const pvSku = (this.sanitizeText(pv.variantSku || pv.sku) || '').toUpperCase();
+
+              const matchEv =
+                (pv.id &&
+                  product.variants.find((ev) => !matchedExistingIds.has(ev.id) && ev.id === pv.id)) ||
+                (pvSku &&
+                  product.variants.find(
+                    (ev) => !matchedExistingIds.has(ev.id) && ev.sku.toUpperCase() === pvSku,
+                  )) ||
+                (pvOrigColor &&
+                  product.variants.find((ev) => {
+                    if (matchedExistingIds.has(ev.id)) return false;
+                    const attrs = (ev.attributes as Record<string, any>) || {};
+                    const evColor = (attrs.color || ev.title?.split('/')?.[0] || '').trim().toLowerCase();
+                    const evSize = (attrs.size || ev.title?.split('/')?.[1] || '').trim().toLowerCase();
+                    return evColor === pvOrigColor.toLowerCase() && evSize === pvOrigSize.toLowerCase();
+                  })) ||
+                product.variants.find((ev) => {
+                  if (matchedExistingIds.has(ev.id)) return false;
+                  const attrs = (ev.attributes as Record<string, any>) || {};
+                  const evColor = (attrs.color || ev.title?.split('/')?.[0] || '').trim().toLowerCase();
+                  const evSize = (attrs.size || ev.title?.split('/')?.[1] || '').trim().toLowerCase();
+                  return evColor === pvColor.toLowerCase() && evSize === pvSize.toLowerCase();
+                }) ||
+                (product.variants.length === 1 && proposedVariants.length === 1
+                  ? product.variants.find((ev) => !matchedExistingIds.has(ev.id))
+                  : undefined);
+
+              const variantPrice =
+                pv.price !== undefined && !Number.isNaN(Number(pv.price))
+                  ? Number(pv.price)
+                  : nextSellingPrice !== undefined && !Number.isNaN(Number(nextSellingPrice))
+                  ? Number(nextSellingPrice)
+                  : undefined;
+
+              const variantImg =
+                pv.imageUrl !== undefined
+                  ? this.sanitizeText(pv.imageUrl) ||
+                    this.sanitizeText(matchedColorObj?.imageUrl) ||
+                    primaryImage ||
+                    null
+                  : this.sanitizeText(matchedColorObj?.imageUrl) || primaryImage || undefined;
+
+              if (matchEv) {
+                matchedExistingIds.add(matchEv.id);
+                const existingAttrs = (matchEv.attributes as Record<string, any>) || {};
+                const nextAttrs: Record<string, any> = {
+                  ...existingAttrs,
+                  color: pvColor,
+                  size: pvSize,
+                  hex: this.sanitizeText(pv.hex) || matchedColorObj?.hex || existingAttrs.hex || '#111827',
+                  ...(pv.attributeName !== undefined ? { attributeName: pv.attributeName } : {}),
+                  ...(pv.attributeValue !== undefined ? { attributeValue: pv.attributeValue } : {}),
+                  ...(snap.category !== undefined ? { category: snap.category } : {}),
+                  ...(snap.subcategory !== undefined ? { subcategory: snap.subcategory } : {}),
+                  ...(snap.productType !== undefined ? { productType: snap.productType } : {}),
+                  ...(Array.isArray(snap.sizes) ? { sizes: snap.sizes } : {}),
+                };
+
+                await tx.productVariant.update({
+                  where: { id: matchEv.id },
+                  data: {
+                    title: `${pvColor} / ${pvSize}`,
+                    ...(variantPrice !== undefined ? { price: variantPrice } : {}),
+                    ...(nextPurchasePrice !== undefined && !Number.isNaN(Number(nextPurchasePrice))
+                      ? { wholesalePrice: Number(nextPurchasePrice) }
+                      : {}),
+                    ...(variantImg !== undefined ? { imageUrl: variantImg } : {}),
+                    attributes: nextAttrs,
+                  },
+                });
+              } else {
+                const colorCode =
+                  pvColor.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 3) || 'STD';
+                const sizeCode =
+                  pvSize.replace(/[^a-zA-Z0-9_-]/g, '').toUpperCase() || 'STD';
+                const rawCandidate = pv.variantCode || `${colorCode}-${sizeCode}`;
+                let candidateSku = (
+                  pvSku || `${merchantPrefix}-${product.baseSku}-${rawCandidate}`
+                )
+                  .trim()
+                  .toUpperCase()
+                  .replace(/\s+/g, '-');
+
+                const collision = await tx.productVariant.findUnique({
+                  where: { sku: candidateSku },
+                });
+                if (collision) {
+                  candidateSku = `${candidateSku}-${Date.now().toString().slice(-4)}-${idx}`;
+                }
+
+                const ean13 = `894${Date.now().toString().slice(-7)}${idx % 10}${Math.floor(
+                  100 + Math.random() * 900,
+                )}`;
+
+                await tx.productVariant.create({
+                  data: {
+                    productId: product.id,
+                    sku: candidateSku,
+                    barcode: ean13,
+                    title: `${pvColor} / ${pvSize}`,
+                    price: variantPrice ?? 0,
+                    wholesalePrice:
+                      nextPurchasePrice !== undefined && !Number.isNaN(Number(nextPurchasePrice))
+                        ? Number(nextPurchasePrice)
+                        : variantPrice !== undefined
+                        ? variantPrice * 0.75
+                        : undefined,
+                    defaultBinCode: existingBin,
+                    imageUrl: variantImg ?? primaryImage ?? null,
+                    attributes: {
+                      color: pvColor,
+                      size: pvSize,
+                      hex: this.sanitizeText(pv.hex) || matchedColorObj?.hex || '#111827',
+                      ...(pv.attributeName !== undefined ? { attributeName: pv.attributeName } : {}),
+                      ...(pv.attributeValue !== undefined ? { attributeValue: pv.attributeValue } : {}),
+                      ...(snap.category !== undefined ? { category: snap.category } : {}),
+                      ...(snap.subcategory !== undefined ? { subcategory: snap.subcategory } : {}),
+                      ...(snap.productType !== undefined ? { productType: snap.productType } : {}),
+                      ...(Array.isArray(snap.sizes) ? { sizes: snap.sizes } : {}),
+                      declaredStock: 0,
+                    },
+                    inventoryItems: {
+                      create: {
+                        locationId: existingLocationId,
+                        quantityAvailable: 0,
+                        quantityReserved: 0,
+                        quantityDamaged: 0,
+                      },
+                    },
+                  },
+                });
+              }
+            }
+
+            // Safely remove deleted variants ONLY if 0 stock and no order/inbound history
+            for (const ev of product.variants) {
+              if (matchedExistingIds.has(ev.id)) continue;
+              const evStock = (ev.inventoryItems || []).reduce(
+                (sum, it) => sum + (it.quantityAvailable || 0) + (it.quantityReserved || 0),
+                0,
+              );
+              if (evStock === 0 && ev.orderItems.length === 0 && ev.inboundItems.length === 0) {
+                try {
+                  await tx.inventoryAuditLog.deleteMany({ where: { variantId: ev.id } });
+                } catch {}
+                await tx.productVariant.delete({ where: { id: ev.id } });
+              }
+            }
+          } else {
+            // Single/Standard product without explicit variantsList
+            for (const ev of product.variants) {
+              const existingAttrs = (ev.attributes as Record<string, any>) || {};
+              await tx.productVariant.update({
+                where: { id: ev.id },
+                data: {
+                  ...(nextSellingPrice !== undefined && !Number.isNaN(Number(nextSellingPrice))
+                    ? { price: Number(nextSellingPrice) }
+                    : {}),
+                  ...(nextPurchasePrice !== undefined && !Number.isNaN(Number(nextPurchasePrice))
+                    ? { wholesalePrice: Number(nextPurchasePrice) }
+                    : {}),
+                  ...(primaryImage ? { imageUrl: primaryImage } : {}),
+                  attributes: {
+                    ...existingAttrs,
+                    ...(snap.category !== undefined ? { category: snap.category } : {}),
+                    ...(snap.subcategory !== undefined ? { subcategory: snap.subcategory } : {}),
+                    ...(snap.productType !== undefined ? { productType: snap.productType } : {}),
+                    ...(Array.isArray(snap.keyFeatures) ? { keyFeatures: snap.keyFeatures } : {}),
+                    ...(Array.isArray(snap.sizes) ? { sizes: snap.sizes } : {}),
+                    ...(cleanProposedColors.length > 0 ? { allColors: cleanProposedColors } : {}),
+                  },
+                },
+              });
+            }
+          }
+
+          // Final metadata sync on first surviving variant
+          const surviving = await tx.productVariant.findMany({
+            where: { productId: product.id },
+            orderBy: { createdAt: 'asc' },
+          });
+          if (surviving.length > 0) {
+            const firstSurviving = surviving[0];
+            const firstAttrs = (firstSurviving.attributes as Record<string, any>) || {};
+            await tx.productVariant.update({
+              where: { id: firstSurviving.id },
+              data: {
+                attributes: {
+                  ...firstAttrs,
+                  ...(cleanProposedColors.length > 0 ? { allColors: cleanProposedColors } : {}),
+                  ...(Array.isArray(snap.keyFeatures) ? { keyFeatures: snap.keyFeatures } : {}),
+                  ...(Array.isArray(snap.sizes) ? { sizes: snap.sizes } : {}),
+                  ...(snap.category !== undefined ? { category: snap.category } : {}),
+                  ...(snap.subcategory !== undefined ? { subcategory: snap.subcategory } : {}),
+                  ...(snap.productType !== undefined ? { productType: snap.productType } : {}),
+                },
+              },
+            });
+          }
+        } else {
+          await tx.product.update({
+            where: { id: product.id },
+            data: updateData,
+          });
+        }
 
         if (pendingRev) {
           await tx.productEditRequest.update({
             where: { id: pendingRev.id },
             data: {
-              status: action === 'APPROVE' ? 'APPROVED' : 'REJECTED',
+              status: 'APPROVED',
               adminId,
-              rejectionReason: reason,
               reviewedAt: new Date(),
             },
           });
         }
 
+        await tx.productEditRequest.updateMany({
+          where: {
+            productId: product.id,
+            requestType: 'REVISION_APPROVAL',
+            status: 'PENDING',
+          },
+          data: { status: 'CANCELLED', reviewedAt: new Date() },
+        });
+
         await tx.inAppNotification.create({
           data: {
             recipientRole: 'MERCHANT',
             merchantId: product.merchantId,
-            title: action === 'APPROVE' ? 'Revision Approved' : 'Revision Rejected',
-            message:
-              action === 'APPROVE'
-                ? `Admin approved revisions for "${product.title}". Ordering active!`
-                : `Revision rejected for "${product.title}": ${reason}`,
-            type: action === 'APPROVE' ? 'REVISION_APPROVED' : 'REVISION_REJECTED',
+            title: 'Product Edit Approved',
+            message: `Admin approved your pending edits for "${updateData.title || product.title}". Changes are now live!`,
+            type: 'REVISION_APPROVED',
             linkUrl: `/merchant/products/${product.id}`,
           },
         });
 
-        return updated;
+        await tx.activityLog.create({
+          data: {
+            action: 'APPROVE_PRODUCT_REVISION',
+            entityType: 'PRODUCT',
+            entityId: product.id,
+            userId: adminId,
+            previousValues: (pendingRev?.originalSnapshot as any) || undefined,
+            newValues: (pendingRev?.proposedSnapshot as any) || undefined,
+            notes: `Approved and applied pending edit for "${updateData.title || product.title}"`,
+          },
+        });
+
+        return product.id;
       });
+
+      return this.findProductById(updatedId);
     } catch (err: any) {
       throw err;
     }
@@ -2075,9 +2735,6 @@ export class InventoryRepository {
     if (p.isSuspended) {
       return { eligible: false, reason: `Product is suspended: ${p.suspendedReason || 'Admin restriction'}` };
     }
-    if (p.editState === 'EDIT_APPROVAL_PENDING') {
-      return { eligible: false, reason: 'Product is currently undergoing revision review by Admin' };
-    }
     const totalAvailable = p.variants.reduce(
       (sum, v) => sum + v.inventoryItems.reduce((s, it) => s + (it.quantityAvailable || 0), 0),
       0
@@ -2091,5 +2748,495 @@ export class InventoryRepository {
       return { eligible: false, reason: `Insufficient stock (available: ${free}, requested: ${quantity})` };
     }
     return { eligible: true };
+  }
+
+  /**
+   * Add new variants and/or adjust variant & size quantities from Merchant Portal Manage Stock
+   */
+  async manageProductStock(
+    productId: string,
+    merchantId: string | undefined,
+    payload: {
+      newVariants?: Array<{
+        title?: string;
+        color?: string;
+        hex?: string;
+        size?: string;
+        attributeName?: string;
+        attributeValue?: string;
+        variantCode?: string;
+        price?: number;
+        wholesalePrice?: number;
+        imageUrl?: string;
+        stock: number;
+      }>;
+      adjustments?: Array<{
+        variantId?: string;
+        variantSku?: string;
+        color?: string;
+        size?: string;
+        newQuantity: number;
+        reason?: string;
+      }>;
+    },
+  ) {
+    const cleanId = productId.trim();
+    const strippedSku = cleanId.replace(/^[A-Z0-9]+-\d+-/i, '').trim().toUpperCase();
+    const merchantFilter = merchantId?.trim()
+      ? {
+          OR: [
+            { merchantId: merchantId.trim() },
+            { merchant: { merchantCode: merchantId.trim().toUpperCase() } },
+          ],
+        }
+      : undefined;
+
+    const skuCandidates = Array.from(
+      new Set([cleanId, cleanId.toUpperCase(), strippedSku].filter(Boolean)),
+    );
+
+    const product = await this.prisma.product.findFirst({
+      where: {
+        OR: [
+          { id: cleanId },
+          merchantFilter
+            ? {
+                AND: [
+                  merchantFilter,
+                  { OR: skuCandidates.map((skuVal) => ({ baseSku: skuVal })) },
+                ],
+              }
+            : { OR: skuCandidates.map((skuVal) => ({ baseSku: skuVal })) },
+        ],
+      },
+      include: {
+        merchant: true,
+        variants: {
+          include: { inventoryItems: true },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+
+    if (!product) {
+      throw new BadRequestException(`Product with ID '${productId}' not found.`);
+    }
+
+    const dbStatus = ((product as any).status || '').trim().toUpperCase();
+    if (product.isSuspended) {
+      throw new BadRequestException(`Product '${product.title}' is suspended and cannot be modified.`);
+    }
+    if (dbStatus === 'REJECTED') {
+      throw new BadRequestException(`Rejected product '${product.title}' cannot be modified.`);
+    }
+
+    const defaultLocation = await this.upsertLocation({
+      zone: 'A',
+      aisle: '01',
+      rack: '01',
+      shelf: '01',
+      binCode: 'A-01-01',
+    });
+
+    const existingVariants = product.variants || [];
+    const existingLocationId =
+      existingVariants[0]?.inventoryItems?.[0]?.locationId || defaultLocation.id;
+    const existingBinCode =
+      existingVariants[0]?.defaultBinCode &&
+      existingVariants[0].defaultBinCode !== 'Pending Approval' &&
+      existingVariants[0].defaultBinCode !== 'Assigned on intake'
+        ? existingVariants[0].defaultBinCode
+        : existingVariants[0]?.defaultBinCode || 'Pending Approval';
+
+    const existingTotalPhysical = existingVariants.reduce(
+      (sum, v) =>
+        sum + v.inventoryItems.reduce((s, it) => s + (it.quantityAvailable || 0), 0),
+      0,
+    );
+    const hasApprovedBin = existingVariants.some(
+      (v) =>
+        v.defaultBinCode &&
+        v.defaultBinCode !== 'Pending Approval' &&
+        v.defaultBinCode !== 'Assigned on intake',
+    );
+    const isAcceptedOrStored =
+      dbStatus === 'APPROVED' ||
+      dbStatus === 'STOCK_STORED' ||
+      dbStatus === 'PUBLISHED' ||
+      hasApprovedBin ||
+      existingTotalPhysical > 0;
+
+    const merchantCode = (product.merchant?.merchantCode || 'MC-101').toUpperCase();
+    const cleanBaseSku = (product.baseSku || 'SKU').trim().toUpperCase().replace(/\s+/g, '-');
+    const basePrice = Number(existingVariants[0]?.price ?? product.sellingPrice ?? 0);
+    const baseWholesale = Number(
+      existingVariants[0]?.wholesalePrice ?? product.purchasePrice ?? basePrice * 0.75,
+    );
+
+    const usedSkus = new Set(existingVariants.map((v) => v.sku.toUpperCase()));
+
+    await this.prisma.$transaction(async (tx) => {
+      // 0. Zero-variant product adjustment fallback
+      if (
+        existingVariants.length === 0 &&
+        (payload.adjustments || []).length > 0 &&
+        (payload.newVariants || []).length === 0
+      ) {
+        const adj = payload.adjustments![0];
+        const newQty = Math.max(0, Math.round(Number(adj.newQuantity) || 0));
+        const stdSku = `${merchantCode}-${cleanBaseSku}-STD`;
+        usedSkus.add(stdSku.toUpperCase());
+
+        const createdDefaultVariant = await tx.productVariant.create({
+          data: {
+            productId: product.id,
+            sku: stdSku,
+            barcode: `894${Date.now().toString().slice(-8)}00`,
+            title: 'Standard',
+            price: basePrice,
+            wholesalePrice: baseWholesale,
+            defaultBinCode: existingBinCode,
+            imageUrl: product.imageUrl || undefined,
+            attributes: {
+              declaredStock: newQty,
+              stock: newQty,
+            },
+          },
+        });
+
+        await tx.inventoryItem.create({
+          data: {
+            variantId: createdDefaultVariant.id,
+            locationId: existingLocationId,
+            quantityAvailable: isAcceptedOrStored ? newQty : 0,
+            quantityReserved: 0,
+            quantityDamaged: 0,
+          },
+        });
+
+        if (newQty > 0 && product.merchantId) {
+          await tx.inventoryAuditLog.create({
+            data: {
+              merchantId: product.merchantId,
+              variantId: createdDefaultVariant.id,
+              quantityDelta: newQty,
+              reason: StockMovementReason.MANUAL_ADJUSTMENT,
+              notes: adj.reason || 'Merchant portal stock adjustment',
+            },
+          });
+        }
+      }
+
+      // 1. Process adjustments on existing variants
+      for (const adj of payload.adjustments || []) {
+        const target = existingVariants.find((v) => {
+          if (adj.variantId && v.id === adj.variantId) return true;
+          if (adj.variantSku && v.sku.toLowerCase() === adj.variantSku.toLowerCase()) return true;
+          const attrs = (v.attributes as Record<string, any>) || {};
+          const vColor = (attrs.color || v.title?.split('/')[0] || '').trim().toLowerCase();
+          const vSize = (attrs.size || attrs.attributeValue || v.title?.split('/')[1] || '')
+            .trim()
+            .toLowerCase();
+          if (adj.color && adj.size) {
+            return (
+              vColor === adj.color.trim().toLowerCase() &&
+              vSize === adj.size.trim().toLowerCase()
+            );
+          }
+          if (adj.size && !adj.color) {
+            return vSize === adj.size.trim().toLowerCase();
+          }
+          return false;
+        });
+
+        if (!target) continue;
+
+        const newQty = Math.max(0, Math.round(Number(adj.newQuantity) || 0));
+        const existingAttrs = (target.attributes as Record<string, any>) || {};
+        const oldPhysical = target.inventoryItems?.[0]?.quantityAvailable ?? 0;
+        const oldDeclared = Number(existingAttrs.declaredStock ?? existingAttrs.stock ?? 0);
+        const oldQty = oldPhysical > 0 ? oldPhysical : oldDeclared;
+
+        await tx.productVariant.update({
+          where: { id: target.id },
+          data: {
+            attributes: {
+              ...existingAttrs,
+              declaredStock: newQty,
+              stock: newQty,
+            },
+          },
+        });
+
+        if (isAcceptedOrStored || (target.inventoryItems && target.inventoryItems.length > 0)) {
+          const locId = target.inventoryItems?.[0]?.locationId || existingLocationId;
+          await tx.inventoryItem.upsert({
+            where: {
+              variantId_locationId: {
+                variantId: target.id,
+                locationId: locId,
+              },
+            },
+            update: { quantityAvailable: isAcceptedOrStored ? newQty : 0 },
+            create: {
+              variantId: target.id,
+              locationId: locId,
+              quantityAvailable: isAcceptedOrStored ? newQty : 0,
+              quantityReserved: 0,
+              quantityDamaged: 0,
+            },
+          });
+        }
+
+        if (newQty !== oldQty && product.merchantId) {
+          await tx.inventoryAuditLog.create({
+            data: {
+              merchantId: product.merchantId,
+              variantId: target.id,
+              quantityDelta: newQty - oldQty,
+              reason: StockMovementReason.MANUAL_ADJUSTMENT,
+              notes: adj.reason || 'Merchant portal variant stock adjustment',
+            },
+          });
+        }
+      }
+
+      // 2. Process new variants
+      let idxCounter = existingVariants.length;
+      for (const nv of payload.newVariants || []) {
+        idxCounter += 1;
+        const color = (nv.color || '').trim();
+        const size = (nv.size || '').trim();
+        const qty = Math.max(0, Math.round(Number(nv.stock) || 0));
+
+        // If matching color+size (or color-only / size-only) already exists, update its stock instead of duplicating
+        const duplicate = existingVariants.find((v) => {
+          const attrs = (v.attributes as Record<string, any>) || {};
+          const vColor = (attrs.color || '').trim().toLowerCase();
+          const vSize = (attrs.size || attrs.attributeValue || '').trim().toLowerCase();
+          if (!color && !size) return false;
+          return vColor === color.toLowerCase() && vSize === size.toLowerCase();
+        });
+
+        if (duplicate) {
+          const existingAttrs = (duplicate.attributes as Record<string, any>) || {};
+          const oldPhysical = duplicate.inventoryItems?.[0]?.quantityAvailable ?? 0;
+          const oldDeclared = Number(existingAttrs.declaredStock ?? existingAttrs.stock ?? 0);
+          const oldQty = oldPhysical > 0 ? oldPhysical : oldDeclared;
+
+          await tx.productVariant.update({
+            where: { id: duplicate.id },
+            data: {
+              attributes: { ...existingAttrs, declaredStock: qty, stock: qty },
+            },
+          });
+          if (isAcceptedOrStored || duplicate.inventoryItems.length > 0) {
+            const locId = duplicate.inventoryItems?.[0]?.locationId || existingLocationId;
+            await tx.inventoryItem.upsert({
+              where: {
+                variantId_locationId: { variantId: duplicate.id, locationId: locId },
+              },
+              update: { quantityAvailable: isAcceptedOrStored ? qty : 0 },
+              create: {
+                variantId: duplicate.id,
+                locationId: locId,
+                quantityAvailable: isAcceptedOrStored ? qty : 0,
+                quantityReserved: 0,
+                quantityDamaged: 0,
+              },
+            });
+          }
+          if (qty !== oldQty && product.merchantId) {
+            await tx.inventoryAuditLog.create({
+              data: {
+                merchantId: product.merchantId,
+                variantId: duplicate.id,
+                quantityDelta: qty - oldQty,
+                reason: StockMovementReason.MANUAL_ADJUSTMENT,
+                notes: 'Updated existing variant quantity via Merchant Portal Manage Stock',
+              },
+            });
+          }
+          continue;
+        }
+
+        const rawVarCode =
+          nv.variantCode ||
+          [color, size].filter(Boolean).join('-') ||
+          `V${idxCounter}`;
+        const cleanVarCode = rawVarCode
+          .trim()
+          .toUpperCase()
+          .replace(/[^A-Z0-9_-]/g, '-');
+
+        let candidateSku = `${merchantCode}-${cleanBaseSku}-${cleanVarCode}`;
+        let suffix = 2;
+        while (usedSkus.has(candidateSku.toUpperCase())) {
+          candidateSku = `${merchantCode}-${cleanBaseSku}-${cleanVarCode}-${suffix}`;
+          suffix += 1;
+        }
+        usedSkus.add(candidateSku.toUpperCase());
+
+        const title =
+          nv.title ||
+          [color, size].filter(Boolean).join(' / ') ||
+          nv.attributeValue ||
+          'Standard';
+        const price = nv.price !== undefined && Number(nv.price) > 0 ? Number(nv.price) : basePrice;
+        const wholesalePrice =
+          nv.wholesalePrice !== undefined && Number(nv.wholesalePrice) > 0
+            ? Number(nv.wholesalePrice)
+            : baseWholesale;
+        const ean13 = `894${Date.now().toString().slice(-8)}${String(idxCounter % 100).padStart(2, '0')}`;
+
+        const createdVariant = await tx.productVariant.create({
+          data: {
+            productId: product.id,
+            sku: candidateSku,
+            barcode: ean13,
+            title,
+            price,
+            wholesalePrice,
+            defaultBinCode: existingBinCode,
+            imageUrl: nv.imageUrl || product.imageUrl || undefined,
+            attributes: {
+              color: color || undefined,
+              hex: nv.hex || '#111827',
+              size: size || undefined,
+              attributeName: nv.attributeName || undefined,
+              attributeValue: nv.attributeValue || undefined,
+              imageUrl: nv.imageUrl || undefined,
+              declaredStock: qty,
+              stock: qty,
+            },
+          },
+        });
+
+        await tx.inventoryItem.create({
+          data: {
+            variantId: createdVariant.id,
+            locationId: existingLocationId,
+            quantityAvailable: isAcceptedOrStored ? qty : 0,
+            quantityReserved: 0,
+            quantityDamaged: 0,
+          },
+        });
+
+        if (qty > 0 && product.merchantId) {
+          await tx.inventoryAuditLog.create({
+            data: {
+              merchantId: product.merchantId,
+              variantId: createdVariant.id,
+              quantityDelta: qty,
+              reason: StockMovementReason.MANUAL_ADJUSTMENT,
+              notes: 'New variant added via Merchant Portal Manage Stock',
+            },
+          });
+        }
+      }
+
+      // 3. Refresh allColors & sizes metadata on first variant and promote APPROVED -> STOCK_STORED when physical stock > 0
+      const refreshedVariants = await tx.productVariant.findMany({
+        where: { productId: product.id },
+        include: { inventoryItems: true },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      if (refreshedVariants.length > 0) {
+        const first = refreshedVariants[0];
+        const firstAttrs = (first.attributes as Record<string, any>) || {};
+        const colorMap = new Map<
+          string,
+          { id: string; name: string; hex: string; imageUrl?: string; sizes: string[] }
+        >();
+        const sizeSet = new Set<string>(
+          Array.isArray(firstAttrs.sizes)
+            ? firstAttrs.sizes.filter((s: any) => typeof s === 'string' && s.trim())
+            : [],
+        );
+
+        if (Array.isArray(firstAttrs.allColors)) {
+          for (const existingC of firstAttrs.allColors) {
+            if (existingC?.name) {
+              colorMap.set(existingC.name.toLowerCase(), {
+                id: existingC.id || `c-${colorMap.size + 1}`,
+                name: existingC.name,
+                hex: existingC.hex || '#111827',
+                imageUrl: existingC.imageUrl,
+                sizes: Array.isArray(existingC.sizes) ? [...existingC.sizes] : [],
+              });
+            }
+          }
+        }
+
+        for (const rv of refreshedVariants) {
+          const attrs = (rv.attributes as Record<string, any>) || {};
+          const cName = (attrs.color || '').trim();
+          const sName = (attrs.size || attrs.attributeValue || '').trim();
+          if (sName) sizeSet.add(sName);
+          if (cName) {
+            const key = cName.toLowerCase();
+            if (!colorMap.has(key)) {
+              colorMap.set(key, {
+                id: `c-${colorMap.size + 1}`,
+                name: cName,
+                hex: attrs.hex || '#111827',
+                imageUrl: rv.imageUrl || attrs.imageUrl,
+                sizes: sName ? [sName] : [],
+              });
+            } else {
+              const entry = colorMap.get(key)!;
+              if (sName && !entry.sizes.includes(sName)) {
+                entry.sizes.push(sName);
+              }
+            }
+          }
+        }
+
+        if (colorMap.size > 0 || sizeSet.size > 0) {
+          await tx.productVariant.update({
+            where: { id: first.id },
+            data: {
+              attributes: {
+                ...firstAttrs,
+                ...(colorMap.size > 0 ? { allColors: Array.from(colorMap.values()) } : {}),
+                ...(sizeSet.size > 0 ? { sizes: Array.from(sizeSet) } : {}),
+              },
+            },
+          });
+        }
+
+        if (dbStatus === 'APPROVED') {
+          const totalPhysical = refreshedVariants.reduce(
+            (sum, rv) =>
+              sum +
+              (rv.inventoryItems || []).reduce(
+                (s: number, it: any) => s + (it.quantityAvailable || 0),
+                0,
+              ),
+            0,
+          );
+          if (totalPhysical > 0) {
+            await tx.product.update({
+              where: { id: product.id },
+              data: {
+                status: 'STOCK_STORED',
+                lifecycleStatus: 'ACTIVE',
+              },
+            });
+          }
+        }
+      }
+    });
+
+    return this.prisma.product.findUnique({
+      where: { id: product.id },
+      include: {
+        variants: {
+          include: { inventoryItems: true },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
   }
 }
