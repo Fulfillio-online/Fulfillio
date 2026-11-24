@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import React, { useState, useMemo, useEffect } from 'react';
-import Link from 'next/link';
+import React, { useState, useMemo, useEffect } from "react";
+import Link from "next/link";
 import {
   Package,
   Search,
@@ -21,23 +21,23 @@ import {
   CheckCircle2,
   XCircle,
   PackageCheck,
-} from 'lucide-react';
-import { SearchInput } from '@/components/ui';
-import { Modal } from '@/components/admin/AdminModal';
+} from "lucide-react";
+import { SearchInput } from "@/components/ui";
+import { Modal } from "@/components/admin/AdminModal";
+import { WarehouseBin, WarehouseProductItem } from "../../types";
+import { MERCHANTS } from "../../mockData";
 import {
-  WarehouseBin,
-  WarehouseProductItem,
-} from '../../types';
-import { MERCHANTS } from '../../mockData';
-import { BulkApprovalModal, BulkSlotAssignment } from '../modals/BulkApprovalModal';
+  BulkApprovalModal,
+  BulkSlotAssignment,
+} from "../modals/BulkApprovalModal";
 
 export type ProductCatalogFilterTab =
-  | 'ALL'
-  | 'APPROVAL'
-  | 'PUBLIC'
-  | 'OUT_OF_STOCK'
-  | 'DRAFT'
-  | 'REJECTED';
+  | "ALL"
+  | "APPROVAL"
+  | "PUBLIC"
+  | "OUT_OF_STOCK"
+  | "DRAFT"
+  | "REJECTED";
 
 export interface ProductsCatalogTabProps {
   products: WarehouseProductItem[];
@@ -53,9 +53,9 @@ export interface ProductsCatalogTabProps {
   onApproveProduct?: (productId: string, binCode?: string) => void;
   onOpenAcceptStockModal?: (product: WarehouseProductItem) => void;
   onOpenApprovalModal?: (
-    mode: 'APPROVE' | 'REJECT',
+    mode: "APPROVE" | "REJECT",
     product: WarehouseProductItem,
-    selectedBin: string
+    selectedBin: string,
   ) => void;
   onBulkApproveProductsWithSlots?: (assignments: BulkSlotAssignment[]) => void;
   onBulkApproveProducts?: (productIds: string[]) => void;
@@ -79,7 +79,7 @@ export function ProductsCatalogTab({
   bins,
   fixedMerchantCode,
   hideMerchantFilter,
-  initialFilterTab = 'ALL',
+  initialFilterTab = "ALL",
   onFilterTabChange,
   onAdjustStock,
   onOpenStockAdjustModal,
@@ -105,11 +105,14 @@ export function ProductsCatalogTab({
   onToggleSuspend,
 }: ProductsCatalogTabProps) {
   // Catalog Filter Tab
-  const [activeCatalogTab, setActiveCatalogTab] = useState<ProductCatalogFilterTab>(initialFilterTab);
+  const [activeCatalogTab, setActiveCatalogTab] =
+    useState<ProductCatalogFilterTab>(initialFilterTab);
 
   useEffect(() => {
     if (initialFilterTab) {
-      setActiveCatalogTab((prev) => (prev !== initialFilterTab ? initialFilterTab : prev));
+      setActiveCatalogTab((prev) =>
+        prev !== initialFilterTab ? initialFilterTab : prev,
+      );
     }
   }, [initialFilterTab]);
 
@@ -122,14 +125,18 @@ export function ProductsCatalogTab({
   };
 
   // Search & Secondary Filters
-  const [searchQuery, setSearchQuery] = useState('');
-  const [merchantFilter, setMerchantFilter] = useState<string>(fixedMerchantCode || 'ALL');
-  const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
-  const [binFilter, setBinFilter] = useState<string>('ALL');
+  const [searchQuery, setSearchQuery] = useState("");
+  const [merchantFilter, setMerchantFilter] = useState<string>(
+    fixedMerchantCode || "ALL",
+  );
+  const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
+  const [binFilter, setBinFilter] = useState<string>("ALL");
 
   useEffect(() => {
     if (fixedMerchantCode) {
-      setMerchantFilter((prev) => (prev !== fixedMerchantCode ? fixedMerchantCode : prev));
+      setMerchantFilter((prev) =>
+        prev !== fixedMerchantCode ? fixedMerchantCode : prev,
+      );
     }
   }, [fixedMerchantCode]);
 
@@ -138,8 +145,10 @@ export function ProductsCatalogTab({
   const [currentPage, setCurrentPage] = useState<number>(1);
 
   // Bulk Selection
-  const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
-  const [bulkAction, setBulkAction] = useState<string>('');
+  const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [bulkAction, setBulkAction] = useState<string>("");
 
   // Bulk Approval Bin Slotting Modal State
   const [bulkSlotModalOpen, setBulkSlotModalOpen] = useState(false);
@@ -148,7 +157,8 @@ export function ProductsCatalogTab({
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
 
   // Delete & Confirmation Modals
-  const [productToDelete, setProductToDelete] = useState<WarehouseProductItem | null>(null);
+  const [productToDelete, setProductToDelete] =
+    useState<WarehouseProductItem | null>(null);
   const [bulkDeleteModalOpen, setBulkDeleteModalOpen] = useState(false);
   const [isPermanentDeleteMode, setIsPermanentDeleteMode] = useState(false);
 
@@ -157,23 +167,23 @@ export function ProductsCatalogTab({
     if (!activeMenuId) return;
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (!target.closest('[data-dropdown-container]')) {
+      if (!target.closest("[data-dropdown-container]")) {
         setActiveMenuId(null);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [activeMenuId]);
 
   // Helper: map merchant code to merchant record id (e.g. MC-101 -> m-101)
   const getMerchantProfileId = (code?: string): string => {
-    if (!code) return 'm-101';
-    return code.toLowerCase().replace('mc-', 'm-');
+    if (!code) return "m-101";
+    return code.toLowerCase().replace("mc-", "m-");
   };
 
   // Helper: normalize category names ('Apparel' -> 'Fashion')
   const normalizeCategory = (cat: string): string => {
-    if (!cat || cat.toLowerCase() === 'apparel') return 'Fashion';
+    if (!cat || cat.toLowerCase() === "apparel") return "Fashion";
     return cat;
   };
 
@@ -186,32 +196,52 @@ export function ProductsCatalogTab({
   // 1. Tab Counts
   const catalogCounts = useMemo(() => {
     const allCount = basePool.length;
-    const approvalCount = basePool.filter((p) => p.status === 'PENDING_APPROVAL' && !p.isDraft).length;
+    const approvalCount = basePool.filter(
+      (p) => p.status === "PENDING_APPROVAL" && !p.isDraft,
+    ).length;
     const publicCount = basePool.filter(
-      (p) => (p.status === 'STOCK_STORED' || p.status === 'APPROVED') && !p.isDraft && p.stock > 0
+      (p) =>
+        (p.status === "STOCK_STORED" || p.status === "APPROVED") &&
+        !p.isDraft &&
+        p.stock > 0,
     ).length;
     const outOfStockCount = basePool.filter(
-      (p) => (p.status === 'APPROVED' || p.status === 'STOCK_STORED') && !p.isDraft && p.stock === 0
+      (p) =>
+        (p.status === "APPROVED" || p.status === "STOCK_STORED") &&
+        !p.isDraft &&
+        p.stock === 0,
     ).length;
-    const draftCount = basePool.filter((p) => p.status === 'DRAFT' || p.isDraft).length;
-    const rejectedCount = basePool.filter((p) => p.status === 'REJECTED' && !p.isDraft).length;
-    return { allCount, approvalCount, publicCount, outOfStockCount, draftCount, rejectedCount };
+    const draftCount = basePool.filter(
+      (p) => p.status === "DRAFT" || p.isDraft,
+    ).length;
+    const rejectedCount = basePool.filter(
+      (p) => p.status === "REJECTED" && !p.isDraft,
+    ).length;
+    return {
+      allCount,
+      approvalCount,
+      publicCount,
+      outOfStockCount,
+      draftCount,
+      rejectedCount,
+    };
   }, [basePool]);
 
   // 2. Tab Filtering
   const tabFilteredProducts = useMemo(() => {
     return basePool.filter((p) => {
-      const isDraft = p.status === 'DRAFT' || Boolean(p.isDraft);
-      const isPending = p.status === 'PENDING_APPROVAL';
-      const isRejected = !isDraft && p.status === 'REJECTED';
-      const isOutOfStock = !isDraft && !isPending && !isRejected && p.stock === 0;
+      const isDraft = p.status === "DRAFT" || Boolean(p.isDraft);
+      const isPending = p.status === "PENDING_APPROVAL";
+      const isRejected = !isDraft && p.status === "REJECTED";
+      const isOutOfStock =
+        !isDraft && !isPending && !isRejected && p.stock === 0;
       const isPublic = !isDraft && !isPending && !isRejected && p.stock > 0;
 
-      if (activeCatalogTab === 'APPROVAL') return isPending;
-      if (activeCatalogTab === 'PUBLIC') return isPublic;
-      if (activeCatalogTab === 'OUT_OF_STOCK') return isOutOfStock;
-      if (activeCatalogTab === 'DRAFT') return isDraft;
-      if (activeCatalogTab === 'REJECTED') return isRejected;
+      if (activeCatalogTab === "APPROVAL") return isPending;
+      if (activeCatalogTab === "PUBLIC") return isPublic;
+      if (activeCatalogTab === "OUT_OF_STOCK") return isOutOfStock;
+      if (activeCatalogTab === "DRAFT") return isDraft;
+      if (activeCatalogTab === "REJECTED") return isRejected;
       return true; // 'ALL' shows all
     });
   }, [basePool, activeCatalogTab]);
@@ -230,23 +260,35 @@ export function ProductsCatalogTab({
         p.fullSku.toLowerCase().includes(q) ||
         p.shortSku.toLowerCase().includes(q);
 
-      const matchesMerchant = merchantFilter === 'ALL' || p.merchantCode === merchantFilter;
-      const matchesCategory = categoryFilter === 'ALL' || normCat === categoryFilter;
+      const matchesMerchant =
+        merchantFilter === "ALL" || p.merchantCode === merchantFilter;
+      const matchesCategory =
+        categoryFilter === "ALL" || normCat === categoryFilter;
       const matchesBin =
-        binFilter === 'ALL' ||
-        (binFilter === 'UNASSIGNED' && (!p.binCode || p.status === 'PENDING_APPROVAL')) ||
+        binFilter === "ALL" ||
+        (binFilter === "UNASSIGNED" &&
+          (!p.binCode || p.status === "PENDING_APPROVAL")) ||
         (p.binCode && p.binCode === binFilter);
 
       return matchesSearch && matchesMerchant && matchesCategory && matchesBin;
     });
-  }, [tabFilteredProducts, searchQuery, merchantFilter, categoryFilter, binFilter]);
+  }, [
+    tabFilteredProducts,
+    searchQuery,
+    merchantFilter,
+    categoryFilter,
+    binFilter,
+  ]);
 
   // Pagination calculations
   const totalItems = filteredProducts.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
   const safePage = Math.min(Math.max(1, currentPage), totalPages);
   const startIndex = (safePage - 1) * pageSize;
-  const paginatedProducts = filteredProducts.slice(startIndex, startIndex + pageSize);
+  const paginatedProducts = filteredProducts.slice(
+    startIndex,
+    startIndex + pageSize,
+  );
 
   // Bulk Selection Helpers
   const isAllPageSelected =
@@ -293,11 +335,11 @@ export function ProductsCatalogTab({
   }, [products, selectedProductIds]);
 
   const hasPendingApprovalSelected = useMemo(() => {
-    return selectedProductsList.some((p) => p.status === 'PENDING_APPROVAL');
+    return selectedProductsList.some((p) => p.status === "PENDING_APPROVAL");
   }, [selectedProductsList]);
 
   const selectedPendingProducts = useMemo(() => {
-    return selectedProductsList.filter((p) => p.status === 'PENDING_APPROVAL');
+    return selectedProductsList.filter((p) => p.status === "PENDING_APPROVAL");
   }, [selectedProductsList]);
 
   // Execute Bulk Action
@@ -306,27 +348,27 @@ export function ProductsCatalogTab({
 
     const ids = Array.from(selectedProductIds);
 
-    if (bulkAction === 'APPROVE_SLOT') {
+    if (bulkAction === "APPROVE_SLOT") {
       if (selectedPendingProducts.length > 0) {
         setBulkSlotModalOpen(true);
       } else if (onBulkApproveProducts) {
         onBulkApproveProducts(ids);
         setSelectedProductIds(new Set());
-        setBulkAction('');
+        setBulkAction("");
       }
-    } else if (bulkAction === 'REJECT') {
+    } else if (bulkAction === "REJECT") {
       onBulkRejectProducts?.(ids);
       setSelectedProductIds(new Set());
-      setBulkAction('');
-    } else if (bulkAction === 'DRAFT') {
+      setBulkAction("");
+    } else if (bulkAction === "DRAFT") {
       onBulkMoveToDraft?.(ids);
       setSelectedProductIds(new Set());
-      setBulkAction('');
-    } else if (bulkAction === 'RESTORE') {
+      setBulkAction("");
+    } else if (bulkAction === "RESTORE") {
       onBulkRestore?.(ids);
       setSelectedProductIds(new Set());
-      setBulkAction('');
-    } else if (bulkAction === 'DELETE') {
+      setBulkAction("");
+    } else if (bulkAction === "DELETE") {
       setBulkDeleteModalOpen(true);
     }
   };
@@ -339,7 +381,7 @@ export function ProductsCatalogTab({
       onBulkApproveProducts(assignments.map((a) => a.productId));
     }
     setSelectedProductIds(new Set());
-    setBulkAction('');
+    setBulkAction("");
     setBulkSlotModalOpen(false);
   };
 
@@ -374,27 +416,27 @@ export function ProductsCatalogTab({
     else onDeleteProducts?.(ids);
     setSelectedProductIds(new Set());
     setBulkDeleteModalOpen(false);
-    setBulkAction('');
+    setBulkAction("");
   };
 
   const handleResetFilters = () => {
-    setSearchQuery('');
-    setMerchantFilter(fixedMerchantCode || 'ALL');
-    setCategoryFilter('ALL');
-    setBinFilter('ALL');
-    setActiveCatalogTab('ALL');
+    setSearchQuery("");
+    setMerchantFilter(fixedMerchantCode || "ALL");
+    setCategoryFilter("ALL");
+    setBinFilter("ALL");
+    setActiveCatalogTab("ALL");
     setCurrentPage(1);
     setSelectedProductIds(new Set());
-    setBulkAction('');
-    onFilterTabChange?.('ALL');
+    setBulkAction("");
+    onFilterTabChange?.("ALL");
   };
 
   const hasActiveFilters =
-    searchQuery !== '' ||
-    (!fixedMerchantCode && merchantFilter !== 'ALL') ||
-    categoryFilter !== 'ALL' ||
-    binFilter !== 'ALL' ||
-    activeCatalogTab !== 'ALL';
+    searchQuery !== "" ||
+    (!fixedMerchantCode && merchantFilter !== "ALL") ||
+    categoryFilter !== "ALL" ||
+    binFilter !== "ALL" ||
+    activeCatalogTab !== "ALL";
 
   return (
     <div className="space-y-4">
@@ -437,12 +479,14 @@ export function ProductsCatalogTab({
               <option value="">Bulk Actions</option>
 
               {/* Dynamic options based on active tab & selection */}
-              {activeCatalogTab === 'APPROVAL' || hasPendingApprovalSelected ? (
+              {activeCatalogTab === "APPROVAL" || hasPendingApprovalSelected ? (
                 <>
-                  <option value="APPROVE_SLOT">Approve &amp; Slot to Bin</option>
+                  <option value="APPROVE_SLOT">
+                    Approve &amp; Slot to Bin
+                  </option>
                   <option value="REJECT">Reject Submissions</option>
                 </>
-              ) : activeCatalogTab === 'DRAFT' ? (
+              ) : activeCatalogTab === "DRAFT" ? (
                 <>
                   <option value="RESTORE">Send Selected for Approval</option>
                   <option value="DELETE">Permanent Delete</option>
@@ -452,7 +496,9 @@ export function ProductsCatalogTab({
                   <option value="DRAFT">Move to Draft</option>
                   <option value="DELETE">Delete Selected</option>
                   {hasPendingApprovalSelected && (
-                    <option value="APPROVE_SLOT">Approve &amp; Slot to Bin</option>
+                    <option value="APPROVE_SLOT">
+                      Approve &amp; Slot to Bin
+                    </option>
                   )}
                 </>
               )}
@@ -464,8 +510,8 @@ export function ProductsCatalogTab({
               disabled={!bulkAction || selectedProductIds.size === 0}
               className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${
                 bulkAction && selectedProductIds.size > 0
-                  ? 'bg-orange-600 hover:bg-orange-500 text-white border-orange-600 shadow-sm cursor-pointer active:scale-95'
-                  : 'bg-slate-100 dark:bg-navy-800 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-white/10 cursor-not-allowed opacity-60'
+                  ? "bg-orange-600 hover:bg-orange-500 text-white border-orange-600 shadow-sm cursor-pointer active:scale-95"
+                  : "bg-slate-100 dark:bg-navy-800 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-white/10 cursor-not-allowed opacity-60"
               }`}
             >
               Apply ({selectedProductIds.size})
@@ -532,32 +578,35 @@ export function ProductsCatalogTab({
         <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-100 dark:border-white/5 text-xs">
           <button
             type="button"
-            onClick={() => handleTabSwitch('ALL')}
+            onClick={() => handleTabSwitch("ALL")}
             className={`cursor-pointer transition-colors px-2.5 py-1 rounded-lg ${
-              activeCatalogTab === 'ALL'
-                ? 'bg-orange-50 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400 font-bold border border-orange-500/20'
-                : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white font-medium'
+              activeCatalogTab === "ALL"
+                ? "bg-orange-50 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400 font-bold border border-orange-500/20"
+                : "text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white font-medium"
             }`}
           >
-            All Products <span className="font-semibold tabular-nums">({catalogCounts.allCount})</span>
+            All Products{" "}
+            <span className="font-semibold tabular-nums">
+              ({catalogCounts.allCount})
+            </span>
           </button>
           <span className="text-slate-300 dark:text-slate-700">|</span>
 
           <button
             type="button"
-            onClick={() => handleTabSwitch('APPROVAL')}
+            onClick={() => handleTabSwitch("APPROVAL")}
             className={`cursor-pointer transition-colors px-2.5 py-1 rounded-lg flex items-center gap-1.5 ${
-              activeCatalogTab === 'APPROVAL'
-                ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-bold border border-amber-500/30'
-                : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white font-medium'
+              activeCatalogTab === "APPROVAL"
+                ? "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-bold border border-amber-500/30"
+                : "text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white font-medium"
             }`}
           >
             <span>Pending Product</span>
             <span
               className={`px-1.5 py-0.2 rounded-full text-[11px] font-bold tabular-nums ${
                 catalogCounts.approvalCount > 0
-                  ? 'bg-amber-500 text-slate-950 font-bold'
-                  : 'text-slate-400 dark:text-slate-500'
+                  ? "bg-amber-500 text-slate-950 font-bold"
+                  : "text-slate-400 dark:text-slate-500"
               }`}
             >
               {catalogCounts.approvalCount}
@@ -567,58 +616,67 @@ export function ProductsCatalogTab({
 
           <button
             type="button"
-            onClick={() => handleTabSwitch('PUBLIC')}
+            onClick={() => handleTabSwitch("PUBLIC")}
             className={`cursor-pointer transition-colors px-2.5 py-1 rounded-lg ${
-              activeCatalogTab === 'PUBLIC'
-                ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 font-bold border border-emerald-500/20'
-                : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white font-medium'
+              activeCatalogTab === "PUBLIC"
+                ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 font-bold border border-emerald-500/20"
+                : "text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white font-medium"
             }`}
           >
-            Published <span className="font-semibold tabular-nums">({catalogCounts.publicCount})</span>
+            Published{" "}
+            <span className="font-semibold tabular-nums">
+              ({catalogCounts.publicCount})
+            </span>
           </button>
           <span className="text-slate-300 dark:text-slate-700">|</span>
 
           <button
             type="button"
-            onClick={() => handleTabSwitch('OUT_OF_STOCK')}
+            onClick={() => handleTabSwitch("OUT_OF_STOCK")}
             className={`cursor-pointer transition-colors px-2.5 py-1 rounded-lg ${
-              activeCatalogTab === 'OUT_OF_STOCK'
-                ? 'bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 font-bold border border-sky-500/20'
-                : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white font-medium'
+              activeCatalogTab === "OUT_OF_STOCK"
+                ? "bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 font-bold border border-sky-500/20"
+                : "text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white font-medium"
             }`}
           >
-            Out of Stock <span className="font-semibold tabular-nums">({catalogCounts.outOfStockCount})</span>
+            Out of Stock{" "}
+            <span className="font-semibold tabular-nums">
+              ({catalogCounts.outOfStockCount})
+            </span>
           </button>
           <span className="text-slate-300 dark:text-slate-700">|</span>
 
           <button
             type="button"
-            onClick={() => handleTabSwitch('DRAFT')}
+            onClick={() => handleTabSwitch("DRAFT")}
             className={`cursor-pointer transition-colors px-2.5 py-1 rounded-lg ${
-              activeCatalogTab === 'DRAFT'
-                ? 'bg-slate-100 dark:bg-navy-800 text-slate-800 dark:text-slate-200 font-bold border border-slate-300 dark:border-white/20'
-                : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white font-medium'
+              activeCatalogTab === "DRAFT"
+                ? "bg-slate-100 dark:bg-navy-800 text-slate-800 dark:text-slate-200 font-bold border border-slate-300 dark:border-white/20"
+                : "text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white font-medium"
             }`}
           >
-            Draft <span className="font-semibold tabular-nums">({catalogCounts.draftCount})</span>
+            Draft{" "}
+            <span className="font-semibold tabular-nums">
+              ({catalogCounts.draftCount})
+            </span>
           </button>
           <span className="text-slate-300 dark:text-slate-700">|</span>
 
           <button
             type="button"
-            onClick={() => handleTabSwitch('REJECTED')}
+            onClick={() => handleTabSwitch("REJECTED")}
             className={`cursor-pointer transition-colors px-2.5 py-1 rounded-lg flex items-center gap-1.5 ${
-              activeCatalogTab === 'REJECTED'
-                ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 font-bold border border-rose-500/30'
-                : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white font-medium'
+              activeCatalogTab === "REJECTED"
+                ? "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 font-bold border border-rose-500/30"
+                : "text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white font-medium"
             }`}
           >
             <span>Rejected</span>
             <span
               className={`px-1.5 py-0.2 rounded-full text-[11px] font-bold tabular-nums ${
                 catalogCounts.rejectedCount > 0
-                  ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 font-bold'
-                  : 'text-slate-400 dark:text-slate-500'
+                  ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 font-bold"
+                  : "text-slate-400 dark:text-slate-500"
               }`}
             >
               {catalogCounts.rejectedCount}
@@ -632,23 +690,25 @@ export function ProductsCatalogTab({
         {/* Table Top Header: Item Count & Rows Per Page */}
         <div className="p-4 border-b border-slate-200 dark:border-white/10 flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="text-slate-600 dark:text-slate-400 font-medium">
-            Showing{' '}
+            Showing{" "}
             <span className="font-bold text-navy-900 dark:text-white">
               {totalItems > 0 ? startIndex + 1 : 0}
-            </span>{' '}
-            to{' '}
+            </span>{" "}
+            to{" "}
             <span className="font-bold text-navy-900 dark:text-white">
               {Math.min(startIndex + pageSize, totalItems)}
-            </span>{' '}
-            of{' '}
+            </span>{" "}
+            of{" "}
             <span className="font-bold text-navy-900 dark:text-white tabular-nums">
               {totalItems}
-            </span>{' '}
+            </span>{" "}
             products
           </div>
 
           <div className="flex items-center gap-1.5">
-            <span className="text-slate-500 dark:text-slate-400 font-medium">Show</span>
+            <span className="text-slate-500 dark:text-slate-400 font-medium">
+              Show
+            </span>
             <select
               value={pageSize}
               onChange={(e) => handlePageSizeChange(Number(e.target.value))}
@@ -660,7 +720,9 @@ export function ProductsCatalogTab({
               <option value={50}>50</option>
               <option value={100}>100</option>
             </select>
-            <span className="text-slate-500 dark:text-slate-400 font-medium">rows</span>
+            <span className="text-slate-500 dark:text-slate-400 font-medium">
+              rows
+            </span>
           </div>
         </div>
 
@@ -687,13 +749,19 @@ export function ProductsCatalogTab({
                 <th className="py-3.5 px-3 text-left align-middle">Merchant</th>
 
                 {/* 4. Warehouse Bin (Public items have bin; pending approval items have no bin) */}
-                <th className="py-3.5 px-3 text-left align-middle">Warehouse Bin</th>
+                <th className="py-3.5 px-3 text-left align-middle">
+                  Warehouse Bin
+                </th>
 
                 {/* 5. Stock Level */}
-                <th className="py-3.5 px-3 text-left align-middle">Stock Level</th>
+                <th className="py-3.5 px-3 text-left align-middle">
+                  Stock Level
+                </th>
 
                 {/* 6. Declare Price */}
-                <th className="py-3.5 px-3 text-left align-middle">Declare Price</th>
+                <th className="py-3.5 px-3 text-left align-middle">
+                  Declare Price
+                </th>
 
                 {/* 7. Status */}
                 <th className="py-3.5 px-3 text-left align-middle">Status</th>
@@ -706,7 +774,10 @@ export function ProductsCatalogTab({
             <tbody className="divide-y divide-slate-100 dark:divide-white/5 text-xs text-navy-800 dark:text-slate-200">
               {paginatedProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-14 text-center text-slate-600 dark:text-slate-400">
+                  <td
+                    colSpan={8}
+                    className="py-14 text-center text-slate-600 dark:text-slate-400"
+                  >
                     <Package className="w-10 h-10 text-slate-400 dark:text-slate-500 mx-auto mb-2 opacity-60" />
                     <p className="text-sm font-semibold text-navy-900 dark:text-white">
                       No products found
@@ -720,23 +791,40 @@ export function ProductsCatalogTab({
                 paginatedProducts.map((p, idx) => {
                   const isSelected = selectedProductIds.has(p.id);
                   const isMenuOpen = activeMenuId === `desktop-${p.id}`;
-                  const isNearBottom = paginatedProducts.length > 4 && idx >= paginatedProducts.length - 2;
+                  const isNearBottom =
+                    paginatedProducts.length > 4 &&
+                    idx >= paginatedProducts.length - 2;
 
-                  const isDraft = p.status === 'DRAFT' || Boolean(p.isDraft);
-                  const isPending = p.status === 'PENDING_APPROVAL';
-                  const isRejected = !isDraft && p.status === 'REJECTED';
-                  const isOutOfStock = !isDraft && !isPending && !isRejected && (p.stock || 0) === 0;
-                  const isLowStock = !isDraft && !isPending && !isRejected && !isOutOfStock && p.stock > 0 && p.stock < 30;
+                  const isDraft = p.status === "DRAFT" || Boolean(p.isDraft);
+                  const isPending = p.status === "PENDING_APPROVAL";
+                  const isRejected = !isDraft && p.status === "REJECTED";
+                  const isOutOfStock =
+                    !isDraft &&
+                    !isPending &&
+                    !isRejected &&
+                    (p.stock || 0) === 0;
+                  const isLowStock =
+                    !isDraft &&
+                    !isPending &&
+                    !isRejected &&
+                    !isOutOfStock &&
+                    p.stock > 0 &&
+                    p.stock < 30;
 
                   return (
                     <tr
                       key={p.id}
                       className={`hover:bg-slate-50/70 dark:hover:bg-navy-800/40 transition-colors ${
-                        isSelected ? 'bg-orange-50/50 dark:bg-orange-950/15' : ''
+                        isSelected
+                          ? "bg-orange-50/50 dark:bg-orange-950/15"
+                          : ""
                       }`}
                     >
                       {/* 1. Checkbox */}
-                      <td className="py-3.5 pl-4 pr-2 w-10 align-middle" onClick={(e) => e.stopPropagation()}>
+                      <td
+                        className="py-3.5 pl-4 pr-2 w-10 align-middle"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <input
                           type="checkbox"
                           checked={isSelected}
@@ -749,7 +837,10 @@ export function ProductsCatalogTab({
                       {/* 2. Product Name, Thumbnail & Category with Date */}
                       <td className="py-3.5 px-3 align-middle">
                         <div className="flex items-center gap-3">
-                          <Link href={`/admin/products/${p.id}`} className="shrink-0 group">
+                          <Link
+                            href={`/admin/products/${p.id}`}
+                            className="shrink-0 group"
+                          >
                             {p.imageUrl ? (
                               <img
                                 src={p.imageUrl}
@@ -773,7 +864,7 @@ export function ProductsCatalogTab({
                             <div className="flex items-center gap-2 mt-1 flex-wrap text-xs">
                               <span className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1 font-medium">
                                 <Clock className="w-3 h-3 text-slate-400 shrink-0" />
-                                <span>{p.submittedAt || 'Recently added'}</span>
+                                <span>{p.submittedAt || "Recently added"}</span>
                               </span>
                             </div>
                           </div>
@@ -795,9 +886,23 @@ export function ProductsCatalogTab({
                         </div>
                       </td>
 
-                      {/* 4. Warehouse Bin (Public items show bin; new pending approval items show Unassigned) */}
-                      <td className="py-3.5 px-3 align-middle" onClick={(e) => e.stopPropagation()}>
-                        {isPending && p.stockAccepted !== true ? (
+                      {/* 4. Warehouse Bin (Public items show bin; new pending approval items show Unassigned; rejected show Unavailable Storage + reason) */}
+                      <td
+                        className="py-3.5 px-3 align-middle"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {isRejected ? (
+                          <div className="space-y-1 max-w-[210px]">
+                            {p.rejectionReason && (
+                              <p
+                                className="text-[11px] text-rose-600 dark:text-rose-400 line-clamp-2 leading-tight"
+                                title={p.rejectionReason}
+                              >
+                                {p.rejectionReason}
+                              </p>
+                            )}
+                          </div>
+                        ) : isPending && p.stockAccepted !== true ? (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-dashed border-amber-500/40">
                             <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                             Unassigned
@@ -805,8 +910,14 @@ export function ProductsCatalogTab({
                         ) : (
                           <div className="inline-block">
                             <select
-                              value={p.binCode && p.binCode !== 'Pending Approval' ? p.binCode : bins[0]?.code || 'A-01-02'}
-                              onChange={(e) => onChangeProductBin(p.id, e.target.value)}
+                              value={
+                                p.binCode && p.binCode !== "Pending Approval"
+                                  ? p.binCode
+                                  : bins[0]?.code || "A-01-02"
+                              }
+                              onChange={(e) =>
+                                onChangeProductBin(p.id, e.target.value)
+                              }
                               aria-label={`Assigned bin for ${p.title}`}
                               className="px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/15 text-xs font-mono font-bold text-orange-700 dark:text-orange-300 focus:outline-none focus:border-orange-500 cursor-pointer"
                             >
@@ -822,41 +933,58 @@ export function ProductsCatalogTab({
 
                       {/* 5. Stock Level */}
                       <td className="py-3.5 px-3 align-middle">
-                        {isPending ? (
+                        {isRejected ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
+                            {p.stock}{" "}
+                            <span className="text-[11px] font-normal">pcs</span>
+                          </span>
+                        ) : isPending ? (
                           p.stockAccepted === true ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold tabular-nums bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30">
-                              {p.stock} <span className="text-[11px] font-normal">pcs</span>
+                              {p.stock}{" "}
+                              <span className="text-[11px] font-normal">
+                                pcs
+                              </span>
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold tabular-nums bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30">
-                              {p.stock} <span className="text-[11px] font-normal">pcs</span>
+                              {p.stock}{" "}
+                              <span className="text-[11px] font-normal">
+                                pcs
+                              </span>
                             </span>
                           )
                         ) : p.isSuspended ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
-                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                            Suspended
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
+                            {p.stock}{" "}
+                            <span className="text-[11px] font-normal">pcs</span>
                           </span>
                         ) : isOutOfStock ? (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold tabular-nums bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30">
-                            0 <span className="text-[11px] font-normal text-rose-500">pcs</span>
+                            0{" "}
+                            <span className="text-[11px] font-normal text-rose-500">
+                              pcs
+                            </span>
                           </span>
                         ) : (
                           <span
                             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold tabular-nums border ${
                               isLowStock
-                                ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30'
-                                : 'bg-slate-100 dark:bg-navy-950 text-navy-900 dark:text-white border-slate-200 dark:border-white/10'
+                                ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                                : "bg-slate-100 dark:bg-navy-950 text-navy-900 dark:text-white border-slate-200 dark:border-white/10"
                             }`}
                           >
-                            {p.stock} <span className="text-[11px] font-normal text-slate-500">pcs</span>
+                            {p.stock}{" "}
+                            <span className="text-[11px] font-normal text-slate-500">
+                              pcs
+                            </span>
                           </span>
                         )}
                       </td>
 
                       {/* 6. Unit Price */}
                       <td className="py-3.5 px-3 tabular-nums text-xs font-bold text-navy-800 dark:text-slate-100 align-middle">
-                        ৳{p.price ? p.price.toLocaleString() : '—'}
+                        <>৳{p.price ? p.price.toLocaleString() : "—"}</>
                       </td>
 
                       {/* 7. Status Column */}
@@ -872,14 +1000,6 @@ export function ProductsCatalogTab({
                               <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
                               Rejected
                             </span>
-                            {p.rejectionReason && (
-                              <p
-                                className="text-[11px] text-rose-600 dark:text-rose-400 line-clamp-2 leading-tight"
-                                title={p.rejectionReason}
-                              >
-                                {p.rejectionReason}
-                              </p>
-                            )}
                           </div>
                         ) : isDraft ? (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-500/30">
@@ -913,14 +1033,18 @@ export function ProductsCatalogTab({
                           <button
                             type="button"
                             onClick={() =>
-                              setActiveMenuId(isMenuOpen ? null : `desktop-${p.id}`)
+                              setActiveMenuId(
+                                isMenuOpen ? null : `desktop-${p.id}`,
+                              )
                             }
                             className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-bold text-navy-800 dark:text-slate-100 border border-slate-300 dark:border-white/15 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
                           >
                             <span>Actions</span>
                             <ChevronDown
                               className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                                isMenuOpen ? 'rotate-180 text-orange-600 dark:text-orange-400' : 'text-slate-600 dark:text-slate-300'
+                                isMenuOpen
+                                  ? "rotate-180 text-orange-600 dark:text-orange-400"
+                                  : "text-slate-600 dark:text-slate-300"
                               }`}
                             />
                           </button>
@@ -929,8 +1053,8 @@ export function ProductsCatalogTab({
                             <div
                               className={`absolute right-0 ${
                                 isNearBottom
-                                  ? 'top-0 -translate-y-full -mt-1.5'
-                                  : 'top-full mt-1.5'
+                                  ? "top-0 -translate-y-full -mt-1.5"
+                                  : "top-full mt-1.5"
                               } w-56 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-2xl py-1.5 z-[100] text-left font-sans text-xs pointer-events-auto`}
                             >
                               {/* STAGE 0: Pending Product -> Approved, Reject, and View */}
@@ -941,11 +1065,13 @@ export function ProductsCatalogTab({
                                     onClick={() => {
                                       setActiveMenuId(null);
                                       onOpenApprovalModal?.(
-                                        'APPROVE',
+                                        "APPROVE",
                                         p,
-                                        p.binCode && p.binCode !== 'Pending Approval' && p.binCode !== 'Assigned on intake'
+                                        p.binCode &&
+                                          p.binCode !== "Pending Approval" &&
+                                          p.binCode !== "Assigned on intake"
                                           ? p.binCode
-                                          : bins[0]?.code || 'A-01-02'
+                                          : bins[0]?.code || "A-01-02",
                                       );
                                     }}
                                     className="w-full px-3.5 py-2 text-left text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 flex items-center gap-2.5 font-bold cursor-pointer"
@@ -959,12 +1085,13 @@ export function ProductsCatalogTab({
                                     onClick={() => {
                                       setActiveMenuId(null);
                                       onOpenApprovalModal?.(
-                                        'REJECT',
+                                        "REJECT",
                                         p,
-                                        p.binCode && p.binCode !== 'Pending Approval'
+                                        p.binCode &&
+                                          p.binCode !== "Pending Approval"
                                           ? p.binCode
-                                          : bins[0]?.code || 'A-01-02'
-                                        );
+                                          : bins[0]?.code || "A-01-02",
+                                      );
                                     }}
                                     className="w-full px-3.5 py-2 text-left text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex items-center gap-2.5 font-semibold cursor-pointer border-b border-slate-200/60 dark:border-white/10"
                                   >
@@ -986,7 +1113,7 @@ export function ProductsCatalogTab({
                               {/* STAGE 2: Published / Out of Stock -> View, Allow Edit, Approve/Reject Revision, Suspend/Reactivate, and Delete (if stock is 0) */}
                               {!isPending && !isDraft && !isRejected && (
                                 <>
-                                  {p.editState === 'EDIT_ACCESS_REQUESTED' && (
+                                  {p.editState === "EDIT_ACCESS_REQUESTED" && (
                                     <button
                                       type="button"
                                       onClick={() => {
@@ -1000,7 +1127,7 @@ export function ProductsCatalogTab({
                                     </button>
                                   )}
 
-                                  {p.editState === 'EDIT_APPROVAL_PENDING' && (
+                                  {p.editState === "EDIT_APPROVAL_PENDING" && (
                                     <>
                                       <button
                                         type="button"
@@ -1045,7 +1172,11 @@ export function ProductsCatalogTab({
                                     className="w-full px-3.5 py-2 text-left text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 flex items-center gap-2.5 font-semibold cursor-pointer"
                                   >
                                     <AlertTriangle className="w-4 h-4 shrink-0" />
-                                    <span>{p.isSuspended ? 'Reactivate Product' : 'Suspend Product'}</span>
+                                    <span>
+                                      {p.isSuspended
+                                        ? "Reactivate Product"
+                                        : "Suspend Product"}
+                                    </span>
                                   </button>
 
                                   <button
@@ -1060,13 +1191,21 @@ export function ProductsCatalogTab({
                                     disabled={(p.stock || 0) > 0}
                                     className={`w-full px-3.5 py-2 text-left flex items-center gap-2.5 font-semibold transition-colors border-t border-slate-200/60 dark:border-white/10 ${
                                       (p.stock || 0) === 0
-                                        ? 'text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 cursor-pointer'
-                                        : 'text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                                        ? "text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 cursor-pointer"
+                                        : "text-slate-400 dark:text-slate-500 cursor-not-allowed"
                                     }`}
-                                    title={(p.stock || 0) > 0 ? `Cannot delete while warehouse stock holds ${p.stock} pcs` : 'Delete Product'}
+                                    title={
+                                      (p.stock || 0) > 0
+                                        ? `Cannot delete while warehouse stock holds ${p.stock} pcs`
+                                        : "Delete Product"
+                                    }
                                   >
                                     <Trash2 className="w-4 h-4 shrink-0" />
-                                    <span>{(p.stock || 0) > 0 ? `Delete Locked (${p.stock} pcs)` : 'Delete Product'}</span>
+                                    <span>
+                                      {(p.stock || 0) > 0
+                                        ? `Delete Locked (${p.stock} pcs)`
+                                        : "Delete Product"}
+                                    </span>
                                   </button>
                                 </>
                               )}
@@ -1094,20 +1233,20 @@ export function ProductsCatalogTab({
                                     disabled={(p.stock || 0) >= 1}
                                     className={`w-full px-3.5 py-2 text-left flex items-center gap-2.5 font-semibold border-t border-slate-200/60 dark:border-white/10 ${
                                       (p.stock || 0) >= 1
-                                        ? 'text-slate-400 dark:text-slate-500 cursor-not-allowed opacity-60'
-                                        : 'text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 cursor-pointer'
+                                        ? "text-slate-400 dark:text-slate-500 cursor-not-allowed opacity-60"
+                                        : "text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 cursor-pointer"
                                     }`}
                                     title={
                                       (p.stock || 0) >= 1
                                         ? `Cannot delete while warehouse stock (${p.stock} pcs) > 0`
-                                        : 'Delete Product'
+                                        : "Delete Product"
                                     }
                                   >
                                     <Trash2 className="w-4 h-4 shrink-0" />
                                     <span>
                                       {(p.stock || 0) >= 1
                                         ? `Delete Locked (${p.stock} pcs)`
-                                        : 'Delete Product'}
+                                        : "Delete Product"}
                                     </span>
                                   </button>
                                 </>
@@ -1136,18 +1275,19 @@ export function ProductsCatalogTab({
           ) : (
             paginatedProducts.map((p) => {
               const isSelected = selectedProductIds.has(p.id);
-              const isPending = p.status === 'PENDING_APPROVAL';
-              const isDraft = p.status === 'DRAFT' || Boolean(p.isDraft);
-              const isRejected = !isDraft && p.status === 'REJECTED';
-              const isOutOfStock = !isDraft && !isPending && !isRejected && p.stock === 0;
+              const isPending = p.status === "PENDING_APPROVAL";
+              const isDraft = p.status === "DRAFT" || Boolean(p.isDraft);
+              const isRejected = !isDraft && p.status === "REJECTED";
+              const isOutOfStock =
+                !isDraft && !isPending && !isRejected && p.stock === 0;
 
               return (
                 <div
                   key={p.id}
                   className={`p-3.5 rounded-xl border transition-all ${
                     isSelected
-                      ? 'border-orange-500 bg-orange-50/40 dark:bg-orange-950/20'
-                      : 'border-slate-200 dark:border-white/10 bg-white dark:bg-navy-950'
+                      ? "border-orange-500 bg-orange-50/40 dark:bg-orange-950/20"
+                      : "border-slate-200 dark:border-white/10 bg-white dark:bg-navy-950"
                   }`}
                 >
                   <div className="flex items-start gap-3">
@@ -1191,7 +1331,7 @@ export function ProductsCatalogTab({
                           {p.merchantName} ({p.merchantCode})
                         </span>
                         <span className="font-bold text-navy-900 dark:text-white tabular-nums">
-                          ৳{p.price ? p.price.toLocaleString() : '—'}
+                          ৳{p.price ? p.price.toLocaleString() : "—"}
                         </span>
                       </div>
 
@@ -1213,11 +1353,11 @@ export function ProductsCatalogTab({
                               Draft
                             </span>
                           ) : p.isSuspended ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
-                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                            Suspended
-                          </span>
-                        ) : isOutOfStock ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
+                              <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                              Suspended
+                            </span>
+                          ) : isOutOfStock ? (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/15 text-sky-700 dark:text-sky-400">
                               Approved
                             </span>
@@ -1249,15 +1389,18 @@ export function ProductsCatalogTab({
               disabled={safePage <= 1}
               className={`p-2 rounded-lg border text-xs font-semibold transition-all ${
                 safePage <= 1
-                  ? 'border-slate-200 dark:border-white/10 text-slate-400 cursor-not-allowed opacity-50'
-                  : 'border-slate-300 dark:border-white/20 hover:bg-slate-100 dark:hover:bg-navy-800 text-navy-900 dark:text-white cursor-pointer'
+                  ? "border-slate-200 dark:border-white/10 text-slate-400 cursor-not-allowed opacity-50"
+                  : "border-slate-300 dark:border-white/20 hover:bg-slate-100 dark:hover:bg-navy-800 text-navy-900 dark:text-white cursor-pointer"
               }`}
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
 
             {Array.from({ length: totalPages }, (_, i) => i + 1)
-              .filter((p) => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
+              .filter(
+                (p) =>
+                  p === 1 || p === totalPages || Math.abs(p - safePage) <= 1,
+              )
               .map((p, idx, arr) => (
                 <React.Fragment key={p}>
                   {idx > 0 && arr[idx - 1] !== p - 1 && (
@@ -1268,8 +1411,8 @@ export function ProductsCatalogTab({
                     onClick={() => handlePageChange(p)}
                     className={`w-7 h-7 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                       p === safePage
-                        ? 'bg-orange-600 text-white shadow-sm'
-                        : 'hover:bg-slate-100 dark:hover:bg-navy-800 text-navy-800 dark:text-slate-200'
+                        ? "bg-orange-600 text-white shadow-sm"
+                        : "hover:bg-slate-100 dark:hover:bg-navy-800 text-navy-800 dark:text-slate-200"
                     }`}
                   >
                     {p}
@@ -1283,8 +1426,8 @@ export function ProductsCatalogTab({
               disabled={safePage >= totalPages}
               className={`p-2 rounded-lg border text-xs font-semibold transition-all ${
                 safePage >= totalPages
-                  ? 'border-slate-200 dark:border-white/10 text-slate-400 cursor-not-allowed opacity-50'
-                  : 'border-slate-300 dark:border-white/20 hover:bg-slate-100 dark:hover:bg-navy-800 text-navy-900 dark:text-white cursor-pointer'
+                  ? "border-slate-200 dark:border-white/10 text-slate-400 cursor-not-allowed opacity-50"
+                  : "border-slate-300 dark:border-white/20 hover:bg-slate-100 dark:hover:bg-navy-800 text-navy-900 dark:text-white cursor-pointer"
               }`}
             >
               <ChevronRight className="w-4 h-4" />
@@ -1308,41 +1451,45 @@ export function ProductsCatalogTab({
         onClose={() => setProductToDelete(null)}
         title={
           isPermanentDeleteMode && (productToDelete?.stock || 0) >= 1
-            ? 'Deletion Blocked — Warehouse Stock Exists'
+            ? "Deletion Blocked — Warehouse Stock Exists"
             : isPermanentDeleteMode
-              ? 'Permanently Delete Product?'
-              : 'Move Product to Draft?'
+              ? "Permanently Delete Product?"
+              : "Move Product to Draft?"
         }
       >
         <div className="space-y-4">
           <p className="text-sm text-slate-600 dark:text-slate-300">
             {isPermanentDeleteMode && (productToDelete?.stock || 0) >= 1 ? (
               <>
-                Cannot delete{' '}
+                Cannot delete{" "}
                 <strong className="text-navy-900 dark:text-white">
                   &quot;{productToDelete?.title}&quot;
-                </strong>{' '}
-                because the warehouse currently holds{' '}
+                </strong>{" "}
+                because the warehouse currently holds{" "}
                 <strong className="text-rose-600 dark:text-rose-400">
                   {productToDelete?.stock} pcs
-                </strong>{' '}
-                in stock. Even if 1 single unit exists in the warehouse, the product cannot be deleted. Product stock must be 0 before deleting.
+                </strong>{" "}
+                in stock. Even if 1 single unit exists in the warehouse, the
+                product cannot be deleted. Product stock must be 0 before
+                deleting.
               </>
             ) : isPermanentDeleteMode ? (
               <>
-                Are you sure you want to permanently delete{' '}
+                Are you sure you want to permanently delete{" "}
                 <strong className="text-navy-900 dark:text-white">
                   &quot;{productToDelete?.title}&quot;
-                </strong>{' '}
-                (0 stock in warehouse)? This will permanently delete it from the PostgreSQL database.
+                </strong>{" "}
+                (0 stock in warehouse)? This will permanently delete it from the
+                PostgreSQL database.
               </>
             ) : (
               <>
-                Move{' '}
+                Move{" "}
                 <strong className="text-navy-900 dark:text-white">
                   &quot;{productToDelete?.title}&quot;
-                </strong>{' '}
-                to Draft? It will no longer be visible on storefronts until restored.
+                </strong>{" "}
+                to Draft? It will no longer be visible on storefronts until
+                restored.
               </>
             )}
           </p>
@@ -1353,15 +1500,18 @@ export function ProductsCatalogTab({
               onClick={() => setProductToDelete(null)}
               className="px-4 py-2 rounded-xl text-xs font-semibold border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-navy-800 text-slate-700 dark:text-slate-300 cursor-pointer"
             >
-              {isPermanentDeleteMode && (productToDelete?.stock || 0) >= 1 ? 'Close' : 'Cancel'}
+              {isPermanentDeleteMode && (productToDelete?.stock || 0) >= 1
+                ? "Close"
+                : "Cancel"}
             </button>
-            {(!isPermanentDeleteMode || (productToDelete?.stock || 0) === 0) && (
+            {(!isPermanentDeleteMode ||
+              (productToDelete?.stock || 0) === 0) && (
               <button
                 type="button"
                 onClick={handleConfirmSingleDelete}
                 className="px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white cursor-pointer shadow-sm"
               >
-                {isPermanentDeleteMode ? 'Delete Forever' : 'Move to Draft'}
+                {isPermanentDeleteMode ? "Delete Forever" : "Move to Draft"}
               </button>
             )}
           </div>
@@ -1376,7 +1526,7 @@ export function ProductsCatalogTab({
       >
         <div className="space-y-4">
           <p className="text-sm text-slate-600 dark:text-slate-300">
-            Are you sure you want to delete or move{' '}
+            Are you sure you want to delete or move{" "}
             <strong className="text-navy-900 dark:text-white">
               {selectedProductIds.size} selected item(s)
             </strong>

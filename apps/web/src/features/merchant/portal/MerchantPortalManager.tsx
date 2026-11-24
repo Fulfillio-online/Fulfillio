@@ -213,9 +213,16 @@ function MerchantPortalInner() {
     setProducts((prev) => {
       const next = prev.map((p) => {
         if (p.id !== id) return p;
-        // Restoring from DRAFT requires Admin Approval again
-        const newStatus = p.status === 'DRAFT' ? ('PENDING_APPROVAL' as const) : ('DRAFT' as const);
-        updatedProduct = { ...p, status: newStatus };
+        // Restoring from DRAFT or REJECTED requires Admin Approval again
+        const newStatus =
+          p.status === 'DRAFT' || p.status === 'REJECTED'
+            ? ('PENDING_APPROVAL' as const)
+            : ('DRAFT' as const);
+        updatedProduct = {
+          ...p,
+          status: newStatus,
+          rejectionReason: newStatus === 'PENDING_APPROVAL' ? undefined : p.rejectionReason,
+        };
         return updatedProduct;
       });
       if (typeof window !== 'undefined') {

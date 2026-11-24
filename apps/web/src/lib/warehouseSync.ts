@@ -914,17 +914,22 @@ export function syncMerchantProductUpdatedToAdmin(
         ap.size;
 
       const isDraftStatus = updatedItem.status === 'DRAFT';
-      const isPendingStatus = updatedItem.status === 'PENDING_APPROVAL' || (!isDraftStatus && ap.status === 'PENDING_APPROVAL');
+      const isRejectedStatus = updatedItem.status === 'REJECTED';
+      const isPendingStatus =
+        updatedItem.status === 'PENDING_APPROVAL' ||
+        (!isDraftStatus && !isRejectedStatus && ap.status === 'PENDING_APPROVAL');
       const isStockStoredStatus =
         updatedItem.status === 'STOCK_STORED' ||
         ((updatedItem.status === 'PUBLISHED' || updatedItem.status === 'APPROVED') && updatedItem.stock > 0);
       const nextAdminStatus = isDraftStatus
         ? ('DRAFT' as const)
-        : isPendingStatus
-          ? ('PENDING_APPROVAL' as const)
-          : isStockStoredStatus
-            ? ('STOCK_STORED' as const)
-            : ('APPROVED' as const);
+        : isRejectedStatus
+          ? ('REJECTED' as const)
+          : isPendingStatus
+            ? ('PENDING_APPROVAL' as const)
+            : isStockStoredStatus
+              ? ('STOCK_STORED' as const)
+              : ('APPROVED' as const);
 
       return {
         ...ap,
@@ -937,6 +942,9 @@ export function syncMerchantProductUpdatedToAdmin(
         price: updatedItem.price,
         status: nextAdminStatus,
         isDraft: isDraftStatus,
+        rejectionReason: isRejectedStatus
+          ? (updatedItem.rejectionReason ?? ap.rejectionReason)
+          : undefined,
         imageUrl: updatedItem.imageUrl !== undefined ? updatedItem.imageUrl : ap.imageUrl,
         images: updatedItem.images !== undefined ? updatedItem.images : (ap.images || []),
         barcode: updatedItem.barcode || ap.barcode,
@@ -950,9 +958,11 @@ export function syncMerchantProductUpdatedToAdmin(
     if (!matched) {
       const fallbackStatus = updatedItem.status === 'DRAFT'
         ? 'DRAFT'
-        : updatedItem.status === 'PUBLISHED'
-          ? 'APPROVED'
-          : 'PENDING_APPROVAL';
+        : updatedItem.status === 'REJECTED'
+          ? 'REJECTED'
+          : updatedItem.status === 'PUBLISHED'
+            ? 'APPROVED'
+            : 'PENDING_APPROVAL';
       nextAdmin.unshift(
         convertMerchantProductToWarehouse(updatedItem, profile, fallbackStatus)
       );
@@ -1765,12 +1775,14 @@ export function getSyncedMerchantDirectoryLists(
           (ap.status === 'APPROVED' ||
             ap.status === 'STOCK_STORED' ||
             ap.status === 'PENDING_APPROVAL' ||
+            ap.status === 'REJECTED' ||
             ap.status === 'DRAFT' ||
             ap.isDraft) &&
           !baseProducts.some((bp) => bp.sku === ap.fullSku || bp.id === ap.id)
       )
       .map((ap) => {
         const isDraft = ap.status === 'DRAFT' || Boolean(ap.isDraft);
+        const isRejected = !isDraft && ap.status === 'REJECTED';
         return {
           id: ap.id,
           merchantCode: ap.merchantCode,
@@ -1788,11 +1800,14 @@ export function getSyncedMerchantDirectoryLists(
           bin: ap.status === 'PENDING_APPROVAL' ? 'Pending Approval' : ap.binCode,
           imageUrl: ap.imageUrl,
           isDraft,
+          rejectionReason: ap.rejectionReason,
           status: isDraft
             ? ('DRAFT' as const)
-            : ap.status === 'PENDING_APPROVAL'
-              ? ('PENDING_APPROVAL' as const)
-              : ('APPROVED' as const),
+            : isRejected
+              ? ('REJECTED' as const)
+              : ap.status === 'PENDING_APPROVAL'
+                ? ('PENDING_APPROVAL' as const)
+                : ('APPROVED' as const),
         };
       });
 
@@ -1802,17 +1817,21 @@ export function getSyncedMerchantDirectoryLists(
         const match = adminProds.find((ap) => ap.fullSku === bp.sku || ap.id === bp.id);
         if (!match) return bp;
         const isDraft = match.status === 'DRAFT' || Boolean(match.isDraft);
+        const isRejected = !isDraft && match.status === 'REJECTED';
         return {
           ...bp,
           stock: match.stock,
           bin: match.binCode,
           price: match.price,
           isDraft,
+          rejectionReason: isRejected ? (match.rejectionReason ?? bp.rejectionReason) : undefined,
           status: isDraft
             ? ('DRAFT' as const)
-            : match.status === 'PENDING_APPROVAL'
-              ? ('PENDING_APPROVAL' as const)
-              : ('APPROVED' as const),
+            : isRejected
+              ? ('REJECTED' as const)
+              : match.status === 'PENDING_APPROVAL'
+                ? ('PENDING_APPROVAL' as const)
+                : ('APPROVED' as const),
         };
       }),
     ];

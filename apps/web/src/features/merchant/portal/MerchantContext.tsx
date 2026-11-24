@@ -177,20 +177,30 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
               const isApproved = serverApproved || localApproved;
               const isDraft =
                 sp.status === 'DRAFT' ||
-                (localMatch.status === 'DRAFT' && sp.status !== 'STOCK_STORED' && sp.status !== 'APPROVED');
+                (localMatch.status === 'DRAFT' && sp.status !== 'STOCK_STORED' && sp.status !== 'APPROVED' && sp.status !== 'REJECTED');
+              const isRejected =
+                !isDraft &&
+                (sp.status === 'REJECTED' ||
+                  (localMatch.status === 'REJECTED' &&
+                    sp.status !== 'STOCK_STORED' &&
+                    sp.status !== 'APPROVED' &&
+                    sp.status !== 'PENDING_APPROVAL'));
               const effectiveStock = sp.stock !== undefined ? sp.stock : localMatch.stock;
               const isStockStored =
                 !isDraft &&
+                !isRejected &&
                 isApproved &&
                 (sp.status === 'STOCK_STORED' || localMatch.status === 'STOCK_STORED' || effectiveStock > 0);
               const finalStatus = isDraft
                 ? ('DRAFT' as const)
-                : isStockStored
-                  ? ('STOCK_STORED' as const)
-                  : isApproved
-                    ? ('APPROVED' as const)
-                    : ('PENDING_APPROVAL' as const);
-              const finalBin = isApproved
+                : isRejected
+                  ? ('REJECTED' as const)
+                  : isStockStored
+                    ? ('STOCK_STORED' as const)
+                    : isApproved
+                      ? ('APPROVED' as const)
+                      : ('PENDING_APPROVAL' as const);
+              const finalBin = isApproved && !isRejected
                 ? (serverApproved ? sp.bin : localMatch.bin)
                 : 'Pending Approval';
 
@@ -199,6 +209,9 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
                 ...sp,
                 status: finalStatus,
                 bin: finalBin,
+                rejectionReason: isRejected
+                  ? (sp.rejectionReason ?? localMatch.rejectionReason)
+                  : undefined,
                 stock: sp.stock !== undefined ? sp.stock : localMatch.stock,
                 imageUrl: (sp.imageUrl && sp.imageUrl.trim()) ? sp.imageUrl : localMatch.imageUrl,
                 images: (sp.images && sp.images.length > 0) ? sp.images : (localMatch.images || []),
@@ -554,20 +567,23 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     if (!target) return;
 
     const isTargetDraft = target.status === 'DRAFT';
+    const isTargetRejected = target.status === 'REJECTED';
     const isPendingOrAwaiting =
-      target.status === 'PENDING_APPROVAL' ||
-      target.status === 'APPROVED' ||
-      target.stockStatus === 'AWAITING_STOCK' ||
-      target.stockAccepted === false;
+      !isTargetRejected &&
+      (target.status === 'PENDING_APPROVAL' ||
+        target.status === 'APPROVED' ||
+        target.stockStatus === 'AWAITING_STOCK' ||
+        target.stockAccepted === false);
     const hasPhysicalStock = (target.stock || 0) > 0;
     const isTargetStockStored =
       !isTargetDraft &&
+      !isTargetRejected &&
       !isPendingOrAwaiting &&
       (target.status === 'STOCK_STORED' || target.status === 'PUBLISHED') &&
       hasPhysicalStock;
 
     // Rule: When physical stock is already stored in warehouse, merchant cannot move to Draft (must request return)
-    if (!isTargetDraft && isTargetStockStored) {
+    if (!isTargetDraft && !isTargetRejected && isTargetStockStored) {
       showToast(
         `Action Blocked: "${target.title}" has ${target.stock} units stored in warehouse. Please use "Request to Return" before drafting.`
       );
@@ -575,20 +591,21 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     }
 
     let newStatus: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'STOCK_STORED';
-    if (!isTargetDraft) {
+    if (isTargetRejected || isTargetDraft) {
+      // Submitting from draft or re-requesting store from rejected requires admin approval
+      newStatus = 'PENDING_APPROVAL';
+    } else {
       // Pending Approval or Awaiting Stock can be cancelled / moved back to Draft
       newStatus = 'DRAFT';
-    } else {
-      // Submitting from draft requires admin approval
-      newStatus = 'PENDING_APPROVAL';
     }
 
     const updatedTarget: MerchantProductItem = {
       ...target,
       status: newStatus,
+      rejectionReason: newStatus === 'PENDING_APPROVAL' ? undefined : target.rejectionReason,
       stockAccepted: newStatus === 'DRAFT' ? false : target.stockAccepted,
       stockStatus: newStatus === 'DRAFT' ? 'AWAITING_STOCK' : target.stockStatus,
-      bin: newStatus === 'DRAFT' ? 'Pending Approval' : target.bin,
+      bin: newStatus === 'DRAFT' || isTargetRejected ? 'Pending Approval' : target.bin,
     };
 
     setProducts((prev) => {
