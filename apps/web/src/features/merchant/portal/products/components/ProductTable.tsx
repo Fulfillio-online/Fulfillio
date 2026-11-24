@@ -22,7 +22,7 @@ import { ProductThumbnail } from './ProductThumbnail';
 import { MerchantProductItem } from '../../types';
 
 export const isPendingApprovalProductItem = (p: MerchantProductItem): boolean => {
-  if (p.status === 'DRAFT') return false;
+  if (p.status === 'DRAFT' || p.status === 'REJECTED') return false;
   if (p.status === 'APPROVED' || p.status === 'PUBLISHED' || p.status === 'STOCK_STORED') return false;
   return (
     p.status === 'PENDING_APPROVAL' ||
@@ -55,7 +55,7 @@ export const isApprovedAwaitingStockProductItem = (_p: MerchantProductItem): boo
 };
 
 export const isStockStoredProductItem = (p: MerchantProductItem): boolean => {
-  if (p.status === 'DRAFT' || isPendingApprovalProductItem(p)) return false;
+  if (p.status === 'DRAFT' || p.status === 'REJECTED' || isPendingApprovalProductItem(p)) return false;
   return p.status === 'PUBLISHED' || p.status === 'STOCK_STORED' || p.status === 'APPROVED';
 };
 
@@ -91,7 +91,8 @@ export function ProductTable({
 
   const renderDropdownItems = (p: MerchantProductItem) => {
     const isDraft = p.status === 'DRAFT';
-    const isPendingApproval = !isDraft && isPendingApprovalProductItem(p);
+    const isRejected = p.status === 'REJECTED';
+    const isPendingApproval = !isDraft && !isRejected && isPendingApprovalProductItem(p);
     const isAwaitingStock = isApprovedAwaitingStockProductItem(p);
     const isStockStored = isStockStoredProductItem(p);
     const isEditAllowed = (p as any).editState === 'EDIT_ALLOWED';
@@ -152,6 +153,47 @@ export function ProductTable({
 
     // STAGE 1: Pending Approval (Awaiting Admin review)
     // Merchant can: View Details, Edit (if stock === 0), Cancel Submission (moves to Draft), Delete (if stock === 0)
+    if (isRejected) {
+      return (
+        <>
+          <Link
+            href={`/merchant/products/${p.id}`}
+            onClick={() => setActiveMenuId(null)}
+            className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors"
+          >
+            <Eye className="h-3.5 w-3.5 text-sky-500" />
+            <span>View Product Details</span>
+          </Link>
+
+          <Link
+            href={`/merchant/products/${p.id}/edit`}
+            onClick={() => setActiveMenuId(null)}
+            className="w-full px-3.5 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-semibold"
+          >
+            <Edit2 className="h-3.5 w-3.5 text-orange-500" />
+            <span>Edit &amp; Resubmit</span>
+          </Link>
+
+          {p.stock === 0 && (
+            <>
+              <div className="border-t border-slate-100 dark:border-white/10 my-1" />
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveMenuId(null);
+                  onRequestDelete(p);
+                }}
+                className="w-full px-3.5 py-2 text-xs text-rose-500 hover:bg-rose-500/10 flex items-center gap-2 cursor-pointer transition-colors font-bold"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>Delete Product</span>
+              </button>
+            </>
+          )}
+        </>
+      );
+    }
+
     if (isPendingApproval) {
       return (
         <>
@@ -360,12 +402,13 @@ export function ProductTable({
           {products.map((p) => {
             const isSelected = selectedIds.includes(p.id);
             const isDraft = p.status === 'DRAFT';
-            const isPendingApproval = !isDraft && isPendingApprovalProductItem(p);
-            const isFirstTimePending = !isDraft && isFirstTimePendingApprovalItem(p);
-            const isPublishPendingFromDraft = !isDraft && isPublishPendingFromDraftItem(p);
+            const isRejected = p.status === 'REJECTED';
+            const isPendingApproval = !isDraft && !isRejected && isPendingApprovalProductItem(p);
+            const isFirstTimePending = !isDraft && !isRejected && isFirstTimePendingApprovalItem(p);
+            const isPublishPendingFromDraft = !isDraft && !isRejected && isPublishPendingFromDraftItem(p);
             const isAwaitingStock = isApprovedAwaitingStockProductItem(p);
             const isOutOfStock = isAwaitingStock;
-            const isLowStock = !isPendingApproval && !isDraft && !isAwaitingStock && p.stock > 0 && p.stock <= 30;
+            const isLowStock = !isPendingApproval && !isDraft && !isRejected && !isAwaitingStock && p.stock > 0 && p.stock <= 30;
 
             return (
               <MerchantExpandableCard
@@ -375,7 +418,9 @@ export function ProductTable({
                 statusBadge={
                   <span
                     className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border select-none ${
-                      isPendingApproval
+                      isRejected
+                        ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30'
+                        : isPendingApproval
                         ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30'
                         : isDraft
                         ? 'bg-slate-100 dark:bg-navy-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10'
@@ -384,7 +429,9 @@ export function ProductTable({
                         : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
                     }`}
                   >
-                    {isPendingApproval
+                    {isRejected
+                      ? 'REJECTED'
+                      : isPendingApproval
                       ? 'PENDING PRODUCT'
                       : isDraft
                       ? 'DRAFT'
@@ -394,24 +441,31 @@ export function ProductTable({
                   </span>
                 }
                 row1={
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="font-mono text-[11px] font-bold text-orange-600 dark:text-orange-400 bg-orange-500/10 px-1.5 py-0.5 rounded border border-orange-500/20">
-                      {p.sku}
-                    </span>
-                    <div className="ml-auto font-mono text-[10px]">
-                      {isFirstTimePending ? (
-                        <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-bold">
-                          Pending Review
-                        </span>
-                      ) : p.bin && p.bin !== 'Pending Approval' && p.bin !== 'Assigned on intake' ? (
-                        <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-bold">
-                          {p.bin}
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="font-mono text-[11px] font-bold text-orange-600 dark:text-orange-400 bg-orange-500/10 px-1.5 py-0.5 rounded border border-orange-500/20">
+                        {p.sku}
+                      </span>
+                      <div className="ml-auto font-mono text-[10px]">
+                        {isFirstTimePending ? (
+                          <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-bold">
+                            Pending Review
+                          </span>
+                        ) : p.bin && p.bin !== 'Pending Approval' && p.bin !== 'Assigned on intake' ? (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-bold">
+                            {p.bin}
                         </span>
                       ) : (
                         <span className="text-slate-400">Unassigned</span>
                       )}
                     </div>
                   </div>
+                  {isRejected && p.rejectionReason && (
+                    <p className="text-[11px] text-rose-600 dark:text-rose-400 line-clamp-2 leading-tight">
+                      Reason: {p.rejectionReason}
+                    </p>
+                  )}
+                </div>
                 }
                 row2={
                   <Link
@@ -548,13 +602,14 @@ export function ProductTable({
               const isMenuOpen = activeMenuId === `desktop-${p.id}`;
               const isNearBottom = products.length > 4 && idx >= products.length - 2;
               const isDraft = p.status === 'DRAFT';
-              const isPendingApproval = !isDraft && isPendingApprovalProductItem(p);
-              const isFirstTimePending = !isDraft && isFirstTimePendingApprovalItem(p);
-              const isPublishPendingFromDraft = !isDraft && isPublishPendingFromDraftItem(p);
+              const isRejected = p.status === 'REJECTED';
+              const isPendingApproval = !isDraft && !isRejected && isPendingApprovalProductItem(p);
+              const isFirstTimePending = !isDraft && !isRejected && isFirstTimePendingApprovalItem(p);
+              const isPublishPendingFromDraft = !isDraft && !isRejected && isPublishPendingFromDraftItem(p);
               const isAwaitingStock = false;
               const isSuspended = Boolean((p as any).isSuspended);
-              const isOutOfStock = !isDraft && !isPendingApproval && (p.stock || 0) === 0;
-              const isLowStock = !isPendingApproval && !isDraft && !isOutOfStock && p.stock > 0 && p.stock <= 30;
+              const isOutOfStock = !isDraft && !isRejected && !isPendingApproval && (p.stock || 0) === 0;
+              const isLowStock = !isPendingApproval && !isDraft && !isRejected && !isOutOfStock && p.stock > 0 && p.stock <= 30;
 
               return (
                 <tr
@@ -648,29 +703,45 @@ export function ProductTable({
 
                   {/* Status Column: PURE INFORMATIVE TEXT BADGE (NOT a button!) */}
                   <td className="py-3.5 px-3.5 text-center">
-                    <span
-                      className={`inline-flex items-center justify-center text-[11px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-full border select-none mx-auto ${
-                        isPendingApproval
-                          ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30'
+                    {isRejected ? (
+                      <div className="space-y-1 max-w-[200px] mx-auto">
+                        <span className="inline-flex items-center justify-center text-[11px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-full border select-none mx-auto bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30">
+                          Rejected
+                        </span>
+                        {p.rejectionReason && (
+                          <p
+                            className="text-[11px] text-rose-600 dark:text-rose-400 line-clamp-2 leading-tight"
+                            title={p.rejectionReason}
+                          >
+                            {p.rejectionReason}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <span
+                        className={`inline-flex items-center justify-center text-[11px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-full border select-none mx-auto ${
+                          isPendingApproval
+                            ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30'
+                            : isDraft
+                            ? 'bg-slate-100 dark:bg-navy-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10'
+                            : isSuspended
+                            ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30'
+                            : isOutOfStock
+                            ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30'
+                            : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
+                        }`}
+                      >
+                        {isPendingApproval
+                          ? 'Pending Product'
                           : isDraft
-                          ? 'bg-slate-100 dark:bg-navy-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10'
+                          ? 'Draft'
                           : isSuspended
-                          ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30'
+                          ? 'Suspended'
                           : isOutOfStock
-                          ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30'
-                          : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
-                      }`}
-                    >
-                      {isPendingApproval
-                        ? 'Pending Product'
-                        : isDraft
-                        ? 'Draft'
-                        : isSuspended
-                        ? 'Suspended'
-                        : isOutOfStock
-                        ? 'Out of Stock'
-                        : 'Published'}
-                    </span>
+                          ? 'Out of Stock'
+                          : 'Published'}
+                      </span>
+                    )}
                   </td>
 
                   {/* Actions Column: ONLY the clean 3-dots trigger button! */}

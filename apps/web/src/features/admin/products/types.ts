@@ -77,6 +77,7 @@ export interface WarehouseProductItem {
   }[];
   editState?: 'EDIT_ALLOWED' | 'EDIT_APPROVAL_PENDING' | 'EDIT_ACCESS_REQUESTED' | null;
   isSuspended?: boolean;
+  rejectionReason?: string;
 }
 
 export interface InboundStockReplenishment {

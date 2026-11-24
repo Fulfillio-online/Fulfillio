@@ -36,7 +36,8 @@ export type ProductCatalogFilterTab =
   | 'APPROVAL'
   | 'PUBLIC'
   | 'OUT_OF_STOCK'
-  | 'DRAFT';
+  | 'DRAFT'
+  | 'REJECTED';
 
 export interface ProductsCatalogTabProps {
   products: WarehouseProductItem[];
@@ -193,7 +194,8 @@ export function ProductsCatalogTab({
       (p) => (p.status === 'APPROVED' || p.status === 'STOCK_STORED') && !p.isDraft && p.stock === 0
     ).length;
     const draftCount = basePool.filter((p) => p.status === 'DRAFT' || p.isDraft).length;
-    return { allCount, approvalCount, publicCount, outOfStockCount, draftCount };
+    const rejectedCount = basePool.filter((p) => p.status === 'REJECTED' && !p.isDraft).length;
+    return { allCount, approvalCount, publicCount, outOfStockCount, draftCount, rejectedCount };
   }, [basePool]);
 
   // 2. Tab Filtering
@@ -201,13 +203,15 @@ export function ProductsCatalogTab({
     return basePool.filter((p) => {
       const isDraft = p.status === 'DRAFT' || Boolean(p.isDraft);
       const isPending = p.status === 'PENDING_APPROVAL';
-      const isOutOfStock = !isDraft && !isPending && p.stock === 0;
-      const isPublic = !isDraft && !isPending && p.stock > 0;
+      const isRejected = !isDraft && p.status === 'REJECTED';
+      const isOutOfStock = !isDraft && !isPending && !isRejected && p.stock === 0;
+      const isPublic = !isDraft && !isPending && !isRejected && p.stock > 0;
 
       if (activeCatalogTab === 'APPROVAL') return isPending;
       if (activeCatalogTab === 'PUBLIC') return isPublic;
       if (activeCatalogTab === 'OUT_OF_STOCK') return isOutOfStock;
       if (activeCatalogTab === 'DRAFT') return isDraft;
+      if (activeCatalogTab === 'REJECTED') return isRejected;
       return true; // 'ALL' shows all
     });
   }, [basePool, activeCatalogTab]);
@@ -598,6 +602,28 @@ export function ProductsCatalogTab({
           >
             Draft <span className="font-semibold tabular-nums">({catalogCounts.draftCount})</span>
           </button>
+          <span className="text-slate-300 dark:text-slate-700">|</span>
+
+          <button
+            type="button"
+            onClick={() => handleTabSwitch('REJECTED')}
+            className={`cursor-pointer transition-colors px-2.5 py-1 rounded-lg flex items-center gap-1.5 ${
+              activeCatalogTab === 'REJECTED'
+                ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 font-bold border border-rose-500/30'
+                : 'text-slate-600 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white font-medium'
+            }`}
+          >
+            <span>Rejected</span>
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[11px] font-bold tabular-nums ${
+                catalogCounts.rejectedCount > 0
+                  ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 font-bold'
+                  : 'text-slate-400 dark:text-slate-500'
+              }`}
+            >
+              {catalogCounts.rejectedCount}
+            </span>
+          </button>
         </div>
       </div>
 
@@ -698,8 +724,9 @@ export function ProductsCatalogTab({
 
                   const isDraft = p.status === 'DRAFT' || Boolean(p.isDraft);
                   const isPending = p.status === 'PENDING_APPROVAL';
-                  const isOutOfStock = !isDraft && !isPending && (p.stock || 0) === 0;
-                  const isLowStock = !isDraft && !isPending && !isOutOfStock && p.stock > 0 && p.stock < 30;
+                  const isRejected = !isDraft && p.status === 'REJECTED';
+                  const isOutOfStock = !isDraft && !isPending && !isRejected && (p.stock || 0) === 0;
+                  const isLowStock = !isDraft && !isPending && !isRejected && !isOutOfStock && p.stock > 0 && p.stock < 30;
 
                   return (
                     <tr
@@ -839,6 +866,21 @@ export function ProductsCatalogTab({
                             <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                             Pending
                           </span>
+                        ) : isRejected ? (
+                          <div className="space-y-1 max-w-[200px]">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
+                              <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                              Rejected
+                            </span>
+                            {p.rejectionReason && (
+                              <p
+                                className="text-[11px] text-rose-600 dark:text-rose-400 line-clamp-2 leading-tight"
+                                title={p.rejectionReason}
+                              >
+                                {p.rejectionReason}
+                              </p>
+                            )}
+                          </div>
                         ) : isDraft ? (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-500/30">
                             <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
@@ -942,7 +984,7 @@ export function ProductsCatalogTab({
                               )}
 
                               {/* STAGE 2: Published / Out of Stock -> View, Allow Edit, Approve/Reject Revision, Suspend/Reactivate, and Delete (if stock is 0) */}
-                              {!isPending && !isDraft && (
+                              {!isPending && !isDraft && !isRejected && (
                                 <>
                                   {p.editState === 'EDIT_ACCESS_REQUESTED' && (
                                     <button
@@ -1029,8 +1071,8 @@ export function ProductsCatalogTab({
                                 </>
                               )}
 
-                              {/* STAGE 3: Draft -> View and Delete (strictly only if stock is 0) */}
-                              {isDraft && (
+                              {/* STAGE 3: Draft / Rejected -> View and Delete (strictly only if stock is 0) */}
+                              {(isDraft || isRejected) && (
                                 <>
                                   <Link
                                     href={`/admin/products/${p.id}`}
@@ -1096,7 +1138,8 @@ export function ProductsCatalogTab({
               const isSelected = selectedProductIds.has(p.id);
               const isPending = p.status === 'PENDING_APPROVAL';
               const isDraft = p.status === 'DRAFT' || Boolean(p.isDraft);
-              const isOutOfStock = !isDraft && !isPending && p.stock === 0;
+              const isRejected = !isDraft && p.status === 'REJECTED';
+              const isOutOfStock = !isDraft && !isPending && !isRejected && p.stock === 0;
 
               return (
                 <div
@@ -1160,6 +1203,10 @@ export function ProductsCatalogTab({
                           {isPending ? (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300">
                               Pending Approval
+                            </span>
+                          ) : isRejected ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-700 dark:text-rose-300">
+                              Rejected
                             </span>
                           ) : isDraft ? (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-500/15 text-slate-700 dark:text-slate-300">

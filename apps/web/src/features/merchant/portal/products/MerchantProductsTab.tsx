@@ -32,8 +32,12 @@ const isProductDraft = (p: MerchantProductItem): boolean => {
   return p.status === 'DRAFT';
 };
 
+const isProductRejected = (p: MerchantProductItem): boolean => {
+  return p.status === 'REJECTED';
+};
+
 const isPendingApprovalProduct = (p: MerchantProductItem): boolean => {
-  if (p.status === 'DRAFT') return false;
+  if (p.status === 'DRAFT' || p.status === 'REJECTED') return false;
   if (
     p.status === 'APPROVED' ||
     p.status === 'PUBLISHED' ||
@@ -48,7 +52,7 @@ const isPendingApprovalProduct = (p: MerchantProductItem): boolean => {
 };
 
 const isProductActive = (p: MerchantProductItem): boolean => {
-  if (p.status === 'DRAFT') return false;
+  if (p.status === 'DRAFT' || p.status === 'REJECTED') return false;
   if (isPendingApprovalProduct(p)) return false;
   return (
     p.status === 'APPROVED' ||
@@ -184,9 +188,10 @@ export function MerchantProductsTab({
     };
   }, [products, orders]);
 
-  // Tab counts: All Items, Active, Pending, Drafts, Out of Stock
+  // Tab counts: All Items, Active, Pending, Drafts, Rejected, Out of Stock
   const counts = useMemo(() => {
     const draftCount = products.filter(isProductDraft).length;
+    const rejectedCount = products.filter(isProductRejected).length;
     const pendingCount = products.filter(isPendingApprovalProduct).length;
     const activeCount = products.filter((p) => isProductActive(p) && (p.stock || 0) > 0).length;
     const outOfStockCount = products.filter((p) => isProductActive(p) && (p.stock || 0) === 0).length;
@@ -197,6 +202,7 @@ export function MerchantProductsTab({
       published: activeCount,
       pendingApproval: pendingCount,
       draft: draftCount,
+      rejected: rejectedCount,
       outOfStock: outOfStockCount,
     };
   }, [products]);
@@ -206,12 +212,15 @@ export function MerchantProductsTab({
     return products
       .filter((p) => {
         const isDraft = isProductDraft(p);
+        const isRejected = isProductRejected(p);
         const isPending = isPendingApprovalProduct(p);
         const isActive = isProductActive(p);
         const isOutOfStock = isActive && (p.stock || 0) === 0;
 
         if (activeTab === 'DRAFT') {
           if (!isDraft) return false;
+        } else if (activeTab === 'REJECTED') {
+          if (!isRejected) return false;
         } else if (activeTab === 'PENDING_APPROVAL') {
           if (!isPending) return false;
         } else if (activeTab === 'ACTIVE' || activeTab === 'PUBLISHED') {

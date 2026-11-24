@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   FileText,
   AlertCircle,
+  XCircle,
 } from 'lucide-react';
 import { ProductFilterTab } from '../types';
 
@@ -18,6 +19,7 @@ interface ProductStatusTabsProps {
     active: number;
     pendingApproval: number;
     draft: number;
+    rejected?: number;
     outOfStock: number;
     // Optional legacy support
     awaitingStock?: number;
@@ -66,6 +68,13 @@ export function ProductStatusTabs({
       label: 'Drafts',
       count: counts.draft,
       icon: <FileText className="h-3.5 w-3.5 text-slate-400" />,
+    },
+    {
+      id: 'REJECTED',
+      label: 'Rejected',
+      count: counts.rejected ?? 0,
+      icon: <XCircle className="h-3.5 w-3.5 text-rose-500" />,
+      badgeStyle: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20',
     },
     {
       id: 'OUT_OF_STOCK',

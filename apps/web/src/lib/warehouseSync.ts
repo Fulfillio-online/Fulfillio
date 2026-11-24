@@ -742,6 +742,7 @@ export function convertMerchantProductToWarehouse(
     colors: item.colors,
     sizes: item.sizes,
     variantsList: item.variantsList,
+    rejectionReason: item.rejectionReason,
   };
 }
 
@@ -1059,21 +1060,27 @@ export function syncAdminProductsToMerchant(
           status:
             matchedAdmin.status === 'DRAFT' || matchedAdmin.isDraft
               ? ('DRAFT' as const)
-              : (matchedAdmin.status === 'STOCK_STORED' || matchedAdmin.status === 'APPROVED') &&
-                matchedAdmin.stockAccepted === true &&
-                matchedAdmin.stock > 0
-                ? ('STOCK_STORED' as const)
-                : matchedAdmin.status === 'APPROVED'
-                  ? ('APPROVED' as const)
-                  : ('PENDING_APPROVAL' as const),
+              : matchedAdmin.status === 'REJECTED'
+                ? ('REJECTED' as const)
+                : (matchedAdmin.status === 'STOCK_STORED' || matchedAdmin.status === 'APPROVED') &&
+                  matchedAdmin.stockAccepted === true &&
+                  matchedAdmin.stock > 0
+                  ? ('STOCK_STORED' as const)
+                  : matchedAdmin.status === 'APPROVED'
+                    ? ('APPROVED' as const)
+                    : ('PENDING_APPROVAL' as const),
+          rejectionReason:
+            matchedAdmin.status === 'REJECTED'
+              ? matchedAdmin.rejectionReason ?? mp.rejectionReason
+              : undefined,
         };
       });
 
-      // 3. Add any new approved products created directly by Admin for this merchantCode
+      // 3. Add any new approved or rejected products created/updated by Admin for this merchantCode
       const newFromAdmin = adminProducts.filter(
         (ap) =>
           ap.merchantCode.toUpperCase() === code &&
-          (ap.status === 'APPROVED' || ap.status === 'STOCK_STORED' || ap.status === 'PENDING_APPROVAL') &&
+          (ap.status === 'APPROVED' || ap.status === 'STOCK_STORED' || ap.status === 'PENDING_APPROVAL' || ap.status === 'REJECTED') &&
           !INITIAL_PRODUCTS.some((seed) => seed.id === ap.id) &&
           !merchantProducts.some((mp) => isMatchingProduct(mp, ap))
       );
@@ -1090,13 +1097,14 @@ export function syncAdminProductsToMerchant(
           reserved: 0,
           price: ap.price,
           bin: ap.binCode,
-          status: 'PUBLISHED',
+          status: ap.status === 'REJECTED' ? 'REJECTED' : 'PUBLISHED',
           totalOrders: 0,
           imageUrl: ap.imageUrl,
           colors: ap.colors,
           sizes: ap.sizes,
           variantsList: ap.variantsList,
           description: ap.description,
+          rejectionReason: ap.rejectionReason,
         }));
         merchantProducts = [...converted, ...merchantProducts];
       }
@@ -1158,9 +1166,11 @@ export function reconcileAdminProductsWithMerchant(
             profile,
             mp.status === 'DRAFT'
               ? 'DRAFT'
-              : mp.status === 'PUBLISHED'
-                ? 'APPROVED'
-                : 'PENDING_APPROVAL'
+              : mp.status === 'REJECTED'
+                ? 'REJECTED'
+                : mp.status === 'PUBLISHED'
+                  ? 'APPROVED'
+                  : 'PENDING_APPROVAL'
           )
         );
       }
@@ -2175,19 +2185,28 @@ export function approveAdminProductSubmission(
 }
 
 /**
- * Admin rejects a pending submission: removed from the warehouse catalog and from the merchant.
+ * Admin rejects a pending submission: saves in REJECTED state with rejectionReason and syncs to merchant.
  */
-export function rejectAdminProductSubmission(productId: string): WarehouseProductItem | null {
+export function rejectAdminProductSubmission(
+  productId: string,
+  reason?: string
+): WarehouseProductItem | null {
   if (typeof window === 'undefined') return null;
   try {
     const current = loadAdminProductsReconciled();
     const target = current.find((p) => p.id === productId);
     if (!target) return null;
-    const next = current.filter((p) => p.id !== productId);
+    const rejectedItem: WarehouseProductItem = {
+      ...target,
+      status: 'REJECTED',
+      isDraft: false,
+      rejectionReason: reason?.trim() || target.rejectionReason || 'Rejected by admin',
+    };
+    const next = current.map((p) => (p.id === productId ? rejectedItem : p));
     localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
-    syncAdminProductsToMerchant(next, [target]);
+    syncAdminProductsToMerchant(next);
     emitWarehouseSync('AdminMerchantDirectory');
-    return target;
+    return rejectedItem;
   } catch {
     return null;
   }
@@ -2639,6 +2658,34 @@ export async function syncProductStatusToDatabase(
     return res.ok;
   } catch (err) {
     console.warn('[Sync] Failed to update product status in PostgreSQL:', err);
+    return false;
+  }
+}
+
+/**
+ * Persist product rejection state and reason to PostgreSQL (pgAdmin) database
+ */
+export async function rejectProductInDatabase(
+  productId: string,
+  reason?: string
+): Promise<boolean> {
+  if (!productId) return false;
+  try {
+    const res = await fetch(
+      `${API_BASE}/inventory/products/${encodeURIComponent(productId)}/reject-submission`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          reason: reason?.trim() || 'Rejected by admin',
+        }),
+      }
+    );
+    return res.ok;
+  } catch (err) {
+    console.warn('[Sync] Failed to reject product in PostgreSQL:', err);
     return false;
   }
 }

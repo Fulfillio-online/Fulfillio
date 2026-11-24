@@ -48,6 +48,7 @@ import {
   acceptStockInDatabase,
   approveProductInDatabase,
   deleteProductFromDatabase,
+  rejectProductInDatabase,
 } from '@/lib/warehouseSync';
 import { WarehousePipelineOrder } from '@/features/admin/orders/types';
 
@@ -448,7 +449,7 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
     finalQty: number,
     finalBin: string,
     acceptStockNow?: boolean,
-    _rejectionReason?: string,
+    rejectionReason?: string,
     variantStocks?: Record<string, number>
   ) => {
     setApprovalModalData(null);
@@ -519,39 +520,29 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
       approveProductInDatabase(targetProduct.id, finalBin, actualStock, isStockAccepted, variantStocks);
       showToast(`Product "${targetProduct.title}" approved & published! Stored ${actualStock} units in Bin ${finalBin}.`);
     } else {
-      const wasAlreadyStored = targetProduct.stockAccepted === true && (targetProduct.stock || 0) > 0;
-      if (wasAlreadyStored) {
-        const updatedProd: WarehouseProductItem = {
-          ...targetProduct,
-          status: 'DRAFT',
-          isDraft: true,
-        };
-        setProduct(updatedProd);
+      const reason = rejectionReason?.trim() || 'Rejected by admin';
+      const updatedProd: WarehouseProductItem = {
+        ...targetProduct,
+        status: 'REJECTED',
+        isDraft: false,
+        rejectionReason: reason,
+      };
+      setProduct(updatedProd);
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY_PRODUCTS);
+        const all: WarehouseProductItem[] = stored ? JSON.parse(stored) : INITIAL_PRODUCTS;
+        const next = all.map((p) => (p.id === targetProduct.id ? updatedProd : p));
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
+        syncAdminProductsToMerchant(next);
+      } catch {}
+      rejectProductInDatabase(targetProduct.id, reason).finally(() => {
         try {
-          const stored = localStorage.getItem(STORAGE_KEY_PRODUCTS);
-          const all: WarehouseProductItem[] = stored ? JSON.parse(stored) : INITIAL_PRODUCTS;
-          const next = all.map((p) => (p.id === targetProduct.id ? updatedProd : p));
-          localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
-          syncAdminProductsToMerchant(next);
+          window.dispatchEvent(
+            new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'AdminProductDetails' } })
+          );
         } catch {}
-        const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
-        fetch(`${API_BASE}/inventory/products/${encodeURIComponent(targetProduct.id)}/status`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'DRAFT' }),
-        }).catch(() => {});
-        showToast(`Rejected publish request for "${targetProduct.title}". Returned to Draft.`);
-      } else {
-        try {
-          const stored = localStorage.getItem(STORAGE_KEY_PRODUCTS);
-          const all: WarehouseProductItem[] = stored ? JSON.parse(stored) : INITIAL_PRODUCTS;
-          const next = all.filter((p) => p.id !== targetProduct.id);
-          localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
-          syncAdminProductsToMerchant(next);
-        } catch {}
-        deleteProductFromDatabase(targetProduct.id, targetProduct.merchantCode);
-        router.push('/admin/products');
-      }
+      });
+      showToast(`Rejected product submission "${targetProduct.title}".`);
     }
   };
 

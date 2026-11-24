@@ -35,6 +35,7 @@ export type ProductFilterTab =
   | 'PUBLISHED'
   | 'EDIT_APPROVAL_PENDING'
   | 'OUT_OF_STOCK'
+  | 'REJECTED'
   | 'STOCK_REQUESTS';
 
 export type ProductSortOption =
@@ -53,6 +54,7 @@ export interface ProductStats {
   awaitingStock: number;
   activeProducts: number;
   editApprovalPending: number;
+  rejected?: number;
   restockRequests: number;
   returnRequests: number;
   totalWarehouseStock: number;

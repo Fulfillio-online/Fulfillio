@@ -228,11 +228,12 @@ export interface MerchantProductItem {
   }[];
   imageUrl?: string;
   images?: string[];
-  status?: 'PUBLISHED' | 'STOCK_STORED' | 'APPROVED' | 'DRAFT' | 'ARCHIVED' | 'PENDING_APPROVAL';
+  status?: 'PUBLISHED' | 'STOCK_STORED' | 'APPROVED' | 'DRAFT' | 'ARCHIVED' | 'PENDING_APPROVAL' | 'REJECTED';
   isDraft?: boolean;
   totalOrders?: number;
   editState?: 'EDIT_ALLOWED' | 'EDIT_APPROVAL_PENDING' | 'EDIT_ACCESS_REQUESTED' | null;
   isSuspended?: boolean;
+  rejectionReason?: string;
 }
 
 export interface MerchantAsnItem {

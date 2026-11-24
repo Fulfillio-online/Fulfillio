@@ -47,6 +47,7 @@ import {
   acceptStockInDatabase,
   syncProductStatusToDatabase,
   deleteProductFromDatabase,
+  rejectProductInDatabase,
 } from '@/lib/warehouseSync';
 
 export interface ProductsManagerProps {
@@ -259,42 +260,30 @@ export function ProductsManager({
 
   const handleBulkRejectProducts = (productIds: string[]) => {
     const idSet = new Set(productIds);
+    const reason = 'Bulk rejected by admin';
     const targetProducts = products.filter((p) => idSet.has(p.id));
-    const deletableRejected = targetProducts.filter((p) => (p.stock || 0) === 0);
-    const draftRestoredRejected = targetProducts.filter((p) => (p.stock || 0) > 0);
-    const deletableIdSet = new Set(deletableRejected.map((p) => p.id));
-    const draftRestoredIdSet = new Set(draftRestoredRejected.map((p) => p.id));
 
-    setProducts((prev) => {
-      const next = prev
-        .filter((p) => !deletableIdSet.has(p.id))
-        .map((p) =>
-          draftRestoredIdSet.has(p.id)
-            ? { ...p, status: 'DRAFT' as const, isDraft: true }
-            : p
-        );
-      try {
-        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
-        syncAdminProductsToMerchant(next, deletableRejected);
-      } catch {}
-      return next;
-    });
-    deletableRejected.forEach((p) => {
-      deleteProductFromDatabase(p.id, p.merchantCode);
-    });
-    draftRestoredRejected.forEach((p) => {
-      fetch(`${API_BASE}/inventory/products/${encodeURIComponent(p.id)}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'DRAFT' }),
-      }).catch(() => {});
-    });
+    const nextProducts = products.map((p) =>
+      idSet.has(p.id)
+        ? { ...p, status: 'REJECTED' as const, isDraft: false, rejectionReason: reason }
+        : p
+    );
+    setProducts(nextProducts);
+    try {
+      localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(nextProducts));
+      syncAdminProductsToMerchant(nextProducts);
+    } catch {}
     triggerToast(`Rejected ${productIds.length} product submission(s).`);
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(
-        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
-      );
-    }
+
+    Promise.all(
+      targetProducts.map((p) => rejectProductInDatabase(p.id, reason))
+    ).finally(() => {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
+        );
+      }
+    });
   };
   const [products, setProducts] = useState<WarehouseProductItem[]>(INITIAL_PRODUCTS);
   const [bins, setBins] = useState<WarehouseBin[]>(INITIAL_BINS);
@@ -387,12 +376,17 @@ export function ProductsManager({
                 const mName = p.merchant?.businessName || `Merchant (${mCode})`;
                 const firstVariant = variants[0];
                 const rawDbStatus = (p.status || '').trim().toUpperCase();
+                const rawLifecycleStatus = (p.lifecycleStatus || '').trim().toUpperCase();
                 const isDraft = rawDbStatus === 'DRAFT';
+                const isRejected = !isDraft && (rawDbStatus === 'REJECTED' || rawLifecycleStatus === 'REJECTED');
                 const isPending =
-                  rawDbStatus === 'PENDING_APPROVAL' ||
-                  (!rawDbStatus && variants.some((v: any) => v.defaultBinCode === 'Pending Approval'));
+                  !isDraft &&
+                  !isRejected &&
+                  (rawDbStatus === 'PENDING_APPROVAL' ||
+                    (!rawDbStatus && variants.some((v: any) => v.defaultBinCode === 'Pending Approval')));
                 const isApproved =
                   !isDraft &&
+                  !isRejected &&
                   !isPending &&
                   (rawDbStatus === 'APPROVED' ||
                     rawDbStatus === 'PUBLISHED' ||
@@ -406,9 +400,11 @@ export function ProductsManager({
 
                 const computedStatus = isDraft
                   ? ('DRAFT' as const)
-                  : isPending
-                    ? ('PENDING_APPROVAL' as const)
-                    : ('STOCK_STORED' as const);
+                  : isRejected
+                    ? ('REJECTED' as const)
+                    : isPending
+                      ? ('PENDING_APPROVAL' as const)
+                      : ('STOCK_STORED' as const);
 
                 const hasValidAssignedBin =
                   Boolean(firstVariant?.defaultBinCode) &&
@@ -450,6 +446,7 @@ export function ProductsManager({
                   status: computedStatus,
                   isDraft,
                   isSuspended: Boolean(p.isSuspended),
+                  rejectionReason: p.rejectionReason || undefined,
                   submittedAt: new Date(p.createdAt || Date.now()).toLocaleDateString('en-GB', {
                     day: '2-digit',
                     month: 'short',
@@ -889,48 +886,27 @@ export function ProductsManager({
         `Product "${product.title}" approved! Stored ${actualStock} units in Bin ${finalBin}.`
       );
     } else {
-      const wasAlreadyStored = product.stockAccepted === true && (product.stock || 0) > 0;
-      if (wasAlreadyStored) {
-        // Draft-to-Publish Rejection: Do NOT delete a product that already has warehouse stock; return it to Draft
-        setProducts((prev) => {
-          const next = prev.map((p) =>
-            p.id === product.id ? { ...p, status: 'DRAFT' as const, isDraft: true } : p
+      const reason = rejectionReason?.trim() || 'Rejected by admin';
+      const nextProducts = products.map((p) =>
+        p.id === product.id
+          ? { ...p, status: 'REJECTED' as const, isDraft: false, rejectionReason: reason }
+          : p
+      );
+      setProducts(nextProducts);
+      try {
+        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(nextProducts));
+        syncAdminProductsToMerchant(nextProducts);
+      } catch {
+        // ignore
+      }
+      triggerToast(`Rejected product submission "${product.title}" (${product.fullSku}).`);
+      rejectProductInDatabase(product.id, reason).finally(() => {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
           );
-          try {
-            localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
-            syncAdminProductsToMerchant(next);
-          } catch {}
-          return next;
-        });
-        fetch(`${API_BASE}/inventory/products/${encodeURIComponent(product.id)}/status`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'DRAFT' }),
-        }).catch(() => {});
-        triggerToast(
-          `Rejected publish request for "${product.title}". Returned to Draft (${product.stock} units remain in warehouse).`
-        );
-      } else {
-        // First-Time Product Rejection: Remove 0-stock first-time submission
-        setProducts((prev) => {
-          const next = prev.filter((p) => p.id !== product.id);
-          try {
-            localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
-            syncAdminProductsToMerchant(next, [product]);
-          } catch {
-            // ignore
-          }
-          return next;
-        });
-        deleteProductFromDatabase(product.id, product.merchantCode);
-        triggerToast(`Rejected product submission "${product.title}" (${product.fullSku}).`);
-      }
-
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(
-          new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
-        );
-      }
+        }
+      });
     }
   };
 
@@ -1279,13 +1255,19 @@ syncAdminProductsToMerchant(next);
       items.filter((i) => i.approvalType === 'WITHDRAWAL').map((i) => i.id)
     );
 
-    setProducts((prev) => {
-      const next = prev.filter((p) => !productIdsToReject.has(p.id));
-      try {
-        localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(next));
-      } catch {}
-      return next;
-    });
+    const reason = 'Bulk rejected by admin';
+    const rejectedProducts = products.filter((p) => productIdsToReject.has(p.id));
+
+    const nextProducts = products.map((p) =>
+      productIdsToReject.has(p.id)
+        ? { ...p, status: 'REJECTED' as const, isDraft: false, rejectionReason: reason }
+        : p
+    );
+    setProducts(nextProducts);
+    try {
+      localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(nextProducts));
+      syncAdminProductsToMerchant(nextProducts);
+    } catch {}
 
     setStockReplenishments((prev) => {
       const next = prev.map((r) =>
@@ -1309,11 +1291,15 @@ syncAdminProductsToMerchant(next);
 
     triggerToast(`Declined ${items.length} requests.`);
 
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(
-        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
-      );
-    }
+    Promise.all(
+      rejectedProducts.map((p) => rejectProductInDatabase(p.id, reason))
+    ).finally(() => {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'ProductsManager' } })
+        );
+      }
+    });
   };
 
   const handleSendRestockNotice = (productId: string, suggestedQty: number, note?: string) => {

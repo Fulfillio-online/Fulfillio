@@ -213,6 +213,7 @@ export const merchantApi = {
         const profitMargin = price > 0 ? Math.round((profit / price) * 100) : 0;
 
         const dbStatus = (p.status || '').trim().toUpperCase();
+        const lifecycleStatus = (p.lifecycleStatus || '').trim().toUpperCase();
         const rawBin =
           firstVariant?.defaultBinCode &&
           firstVariant.defaultBinCode !== 'Pending Approval' &&
@@ -221,12 +222,15 @@ export const merchantApi = {
             : (variants[0]?.attributes as any)?.bin || (firstVariant?.attributes as any)?.bin;
 
         const isDraft = dbStatus === 'DRAFT';
+        const isRejected = !isDraft && (dbStatus === 'REJECTED' || lifecycleStatus === 'REJECTED');
         const isPending =
           !isDraft &&
+          !isRejected &&
           (dbStatus === 'PENDING_APPROVAL' ||
             (!dbStatus && (!rawBin || rawBin === 'Pending Approval' || rawBin === 'Assigned on intake')));
         const isStockStored =
           !isDraft &&
+          !isRejected &&
           !isPending &&
           (dbStatus === 'STOCK_STORED' || dbStatus === 'APPROVED' || dbStatus === 'PUBLISHED');
 
@@ -241,9 +245,11 @@ export const merchantApi = {
             : 'Pending Approval';
         const resolvedStatus = isDraft
           ? ('DRAFT' as const)
-          : isPending
-            ? ('PENDING_APPROVAL' as const)
-            : ('STOCK_STORED' as const);
+          : isRejected
+            ? ('REJECTED' as const)
+            : isPending
+              ? ('PENDING_APPROVAL' as const)
+              : ('STOCK_STORED' as const);
 
         return {
           id: p.id,
@@ -253,6 +259,7 @@ export const merchantApi = {
           barcode: firstVariant?.barcode || '',
           stock: totalStock,
           stockAccepted: resolvedStatus === 'STOCK_STORED',
+          rejectionReason: p.rejectionReason || undefined,
           stockStatus:
             resolvedStatus === 'STOCK_STORED'
               ? totalStock > 0
