@@ -511,65 +511,92 @@ export function useMerchantDirectory() {
     triggerToast(`Rejected product submission "${rejected.title}" (${rejected.fullSku}).`);
   };
 
-  const handleReviewPayoutAccount = (
-    merchantId: string,
+  const applyPayoutReview = (
+    merchantIds: string[],
     action: 'APPROVE' | 'REJECT',
     rejectionReason?: string,
-  ) => {
+  ): MerchantRecord[] => {
+    const idSet = new Set(merchantIds);
     const nextStatus: 'VERIFIED' | 'REJECTED' = action === 'APPROVE' ? 'VERIFIED' : 'REJECTED';
     const nowIso = new Date().toISOString();
-    const target = merchants.find((m) => m.id === merchantId || m.merchantCode === merchantId);
-    const updated = merchants.map((m) =>
-      m.id === merchantId || m.merchantCode === merchantId
-        ? {
-            ...m,
-            payoutAccount: {
-              ...m.payoutAccount,
-              status: nextStatus,
-              updatedAt: nowIso,
-              ...(nextStatus === 'REJECTED'
-                ? { rejectionReason: rejectionReason || 'Payout details verification failed' }
-                : { rejectionReason: undefined }),
-            },
-          }
-        : m,
-    );
+    const resolvedReason =
+      nextStatus === 'REJECTED'
+        ? rejectionReason?.trim() || 'Payout details verification failed'
+        : undefined;
 
-    if (dbMerchantsRef.current) {
-      dbMerchantsRef.current = dbMerchantsRef.current.map((m) =>
-        m.id === merchantId || m.merchantCode === merchantId
+    const patchList = (list: MerchantRecord[]) =>
+      list.map((m) =>
+        idSet.has(m.id) || (m.merchantCode && idSet.has(m.merchantCode))
           ? {
               ...m,
               payoutAccount: {
                 ...m.payoutAccount,
                 status: nextStatus,
                 updatedAt: nowIso,
-                ...(nextStatus === 'REJECTED'
-                  ? { rejectionReason: rejectionReason || 'Payout details verification failed' }
-                  : { rejectionReason: undefined }),
+                rejectionReason: resolvedReason,
               },
             }
           : m,
       );
+
+    const matchedTargets = merchants.filter(
+      (m) => idSet.has(m.id) || (m.merchantCode && idSet.has(m.merchantCode)),
+    );
+    const updated = patchList(merchants);
+
+    if (dbMerchantsRef.current) {
+      dbMerchantsRef.current = patchList(dbMerchantsRef.current);
     }
 
     setMerchants(updated);
     syncMerchantDirectoryToProfiles(updated);
 
-    const targetIdentifier = target?.merchantCode || target?.id || merchantId;
-    fetch(`${API_BASE}/merchants/${encodeURIComponent(targetIdentifier)}/payout-status`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        status: nextStatus,
-        ...(rejectionReason ? { rejectionReason } : {}),
-      }),
-    }).catch(() => {});
+    const identifiers =
+      matchedTargets.length > 0
+        ? matchedTargets.map((m) => m.merchantCode || m.id)
+        : merchantIds;
 
+    for (const targetIdentifier of identifiers) {
+      fetch(`${API_BASE}/merchants/${encodeURIComponent(targetIdentifier)}/payout-status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: nextStatus,
+          ...(resolvedReason ? { rejectionReason: resolvedReason } : {}),
+        }),
+      }).catch(() => {});
+    }
+
+    return matchedTargets;
+  };
+
+  const handleReviewPayoutAccount = (
+    merchantId: string,
+    action: 'APPROVE' | 'REJECT',
+    rejectionReason?: string,
+  ) => {
+    const matched = applyPayoutReview([merchantId], action, rejectionReason);
+    const target = matched[0];
+    const targetLabel = target?.storeName || target?.merchantCode || merchantId;
     triggerToast(
       action === 'APPROVE'
-        ? `Payout account for "${target?.storeName || targetIdentifier}" verified!`
-        : `Payout account for "${target?.storeName || targetIdentifier}" rejected.`,
+        ? `Payout account for "${targetLabel}" verified!`
+        : `Payout account for "${targetLabel}" rejected.`,
+    );
+  };
+
+  const handleBulkReviewPayoutAccounts = (
+    merchantIds: string[],
+    action: 'APPROVE' | 'REJECT',
+    rejectionReason?: string,
+  ) => {
+    if (!merchantIds.length) return;
+    const matched = applyPayoutReview(merchantIds, action, rejectionReason);
+    const count = matched.length || merchantIds.length;
+    triggerToast(
+      action === 'APPROVE'
+        ? `Verified ${count} payout account${count > 1 ? 's' : ''}!`
+        : `Rejected ${count} payout account${count > 1 ? 's' : ''}.`,
     );
   };
 
@@ -585,6 +612,7 @@ export function useMerchantDirectory() {
     handleBulkUpdateStatus,
     handleUpdateMerchant,
     handleReviewPayoutAccount,
+    handleBulkReviewPayoutAccounts,
     handleAdjustStock,
     handleAddProduct,
     handleApproveProduct,

@@ -56,7 +56,7 @@ export function MerchantOrdersTab({
   onTriggerToast,
 }: MerchantOrdersTabProps) {
   const router = useRouter();
-  const { syncLocalOrdersToDatabase } = useMerchant();
+  const { syncLocalOrdersToDatabase, profile } = useMerchant();
   const [isSyncing, setIsSyncing] = useState(false);
   const [isCreateOrderOpen, setIsCreateOrderOpen] = useState(false);
   const [cancellingOrder, setCancellingOrder] = useState<MerchantOrderItem | null>(null);
@@ -809,6 +809,7 @@ export function MerchantOrdersTab({
         onClose={() => setIsCreateOrderOpen(false)}
         products={products}
         memoList={memoList}
+        baseHandlingFee={profile?.baseHandlingFee ?? 45}
         onCreateOrder={onCreateOrder}
         onTriggerToast={onTriggerToast}
       />

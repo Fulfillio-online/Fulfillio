@@ -116,6 +116,44 @@ enum InventoryTransactionType {
   ORDER_RELEASED
 }
 
+enum OrderEarningStatus {
+  PENDING
+  READY_TO_CLAIM
+  CLAIMED
+  REFUNDED
+}
+
+enum PayoutMethod {
+  BKASH
+  NAGAD
+  ROCKET
+  BANK_TRANSFER
+  CASH
+}
+
+enum PayoutRequestStatus {
+  PENDING
+  ACCEPTED
+  PAID
+  REJECTED
+  CANCELLED
+}
+
+enum FinanceEntryType {
+  EXPENSE
+  INCOME
+}
+
+enum FinanceEntryCategory {
+  RENT
+  SALARY
+  COURIER_COST
+  PACKAGING_PURCHASE
+  UTILITY_MISC
+  STORAGE_FEE
+  OTHER_INCOME
+}
+
 model Merchant {
   id                String         @id @default(uuid())
   merchantCode      String         @unique @default("MC-101")
@@ -131,6 +169,8 @@ model Merchant {
   socialChannels    Json?          @db.JsonB
   baseHandlingFee   Decimal        @default(50.00) @db.Decimal(10, 2)
   monthlyStorageFee Decimal        @default(2500.00) @db.Decimal(10, 2)
+  returnWindowDays  Int            @default(3)
+  minPayoutAmount   Decimal        @default(100.00) @db.Decimal(10, 2)
   apiKeyHash        String?
   webhookUrl        String?
   webhookSecret     String?
@@ -142,9 +182,12 @@ model Merchant {
   orders           Order[]
   memoTemplates    MemoTemplate[]
   settlements      Settlement[]
+  orderEarnings    OrderEarning[]
+  payoutRequests   PayoutRequest[]
   inboundShipments InboundShipment[]
   auditLogs        InventoryAuditLog[]
   webhookDeliveryLogs WebhookDeliveryLog[]
+  financeEntries   CompanyFinanceEntry[]
 
   @@index([merchantCode])
   @@index([status])
@@ -358,6 +401,8 @@ model Order {
   isRestocked       Boolean          @default(false)
   restockedAt       DateTime?
   restockedBin      String?
+  deliveredAt       DateTime?
+  returnedAt        DateTime?
   timeline          Json?            @db.JsonB
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
@@ -365,6 +410,7 @@ model Order {
   merchant          Merchant         @relation(fields: [merchantId], references: [id], onDelete: Cascade)
   items             OrderItem[]
   fulfillments      Fulfillment[]
+  earning           OrderEarning?
 
   @@index([merchantId, status])
   @@index([memoCode])
@@ -435,22 +481,105 @@ model Fulfillment {
   @@map("fulfillments")
 }
 
-model Settlement {
-  id                String   @id @default(uuid())
+model OrderEarning {
+  id               String             @id @default(uuid())
+  transactionRef   String             @unique
+  merchantId       String
+  orderId          String             @unique
+  orderNumber      String
+  itemSummary      String
+  grossAmount      Decimal            @db.Decimal(12, 2)
+  deliveryFee      Decimal            @default(0) @db.Decimal(10, 2)
+  handlingFee      Decimal            @default(0) @db.Decimal(10, 2)
+  packagingFee     Decimal            @default(0) @db.Decimal(10, 2)
+  feeAmount        Decimal            @default(0) @db.Decimal(10, 2)
+  netAmount        Decimal            @db.Decimal(12, 2)
+  status           OrderEarningStatus @default(PENDING)
+  returnWindowDays Int                @default(3)
+  completedAt      DateTime
+  claimableAt      DateTime
+  claimedAt        DateTime?
+  refundedAt       DateTime?
+  refundReason     String?
+  releasedByAdmin  Boolean            @default(false)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  merchant         Merchant           @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  order            Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId, status])
+  @@index([merchantId, claimableAt])
+  @@index([merchantId, completedAt])
+  @@map("order_earnings")
+}
+
+model PayoutRequest {
+  id                String              @id @default(uuid())
+  requestCode       String              @unique
   merchantId        String
+  amount            Decimal             @db.Decimal(12, 2)
+  method            PayoutMethod        @default(BKASH)
+  provider          String
+  accountNumber     String
+  accountHolder     String?
+  branchName        String?
+  routingNumber     String?
+  remarks           String?
+  status            PayoutRequestStatus @default(PENDING)
+  rejectionReason   String?
+  reviewedAt        DateTime?
+  reviewedByAdminId String?
+  trxId             String?
+  proofDocumentUrl  String?             @db.Text
+  proofDocumentName String?
+  proofDocumentMime String?
+  proofChannel      String?
+  proofNotes        String?
+  proofChecksum     String?
+  paidAt            DateTime?
+  paidByAdminId     String?
+  paidByAdminName   String?
+  requestedAt       DateTime            @default(now())
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  merchant          Merchant            @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  settlement        Settlement?
+
+  @@index([merchantId, status])
+  @@index([status, requestedAt])
+  @@map("payout_requests")
+}
+
+model Settlement {
+  id                String         @id @default(uuid())
+  merchantId        String
+  payoutRequestId   String?        @unique
+  transactionRef    String?
+  paymentMethod     String?
+  accountDetails    Json?          @db.JsonB
+  proofDocumentUrl  String?        @db.Text
+  proofDocumentName String?
+  proofDocumentMime String?
+  proofChecksum     String?
+  remarks           String?
   cycleStart        DateTime
   cycleEnd          DateTime
-  totalCodCollected Decimal  @db.Decimal(10, 2)
-  storageFees       Decimal  @db.Decimal(10, 2)
-  handlingFees      Decimal  @db.Decimal(10, 2)
-  packagingFees     Decimal  @default(0) @db.Decimal(10, 2)
-  netPayout         Decimal  @db.Decimal(10, 2)
-  isPaid            Boolean  @default(false)
-  createdAt         DateTime @default(now())
+  totalCodCollected Decimal        @db.Decimal(10, 2)
+  storageFees       Decimal        @db.Decimal(10, 2)
+  handlingFees      Decimal        @db.Decimal(10, 2)
+  packagingFees     Decimal        @default(0) @db.Decimal(10, 2)
+  netPayout         Decimal        @db.Decimal(10, 2)
+  isPaid            Boolean        @default(false)
+  paidAt            DateTime?
+  createdAt         DateTime       @default(now())
 
-  merchant          Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  merchant          Merchant       @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  payoutRequest     PayoutRequest? @relation(fields: [payoutRequestId], references: [id], onDelete: SetNull)
 
   @@index([merchantId, isPaid])
+  @@index([paidAt])
   @@map("settlements")
 }
 
@@ -617,4 +746,29 @@ model InAppNotification {
   @@index([merchantId, isRead])
   @@index([createdAt])
   @@map("in_app_notifications")
+}
+
+model CompanyFinanceEntry {
+  id                 String               @id @default(uuid())
+  entryCode          String               @unique
+  type               FinanceEntryType
+  category           FinanceEntryCategory
+  title              String
+  amount             Decimal              @db.Decimal(12, 2)
+  entryDate          DateTime             @default(now())
+  merchantId         String?
+  paymentMethod      String?
+  referenceNo        String?
+  notes              String?
+  createdByAdminId   String?
+  createdByAdminName String?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  merchant           Merchant?            @relation(fields: [merchantId], references: [id], onDelete: SetNull)
+
+  @@index([type, entryDate])
+  @@index([category, entryDate])
+  @@index([merchantId, entryDate])
+  @@map("company_finance_entries")
 }

@@ -4,51 +4,65 @@ import React from 'react';
 import { TrendingUp, Clock, CreditCard, Percent } from 'lucide-react';
 
 interface EarningsKpiCardsProps {
-  totalProfit: number;
+  totalNetEarnings: number;
+  completedOrdersCount: number;
   pendingEarnings: number;
+  pendingCount: number;
+  returnWindowDays: number;
   totalPayouts: number;
+  paidPayoutsCount: number;
   platformFees: number;
+  totalRefunded: number;
+  refundedCount: number;
 }
 
 export function EarningsKpiCards({
-  totalProfit,
+  totalNetEarnings,
+  completedOrdersCount,
   pendingEarnings,
+  pendingCount,
+  returnWindowDays,
   totalPayouts,
+  paidPayoutsCount,
   platformFees,
+  totalRefunded,
+  refundedCount,
 }: EarningsKpiCardsProps) {
   const kpis = [
     {
-      title: 'Total Cleared Profit',
-      amount: totalProfit,
+      title: 'Total Net Earnings',
+      amount: totalNetEarnings,
       icon: TrendingUp,
-      color: 'text-emerald-400',
+      color: 'text-emerald-600 dark:text-emerald-400',
       bgColor: 'bg-emerald-500/10 border-emerald-500/20',
-      badge: '+18.2%',
-      subtext: 'Net profit settled',
+      subtext: `From ${completedOrdersCount} completed order(s)`,
     },
     {
-      title: 'Pending earnings',
+      title: 'Pending (Return Hold)',
       amount: pendingEarnings,
       icon: Clock,
-      color: 'text-amber-400',
+      color: 'text-amber-600 dark:text-amber-400',
       bgColor: 'bg-amber-500/10 border-amber-500/20',
-      subtext: 'Awaiting last-mile delivery completion',
+      subtext: `${pendingCount} order(s) in ${returnWindowDays}-day customer return window`,
     },
     {
-      title: 'Total payouts',
+      title: 'Total Payouts Paid',
       amount: totalPayouts,
       icon: CreditCard,
-      color: 'text-sky-400',
-      bgColor: 'bg-sky-500/10 border-sky-500/20',
-      subtext: 'Paid to payout account',
+      color: 'text-orange-600 dark:text-orange-400',
+      bgColor: 'bg-orange-500/10 border-orange-500/20',
+      subtext: `${paidPayoutsCount} settled payout(s) with digital proof`,
     },
     {
-      title: 'Platform & delivery fees',
+      title: 'Delivery & 3PL Fees',
       amount: platformFees,
       icon: Percent,
-      color: 'text-rose-400',
+      color: 'text-rose-600 dark:text-rose-400',
       bgColor: 'bg-rose-500/10 border-rose-500/20',
-      subtext: 'Settled / courier fees',
+      subtext:
+        refundedCount > 0
+          ? `${refundedCount} returned/refunded (৳${totalRefunded.toLocaleString()})`
+          : 'Courier + handling + packaging fees',
     },
   ];
 
@@ -61,7 +75,7 @@ export function EarningsKpiCards({
             key={idx}
             className="p-5 rounded-2xl bg-white dark:bg-navy-900 border border-slate-200/80 dark:border-white/10 shadow-sm space-y-3 relative overflow-hidden"
           >
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                 {kpi.title}
               </span>
@@ -73,14 +87,9 @@ export function EarningsKpiCards({
             </div>
 
             <div>
-              <div className="text-2xl font-black text-navy-900 dark:text-white flex items-baseline gap-1">
+              <div className="text-2xl font-black text-navy-900 dark:text-white flex items-baseline gap-1 tabular-nums">
                 <span className="text-sm font-bold text-slate-500 dark:text-slate-400">৳</span>
                 <span>{kpi.amount.toLocaleString()}</span>
-                {kpi.badge && (
-                  <span className="ml-2 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                    {kpi.badge}
-                  </span>
-                )}
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{kpi.subtext}</p>
             </div>

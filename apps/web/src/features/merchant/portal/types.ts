@@ -83,6 +83,7 @@ export interface MerchantProfileData {
   apiKey?: string;
   webhookUrl?: string;
   webhookSecret?: string;
+  baseHandlingFee?: number;
 }
 
 export interface ResellerMemo {
@@ -110,6 +111,7 @@ export interface OrderLineItem {
   variant: string;
   sku: string;
   price: number;
+  basePrice?: number;
   quantity: number;
   total: number;
   imageUrl?: string;
@@ -225,6 +227,7 @@ export interface MerchantProductItem {
   variantsList?: {
     id: string;
     variantSku: string;
+    price?: number;
     color?: string;
     originalColor?: string;
     size?: string;

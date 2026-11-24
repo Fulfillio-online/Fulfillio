@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
+  BarChart3,
   Users,
   Printer,
   Package,
@@ -20,6 +21,7 @@ import {
   ChevronDown,
   Layers,
   ListOrdered,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface AdminSidebarProps {
@@ -90,6 +92,24 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
               >
                 <LayoutDashboard className="h-4 w-4" />
                 <span>Dashboard</span>
+              </Link>
+
+              <Link
+                href="/admin/finance"
+                onClick={onClose}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  isCurrent('/admin/finance')
+                    ? 'bg-orange-600 text-white shadow-sm'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-slate-100 hover:bg-slate-100/60 dark:hover:bg-navy-800/60'
+                }`}
+              >
+                <span className="flex items-center gap-3">
+                  <BarChart3 className="h-4 w-4" />
+                  <span>Finance &amp; Analytics</span>
+                </span>
+                <span className="text-[11px] tabular-nums px-1.5 py-0.5 rounded bg-black/20">
+                  P&amp;L
+                </span>
               </Link>
             </div>
           </div>
@@ -322,6 +342,19 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
               Financials &amp; Settings
             </span>
             <div className="mt-2 space-y-1">
+              <Link
+                href="/admin/payment-accounts"
+                onClick={onClose}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  isCurrent('/admin/payment-accounts')
+                    ? 'bg-orange-600 text-white shadow-sm'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-slate-100 hover:bg-slate-100/60 dark:hover:bg-navy-800/60'
+                }`}
+              >
+                <ShieldCheck className="h-4 w-4" />
+                <span>Account Verifications</span>
+              </Link>
+
               <Link
                 href="/admin/payouts"
                 onClick={onClose}

@@ -600,7 +600,13 @@ function MerchantPortalInner() {
           )}
 
           {activeTab === 'billing' && (
-            <MerchantBillingTab payoutAccount={profile.payoutAccount} />
+            <MerchantBillingTab
+              merchantCode={profile.merchantCode}
+              payoutAccount={profile.payoutAccount}
+              onUpdatePayoutAccount={(updatedAccount) =>
+                handleUpdateProfile({ payoutAccount: updatedAccount })
+              }
+            />
           )}
 
           {activeTab === 'api-keys' && (

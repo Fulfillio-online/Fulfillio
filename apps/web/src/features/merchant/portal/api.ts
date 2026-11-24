@@ -98,6 +98,8 @@ export const merchantApi = {
         storeName: remote.storeName || remote.businessName,
         ownerName: remote.ownerName || session?.ownerName || remote.businessName || '',
         logoUrl: remote.logoUrl || undefined,
+        baseHandlingFee:
+          remote.baseHandlingFee !== undefined ? Number(remote.baseHandlingFee) : 45,
         payoutMethod: remote.payoutMethod || 'Bank Transfer / bKash',
         payoutSchedule: remote.payoutSchedule || rawPayout.frequency || 'Weekly',
         payoutAccount: {
@@ -266,6 +268,7 @@ export const merchantApi = {
           return {
             id: v.id,
             variantSku: v.sku,
+            price: Number(v.price) || 0,
             color: colorName,
             size: sizeName,
             imageUrl: variantImg,

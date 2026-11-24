@@ -13,6 +13,8 @@ export * as InboundFeature from './inbound';
 export * as ReturnsFeature from './returns';
 export * as StockFeature from './stock';
 export * as BillingFeature from './billing';
+export * as FinanceFeature from './finance';
+export * as PaymentAccountsFeature from './payment-accounts';
 export * as DashboardFeature from './dashboard/ExecutiveDashboard';
 
 export { CourierIntegrationManager } from './couriers';
@@ -25,4 +27,6 @@ export { WarehouseInboundManager } from './inbound';
 export { WarehouseReturnsManager } from './returns';
 export { WarehouseStockCycleManager } from './stock';
 export { AdminBillingManager } from './billing';
+export { FinanceAnalyticsHub } from './finance';
+export { PaymentAccountVerificationsManager } from './payment-accounts';
 export { ExecutiveDashboard } from './dashboard/ExecutiveDashboard';

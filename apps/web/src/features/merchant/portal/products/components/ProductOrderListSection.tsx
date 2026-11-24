@@ -22,6 +22,7 @@ import {
   getOrderCart,
   addToOrderCart,
   updateOrderCartItemQty,
+  updateOrderCartItemPrice,
   removeOrderCartItem,
   clearOrderCart,
 } from '../lib/orderCartStorage';
@@ -98,8 +99,13 @@ export function ProductOrderListSection({
     }
   }, [availableSizes, selectedSize]);
 
-  // Selected quantity
+  // Selected quantity & selling price
   const [selectedQty, setSelectedQty] = useState(1);
+  const [selectedPrice, setSelectedPrice] = useState<number>(product.price || 0);
+
+  useEffect(() => {
+    setSelectedPrice(product.price || 0);
+  }, [product.id, product.price]);
 
   // Cart state
   const [cartItems, setCartItems] = useState<OrderCartItem[]>([]);
@@ -178,6 +184,10 @@ export function ProductOrderListSection({
       return;
     }
     if (selectedQty <= 0) return;
+    if (!Number.isFinite(selectedPrice) || selectedPrice <= 0) {
+      effectiveToast('Please enter a valid selling price greater than ৳0.');
+      return;
+    }
 
     const matchedColorObj = availableColors.find((c) => c.name === selectedColor);
     const itemImage = matchedColorObj?.imageUrl || product.imageUrl;
@@ -190,17 +200,25 @@ export function ProductOrderListSection({
       color: selectedColor,
       size: selectedSize,
       sku: currentVariantSku,
-      unitPrice: product.price || 0,
+      unitPrice: selectedPrice,
+      declaredPrice: product.price || 0,
       qty: selectedQty,
       maxStock,
     });
 
     setCartItems(updated);
-    effectiveToast(`Added "${product.title} (${selectedColor} · ${selectedSize})" to Order List!`);
+    effectiveToast(
+      `Added "${product.title} (${selectedColor} · ${selectedSize})" @ ৳${selectedPrice.toLocaleString()} to Order List!`
+    );
   };
 
   const handleUpdateQty = (id: string, newQty: number) => {
     const updated = updateOrderCartItemQty(id, newQty);
+    setCartItems(updated);
+  };
+
+  const handleUpdatePrice = (id: string, nextPrice: number) => {
+    const updated = updateOrderCartItemPrice(id, nextPrice);
     setCartItems(updated);
   };
 
@@ -301,12 +319,36 @@ export function ProductOrderListSection({
               </div>
             </div>
 
-            {/* Quantity and Add Button */}
+            {/* Quantity, Selling Price and Add Button */}
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                Quantity &amp; Action
-              </label>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Sell Price, Qty &amp; Add
+                </label>
+                <span className="text-[10px] text-slate-400 font-mono">
+                  Base: ৳{product.price.toLocaleString()}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative shrink-0">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500">
+                    ৳
+                  </span>
+                  <input
+                    type="number"
+                    min="1"
+                    step="any"
+                    placeholder={String(product.price || 0)}
+                    value={selectedPrice === 0 ? '' : selectedPrice}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      setSelectedPrice(raw === '' ? 0 : Math.max(0, Number(raw) || 0));
+                    }}
+                    aria-label="Selling Price"
+                    className="w-24 pl-6 pr-2 py-1.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-navy-950 text-xs font-mono font-bold text-right text-navy-900 dark:text-white focus:outline-none focus:border-orange-500"
+                  />
+                </div>
+
                 <div className="flex items-center border border-slate-200 dark:border-white/10 rounded-xl bg-slate-50 dark:bg-navy-950 p-1 shrink-0">
                   <button
                     type="button"
@@ -401,14 +443,17 @@ export function ProductOrderListSection({
                     <th className="py-2.5 px-3">Product</th>
                     <th className="py-2.5 px-3">Variant / Spec</th>
                     <th className="py-2.5 px-3">SKU</th>
-                    <th className="py-2.5 px-3 text-right">Unit Price</th>
+                    <th className="py-2.5 px-3 text-right">Selling Price (৳)</th>
                     <th className="py-2.5 px-3 text-center">Quantity</th>
                     <th className="py-2.5 px-3 text-right">Total</th>
                     <th className="py-2.5 px-2 text-center w-10">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                  {cartItems.map((item) => (
+                  {cartItems.map((item) => {
+                    const declared = item.declaredPrice ?? item.unitPrice;
+                    const markupPerUnit = item.unitPrice - declared;
+                    return (
                     <tr key={item.id} className="hover:bg-slate-50/70 dark:hover:bg-navy-900/40">
                       <td className="py-3 px-3">
                         <div className="flex items-center gap-2.5">
@@ -437,8 +482,38 @@ export function ProductOrderListSection({
                         {item.sku}
                       </td>
 
-                      <td className="py-3 px-3 text-right font-mono font-medium text-navy-900 dark:text-slate-200">
-                        ৳{item.unitPrice.toLocaleString()}
+                      <td className="py-3 px-3 text-right">
+                        <div className="inline-flex flex-col items-end gap-1">
+                          <div className="relative">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400">
+                              ৳
+                            </span>
+                            <input
+                              type="number"
+                              min="1"
+                              step="any"
+                              placeholder={String(declared)}
+                              value={item.unitPrice === 0 ? '' : item.unitPrice}
+                              onChange={(e) => {
+                                const raw = e.target.value;
+                                handleUpdatePrice(
+                                  item.id,
+                                  raw === '' ? 0 : Math.max(0, Number(raw) || 0)
+                                );
+                              }}
+                              aria-label={`Selling price for ${item.title}`}
+                              className="w-24 pl-5 pr-2 py-1 rounded-lg border border-slate-200 dark:border-white/15 bg-slate-50 dark:bg-navy-900 text-xs font-mono font-bold text-right text-navy-900 dark:text-white focus:outline-none focus:border-orange-500"
+                            />
+                          </div>
+                          <div className="flex items-center gap-1 text-[10px] font-mono">
+                            <span className="text-slate-400">Base: ৳{declared.toLocaleString()}</span>
+                            {markupPerUnit > 0 && (
+                              <span className="px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-500/30">
+                                +৳{markupPerUnit.toLocaleString()}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </td>
 
                       <td className="py-3 px-3">
@@ -478,7 +553,8 @@ export function ProductOrderListSection({
                         </button>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -570,6 +646,8 @@ export function ProductOrderListSection({
         merchantStoreName={effectiveStoreName}
         merchantCode={effectiveMerchantCode}
         initialMemoCode={selectedMemoCode}
+        baseHandlingFee={merchantCtx.profile?.baseHandlingFee ?? 45}
+        onUpdateItemPrice={handleUpdatePrice}
         onOrderPlaced={(newOrder, itemsToDeduct) => {
           effectiveCreateOrder(newOrder, itemsToDeduct);
           clearOrderCart();

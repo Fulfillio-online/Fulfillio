@@ -1,10 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { ReturnsRepository } from './returns.repository';
+import { BillingService } from '../billing/billing.service';
 import { StockMovementReason } from '@fulfillio/contracts';
 
 @Injectable()
 export class ReturnsService {
-  constructor(private readonly repository: ReturnsRepository) {}
+  constructor(
+    private readonly repository: ReturnsRepository,
+    private readonly billingService: BillingService,
+  ) {}
 
   async listReturns(merchantIdOrCode?: string) {
     const resolvedId = await this.repository.resolveMerchantId(merchantIdOrCode);
@@ -186,6 +190,15 @@ export class ReturnsService {
       );
     }
 
+    try {
+      await this.billingService.reverseOrderEarning(
+        order.id,
+        reasonNotes || 'Customer returned product (RTO intake) — earning refunded',
+      );
+    } catch (err: any) {
+      console.warn('[ReturnsService] Billing earning reversal notice:', err?.message || err);
+    }
+
     return {
       orderId,
       status: 'RETURNED',
@@ -227,6 +240,15 @@ export class ReturnsService {
           d.notes || 'QC Failed: Routed to Quarantine Bin',
         );
       }
+    }
+
+    try {
+      await this.billingService.reverseOrderEarning(
+        order.id,
+        'Customer return QC processed — earning refunded',
+      );
+    } catch (err: any) {
+      console.warn('[ReturnsService] Billing earning reversal notice:', err?.message || err);
     }
 
     return {

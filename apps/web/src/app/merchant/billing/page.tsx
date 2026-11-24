@@ -9,6 +9,7 @@ export default function MerchantBillingPage() {
 
   return (
     <MerchantBillingTab
+      merchantCode={profile.merchantCode}
       payoutAccount={profile.payoutAccount}
       onUpdatePayoutAccount={(updatedAccount) =>
         updateProfile({ payoutAccount: updatedAccount })

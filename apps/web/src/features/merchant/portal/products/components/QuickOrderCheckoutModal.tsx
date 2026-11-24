@@ -27,6 +27,8 @@ interface QuickOrderCheckoutModalProps {
   merchantStoreName: string;
   merchantCode: string;
   initialMemoCode?: string;
+  baseHandlingFee?: number;
+  onUpdateItemPrice?: (id: string, unitPrice: number) => void;
   onOrderPlaced: (
     newOrder: MerchantOrderItem,
     itemsToDeduct: { productId: string; qty: number; variantSku?: string }[]
@@ -42,10 +44,13 @@ export function QuickOrderCheckoutModal({
   merchantStoreName,
   merchantCode,
   initialMemoCode,
+  baseHandlingFee = 45,
+  onUpdateItemPrice,
   onOrderPlaced,
   onTriggerToast,
 }: QuickOrderCheckoutModalProps) {
   const [mounted, setMounted] = useState(false);
+  const [priceOverrides, setPriceOverrides] = useState<Record<string, number>>({});
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
@@ -72,6 +77,12 @@ export function QuickOrderCheckoutModal({
   }, []);
 
   useEffect(() => {
+    if (isOpen) {
+      setPriceOverrides({});
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
     if (initialMemoCode) {
       setMemoCode(initialMemoCode);
     } else if (memos && memos.length > 0) {
@@ -95,10 +106,28 @@ export function QuickOrderCheckoutModal({
 
   if (!isOpen || !mounted) return null;
 
-  const subtotal = cartItems.reduce((acc, it) => acc + it.unitPrice * it.qty, 0);
-  const totalItemCount = cartItems.reduce((acc, it) => acc + it.qty, 0);
+  const effectiveCartItems = cartItems.map((it) => ({
+    ...it,
+    unitPrice:
+      priceOverrides[it.id] !== undefined ? priceOverrides[it.id] : it.unitPrice,
+    declaredPrice: it.declaredPrice ?? it.unitPrice,
+  }));
+
+  const handleItemPriceEdit = (id: string, nextPrice: number) => {
+    const safePrice = Math.max(0, Number(nextPrice) || 0);
+    setPriceOverrides((prev) => ({ ...prev, [id]: safePrice }));
+    onUpdateItemPrice?.(id, safePrice);
+  };
+
+  const subtotal = effectiveCartItems.reduce((acc, it) => acc + it.unitPrice * it.qty, 0);
+  const baseSubtotal = effectiveCartItems.reduce((acc, it) => acc + it.declaredPrice * it.qty, 0);
+  const extraMarkup = subtotal - baseSubtotal;
+  const totalItemCount = effectiveCartItems.reduce((acc, it) => acc + it.qty, 0);
   const orderTotal = Math.max(0, subtotal + deliveryFee - discount);
   const codAmount = Math.max(0, orderTotal - advancePayment);
+  const estHandlingFee = Math.max(0, Number(baseHandlingFee) || 0);
+  const estPackagingFee = 5;
+  const estNetEarning = Math.max(0, orderTotal - deliveryFee - estHandlingFee - estPackagingFee);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -132,10 +161,14 @@ export function QuickOrderCheckoutModal({
       return;
     }
 
-    // Business check: Every item must have accepted warehouse stock
-    for (const it of cartItems) {
+    // Business check: Every item must have accepted warehouse stock & valid selling price
+    for (const it of effectiveCartItems) {
       if ((it.maxStock || 0) <= 0 || it.qty <= 0) {
         onTriggerToast(`Cannot create order: "${it.title}" has 0 stock stored in warehouse bins.`);
+        return;
+      }
+      if (!Number.isFinite(it.unitPrice) || it.unitPrice <= 0) {
+        onTriggerToast(`Please enter a valid selling price (> ৳0) for "${it.title}".`);
         return;
       }
     }
@@ -158,12 +191,13 @@ export function QuickOrderCheckoutModal({
         ? `Partial (${advanceMethod} Adv + COD)`
         : 'Cash on Delivery';
 
-      const lineItems: OrderLineItem[] = cartItems.map((it) => ({
+      const lineItems: OrderLineItem[] = effectiveCartItems.map((it) => ({
         id: it.productId,
         title: it.title,
         variant: it.variantLabel || `${it.color} · ${it.size}`,
         sku: it.sku,
         price: it.unitPrice,
+        basePrice: it.declaredPrice,
         quantity: it.qty,
         total: it.unitPrice * it.qty,
         imageUrl: it.imageUrl,
@@ -177,8 +211,8 @@ export function QuickOrderCheckoutModal({
         phone: customerPhone.trim(),
         address: `${customerAddress.trim()}, ${city}`,
         city: city,
-        productId: cartItems[0]?.productId || 'p-1',
-        items: cartItems.map((it) => `${it.title} (${it.variantLabel}) x ${it.qty}`).join(', '),
+        productId: effectiveCartItems[0]?.productId || 'p-1',
+        items: effectiveCartItems.map((it) => `${it.title} (${it.variantLabel}) x ${it.qty}`).join(', '),
         qty: totalItemCount,
         amount: orderTotal,
         subtotal,
@@ -204,7 +238,7 @@ export function QuickOrderCheckoutModal({
         ],
       };
 
-      const itemsToDeduct = cartItems.map((it) => ({
+      const itemsToDeduct = effectiveCartItems.map((it) => ({
         productId: it.productId,
         qty: it.qty,
         variantSku: it.sku,
@@ -261,9 +295,11 @@ export function QuickOrderCheckoutModal({
               <span>Items in this Order ({cartItems.length})</span>
               <span className="text-navy-900 dark:text-white font-mono">Subtotal: ৳{subtotal.toLocaleString()}</span>
             </div>
-            <div className="max-h-36 overflow-y-auto divide-y divide-slate-200/60 dark:divide-white/5 space-y-1">
-              {cartItems.map((it) => (
-                <div key={it.id} className="pt-1.5 first:pt-0 flex items-center justify-between text-xs gap-3">
+            <div className="max-h-44 overflow-y-auto divide-y divide-slate-200/60 dark:divide-white/5 space-y-1.5">
+              {effectiveCartItems.map((it) => {
+                const markupPerUnit = it.unitPrice - it.declaredPrice;
+                return (
+                <div key={it.id} className="pt-2 first:pt-0 flex items-center justify-between text-xs gap-3">
                   <div className="flex items-center gap-2 min-w-0">
                     <img
                       src={it.imageUrl || 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=100&q=80'}
@@ -274,21 +310,47 @@ export function QuickOrderCheckoutModal({
                       <span className="font-semibold text-navy-900 dark:text-slate-200 truncate block">
                         {it.title}
                       </span>
-                      <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                        {it.variantLabel || `${it.color} · ${it.size}`} • SKU: {it.sku}
-                      </span>
+                      <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400">
+                        <span>{it.variantLabel || `${it.color} · ${it.size}`} · SKU: {it.sku}</span>
+                        <span className="font-mono text-slate-400">Base: ৳{it.declaredPrice.toLocaleString()}</span>
+                        {markupPerUnit > 0 && (
+                          <span className="px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-mono font-bold border border-emerald-500/30">
+                            +৳{markupPerUnit.toLocaleString()}/unit
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <span className="font-mono font-bold text-navy-900 dark:text-white">
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="relative">
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">
+                        ৳
+                      </span>
+                      <input
+                        type="number"
+                        min="1"
+                        step="any"
+                        placeholder={String(it.declaredPrice)}
+                        value={it.unitPrice === 0 ? '' : it.unitPrice}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          handleItemPriceEdit(
+                            it.id,
+                            raw === '' ? 0 : Math.max(0, Number(raw) || 0)
+                          );
+                        }}
+                        aria-label={`Selling price for ${it.title}`}
+                        className="w-20 pl-5 pr-1.5 py-1 rounded-lg border border-slate-200 dark:border-white/15 bg-white dark:bg-navy-900 text-xs font-mono font-bold text-right text-navy-900 dark:text-white focus:outline-none focus:border-orange-500"
+                      />
+                    </div>
+                    <span className="text-[11px] font-mono text-slate-400">× {it.qty}</span>
+                    <span className="font-mono font-bold text-navy-900 dark:text-white w-16 text-right tabular-nums">
                       ৳{(it.unitPrice * it.qty).toLocaleString()}
-                    </span>
-                    <span className="text-[10px] text-slate-400 block font-mono">
-                      ৳{it.unitPrice} × {it.qty}
                     </span>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -526,6 +588,27 @@ export function QuickOrderCheckoutModal({
               </span>
               <span className="text-base sm:text-lg font-black text-emerald-600 dark:text-emerald-400 font-mono">
                 ৳{codAmount.toLocaleString()}
+              </span>
+            </div>
+
+            {extraMarkup > 0 && (
+              <div className="flex justify-between items-center text-[11px] text-emerald-700 dark:text-emerald-300">
+                <span>Extra Markup Above Base Price</span>
+                <span className="font-mono font-bold">+৳{extraMarkup.toLocaleString()}</span>
+              </div>
+            )}
+
+            <div className="pt-2 border-t border-slate-200/70 dark:border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs">
+              <div>
+                <span className="font-bold text-navy-900 dark:text-slate-200 block">
+                  Estimated Merchant Net Earning
+                </span>
+                <span className="text-[10px] font-mono text-slate-400">
+                  Invoice ৳{orderTotal.toLocaleString()} − Delivery ৳{deliveryFee} − Handling ৳{estHandlingFee} − Est. Packaging ৳{estPackagingFee}
+                </span>
+              </div>
+              <span className="text-base font-black text-orange-600 dark:text-orange-400 font-mono tabular-nums">
+                ৳{estNetEarning.toLocaleString()}
               </span>
             </div>
           </div>

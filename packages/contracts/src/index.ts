@@ -392,3 +392,385 @@ export interface InAppNotificationDto {
   createdAt: string;
 }
 
+// ============================================================================
+// DYNAMIC EARNINGS, RETURN-WINDOW HOLD, CLAIM STAGE & DIGITAL-PROOF PAYOUTS
+// ============================================================================
+
+export enum OrderEarningStatus {
+  PENDING = 'PENDING',
+  READY_TO_CLAIM = 'READY_TO_CLAIM',
+  CLAIMED = 'CLAIMED',
+  REFUNDED = 'REFUNDED',
+}
+
+export enum PayoutMethod {
+  BKASH = 'BKASH',
+  NAGAD = 'NAGAD',
+  ROCKET = 'ROCKET',
+  BANK_TRANSFER = 'BANK_TRANSFER',
+  CASH = 'CASH',
+}
+
+export enum PayoutRequestStatus {
+  PENDING = 'PENDING',
+  ACCEPTED = 'ACCEPTED',
+  PAID = 'PAID',
+  REJECTED = 'REJECTED',
+  CANCELLED = 'CANCELLED',
+}
+
+export interface OrderEarningDto {
+  id: string;
+  transactionRef: string;
+  merchantId: string;
+  merchantCode?: string;
+  merchantName?: string;
+  orderId: string;
+  orderNumber: string;
+  customerName?: string;
+  itemSummary: string;
+  grossAmount: number;
+  deliveryFee: number;
+  handlingFee: number;
+  packagingFee: number;
+  feeAmount: number;
+  netAmount: number;
+  status: OrderEarningStatus;
+  returnWindowDays: number;
+  completedAt: string;
+  claimableAt: string;
+  claimedAt?: string;
+  refundedAt?: string;
+  refundReason?: string;
+  releasedByAdmin: boolean;
+  remainingMs: number;
+  isReturnWindowOver: boolean;
+}
+
+export interface PayoutDigitalProofDto {
+  trxId: string;
+  proofDocumentUrl: string;
+  proofDocumentName?: string;
+  proofDocumentMime?: string;
+  proofChannel?: string;
+  proofNotes?: string;
+  proofChecksum?: string;
+  paidAt?: string;
+  paidByAdminName?: string;
+}
+
+export interface PayoutRequestDto {
+  id: string;
+  requestCode: string;
+  merchantId: string;
+  merchantCode: string;
+  merchantName: string;
+  ownerName: string;
+  amount: number;
+  method: PayoutMethod;
+  provider: string;
+  accountNumber: string;
+  accountHolder?: string;
+  branchName?: string;
+  routingNumber?: string;
+  remarks?: string;
+  status: PayoutRequestStatus;
+  rejectionReason?: string;
+  requestedAt: string;
+  reviewedAt?: string;
+  trxId?: string;
+  proofDocumentUrl?: string;
+  proofDocumentName?: string;
+  proofDocumentMime?: string;
+  proofChannel?: string;
+  proofNotes?: string;
+  proofChecksum?: string;
+  paidAt?: string;
+  paidByAdminName?: string;
+}
+
+export type EarningsChartPeriod = 'THIS_MONTH' | 'LAST_30_DAYS' | 'LAST_6_MONTHS' | 'ALL_TIME';
+
+export interface EarningsChartBucketDto {
+  label: string;
+  grossAmount: number;
+  feeAmount: number;
+  netAmount: number;
+  ordersCount: number;
+}
+
+export interface MerchantEarningsDashboardDto {
+  merchant: {
+    id: string;
+    merchantCode: string;
+    businessName: string;
+    ownerName: string;
+    returnWindowDays: number;
+    minPayoutAmount: number;
+    baseHandlingFee: number;
+    payoutAccount?: Record<string, any> | null;
+  };
+  summary: {
+    availableBalance: number;
+    readyToClaim: number;
+    withdrawableTotal: number;
+    pendingEarnings: number;
+    totalClaimed: number;
+    upcomingPayout: number;
+    totalPaidOut: number;
+    totalRefunded: number;
+    clawbackDeficit: number;
+    totalGrossEarnings: number;
+    totalDeliveryFees: number;
+    totalHandlingFees: number;
+    totalPackagingFees: number;
+    totalPlatformFees: number;
+    totalNetEarnings: number;
+    completedOrdersCount: number;
+    pendingCount: number;
+    readyToClaimCount: number;
+    claimedCount: number;
+    refundedCount: number;
+    paidPayoutsCount: number;
+    nextScheduledPayoutDate: string;
+  };
+  chart: {
+    period: EarningsChartPeriod;
+    buckets: EarningsChartBucketDto[];
+    periodGross: number;
+    periodDeliveryFees: number;
+    periodHandlingAndPackagingFees: number;
+    periodPlatformFees: number;
+    periodRefunded: number;
+    periodNet: number;
+  };
+  earnings: OrderEarningDto[];
+  payoutRequests: PayoutRequestDto[];
+}
+
+export enum FinanceEntryType {
+  EXPENSE = 'EXPENSE',
+  INCOME = 'INCOME',
+}
+
+export enum FinanceEntryCategory {
+  RENT = 'RENT',
+  SALARY = 'SALARY',
+  COURIER_COST = 'COURIER_COST',
+  PACKAGING_PURCHASE = 'PACKAGING_PURCHASE',
+  UTILITY_MISC = 'UTILITY_MISC',
+  STORAGE_FEE = 'STORAGE_FEE',
+  OTHER_INCOME = 'OTHER_INCOME',
+}
+
+export type FinanceTimeframePreset =
+  | 'TODAY'
+  | 'LAST_7_DAYS'
+  | 'THIS_MONTH'
+  | 'LAST_30_DAYS'
+  | 'ALL_TIME'
+  | 'CUSTOM';
+
+export interface CompanyFinanceEntryDto {
+  id: string;
+  entryCode: string;
+  type: FinanceEntryType;
+  category: FinanceEntryCategory;
+  title: string;
+  amount: number;
+  entryDate: string;
+  merchantId?: string | null;
+  merchantCode?: string | null;
+  merchantName?: string | null;
+  paymentMethod?: string | null;
+  referenceNo?: string | null;
+  notes?: string | null;
+  createdByAdminId?: string | null;
+  createdByAdminName?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FinanceAnalyticsExpenseCategoryDto {
+  category: FinanceEntryCategory;
+  label: string;
+  amount: number;
+  sharePercentage: number;
+  entriesCount: number;
+}
+
+export interface FinanceAnalyticsRevenueStreamDto {
+  id: string;
+  label: string;
+  source: 'AUTO_ORDER_FEE' | 'MANUAL_LEDGER';
+  amount: number;
+  sharePercentage: number;
+}
+
+export interface FinanceTimeSeriesBucketDto {
+  label: string;
+  dateKey: string;
+  totalOrders: number;
+  deliveredOrders: number;
+  returnedOrders: number;
+  cancelledOrders: number;
+  grossCod: number;
+  revenue3pl: number;
+  expenses: number;
+  netProfit: number;
+}
+
+export interface FinanceMerchantBreakdownDto {
+  merchantId: string;
+  merchantCode: string;
+  merchantName: string;
+  ownerName: string;
+  totalOrders: number;
+  deliveredOrders: number;
+  returnedOrders: number;
+  cancelledOrders: number;
+  grossCodCollected: number;
+  handlingFees: number;
+  packagingFees: number;
+  deliveryFees: number;
+  total3plFees: number;
+  merchantNetEarned: number;
+  totalPaidOut: number;
+  currentUnpaidDue: number;
+  pendingPayoutCount: number;
+}
+
+export interface AdminFinanceAnalyticsDto {
+  filter: {
+    preset: FinanceTimeframePreset;
+    startDate: string;
+    endDate: string;
+    label: string;
+    merchantId?: string | null;
+    merchantCode?: string | null;
+    merchantName?: string | null;
+  };
+  merchantsList: Array<{
+    id: string;
+    merchantCode: string;
+    businessName: string;
+  }>;
+  codSettlement: {
+    totalOrderBillCollected: number;
+    totalPlatformFeesDeducted: number;
+    deliveryFeesDeducted: number;
+    handlingAndPackagingDeducted: number;
+    merchantNetPayable: number;
+    deliveredOrdersInPeriod: number;
+    totalPaidToMerchants: number;
+    allTimePaidToMerchants: number;
+    pendingReturnWindowHold: number;
+    readyToClaimAndWalletBalance: number;
+    pendingPayoutRequestsAmount: number;
+    pendingPayoutRequestsCount: number;
+    totalUnpaidMerchantLiability: number;
+  };
+  companyProfitLoss: {
+    isMerchantScoped: boolean;
+    autoHandlingRevenue: number;
+    autoPackagingRevenue: number;
+    autoDeliveryFeeRevenue: number;
+    autoOrderFeeRevenue: number;
+    manualStorageIncome: number;
+    manualOtherIncome: number;
+    gross3plRevenue: number;
+    totalOperatingExpenses: number;
+    netProfit: number;
+    netMarginPercentage: number;
+    isProfitable: boolean;
+    revenueStreams: FinanceAnalyticsRevenueStreamDto[];
+    expensesByCategory: FinanceAnalyticsExpenseCategoryDto[];
+  };
+  orderVolume: {
+    totalOrders: number;
+    deliveredOrders: number;
+    dispatchedInTransitOrders: number;
+    pendingAndProcessingOrders: number;
+    returnedOrders: number;
+    cancelledOrders: number;
+    deliverySuccessRate: number;
+    returnRate: number;
+    returnedOrderValue: number;
+    buckets: FinanceTimeSeriesBucketDto[];
+  };
+  merchantBreakdown: FinanceMerchantBreakdownDto[];
+  ledgerEntries: CompanyFinanceEntryDto[];
+}
+
+export interface AdminOperationsCourierDto {
+  provider: string;
+  label: string;
+  totalParcels: number;
+  sharePercentage: number;
+  deliveredCount: number;
+  inTransitCount: number;
+  returnedCount: number;
+  deliverySuccessRate: number;
+  returnRate: number;
+  codInTransitAmount: number;
+  status: 'optimal' | 'healthy' | 'delayed';
+}
+
+export interface AdminOperationsZoneCapacityDto {
+  zoneId: string;
+  zone: string;
+  binCount: number;
+  skuCount: number;
+  availableUnits: number;
+  reservedUnits: number;
+  damagedUnits: number;
+  totalUnits: number;
+  reorderAlerts: number;
+}
+
+export interface AdminOperationsActivityDto {
+  id: string;
+  title: string;
+  details: string;
+  type: 'order' | 'inbound' | 'payout' | 'merchant' | 'inventory' | 'system';
+  createdAt: string;
+}
+
+export interface AdminOperationsDashboardDto {
+  generatedAt: string;
+  pipeline: {
+    pendingAndProcessingCount: number;
+    pendingCount: number;
+    onHoldCount: number;
+    pickingAndAllocatedCount: number;
+    packedAndReadyCount: number;
+    dispatchedInTransitCount: number;
+    deliveredTodayCount: number;
+    totalDeliveredAllTime: number;
+    returnedAndCancelledCount: number;
+    returnedCount: number;
+    cancelledCount: number;
+    totalOrdersAllTime: number;
+    deliverySuccessRate: number;
+  };
+  actionCenter: {
+    pendingMerchantsCount: number;
+    pendingProductApprovalsCount: number;
+    pendingRestockRequestsCount: number;
+    pendingPayoutRequestsCount: number;
+    pendingPayoutRequestsAmount: number;
+    pendingReturnRequestsCount: number;
+    totalActionItems: number;
+  };
+  couriers: AdminOperationsCourierDto[];
+  warehouseCapacity: {
+    totalBins: number;
+    totalSkusInStock: number;
+    totalAvailableUnits: number;
+    totalReservedUnits: number;
+    totalDamagedUnits: number;
+    zones: AdminOperationsZoneCapacityDto[];
+  };
+  recentActivity: AdminOperationsActivityDto[];
+}
+

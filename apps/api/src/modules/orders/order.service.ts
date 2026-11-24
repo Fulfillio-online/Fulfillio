@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { OrderRepository } from './order.repository';
 import { InventoryService } from '../inventory/inventory.service';
+import { BillingService } from '../billing/billing.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   OrderStatus,
@@ -16,6 +17,7 @@ export class OrderService {
   constructor(
     private readonly orderRepository: OrderRepository,
     private readonly inventoryService: InventoryService,
+    private readonly billingService: BillingService,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -136,7 +138,24 @@ export class OrderService {
    */
   async updateOrderStatus(id: string, status: OrderStatus, merchantId?: string) {
     const order = await this.getOrderById(id, merchantId);
-    return this.orderRepository.updateStatus(order.id, status);
+    const updated = await this.orderRepository.updateStatus(order.id, status);
+
+    try {
+      if (status === OrderStatus.DELIVERED || status === OrderStatus.PARTIAL_DELIVERED) {
+        await this.billingService.recordCompletedOrderEarning(updated.id);
+      } else if (status === OrderStatus.RETURNED || status === OrderStatus.CANCELLED) {
+        await this.billingService.reverseOrderEarning(
+          updated.id,
+          status === OrderStatus.RETURNED
+            ? 'Customer returned product — earning refunded'
+            : 'Order cancelled — earning reversed',
+        );
+      }
+    } catch (err: any) {
+      console.warn('[OrderService] Billing earning sync notice:', err?.message || err);
+    }
+
+    return updated;
   }
 
   /**
@@ -249,6 +268,10 @@ export class OrderService {
     }
   }
 
+  private round2(val: number): number {
+    return Math.round((Number(val) || 0) * 100) / 100;
+  }
+
   /**
    * Ingest an order from Merchant Portal, WooCommerce, Shopify, or REST API
    * Stores order directly in PostgreSQL database (orders and order_items tables)
@@ -265,7 +288,7 @@ export class OrderService {
       city?: string;
       memoCode?: string;
       courierProvider?: string;
-      totalAmount: number;
+      totalAmount?: number;
       codAmount?: number;
       subtotal?: number;
       deliveryFee?: number;
@@ -286,7 +309,7 @@ export class OrderService {
         variantLabel?: string | null;
         variant?: string | null;
         quantity: number;
-        unitPrice: number;
+        unitPrice?: number;
       }>;
     },
   ) {
@@ -322,6 +345,7 @@ export class OrderService {
         let resolvedSku = item.sku || null;
         let resolvedTitle = item.title || item.productTitle || null;
         let resolvedLabel = item.variantLabel || item.variant || null;
+        let resolvedBasePrice = 0;
 
         // Try lookup by variantId
         if (item.variantId) {
@@ -341,6 +365,7 @@ export class OrderService {
               resolvedSku = resolvedSku || v.sku;
               resolvedTitle = resolvedTitle || v.product?.title || v.title;
               resolvedLabel = resolvedLabel || v.title;
+              resolvedBasePrice = Number(v.price) || 0;
             }
           } catch {}
         }
@@ -362,6 +387,7 @@ export class OrderService {
               resolvedSku = resolvedSku || v.sku;
               resolvedTitle = resolvedTitle || v.product?.title || v.title;
               resolvedLabel = resolvedLabel || v.title;
+              resolvedBasePrice = Number(v.price) || 0;
             }
           } catch {}
         }
@@ -382,7 +408,9 @@ export class OrderService {
             if (v) {
               resolvedVariantId = v.id;
               resolvedSku = resolvedSku || v.sku;
-              resolvedTitle = resolvedTitle || v.title;
+              resolvedTitle = resolvedTitle || v.product?.title || v.title;
+              resolvedLabel = resolvedLabel || v.title;
+              resolvedBasePrice = Number(v.price) || 0;
             }
           } catch {}
         }
@@ -403,13 +431,30 @@ export class OrderService {
           });
         }
 
+        // Resolve custom order selling price (falls back to declared variant price if omitted or 0)
+        let resolvedUnitPrice = this.round2(resolvedBasePrice);
+        if (
+          item.unitPrice !== undefined &&
+          item.unitPrice !== null &&
+          String(item.unitPrice).trim() !== ''
+        ) {
+          const parsedPrice = Number(item.unitPrice);
+          if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+            throw new BadRequestException(
+              'Product selling price must be a valid non-negative number.',
+            );
+          }
+          resolvedUnitPrice =
+            parsedPrice > 0 ? this.round2(parsedPrice) : this.round2(resolvedBasePrice);
+        }
+
         return {
           variantId: resolvedVariantId,
           sku: resolvedSku || 'SKU-STANDARD',
           productTitle: resolvedTitle || 'Product',
           variantLabel: resolvedLabel || 'Standard',
           quantity: Math.max(1, Number(item.quantity) || 1),
-          unitPrice: Number(item.unitPrice) || 0,
+          unitPrice: resolvedUnitPrice,
         };
       }),
     );
@@ -430,7 +475,53 @@ export class OrderService {
       }
     }
 
-    // 4. Create order record with Merchant's Reseller Memo Code, Fraud Score, and items in PostgreSQL
+    // 4. Derive authoritative order totals from item selling prices + delivery - discount
+    const computedItemsSubtotal = this.round2(
+      formattedItems.reduce((sum, it) => sum + it.unitPrice * it.quantity, 0),
+    );
+    const deliveryFee = this.round2(Math.max(0, Number(payload.deliveryFee) || 0));
+    const discount = this.round2(Math.max(0, Number(payload.discount) || 0));
+    const advancePayment = this.round2(Math.max(0, Number(payload.advancePayment) || 0));
+
+    const subtotal =
+      computedItemsSubtotal > 0
+        ? computedItemsSubtotal
+        : this.round2(
+            Math.max(
+              0,
+              isNaN(Number(payload.subtotal))
+                ? Number(payload.totalAmount) || 0
+                : Number(payload.subtotal),
+            ),
+          );
+    const totalAmount =
+      computedItemsSubtotal > 0
+        ? this.round2(Math.max(0, subtotal + deliveryFee - discount))
+        : this.round2(Math.max(0, Number(payload.totalAmount) || 0));
+    const codAmount =
+      computedItemsSubtotal > 0
+        ? this.round2(Math.max(0, totalAmount - advancePayment))
+        : this.round2(
+            Math.max(
+              0,
+              isNaN(Number(payload.codAmount))
+                ? Math.max(0, totalAmount - advancePayment)
+                : Number(payload.codAmount),
+            ),
+          );
+
+    const defaultPaymentStatus =
+      codAmount === 0 ? 'Paid' : advancePayment > 0 ? 'Partial' : 'Unpaid';
+    const defaultPaymentMethod =
+      codAmount === 0
+        ? payload.advancePaymentMethod
+          ? `${payload.advancePaymentMethod} (100% Advance)`
+          : 'Full Paid'
+        : advancePayment > 0
+          ? `Partial (${payload.advancePaymentMethod || 'Advance'} + COD)`
+          : 'Cash on Delivery';
+
+    // 5. Create order record with Merchant's Reseller Memo Code, Fraud Score, and items in PostgreSQL
     const order = await this.orderRepository.createOrderWithItems({
       merchantId,
       externalOrderId: payload.externalOrderId,
@@ -443,17 +534,14 @@ export class OrderService {
       status: targetStatus,
       customerRiskScore: fraudReport.successRatio,
       customerRiskLevel: fraudReport.riskLevel,
-      totalAmount: isNaN(Number(payload.totalAmount)) ? 0 : Number(payload.totalAmount),
-      codAmount: isNaN(Number(payload.codAmount)) ? (Number(payload.totalAmount) || 0) : Number(payload.codAmount),
-      subtotal: isNaN(Number(payload.subtotal)) ? (Number(payload.totalAmount) || 0) : Number(payload.subtotal),
-      deliveryFee: isNaN(Number(payload.deliveryFee)) ? 0 : Number(payload.deliveryFee),
-      discount: isNaN(Number(payload.discount)) ? 0 : Number(payload.discount),
-      advancePayment: isNaN(Number(payload.advancePayment)) ? 0 : Number(payload.advancePayment),
-      paymentMethod:
-        payload.paymentMethod ||
-        ((Number(payload.codAmount) || 0) === 0 ? 'Full Paid' : 'Cash on Delivery'),
-      paymentStatus:
-        payload.paymentStatus || ((Number(payload.codAmount) || 0) === 0 ? 'Paid' : 'Unpaid'),
+      totalAmount,
+      codAmount,
+      subtotal,
+      deliveryFee,
+      discount,
+      advancePayment,
+      paymentMethod: payload.paymentMethod || defaultPaymentMethod,
+      paymentStatus: payload.paymentStatus || defaultPaymentStatus,
       advancePaymentMethod: payload.advancePaymentMethod,
       advanceTrxId: payload.advanceTrxId,
       timeline: payload.timeline,
@@ -479,9 +567,9 @@ export class OrderService {
       city?: string;
       memoCode?: string;
       courierProvider?: string;
-      totalAmount: number;
+      totalAmount?: number;
       codAmount?: number;
-      items: Array<{ variantId: string; quantity: number; unitPrice: number }>;
+      items: Array<{ variantId: string; quantity: number; unitPrice?: number }>;
     }>,
   ) {
     const results: Array<{ success: boolean; customerName: string; orderId?: string; error?: string }> = [];
@@ -600,6 +688,12 @@ export class OrderService {
           "restockedBin" = NULL
       WHERE "id" = ${order.id}
     `;
+
+    try {
+      await this.billingService.reverseOrderEarning(order.id, finalReason);
+    } catch (err: any) {
+      console.warn('[OrderService] Billing earning reversal notice:', err?.message || err);
+    }
 
     return {
       ...updated,

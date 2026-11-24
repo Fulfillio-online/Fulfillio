@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   CheckCircle2,
   XCircle,
@@ -11,7 +12,9 @@ import {
   Smartphone,
   Store,
   DollarSign,
-  ChevronDown,
+  MoreVertical,
+  ShieldCheck,
+  Ban,
 } from 'lucide-react';
 import { PaymentRequest } from '../types';
 
@@ -24,6 +27,21 @@ interface PaymentRequestsTableProps {
   onAccept: (request: PaymentRequest) => void;
   onReject: (request: PaymentRequest) => void;
   onOpenPayModal: (request: PaymentRequest) => void;
+  onViewProof: (request: PaymentRequest) => void;
+}
+
+function formatDateTime(iso?: string): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
 }
 
 export function PaymentRequestsTable({
@@ -35,35 +53,68 @@ export function PaymentRequestsTable({
   onAccept,
   onReject,
   onOpenPayModal,
+  onViewProof,
 }: PaymentRequestsTableProps) {
-  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [menuState, setMenuState] = useState<{
+    req: PaymentRequest;
+    top: number;
+    left: number;
+  } | null>(null);
 
-  // Close dropdown on outside click
   useEffect(() => {
-    if (!activeMenuId) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target.closest('[data-dropdown-container]')) {
-        setActiveMenuId(null);
-      }
+    if (!menuState) return;
+    const close = () => setMenuState(null);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    window.addEventListener('click', close);
+    return () => {
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+      window.removeEventListener('click', close);
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [activeMenuId]);
+  }, [menuState]);
+
+  const handleOpenMenu = (req: PaymentRequest, e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    if (menuState?.req.id === req.id) {
+      setMenuState(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const menuWidth = 210;
+    const menuHeight = 148;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const rawTop =
+      spaceBelow < menuHeight && spaceAbove >= spaceBelow
+        ? rect.top - menuHeight - 6
+        : rect.bottom + 6;
+    const top = Math.max(10, Math.min(rawTop, window.innerHeight - menuHeight - 10));
+    const left = Math.max(10, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 10));
+    setMenuState({ req, top, left });
+  };
+
   const getMethodBadge = (req: PaymentRequest) => {
     switch (req.method) {
       case 'BKASH':
         return (
-          <div className="flex items-center gap-1.5 text-pink-400 font-semibold text-xs">
+          <div className="flex items-center gap-1.5 text-orange-600 dark:text-orange-400 font-semibold text-xs">
             <Smartphone className="w-3.5 h-3.5 shrink-0" />
             <span>bKash</span>
           </div>
         );
       case 'NAGAD':
         return (
-          <div className="flex items-center gap-1.5 text-orange-400 font-semibold text-xs">
+          <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-semibold text-xs">
             <Smartphone className="w-3.5 h-3.5 shrink-0" />
             <span>Nagad</span>
+          </div>
+        );
+      case 'ROCKET':
+        return (
+          <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-semibold text-xs">
+            <Smartphone className="w-3.5 h-3.5 shrink-0" />
+            <span>Rocket</span>
           </div>
         );
       case 'BANK_TRANSFER':
@@ -88,30 +139,38 @@ export function PaymentRequestsTable({
     switch (req.status) {
       case 'PENDING':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 select-none">
             <Clock className="w-3 h-3" />
-            Pending
+            <span>Pending</span>
           </span>
         );
       case 'ACCEPTED':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30">
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30 select-none">
             <Check className="w-3 h-3" />
-            Accepted
+            <span>Accepted</span>
           </span>
         );
       case 'PAID':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 select-none">
             <CheckCircle2 className="w-3 h-3" />
-            Paid
+            <span>Paid · Proof</span>
           </span>
         );
       case 'REJECTED':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30 select-none">
             <XCircle className="w-3 h-3" />
-            Rejected
+            <span>Rejected</span>
+          </span>
+        );
+      case 'CANCELLED':
+      default:
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-slate-100 dark:bg-navy-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/10 select-none">
+            <Ban className="w-3 h-3" />
+            <span>Cancelled</span>
           </span>
         );
     }
@@ -119,7 +178,7 @@ export function PaymentRequestsTable({
 
   return (
     <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-navy-900/90 overflow-hidden shadow-xl">
-      {/* 1. Mobile Cards (< md screens) */}
+      {/* 1. Mobile Cards (< md) */}
       <div className="block md:hidden p-3 space-y-3">
         {requests.length === 0 ? (
           <div className="p-8 text-center text-xs text-slate-600 dark:text-slate-300">
@@ -133,28 +192,26 @@ export function PaymentRequestsTable({
                 key={req.id}
                 className={`rounded-xl border transition-all p-3.5 space-y-2.5 ${
                   isSelected
-                    ? 'border-emerald-500/50 bg-emerald-50 dark:bg-emerald-950/20'
+                    ? 'border-orange-500/50 bg-orange-500/5'
                     : 'border-slate-200 dark:border-white/10 bg-slate-50/70 dark:bg-navy-950/70'
                 }`}
               >
-                {/* Row 1: Checkbox + ID + Status */}
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <input
                       type="checkbox"
                       checked={isSelected}
                       onChange={() => onToggleSelectRow(req.id)}
-                      aria-label={`Select ${req.id}`}
-                      className="w-4 h-4 rounded bg-slate-50 dark:bg-navy-950 border-slate-300 dark:border-white/15 text-orange-600 dark:text-orange-500 focus:ring-orange-500 cursor-pointer accent-orange-500"
+                      aria-label={`Select ${req.requestCode}`}
+                      className="w-4 h-4 rounded bg-slate-50 dark:bg-navy-950 border-slate-300 dark:border-white/15 text-orange-600 focus:ring-orange-500 cursor-pointer accent-orange-500"
                     />
-                    <span className="tabular-nums text-xs font-extrabold text-navy-800 dark:text-white">
-                      {req.id}
+                    <span className="font-mono text-xs font-extrabold text-navy-800 dark:text-white">
+                      {req.requestCode}
                     </span>
                   </div>
-                  <div>{getStatusBadge(req)}</div>
+                  {getStatusBadge(req)}
                 </div>
 
-                {/* Row 2: Merchant & Amount */}
                 <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100 dark:border-white/5">
                   <div>
                     <div className="font-bold text-navy-800 dark:text-white">{req.merchantName}</div>
@@ -167,86 +224,32 @@ export function PaymentRequestsTable({
                   </div>
                 </div>
 
-                {/* Row 3: Account info & TrxID */}
                 <div className="text-xs space-y-1 pt-1 border-t border-slate-100 dark:border-white/5 text-slate-700 dark:text-slate-200">
                   <div className="flex items-center justify-between">
-                    <div>{getMethodBadge(req)}</div>
-                    <span className="tabular-nums text-slate-700 dark:text-slate-200">{req.accountDetails.accountNumber}</span>
+                    {getMethodBadge(req)}
+                    <span className="font-mono">{req.accountDetails.accountNumber}</span>
                   </div>
                   {req.trxId && (
-                    <div className="tabular-nums text-xs text-orange-600 dark:text-orange-400 flex items-center justify-between">
-                      <span className="text-slate-500 dark:text-slate-400">TrxID:</span>
+                    <div className="font-mono text-xs text-emerald-600 dark:text-emerald-400 flex items-center justify-between">
+                      <span>TrxID:</span>
                       <span className="font-bold">{req.trxId}</span>
                     </div>
                   )}
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400">{req.requestedAt}</div>
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400">{formatDateTime(req.requestedAt)}</div>
                 </div>
 
-                {/* Row 4: Action Buttons */}
-                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-white/5">
-                  {req.status === 'PENDING' && (
-                    <div className="relative inline-block text-left" data-dropdown-container>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setActiveMenuId(activeMenuId === `mob-${req.id}` ? null : `mob-${req.id}`)
-                        }
-                        className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-bold text-navy-800 dark:text-slate-100 border border-slate-300 dark:border-white/15 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
-                      >
-                        <span>Actions</span>
-                        <ChevronDown
-                          className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                            activeMenuId === `mob-${req.id}` ? 'rotate-180 text-orange-600 dark:text-orange-400' : 'text-slate-600 dark:text-slate-300'
-                          }`}
-                        />
-                      </button>
-
-                      {activeMenuId === `mob-${req.id}` && (
-                        <div className="absolute right-0 bottom-full mb-1.5 w-44 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-2xl py-1.5 z-[100] text-left text-xs pointer-events-auto">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setActiveMenuId(null);
-                              onAccept(req);
-                            }}
-                            className="w-full px-3 py-2 text-left text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer"
-                          >
-                            <Check className="w-4 h-4 text-orange-600 dark:text-orange-400" />
-                            <span>Accept Request</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setActiveMenuId(null);
-                              onReject(req);
-                            }}
-                            className="w-full px-3 py-2 text-left text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer border-t border-slate-200 dark:border-white/10"
-                          >
-                            <XCircle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
-                            <span>Reject Request</span>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {req.status === 'ACCEPTED' && (
-                    <button
-                      type="button"
-                      onClick={() => onOpenPayModal(req)}
-                      className="px-3.5 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-colors cursor-pointer"
-                    >
-                      <CreditCard className="w-3.5 h-3.5" />
-                      <span>Pay Payout</span>
-                    </button>
-                  )}
-
-                  {req.status === 'REJECTED' && (
-                    <span className="text-xs text-rose-600 dark:text-rose-400 font-semibold inline-flex items-center gap-1">
-                      <XCircle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
-                      <span>Rejected</span>
-                    </span>
-                  )}
+                <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-white/5">
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                    {req.rejectionReason ? `Rejected: ${req.rejectionReason}` : req.remarks || ''}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => handleOpenMenu(req, e)}
+                    className="p-2 rounded-xl text-slate-500 hover:text-navy-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-navy-800"
+                    aria-label="Actions menu"
+                  >
+                    <MoreVertical className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
             );
@@ -254,7 +257,7 @@ export function PaymentRequestsTable({
         )}
       </div>
 
-      {/* 2. Desktop Full Table (>= md screens) */}
+      {/* 2. Desktop Table (>= md) */}
       <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-left text-xs border-collapse">
           <thead>
@@ -265,15 +268,15 @@ export function PaymentRequestsTable({
                   checked={allVisibleSelected}
                   onChange={onToggleSelectAll}
                   aria-label="Select all requests on this page"
-                  className="w-4 h-4 rounded bg-slate-50 dark:bg-navy-950 border-slate-300 dark:border-white/15 text-orange-600 dark:text-orange-500 focus:ring-orange-500 cursor-pointer accent-orange-500"
+                  className="w-4 h-4 rounded bg-slate-50 dark:bg-navy-950 border-slate-300 dark:border-white/15 text-orange-600 focus:ring-orange-500 cursor-pointer accent-orange-500"
                 />
               </th>
               <th className="py-3.5 px-3 align-middle">Request ID &amp; Date</th>
               <th className="py-3.5 px-3 align-middle">Merchant / Store</th>
               <th className="py-3.5 px-3 align-middle">Amount</th>
               <th className="py-3.5 px-3 align-middle">Method &amp; Account Details</th>
-              <th className="py-3.5 px-3 align-middle">Status</th>
-              <th className="py-3.5 pl-3 pr-5 text-right align-middle">Actions</th>
+              <th className="py-3.5 px-3 text-center align-middle">Status</th>
+              <th className="py-3.5 pl-3 pr-5 text-center align-middle w-16">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200/60 dark:divide-white/10 font-sans">
@@ -284,60 +287,57 @@ export function PaymentRequestsTable({
                 </td>
               </tr>
             ) : (
-              requests.map((req, idx) => {
-                const isNearBottom = idx > 0 && idx >= requests.length - 2;
+              requests.map((req) => {
                 const isSelected = selectedIds.includes(req.id);
                 return (
                   <tr
                     key={req.id}
                     className={`hover:bg-slate-100/40 dark:hover:bg-navy-800/40 transition-colors ${
-                      isSelected ? 'bg-emerald-50 dark:bg-emerald-950/15' : ''
+                      isSelected ? 'bg-orange-500/5' : ''
                     }`}
                   >
-                    {/* Checkbox */}
                     <td className="py-3.5 pl-4 pr-2 w-10 align-middle">
                       <input
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => onToggleSelectRow(req.id)}
-                        aria-label={`Select ${req.id}`}
-                        className="w-4 h-4 rounded bg-slate-50 dark:bg-navy-950 border-slate-300 dark:border-white/15 text-orange-600 dark:text-orange-500 focus:ring-orange-500 cursor-pointer accent-orange-500"
+                        aria-label={`Select ${req.requestCode}`}
+                        className="w-4 h-4 rounded bg-slate-50 dark:bg-navy-950 border-slate-300 dark:border-white/15 text-orange-600 focus:ring-orange-500 cursor-pointer accent-orange-500"
                       />
                     </td>
 
-                    {/* Request ID & Date */}
                     <td className="py-3.5 px-3 align-middle">
-                      <span className="tabular-nums text-xs font-bold text-navy-800 dark:text-white block">
-                        {req.id}
+                      <span className="font-mono text-xs font-bold text-navy-800 dark:text-white block">
+                        {req.requestCode}
                       </span>
-                      <span className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1 mt-0.5">
-                        <Clock className="w-3 h-3 text-slate-500 dark:text-slate-400" />
-                        <span>{req.requestedAt}</span>
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
+                        <Clock className="w-3 h-3" />
+                        <span>{formatDateTime(req.requestedAt)}</span>
                       </span>
                     </td>
 
-                    {/* Merchant & Store */}
                     <td className="py-3.5 px-3 align-middle">
                       <div className="font-semibold text-navy-800 dark:text-white flex items-center gap-1.5">
                         <Store className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 shrink-0" />
                         <span>{req.merchantName}</span>
                       </div>
                       <div className="tabular-nums text-xs font-bold text-orange-600 dark:text-orange-400 mt-0.5">
-                        {req.merchantCode} · <span className="font-sans text-slate-600 dark:text-slate-300 font-normal">{req.ownerName}</span>
+                        {req.merchantCode} ·{' '}
+                        <span className="font-sans text-slate-600 dark:text-slate-300 font-normal">
+                          {req.ownerName}
+                        </span>
                       </div>
                     </td>
 
-                    {/* Amount */}
                     <td className="py-3.5 px-3 align-middle">
                       <span className="tabular-nums text-sm font-extrabold text-orange-600 dark:text-orange-400 block">
                         ৳{req.amount.toLocaleString()}
                       </span>
                     </td>
 
-                    {/* Method & Account Details */}
                     <td className="py-3.5 px-3 align-middle">
                       <div>{getMethodBadge(req)}</div>
-                      <div className="tabular-nums text-xs text-slate-700 dark:text-slate-200 font-semibold mt-0.5">
+                      <div className="font-mono text-xs text-slate-700 dark:text-slate-200 font-semibold mt-0.5">
                         {req.accountDetails.accountNumber}
                       </div>
                       <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
@@ -346,85 +346,33 @@ export function PaymentRequestsTable({
                       </div>
                     </td>
 
-                    {/* Status */}
-                    <td className="py-3.5 px-3 align-middle">
-                      <div>{getStatusBadge(req)}</div>
-                      {req.trxId && (
-                        <div className="tabular-nums text-[11px] font-bold text-orange-600 dark:text-orange-400 mt-1">
-                          Trx: {req.trxId}
-                        </div>
-                      )}
+                    <td className="py-3.5 px-3 text-center align-middle">
+                      <div className="flex flex-col items-center gap-1">
+                        {getStatusBadge(req)}
+                        {req.trxId && (
+                          <span className="font-mono text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                            Trx: {req.trxId}
+                          </span>
+                        )}
+                        {req.status === 'REJECTED' && req.rejectionReason && (
+                          <span className="text-[10px] text-rose-600 dark:text-rose-400 max-w-[160px] truncate">
+                            {req.rejectionReason}
+                          </span>
+                        )}
+                      </div>
                     </td>
 
-                    {/* Actions Column */}
-                    <td className="py-3.5 pl-3 pr-5 text-right align-middle">
-                      {req.status === 'PENDING' && (
-                        <div className="relative inline-block text-left" data-dropdown-container>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setActiveMenuId(activeMenuId === req.id ? null : req.id)
-                            }
-                            className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-bold text-navy-800 dark:text-slate-100 border border-slate-300 dark:border-white/15 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
-                          >
-                            <span>Actions</span>
-                            <ChevronDown
-                              className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                                activeMenuId === req.id ? 'rotate-180 text-orange-600 dark:text-orange-400' : 'text-slate-600 dark:text-slate-300'
-                              }`}
-                            />
-                          </button>
-
-                          {activeMenuId === req.id && (
-                            <div
-                              className={`absolute right-0 ${
-                                isNearBottom ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
-                              } w-44 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 shadow-2xl py-1.5 z-[100] text-left text-xs pointer-events-auto`}
-                            >
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setActiveMenuId(null);
-                                  onAccept(req);
-                                }}
-                                className="w-full px-3 py-2 text-left text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer"
-                              >
-                                <Check className="w-4 h-4 text-orange-600 dark:text-orange-400" />
-                                <span>Accept Request</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setActiveMenuId(null);
-                                  onReject(req);
-                                }}
-                                className="w-full px-3 py-2 text-left text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold flex items-center gap-2 transition-colors cursor-pointer border-t border-slate-200 dark:border-white/10"
-                              >
-                                <XCircle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
-                                <span>Reject Request</span>
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {req.status === 'ACCEPTED' && (
+                    <td className="py-3.5 pl-3 pr-5 text-center align-middle">
+                      <div className="flex items-center justify-center">
                         <button
                           type="button"
-                          onClick={() => onOpenPayModal(req)}
-                          className="px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-colors cursor-pointer ml-auto"
+                          onClick={(e) => handleOpenMenu(req, e)}
+                          className="p-2 rounded-xl text-slate-500 hover:text-navy-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-navy-800 transition-colors cursor-pointer"
+                          aria-label="Actions menu"
                         >
-                          <CreditCard className="w-3.5 h-3.5" />
-                          <span>Pay Payout</span>
+                          <MoreVertical className="h-4 w-4" />
                         </button>
-                      )}
-
-                      {req.status === 'REJECTED' && (
-                        <span className="text-xs text-rose-600 dark:text-rose-400 font-semibold inline-flex items-center gap-1">
-                          <XCircle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
-                          <span>Rejected</span>
-                        </span>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -433,6 +381,115 @@ export function PaymentRequestsTable({
           </tbody>
         </table>
       </div>
+
+      {/* Portaled Clamped Dropdown Menu */}
+      {menuState &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: 'fixed',
+              top: menuState.top,
+              left: menuState.left,
+              width: 210,
+              maxHeight: 'calc(100vh - 20px)',
+            }}
+            className="z-[9999] rounded-xl border border-slate-200 dark:border-white/15 bg-white dark:bg-navy-900 shadow-2xl py-1.5 overflow-y-auto text-xs"
+          >
+            {menuState.req.status === 'PENDING' && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = menuState.req;
+                    setMenuState(null);
+                    onAccept(target);
+                  }}
+                  className="w-full px-3.5 py-2 text-left text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 font-semibold flex items-center gap-2 cursor-pointer"
+                >
+                  <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span>Accept Request</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = menuState.req;
+                    setMenuState(null);
+                    onOpenPayModal(target);
+                  }}
+                  className="w-full px-3.5 py-2 text-left text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/30 font-semibold flex items-center gap-2 cursor-pointer"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>Pay &amp; Attach Proof</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = menuState.req;
+                    setMenuState(null);
+                    onReject(target);
+                  }}
+                  className="w-full px-3.5 py-2 text-left text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold flex items-center gap-2 border-t border-slate-100 dark:border-white/10 cursor-pointer"
+                >
+                  <XCircle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+                  <span>Reject Request</span>
+                </button>
+              </>
+            )}
+
+            {menuState.req.status === 'ACCEPTED' && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = menuState.req;
+                    setMenuState(null);
+                    onOpenPayModal(target);
+                  }}
+                  className="w-full px-3.5 py-2 text-left text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/30 font-semibold flex items-center gap-2 cursor-pointer"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>Pay &amp; Attach Proof</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = menuState.req;
+                    setMenuState(null);
+                    onReject(target);
+                  }}
+                  className="w-full px-3.5 py-2 text-left text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold flex items-center gap-2 border-t border-slate-100 dark:border-white/10 cursor-pointer"
+                >
+                  <XCircle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+                  <span>Reject Request</span>
+                </button>
+              </>
+            )}
+
+            {menuState.req.status === 'PAID' && (
+              <button
+                type="button"
+                onClick={() => {
+                  const target = menuState.req;
+                  setMenuState(null);
+                  onViewProof(target);
+                }}
+                className="w-full px-3.5 py-2 text-left text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 font-semibold flex items-center gap-2 cursor-pointer"
+              >
+                <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <span>View Digital Proof</span>
+              </button>
+            )}
+
+            {(menuState.req.status === 'REJECTED' || menuState.req.status === 'CANCELLED') && (
+              <div className="px-3.5 py-2 text-[11px] text-slate-500 dark:text-slate-400">
+                No further actions ({menuState.req.status.toLowerCase()})
+              </div>
+            )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

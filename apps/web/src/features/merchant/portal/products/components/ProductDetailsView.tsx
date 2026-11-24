@@ -380,9 +380,14 @@ export function ProductDetailsView({
   const currentVariantStock =
     selectedVariant !== undefined ? selectedVariant.stock : product.stock;
 
-  // Integrated Hero B2B Quick Order Quantity
+  // Integrated Hero B2B Quick Order Quantity & Selling Price
   const [orderQty, setOrderQty] = useState<number>(1);
+  const [sellingPrice, setSellingPrice] = useState<number>(product.price || 0);
   const [activeTab, setActiveTab] = useState<'info' | 'variants'>('info');
+
+  useEffect(() => {
+    setSellingPrice(product.price || 0);
+  }, [product.id, product.price]);
 
   // Reset or cap orderQty when variant stock changes
   useEffect(() => {
@@ -438,6 +443,10 @@ export function ProductDetailsView({
 
   const handleAddToCart = () => {
     if (!isReadyToOrder || currentVariantStock <= 0 || orderQty <= 0) return;
+    if (!Number.isFinite(sellingPrice) || sellingPrice <= 0) {
+      onTriggerToast('Please enter a valid selling price greater than ৳0.');
+      return;
+    }
 
     const matchedColorObj = productColors.find(
       (c) => c.name.toLowerCase() === selectedColor.toLowerCase()
@@ -452,13 +461,14 @@ export function ProductDetailsView({
       color: selectedColor,
       size: selectedSize,
       sku: currentVariantSku,
-      unitPrice: product.price || 0,
+      unitPrice: sellingPrice,
+      declaredPrice: product.price || 0,
       qty: orderQty,
       maxStock: currentVariantStock,
     });
 
     onTriggerToast(
-      `Added ${orderQty}x "${product.title} (${selectedColor} · ${selectedSize})" to Order List!`
+      `Added ${orderQty}x "${product.title} (${selectedColor} · ${selectedSize})" @ ৳${sellingPrice.toLocaleString()} to Order List!`
     );
   };
 
@@ -959,73 +969,118 @@ export function ProductDetailsView({
                   </div>
                 ) : null}
 
-                {/* Quantity and Add to Order List in ONE LINE */}
-                <div className="flex items-center gap-3">
-                  {/* Quantity Stepper */}
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-                      Quantity:
-                    </span>
-                    <div className="flex items-center border border-slate-200 dark:border-white/10 rounded-xl bg-slate-50 dark:bg-navy-950 p-1">
-                      <button
-                        type="button"
-                        disabled={!isReadyToOrder || currentVariantStock <= 0 || orderQty <= 1}
-                        onClick={() => setOrderQty((q) => Math.max(1, q - 1))}
-                        className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-navy-800 text-slate-500 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
-                        aria-label="Decrease quantity"
-                      >
-                        <Minus className="h-3.5 w-3.5" />
-                      </button>
-                      <input
-                        type="number"
-                        min="1"
-                        max={Math.max(1, currentVariantStock)}
-                        disabled={!isReadyToOrder || currentVariantStock <= 0}
-                        value={orderQty}
-                        onChange={(e) =>
-                          setOrderQty(
-                            Math.min(
-                              currentVariantStock,
-                              Math.max(1, parseInt(e.target.value, 10) || 1)
-                            )
-                          )
-                        }
-                        className="w-12 text-center text-xs font-mono font-bold bg-transparent border-0 focus:outline-none text-navy-900 dark:text-white disabled:opacity-50"
-                      />
-                      <button
-                        type="button"
-                        disabled={!isReadyToOrder || currentVariantStock <= 0 || orderQty >= currentVariantStock}
-                        onClick={() => setOrderQty((q) => Math.min(currentVariantStock, q + 1))}
-                        className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-navy-800 text-slate-500 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
-                        aria-label="Increase quantity"
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                      </button>
+                {/* Order Selling Price, Quantity & Add to Order List */}
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-navy-950 p-3">
+                    <div>
+                      <span className="text-xs font-bold text-navy-900 dark:text-slate-200 block">
+                        Order Selling Price (৳)
+                      </span>
+                      <span className="text-[11px] text-slate-400 font-mono">
+                        Base: ৳{product.price.toLocaleString()}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {sellingPrice > product.price && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+                          +৳{(sellingPrice - product.price).toLocaleString()}/unit
+                        </span>
+                      )}
+                      {sellingPrice > 0 && sellingPrice < product.price && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                          -৳{(product.price - sellingPrice).toLocaleString()}/unit
+                        </span>
+                      )}
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500">
+                          ৳
+                        </span>
+                        <input
+                          type="number"
+                          min="1"
+                          step="any"
+                          disabled={!isReadyToOrder || currentVariantStock <= 0}
+                          placeholder={String(product.price || 0)}
+                          value={sellingPrice === 0 ? '' : sellingPrice}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            setSellingPrice(raw === '' ? 0 : Math.max(0, Number(raw) || 0));
+                          }}
+                          aria-label="Order Selling Price"
+                          className="w-28 pl-6 pr-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-white/15 bg-white dark:bg-navy-900 text-xs font-mono font-bold text-right text-navy-900 dark:text-white focus:outline-none focus:border-orange-500 disabled:opacity-50"
+                        />
+                      </div>
                     </div>
                   </div>
 
-                  {/* Add to Order List Button in same line */}
-                  <button
-                    type="button"
-                    disabled={!isReadyToOrder || currentVariantStock <= 0}
-                    onClick={handleAddToCart}
-                    className={`flex-1 min-h-[42px] py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
-                      !isReadyToOrder || currentVariantStock <= 0
-                        ? 'bg-slate-200/60 dark:bg-black/60 border border-slate-300/80 dark:border-white/10 text-slate-400 dark:text-slate-600 cursor-not-allowed opacity-50'
-                        : 'bg-orange-600 hover:bg-orange-500 active:scale-[0.99] text-white shadow-md shadow-orange-500/20 cursor-pointer'
-                    }`}
-                  >
-                    <ShoppingCart className="h-4 w-4 shrink-0" />
-                    <span className="truncate">
-                      {isPendingApproval
-                        ? 'Pending Approval'
-                        : isSuspended
-                        ? 'Product Suspended'
-                        : currentVariantStock <= 0
-                        ? 'Variant Out of Stock'
-                        : `Add to Order List (৳${(product.price * orderQty).toLocaleString()})`}
-                    </span>
-                  </button>
+                  <div className="flex items-center gap-3">
+                    {/* Quantity Stepper */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                        Quantity:
+                      </span>
+                      <div className="flex items-center border border-slate-200 dark:border-white/10 rounded-xl bg-slate-50 dark:bg-navy-950 p-1">
+                        <button
+                          type="button"
+                          disabled={!isReadyToOrder || currentVariantStock <= 0 || orderQty <= 1}
+                          onClick={() => setOrderQty((q) => Math.max(1, q - 1))}
+                          className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-navy-800 text-slate-500 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                          aria-label="Decrease quantity"
+                        >
+                          <Minus className="h-3.5 w-3.5" />
+                        </button>
+                        <input
+                          type="number"
+                          min="1"
+                          max={Math.max(1, currentVariantStock)}
+                          disabled={!isReadyToOrder || currentVariantStock <= 0}
+                          value={orderQty}
+                          onChange={(e) =>
+                            setOrderQty(
+                              Math.min(
+                                currentVariantStock,
+                                Math.max(1, parseInt(e.target.value, 10) || 1)
+                              )
+                            )
+                          }
+                          className="w-12 text-center text-xs font-mono font-bold bg-transparent border-0 focus:outline-none text-navy-900 dark:text-white disabled:opacity-50"
+                        />
+                        <button
+                          type="button"
+                          disabled={!isReadyToOrder || currentVariantStock <= 0 || orderQty >= currentVariantStock}
+                          onClick={() => setOrderQty((q) => Math.min(currentVariantStock, q + 1))}
+                          className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-navy-800 text-slate-500 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                          aria-label="Increase quantity"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Add to Order List Button in same line */}
+                    <button
+                      type="button"
+                      disabled={!isReadyToOrder || currentVariantStock <= 0}
+                      onClick={handleAddToCart}
+                      className={`flex-1 min-h-[42px] py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+                        !isReadyToOrder || currentVariantStock <= 0
+                          ? 'bg-slate-200/60 dark:bg-black/60 border border-slate-300/80 dark:border-white/10 text-slate-400 dark:text-slate-600 cursor-not-allowed opacity-50'
+                          : 'bg-orange-600 hover:bg-orange-500 active:scale-[0.99] text-white shadow-md shadow-orange-500/20 cursor-pointer'
+                      }`}
+                    >
+                      <ShoppingCart className="h-4 w-4 shrink-0" />
+                      <span className="truncate">
+                        {isPendingApproval
+                          ? 'Pending Approval'
+                          : isSuspended
+                          ? 'Product Suspended'
+                          : currentVariantStock <= 0
+                          ? 'Variant Out of Stock'
+                          : `Add to Order List (৳${(sellingPrice * orderQty).toLocaleString()})`}
+                      </span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

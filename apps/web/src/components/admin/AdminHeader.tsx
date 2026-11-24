@@ -19,6 +19,7 @@ import {
   RotateCcw,
   CreditCard,
   Radio,
+  ShieldCheck,
 } from 'lucide-react';
 import { useTheme } from '@/lib/hooks/useTheme';
 
@@ -132,6 +133,20 @@ export function AdminHeader({ onOpenMobileSidebar }: AdminHeaderProps) {
         title: 'Stock & Cycle Count',
         icon: Boxes,
         subtitle: 'Inventory Audits & Discrepancies',
+      };
+    }
+    if (pathname.startsWith('/admin/payment-accounts')) {
+      return {
+        title: 'Account Verifications',
+        icon: ShieldCheck,
+        subtitle: 'Merchant Bank & MFS KYC Approval Queue',
+      };
+    }
+    if (pathname.startsWith('/admin/payouts')) {
+      return {
+        title: 'Payment Requests',
+        icon: CreditCard,
+        subtitle: 'Merchant COD Payouts & Settlements',
       };
     }
     if (pathname.startsWith('/admin/billing')) {

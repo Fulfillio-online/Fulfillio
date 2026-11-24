@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { CheckCircle2 } from 'lucide-react';
 import { MerchantStatsOverview } from './components/MerchantStatsOverview';
 import { MerchantTable } from './components/MerchantTable';
-import { PendingPayoutApprovalsPanel } from './components/PendingPayoutApprovalsPanel';
 import { useMerchantDirectory } from './useMerchantDirectory';
 
 export interface MerchantDirectoryManagerProps {
@@ -24,7 +23,6 @@ export function MerchantDirectoryManager(_props: MerchantDirectoryManagerProps) 
     toastMessage,
     handleToggleStatus,
     handleBulkUpdateStatus,
-    handleReviewPayoutAccount,
   } = useMerchantDirectory();
 
   // Pending-approval submissions are not live catalog items yet.
@@ -57,11 +55,7 @@ export function MerchantDirectoryManager(_props: MerchantDirectoryManagerProps) 
             {pendingPayoutMerchants.length > 0 && (
               <button
                 type="button"
-                onClick={() =>
-                  router.push(
-                    `/admin/merchants/${encodeURIComponent(pendingPayoutMerchants[0].id)}?tab=payout`
-                  )
-                }
+                onClick={() => router.push('/admin/payment-accounts')}
                 className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 transition-colors cursor-pointer"
               >
                 {pendingPayoutMerchants.length} Payout Approval{pendingPayoutMerchants.length > 1 ? 's' : ''} Pending
@@ -75,12 +69,6 @@ export function MerchantDirectoryManager(_props: MerchantDirectoryManagerProps) 
 
         {/* 4 Summary Metric Cards */}
         <MerchantStatsOverview merchants={merchants} productsCount={liveProducts.length} />
-
-        {/* Pending Payment Details Approval Queue */}
-        <PendingPayoutApprovalsPanel
-          pendingMerchants={pendingPayoutMerchants}
-          onReviewPayout={handleReviewPayoutAccount}
-        />
 
         {/* Searchable & Filterable Merchant Table with Multi-Select and Bulk Actions */}
         <MerchantTable

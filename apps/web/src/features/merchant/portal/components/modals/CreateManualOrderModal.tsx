@@ -33,6 +33,7 @@ interface OrderLineItemDraft {
   sku: string;
   title: string;
   unitPrice: number;
+  declaredPrice: number;
   qty: number;
   maxStock: number;
   imageUrl?: string;
@@ -46,6 +47,7 @@ interface CreateManualOrderModalProps {
   onClose: () => void;
   products: MerchantProductItem[];
   memoList: ResellerMemo[];
+  baseHandlingFee?: number;
   onCreateOrder: (
     order: MerchantOrderItem,
     productIdOrItems?: string | { productId: string; qty: number; variantSku?: string }[],
@@ -195,6 +197,7 @@ export function resolveVariantConfig(
   sku: string;
   variantLabel: string;
   maxStock: number;
+  basePrice: number;
   imageUrl?: string;
   selectedColor?: string;
   selectedSize?: string;
@@ -225,10 +228,13 @@ export function resolveVariantConfig(
       matchedVariant.size || matchedVariant.attributeValue || resolvedSize,
     ].filter(Boolean);
     const label = labelParts.length > 0 ? labelParts.join(' / ') : 'Standard';
+    const basePrice =
+      matchedVariant.price && matchedVariant.price > 0 ? matchedVariant.price : (p.price || 0);
     return {
       sku: matchedVariant.variantSku,
       variantLabel: label,
       maxStock: matchedVariant.stock > 0 ? matchedVariant.stock : (p.stock > 0 ? p.stock : 0),
+      basePrice,
       imageUrl: resolvedImage,
       selectedColor: resolvedColor,
       selectedSize: resolvedSize,
@@ -248,6 +254,7 @@ export function resolveVariantConfig(
     sku: derivedSku,
     variantLabel: label,
     maxStock: stock,
+    basePrice: p.price || 0,
     imageUrl: resolvedImage,
     selectedColor: resolvedColor,
     selectedSize: resolvedSize,
@@ -274,6 +281,7 @@ export function CreateManualOrderModal({
   onClose,
   products,
   memoList,
+  baseHandlingFee = 45,
   onCreateOrder,
   onTriggerToast,
 }: CreateManualOrderModalProps) {
@@ -333,6 +341,7 @@ export function CreateManualOrderModal({
     const p = products.find(isEligibleProductForOrder) || products[0];
     if (!p) return [];
     const cfg = resolveVariantConfig(p);
+    const basePrice = cfg.basePrice || p.price || 0;
     return [
       {
         rowId: `row-${Date.now()}-1`,
@@ -340,7 +349,8 @@ export function CreateManualOrderModal({
         title: p.title,
         variantLabel: cfg.variantLabel,
         sku: cfg.sku,
-        unitPrice: p.price || 0,
+        unitPrice: basePrice,
+        declaredPrice: basePrice,
         qty: cfg.maxStock > 0 ? 1 : 0,
         maxStock: cfg.maxStock,
         imageUrl: cfg.imageUrl,
@@ -359,6 +369,7 @@ export function CreateManualOrderModal({
           const p = products.find(isEligibleProductForOrder) || products[0];
           if (!p) return [];
           const cfg = resolveVariantConfig(p);
+          const basePrice = cfg.basePrice || p.price || 0;
           return [
             {
               rowId: `row-${Date.now()}-1`,
@@ -366,7 +377,8 @@ export function CreateManualOrderModal({
               title: p.title,
               variantLabel: cfg.variantLabel,
               sku: cfg.sku,
-              unitPrice: p.price || 0,
+              unitPrice: basePrice,
+              declaredPrice: basePrice,
               qty: cfg.maxStock > 0 ? 1 : 0,
               maxStock: cfg.maxStock,
               imageUrl: cfg.imageUrl,
@@ -382,10 +394,15 @@ export function CreateManualOrderModal({
           const cfg = resolveVariantConfig(p, item.selectedColor, item.selectedSize);
           const nextMaxStock = cfg.maxStock;
           const nextQty = nextMaxStock <= 0 ? 0 : Math.min(item.qty > 0 ? item.qty : 1, nextMaxStock);
+          const nextBasePrice = cfg.basePrice || p.price || 0;
+          const prevDeclared = item.declaredPrice ?? nextBasePrice;
+          const shouldSyncPrice = item.unitPrice === prevDeclared && nextBasePrice > 0;
           return {
             ...item,
             variantLabel: cfg.variantLabel,
             sku: cfg.sku,
+            unitPrice: shouldSyncPrice ? nextBasePrice : item.unitPrice,
+            declaredPrice: nextBasePrice,
             maxStock: nextMaxStock,
             qty: nextQty,
             imageUrl: cfg.imageUrl || item.imageUrl,
@@ -411,9 +428,15 @@ export function CreateManualOrderModal({
 
   // Real-time Calculations
   const subtotal = items.reduce((sum, item) => sum + (item.unitPrice * item.qty), 0);
+  const baseSubtotal = items.reduce((sum, item) => sum + (item.declaredPrice * item.qty), 0);
+  const extraMarkup = subtotal - baseSubtotal;
   const orderTotal = Math.max(0, subtotal + deliveryFee - discount);
   const codAmount = Math.max(0, orderTotal - advancePayment);
   const totalQty = items.reduce((sum, item) => sum + item.qty, 0);
+  const estHandlingFee = Math.max(0, Number(baseHandlingFee) || 0);
+  const estPackagingFee = 5;
+  const estTotalFees = deliveryFee + estHandlingFee + estPackagingFee;
+  const estNetEarning = Math.max(0, orderTotal - estTotalFees);
 
   // Delivery Presets Handler
   const handleSelectDeliveryPreset = (
@@ -443,13 +466,15 @@ export function CreateManualOrderModal({
       return;
     }
     const cfg = resolveVariantConfig(available);
+    const basePrice = cfg.basePrice || available.price || 0;
     const newItem: OrderLineItemDraft = {
       rowId: `row-${Date.now()}-${items.length + 1}`,
       productId: available.id,
       title: available.title,
       variantLabel: cfg.variantLabel,
       sku: cfg.sku,
-      unitPrice: available.price || 0,
+      unitPrice: basePrice,
+      declaredPrice: basePrice,
       qty: cfg.maxStock > 0 ? 1 : 0,
       maxStock: cfg.maxStock,
       imageUrl: cfg.imageUrl,
@@ -473,6 +498,7 @@ export function CreateManualOrderModal({
     if (!p) return;
     const cfg = resolveVariantConfig(p);
     const nextQty = cfg.maxStock > 0 ? 1 : 0;
+    const basePrice = cfg.basePrice || p.price || 0;
     setItems((prev) =>
       prev.map((it) =>
         it.rowId === rowId
@@ -482,7 +508,8 @@ export function CreateManualOrderModal({
               title: p.title,
               variantLabel: cfg.variantLabel,
               sku: cfg.sku,
-              unitPrice: p.price || 0,
+              unitPrice: basePrice,
+              declaredPrice: basePrice,
               qty: nextQty,
               maxStock: cfg.maxStock,
               imageUrl: cfg.imageUrl,
@@ -503,10 +530,14 @@ export function CreateManualOrderModal({
         if (!p) return it;
         const cfg = resolveVariantConfig(p, newColorName, it.selectedSize);
         const nextQty = cfg.maxStock <= 0 ? 0 : Math.min(cfg.maxStock, Math.max(1, it.qty));
+        const nextBase = cfg.basePrice || p.price || 0;
+        const wasAtBase = it.unitPrice === it.declaredPrice;
         return {
           ...it,
           variantLabel: cfg.variantLabel,
           sku: cfg.sku,
+          unitPrice: wasAtBase && nextBase > 0 ? nextBase : it.unitPrice,
+          declaredPrice: nextBase,
           maxStock: cfg.maxStock,
           qty: nextQty,
           imageUrl: cfg.imageUrl,
@@ -526,10 +557,14 @@ export function CreateManualOrderModal({
         if (!p) return it;
         const cfg = resolveVariantConfig(p, it.selectedColor, newSize);
         const nextQty = cfg.maxStock <= 0 ? 0 : Math.min(cfg.maxStock, Math.max(1, it.qty));
+        const nextBase = cfg.basePrice || p.price || 0;
+        const wasAtBase = it.unitPrice === it.declaredPrice;
         return {
           ...it,
           variantLabel: cfg.variantLabel,
           sku: cfg.sku,
+          unitPrice: wasAtBase && nextBase > 0 ? nextBase : it.unitPrice,
+          declaredPrice: nextBase,
           maxStock: cfg.maxStock,
           qty: nextQty,
           imageUrl: cfg.imageUrl,
@@ -609,6 +644,12 @@ export function CreateManualOrderModal({
         );
         return;
       }
+      if (!Number.isFinite(item.unitPrice) || item.unitPrice <= 0) {
+        onTriggerToast(
+          `Please enter a valid selling price (> ৳0) for "${item.title}".`
+        );
+        return;
+      }
     }
 
     if (!memoList || memoList.length === 0) {
@@ -648,6 +689,7 @@ export function CreateManualOrderModal({
       variant: it.variantLabel,
       sku: it.sku,
       price: it.unitPrice,
+      basePrice: it.declaredPrice,
       quantity: it.qty,
       total: it.unitPrice * it.qty,
       imageUrl: it.imageUrl,
@@ -660,6 +702,7 @@ export function CreateManualOrderModal({
       customer: orderCustomer.trim(),
       phone: orderPhone.trim(),
       address: orderAddress.trim(),
+      city: orderCity.trim() || 'Dhaka',
       productId: items[0].productId,
       items: items.map((it) => `${it.title} (${it.variantLabel}) x ${it.qty}`).join(', '),
       qty: totalQty,
@@ -699,6 +742,36 @@ export function CreateManualOrderModal({
     }));
 
     onCreateOrder(newOrder, itemsToDeduct);
+
+    // Reset form fields for next manual order
+    setOrderCustomer('');
+    setOrderPhone('');
+    setOrderAddress('');
+    setDiscount(0);
+    setAdvancePayment(0);
+    setAdvanceTrxId('');
+    const firstProd = products.find(isEligibleProductForOrder) || products[0];
+    if (firstProd) {
+      const cfg = resolveVariantConfig(firstProd);
+      const basePrice = cfg.basePrice || firstProd.price || 0;
+      setItems([
+        {
+          rowId: `row-${Date.now()}-1`,
+          productId: firstProd.id,
+          title: firstProd.title,
+          variantLabel: cfg.variantLabel,
+          sku: cfg.sku,
+          unitPrice: basePrice,
+          declaredPrice: basePrice,
+          qty: cfg.maxStock > 0 ? 1 : 0,
+          maxStock: cfg.maxStock,
+          imageUrl: cfg.imageUrl,
+          selectedColor: cfg.selectedColor,
+          selectedSize: cfg.selectedSize,
+          selectedVariantId: cfg.selectedVariantId,
+        },
+      ]);
+    }
     onClose();
 
     onTriggerToast(
@@ -1000,21 +1073,41 @@ export function CreateManualOrderModal({
 
                       {/* Selling / Order Price (৳) */}
                       <div>
-                        <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center justify-between mb-1 gap-1">
                           <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-                            Selling Price (৳) *
+                            Selling Price (৳) <span className="text-rose-500">*</span>
                           </label>
-                          <span className="text-[10px] text-slate-400 font-mono" title="Declared Catalog Price">
-                            Declared: ৳{products.find((p) => p.id === item.productId)?.price || item.unitPrice}
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className="text-[10px] text-slate-400 font-mono"
+                              title="Declared Catalog Base Price"
+                            >
+                              Base: ৳{item.declaredPrice.toLocaleString()}
+                            </span>
+                            {item.unitPrice !== item.declaredPrice && (
+                              <button
+                                type="button"
+                                onClick={() => handleUnitPriceChange(item.rowId, item.declaredPrice)}
+                                className="text-[10px] font-bold text-orange-600 dark:text-orange-400 hover:underline cursor-pointer"
+                              >
+                                Reset
+                              </button>
+                            )}
+                          </div>
                         </div>
                         <input
                           type="number"
-                          min="0"
-                          value={item.unitPrice}
-                          onChange={(e) =>
-                            handleUnitPriceChange(item.rowId, Number(e.target.value) || 0)
-                          }
+                          min="1"
+                          step="any"
+                          placeholder={String(item.declaredPrice)}
+                          value={item.unitPrice === 0 ? '' : item.unitPrice}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            handleUnitPriceChange(
+                              item.rowId,
+                              raw === '' ? 0 : Math.max(0, Number(raw) || 0)
+                            );
+                          }}
                           aria-label="Order Selling Price"
                           className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-mono font-bold text-navy-900 dark:text-white text-right focus:outline-none focus:border-orange-500 shadow-2xs"
                         />
@@ -1077,6 +1170,16 @@ export function CreateManualOrderModal({
                         >
                           {item.maxStock === 0 ? 'Out of Stock' : `${item.maxStock} in stock`}
                         </span>
+                        {item.unitPrice > item.declaredPrice && (
+                          <span className="px-2.5 py-0.5 rounded-lg font-mono font-bold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+                            +৳{(item.unitPrice - item.declaredPrice).toLocaleString()}/unit (+৳{((item.unitPrice - item.declaredPrice) * Math.max(1, item.qty)).toLocaleString()} markup)
+                          </span>
+                        )}
+                        {item.unitPrice > 0 && item.unitPrice < item.declaredPrice && (
+                          <span className="px-2.5 py-0.5 rounded-lg font-mono font-bold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                            -৳{(item.declaredPrice - item.unitPrice).toLocaleString()}/unit below base
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-1.5 ml-auto">
@@ -1329,6 +1432,15 @@ export function CreateManualOrderModal({
                       </span>
                     </div>
 
+                    {extraMarkup > 0 && (
+                      <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
+                        <span>Extra Markup Above Base</span>
+                        <span className="font-bold font-mono tabular-nums">
+                          +৳{extraMarkup.toLocaleString()}
+                        </span>
+                      </div>
+                    )}
+
                     <div className="flex justify-between text-slate-600 dark:text-slate-400">
                       <span>Delivery Charge</span>
                       <span className="font-semibold text-blue-600 dark:text-blue-400 font-mono">
@@ -1394,6 +1506,21 @@ export function CreateManualOrderModal({
                       : advancePayment > 0
                       ? `⚠️ Customer paid ৳${advancePayment.toLocaleString()} advance. Courier will collect remaining ৳${codAmount.toLocaleString()} COD.`
                       : `📦 Full ৳${codAmount.toLocaleString()} will be collected by courier as COD.`}
+                  </p>
+                </div>
+
+                {/* Estimated Net Merchant Earning */}
+                <div className="p-3.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-500/30 space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider text-[11px]">
+                      Estimated Net Earning
+                    </span>
+                    <span className="text-base font-black font-mono tabular-nums text-emerald-700 dark:text-emerald-300">
+                      ৳{estNetEarning.toLocaleString()}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-emerald-700/90 dark:text-emerald-300/80 font-mono">
+                    Invoice ৳{orderTotal.toLocaleString()} − Delivery ৳{deliveryFee.toLocaleString()} − Handling ৳{estHandlingFee.toLocaleString()} − Est. Packaging ৳{estPackagingFee}
                   </p>
                 </div>
 

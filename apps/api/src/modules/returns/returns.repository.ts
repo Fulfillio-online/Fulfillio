@@ -26,7 +26,7 @@ export class ReturnsRepository {
   async markOrderReturned(orderId: string) {
     return this.prisma.order.update({
       where: { id: orderId },
-      data: { status: 'RETURNED' },
+      data: { status: 'RETURNED', returnedAt: new Date() },
       include: { items: true },
     });
   }

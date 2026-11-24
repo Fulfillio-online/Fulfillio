@@ -315,9 +315,16 @@ export class OrderRepository {
   }
 
   async updateStatus(id: string, status: OrderStatus) {
+    const data: any = { status };
+    if (status === OrderStatus.DELIVERED || status === OrderStatus.PARTIAL_DELIVERED) {
+      data.deliveredAt = new Date();
+    } else if (status === OrderStatus.RETURNED) {
+      data.returnedAt = new Date();
+    }
+
     return this.prisma.order.update({
       where: { id },
-      data: { status },
+      data,
       include: { items: true },
     });
   }

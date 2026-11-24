@@ -8,6 +8,7 @@ export interface OrderCartItem {
   size: string;
   sku: string;
   unitPrice: number;
+  declaredPrice?: number;
   qty: number;
   maxStock: number;
 }
@@ -55,18 +56,36 @@ export function addToOrderCart(item: Omit<OrderCartItem, 'id'>): OrderCartItem[]
       ...existing,
       qty: newQty,
       unitPrice: item.unitPrice,
+      declaredPrice: item.declaredPrice ?? existing.declaredPrice ?? item.unitPrice,
       sku: item.sku || existing.sku,
       imageUrl: item.imageUrl || existing.imageUrl,
     };
   } else {
     const newEntry: OrderCartItem = {
       ...item,
+      declaredPrice: item.declaredPrice ?? item.unitPrice,
       id: `cart-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       qty: Math.max(1, item.qty),
     };
     updated = [newEntry, ...current];
   }
 
+  saveOrderCart(updated);
+  return updated;
+}
+
+export function updateOrderCartItemPrice(id: string, unitPrice: number): OrderCartItem[] {
+  const current = getOrderCart();
+  const safePrice = Math.max(0, Number(unitPrice) || 0);
+  const updated = current.map((item) => {
+    if (item.id === id) {
+      return {
+        ...item,
+        unitPrice: safePrice,
+      };
+    }
+    return item;
+  });
   saveOrderCart(updated);
   return updated;
 }

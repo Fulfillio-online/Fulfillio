@@ -3,9 +3,10 @@ import { ReturnsController } from './returns.controller';
 import { ReturnsService } from './returns.service';
 import { ReturnsRepository } from './returns.repository';
 import { AuthModule } from '../auth/auth.module';
+import { BillingModule } from '../billing/billing.module';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, BillingModule],
   controllers: [ReturnsController],
   providers: [ReturnsService, ReturnsRepository],
   exports: [ReturnsService, ReturnsRepository],

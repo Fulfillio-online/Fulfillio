@@ -67,9 +67,16 @@ export class ShippingRepository {
 
     if (!existing) return null;
 
+    const data: any = { status };
+    if (status === OrderStatus.DELIVERED || status === OrderStatus.PARTIAL_DELIVERED) {
+      data.deliveredAt = new Date();
+    } else if (status === OrderStatus.RETURNED) {
+      data.returnedAt = new Date();
+    }
+
     return this.prisma.order.update({
       where: { id: existing.id },
-      data: { status },
+      data,
     });
   }
 }

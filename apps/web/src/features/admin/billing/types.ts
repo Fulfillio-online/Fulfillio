@@ -1,24 +1,33 @@
-export type PaymentMethod = 'BKASH' | 'NAGAD' | 'BANK_TRANSFER' | 'CASH';
+export type PaymentMethod = 'BKASH' | 'NAGAD' | 'ROCKET' | 'BANK_TRANSFER' | 'CASH';
 export type PaymentStatus = 'PAID' | 'UNPAID';
 
 export interface SettlementTransaction {
   id: string;
   transactionRef: string;
   settlementId?: string;
+  requestCode?: string;
   merchantId: string;
   merchantCode: string;
   merchantName: string;
   ownerName: string;
-  transactionDate: string; // e.g. "24 Oct 2026, 03:30 PM"
+  transactionDate: string;
   paymentMethod: PaymentMethod;
   accountDetails: {
-    provider: string; // e.g. "bKash", "BRAC Bank PLC"
+    provider: string;
     accountNumber: string;
     accountHolder: string;
   };
   amount: number;
   status: PaymentStatus;
   remarks?: string;
+  proofDocumentUrl?: string;
+  proofDocumentName?: string;
+  proofDocumentMime?: string;
+  proofChannel?: string;
+  proofNotes?: string;
+  proofChecksum?: string;
+  paidByAdminName?: string;
+  paidAt?: string;
 }
 
 export interface MerchantFinancialProfile {

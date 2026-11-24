@@ -1,11 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ShippingRepository } from './shipping.repository';
+import { BillingService } from '../billing/billing.service';
 import { CourierProvider } from '@fulfillio/contracts';
 import { OrderStatus } from '@fulfillio/contracts';
 
 @Injectable()
 export class ShippingService {
-  constructor(private readonly repository: ShippingRepository) {}
+  constructor(
+    private readonly repository: ShippingRepository,
+    private readonly billingService: BillingService,
+  ) {}
 
   async bookConsignment(orderId: string, provider: CourierProvider) {
     // Generate simulated tracking & consignment ID
@@ -66,6 +70,22 @@ export class ShippingService {
         consignmentId,
         orderStatus,
       );
+      if (updated?.id) {
+        try {
+          if (orderStatus === OrderStatus.DELIVERED || orderStatus === OrderStatus.PARTIAL_DELIVERED) {
+            await this.billingService.recordCompletedOrderEarning(updated.id);
+          } else if (orderStatus === OrderStatus.RETURNED || orderStatus === OrderStatus.CANCELLED) {
+            await this.billingService.reverseOrderEarning(
+              updated.id,
+              orderStatus === OrderStatus.RETURNED
+                ? `Courier ${provider} marked order RETURNED — earning refunded`
+                : `Courier ${provider} marked order CANCELLED — earning reversed`,
+            );
+          }
+        } catch (err: any) {
+          console.warn('[ShippingService] Billing earning sync notice:', err?.message || err);
+        }
+      }
       return {
         success: true,
         provider,

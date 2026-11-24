@@ -116,7 +116,7 @@ export function OrderItemsCard({
 
         <div className="pt-2 border-t border-slate-200/80 dark:border-white/10 flex justify-between items-center text-xs text-slate-700 dark:text-slate-300">
           <span className="font-medium">Total Invoice Value</span>
-          <span className="font-bold text-sm sm:text-base text-white">
+          <span className="font-bold text-sm sm:text-base text-navy-900 dark:text-white">
             ৳{Number(orderTotal).toLocaleString()}
           </span>
         </div>

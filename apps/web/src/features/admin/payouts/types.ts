@@ -1,23 +1,35 @@
-export type PaymentRequestMethod = 'BKASH' | 'NAGAD' | 'BANK_TRANSFER' | 'CASH';
+export type PaymentRequestMethod = 'BKASH' | 'NAGAD' | 'ROCKET' | 'BANK_TRANSFER' | 'CASH';
 
-export type PaymentRequestStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'PAID';
+export type PaymentRequestStatus = 'PENDING' | 'ACCEPTED' | 'PAID' | 'REJECTED' | 'CANCELLED';
 
 export interface PaymentRequest {
-  id: string; // e.g. "PR-901"
+  id: string;
+  requestCode: string;
   merchantId: string;
-  merchantCode: string; // e.g. "MC-101"
-  merchantName: string; // e.g. "Sabbir's Store"
+  merchantCode: string;
+  merchantName: string;
   ownerName: string;
   amount: number;
   method: PaymentRequestMethod;
   accountDetails: {
-    provider: string; // e.g. "bKash Personal", "BRAC Bank PLC", "Nagad Merchant"
+    provider: string;
     accountNumber: string;
     accountHolder?: string;
+    branchName?: string;
+    routingNumber?: string;
   };
-  requestedAt: string; // e.g. "05 Nov 2026, 11:20 AM"
+  requestedAt: string;
+  reviewedAt?: string;
   status: PaymentRequestStatus;
+  rejectionReason?: string;
   trxId?: string;
+  proofDocumentUrl?: string;
+  proofDocumentName?: string;
+  proofDocumentMime?: string;
+  proofChannel?: string;
+  proofNotes?: string;
+  proofChecksum?: string;
   paidAt?: string;
+  paidByAdminName?: string;
   remarks?: string;
 }
