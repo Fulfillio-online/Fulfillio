@@ -48,6 +48,8 @@ import {
   getStoredMerchantProductsForCode,
   getStoredMerchantMemosForCode,
   getStoredMerchantProfileForCode,
+  getStoredAdminProducts,
+  fetchOrderByIdFromDatabase,
 } from '@/lib/warehouseSync';
 
 interface OrderDetailsViewProps {
@@ -71,139 +73,158 @@ export function OrderDetailsView({ orderId }: OrderDetailsViewProps) {
   const [isTimelineMobileExpanded, setIsTimelineMobileExpanded] = useState(false);
 
   useEffect(() => {
-    try {
-      const decodedId = decodeURIComponent(orderId).trim();
-      const cleanId = decodedId.replace(/^#/, '').toLowerCase();
+    let cancelled = false;
 
-      // 1. Try to load from Admin Storage
-      const stored = localStorage.getItem(STORAGE_KEY_ORDERS);
-      let list = INITIAL_PIPELINE_ORDERS;
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          list = parsed;
+    const enrichItemBinsFromCatalog = (target: WarehousePipelineOrder): WarehousePipelineOrder => {
+      const adminProds = getStoredAdminProducts();
+      const mProds = getStoredMerchantProductsForCode(target.merchantCode || 'MC-101');
+      const resolveBin = (sku?: string, title?: string, currentBin?: string) => {
+        const cleanSku = String(sku || '').trim().toUpperCase();
+        const cleanTitle = String(title || '').trim().toLowerCase();
+        const adminMatch = adminProds.find(
+          (ap) =>
+            (cleanSku &&
+              (String(ap.fullSku || '').trim().toUpperCase() === cleanSku ||
+                String(ap.shortSku || '').trim().toUpperCase() === cleanSku)) ||
+            (cleanTitle && String(ap.title || '').trim().toLowerCase() === cleanTitle),
+        );
+        if (
+          adminMatch?.binCode &&
+          adminMatch.binCode !== 'Pending Approval' &&
+          adminMatch.binCode !== 'Assigned on intake'
+        ) {
+          return adminMatch.binCode;
         }
-      }
+        const merchMatch = mProds.find(
+          (mp) =>
+            (cleanSku && String(mp.sku || '').trim().toUpperCase() === cleanSku) ||
+            (cleanTitle && String(mp.title || '').trim().toLowerCase() === cleanTitle),
+        );
+        if (
+          merchMatch?.bin &&
+          merchMatch.bin !== 'Pending Approval' &&
+          merchMatch.bin !== 'Assigned on intake'
+        ) {
+          return merchMatch.bin;
+        }
+        return currentBin && currentBin !== 'Unassigned' ? currentBin : 'Unassigned';
+      };
 
-      let found = list.find(
-        (o) =>
-          o.id.toLowerCase() === cleanId ||
-          o.id.replace(/^#/, '').toLowerCase() === cleanId ||
-          o.id === decodedId
-      );
+      const enrichedItems = target.items?.map((it) => ({
+        ...it,
+        bin:
+          it.bin && it.bin !== 'Unassigned'
+            ? it.bin
+            : resolveBin(it.sku, it.title, it.bin),
+      }));
 
-      // 2. Always cross-reference Merchant Orders to ensure multi-item/multi-variant integrity
-      const merchantCodes = ['MC-101', 'MC-102', 'MC-103', 'MC-104', 'MC-107'];
-      for (const code of merchantCodes) {
-        const merchantOrders = getStoredMerchantOrdersForCode(code);
-        const matchedMerchantOrder = merchantOrders.find(
-          (mo) =>
-            mo.id.toLowerCase() === cleanId ||
-            (mo.orderNumber && mo.orderNumber.replace(/^#/, '').toLowerCase() === cleanId)
+      return {
+        ...target,
+        bin: enrichedItems?.[0]?.bin || resolveBin(target.sku, target.productTitle, target.bin),
+        items: enrichedItems,
+      };
+    };
+
+    const loadOrder = async () => {
+      try {
+        const decodedId = decodeURIComponent(orderId).trim();
+        const cleanId = decodedId.replace(/^#/, '').toLowerCase();
+
+        // 1. Try PostgreSQL backend first for exact product & bin data
+        const dbOrder = await fetchOrderByIdFromDatabase(decodedId);
+        if (!cancelled && dbOrder) {
+          setOrder(enrichItemBinsFromCatalog(dbOrder));
+          setIsLoaded(true);
+          return;
+        }
+
+        // 2. Fallback to Admin LocalStorage
+        const stored = localStorage.getItem(STORAGE_KEY_ORDERS);
+        let list = INITIAL_PIPELINE_ORDERS;
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            list = parsed;
+          }
+        }
+
+        let found = list.find(
+          (o) =>
+            o.id.toLowerCase() === cleanId ||
+            o.id.replace(/^#/, '').toLowerCase() === cleanId ||
+            o.id === decodedId,
         );
 
-        if (matchedMerchantOrder) {
-          const mProds = getStoredMerchantProductsForCode(code);
-          const mProf = getStoredMerchantProfileForCode(code);
-          const mMemos = getStoredMerchantMemosForCode(code, mProf);
-          const converted = convertMerchantOrderToWarehouse(
-            matchedMerchantOrder,
-            mProds,
-            mMemos,
-            mProf
+        // 3. Cross-reference Merchant Orders to ensure multi-item/multi-variant & bin integrity
+        const merchantCodes = ['MC-101', 'MC-102', 'MC-103', 'MC-104', 'MC-107'];
+        for (const code of merchantCodes) {
+          const merchantOrders = getStoredMerchantOrdersForCode(code);
+          const matchedMerchantOrder = merchantOrders.find(
+            (mo) =>
+              mo.id.toLowerCase() === cleanId ||
+              (mo.orderNumber && mo.orderNumber.replace(/^#/, '').toLowerCase() === cleanId),
           );
 
-          if (found) {
-            // If merchant order has lineItems or distinct items, overwrite items array
-            found = {
-              ...found,
-              productTitle: converted.productTitle,
-              items:
-                converted.items && converted.items.length > 0
-                  ? converted.items
-                  : found.items,
-              subtotal: matchedMerchantOrder.subtotal ?? converted.subtotal ?? found.subtotal,
-              deliveryFee: matchedMerchantOrder.deliveryFee ?? converted.deliveryFee ?? found.deliveryFee,
-              discount: matchedMerchantOrder.discount ?? converted.discount ?? found.discount,
-              advancePayment: matchedMerchantOrder.advancePayment ?? converted.advancePayment ?? found.advancePayment,
-              paymentStatus: matchedMerchantOrder.paymentStatus ?? converted.paymentStatus ?? found.paymentStatus,
-            };
-          } else {
-            found = converted;
+          if (matchedMerchantOrder) {
+            const mProds = getStoredMerchantProductsForCode(code);
+            const mProf = getStoredMerchantProfileForCode(code);
+            const mMemos = getStoredMerchantMemosForCode(code, mProf);
+            const converted = convertMerchantOrderToWarehouse(
+              matchedMerchantOrder,
+              mProds,
+              mMemos,
+              mProf,
+            );
+
+            if (found) {
+              found = {
+                ...found,
+                productTitle: converted.productTitle,
+                items:
+                  converted.items && converted.items.length > 0
+                    ? converted.items
+                    : found.items,
+                subtotal: matchedMerchantOrder.subtotal ?? converted.subtotal ?? found.subtotal,
+                deliveryFee:
+                  matchedMerchantOrder.deliveryFee ?? converted.deliveryFee ?? found.deliveryFee,
+                discount: matchedMerchantOrder.discount ?? converted.discount ?? found.discount,
+                advancePayment:
+                  matchedMerchantOrder.advancePayment ??
+                  converted.advancePayment ??
+                  found.advancePayment,
+                paymentStatus:
+                  matchedMerchantOrder.paymentStatus ??
+                  converted.paymentStatus ??
+                  found.paymentStatus,
+              };
+            } else {
+              found = converted;
+            }
+            break;
           }
-          break;
+        }
+
+        if (!cancelled) {
+          const resolved = found || list[0] || null;
+          setOrder(resolved ? enrichItemBinsFromCatalog(resolved) : null);
+        }
+      } catch (e) {
+        console.error('Failed to load order details:', e);
+        if (!cancelled) {
+          setOrder(INITIAL_PIPELINE_ORDERS[0]);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoaded(true);
         }
       }
+    };
 
-      // Fallback for default demo orders like ORD-9824 and ORD-9825 if loaded from stale cache
-      if (found) {
-        const upperId = (found.id || '').replace(/^#/, '').toUpperCase();
-        if (upperId === 'ORD-9824' && (!found.items || found.items.length <= 1)) {
-          found = {
-            ...found,
-            productTitle: 'Drop-Shoulder Heavyweight Fleece Hoodie',
-            qty: 2,
-            items: [
-              {
-                sku: 'MC-101-HEAVY-HOOD-BLK-L',
-                title: 'Drop-Shoulder Heavyweight Fleece Hoodie',
-                image: found.productImage || 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=300&q=80',
-                color: 'Obsidian Black',
-                size: 'L',
-                qty: 1,
-                unitPrice: 850,
-                bin: 'A-01-02',
-              },
-              {
-                sku: 'MC-101-HEAVY-HOOD-BEI-M',
-                title: 'Drop-Shoulder Heavyweight Fleece Hoodie',
-                image: found.productImage || 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=300&q=80',
-                color: 'Warm Beige',
-                size: 'M',
-                qty: 1,
-                unitPrice: 800,
-                bin: 'A-01-03',
-              },
-            ],
-          };
-        } else if (upperId === 'ORD-9825' && (!found.items || found.items.length <= 1)) {
-          found = {
-            ...found,
-            productTitle: 'Raw Selvedge Denim Jacket',
-            qty: 2,
-            items: [
-              {
-                sku: 'MC-101-JKT-RAW-L',
-                title: 'Raw Selvedge Denim Jacket',
-                image: found.productImage || 'https://images.unsplash.com/photo-1576995853123-5a10305d93c0?auto=format&fit=crop&w=300&q=80',
-                color: 'Indigo',
-                size: 'L',
-                qty: 1,
-                unitPrice: 1950,
-                bin: 'A-01-04',
-              },
-              {
-                sku: 'MC-101-CAP-STR-BLK',
-                title: 'Embroidered Streetwear Cap',
-                image: 'https://images.unsplash.com/photo-1588850561407-ed78c282e89b?auto=format&fit=crop&w=300&q=80',
-                color: 'Black',
-                size: 'Free Size',
-                qty: 1,
-                unitPrice: 500,
-                bin: 'B-02-01',
-              },
-            ],
-          };
-        }
-      }
+    loadOrder();
 
-      setOrder(found || list[0] || null);
-    } catch (e) {
-      console.error('Failed to load order details:', e);
-      setOrder(INITIAL_PIPELINE_ORDERS[0]);
-    } finally {
-      setIsLoaded(true);
-    }
+    return () => {
+      cancelled = true;
+    };
   }, [orderId]);
 
   const showToast = (msg: string) => {
@@ -772,7 +793,7 @@ export function OrderDetailsView({ orderId }: OrderDetailsViewProps) {
 
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                           <MapPin className="h-3 w-3" />
-                          <span>Bin: {item.bin || 'A-01-02'}</span>
+                          <span>Bin: {item.bin || 'Unassigned'}</span>
                         </span>
                       </div>
 

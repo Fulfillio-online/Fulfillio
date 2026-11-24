@@ -1091,7 +1091,7 @@ export function convertMerchantProductToWarehouse(
   };
 }
 
-function getStoredAdminProducts(): WarehouseProductItem[] {
+export function getStoredAdminProducts(): WarehouseProductItem[] {
   if (typeof window === 'undefined') return INITIAL_PRODUCTS;
   try {
     const raw = localStorage.getItem(STORAGE_KEY_PRODUCTS);
@@ -1597,8 +1597,42 @@ export function convertMerchantOrderToWarehouse(
       const vParts = vStr.split(/[/•·|-]/).map((s) => s.trim()).filter(Boolean);
       const itemColor = vParts[0] || 'Standard';
       const itemSize = vParts[1] || 'L';
-      const matchedProd = merchantProducts.find((p) => p.id === li.id || p.sku === li.sku);
-      const itemBin = matchedProd?.bin?.split('-').slice(0, 3).join('-') || 'A-01-02';
+      const matchedProd =
+        merchantProducts.find((p) => {
+          if (p.id === li.id || p.sku === li.sku) return true;
+          const { fullSku: pFull } = normalizeFullSku(p.sku || '', merchantCode);
+          return pFull.toUpperCase() === itemFullSku.toUpperCase();
+        }) ||
+        merchantProducts.find(
+          (p) =>
+            li.title &&
+            p.title &&
+            p.title.trim().toLowerCase() === li.title.trim().toLowerCase(),
+        );
+      const matchedAdmin = getStoredAdminProducts().find((ap) => {
+        const { fullSku: aFull } = normalizeFullSku(
+          ap.fullSku || ap.shortSku || '',
+          ap.merchantCode || merchantCode,
+        );
+        return (
+          ap.fullSku === li.sku ||
+          ap.shortSku === li.sku ||
+          aFull.toUpperCase() === itemFullSku.toUpperCase() ||
+          (li.title && ap.title?.trim().toLowerCase() === li.title.trim().toLowerCase())
+        );
+      });
+      const rawBin =
+        (matchedAdmin?.binCode &&
+        matchedAdmin.binCode !== 'Pending Approval' &&
+        matchedAdmin.binCode !== 'Assigned on intake'
+          ? matchedAdmin.binCode
+          : '') ||
+        (matchedProd?.bin &&
+        matchedProd.bin !== 'Pending Approval' &&
+        matchedProd.bin !== 'Assigned on intake'
+          ? matchedProd.bin
+          : '');
+      const itemBin = cleanBinCode(rawBin) || rawBin || 'Unassigned';
       const cleanTitle = (li.title || primaryProduct?.title || 'Warehouse Order Item')
         .replace(/\s*\(\+\d+\s*more\)/gi, '')
         .replace(/\s*\+\s*\d+\s*more/gi, '')
@@ -3294,6 +3328,167 @@ export async function cancelOrderInDatabase(
   }
 }
 
+const DB_STAGE_MAP: Record<string, OrderStage> = {
+  ALLOCATED: 'PICK',
+  PICKING: 'PICK',
+  ON_HOLD_STOCK: 'WAITING',
+  ON_HOLD_FRAUD: 'WAITING',
+  PACKED: 'PACK',
+  DISPATCHED: 'DISPATCH',
+  DELIVERED: 'HANDED_OVER',
+  PARTIAL_DELIVERED: 'HANDED_OVER',
+  RETURNED: 'CANCELLED',
+  CANCELLED: 'CANCELLED',
+  PENDING: 'PICK',
+};
+
+function resolveDbOrderItemBin(it: any): string {
+  const invItems = Array.isArray(it?.variant?.inventoryItems) ? it.variant.inventoryItems : [];
+  const activeStockInv = invItems.find(
+    (inv: any) =>
+      !inv?.location?.isDamaged &&
+      inv?.location?.binCode &&
+      (Number(inv.quantityAvailable || 0) + Number(inv.quantityReserved || 0)) > 0,
+  );
+  if (activeStockInv?.location?.binCode) {
+    return String(activeStockInv.location.binCode);
+  }
+  const anyLocInv = invItems.find((inv: any) => inv?.location?.binCode);
+  if (anyLocInv?.location?.binCode) {
+    return String(anyLocInv.location.binCode);
+  }
+  if (it?.variant?.defaultBinCode) {
+    return String(it.variant.defaultBinCode);
+  }
+  // Cross-reference Admin/Merchant local catalog by SKU if variant relation wasn't linked
+  const itemSku = String(it?.sku || '').trim().toUpperCase();
+  if (itemSku) {
+    const adminMatch = getStoredAdminProducts().find(
+      (ap) =>
+        String(ap.fullSku || '').trim().toUpperCase() === itemSku ||
+        String(ap.shortSku || '').trim().toUpperCase() === itemSku,
+    );
+    if (
+      adminMatch?.binCode &&
+      adminMatch.binCode !== 'Pending Approval' &&
+      adminMatch.binCode !== 'Assigned on intake'
+    ) {
+      return adminMatch.binCode;
+    }
+  }
+  return 'Unassigned';
+}
+
+export function mapDbOrderToWarehouseOrder(o: any): WarehousePipelineOrder {
+  const cleanId = String(o.externalOrderId || o.id || '').replace(/^#/, '').trim();
+  const firstItem = (o.items && o.items[0]) || {};
+  const itemTitle =
+    firstItem.productTitle ||
+    firstItem.variant?.title ||
+    firstItem.variant?.product?.title ||
+    'Product Item';
+  const itemSku = firstItem.sku || firstItem.variant?.sku || 'SKU-001';
+  const totalQty =
+    (o.items || []).reduce((sum: number, it: any) => sum + (it.quantity || 1), 0) || 1;
+
+  const mappedItems: OrderItem[] = (o.items || []).map((it: any) => {
+    const vLabel = it.variantLabel || '';
+    const color = vLabel.includes('·') ? vLabel.split('·')[0].trim() : 'Standard';
+    const size = vLabel.includes('·') ? vLabel.split('·')[1].trim() : 'Standard';
+    return {
+      sku: it.sku || it.variant?.sku || '',
+      title: it.productTitle || it.variant?.title || 'Product Item',
+      image: it.variant?.imageUrl || it.variant?.product?.imageUrl || '',
+      color,
+      size,
+      qty: it.quantity || 1,
+      unitPrice: Number(it.unitPrice) || 0,
+      bin: resolveDbOrderItemBin(it),
+    };
+  });
+
+  const firstColor = firstItem.variantLabel?.includes('·')
+    ? firstItem.variantLabel.split('·')[0].trim()
+    : 'Standard';
+  const firstSize = firstItem.variantLabel?.includes('·')
+    ? firstItem.variantLabel.split('·')[1].trim()
+    : 'Standard';
+
+  return {
+    id: cleanId,
+    createdAt: o.createdAt ? new Date(o.createdAt).toLocaleString() : 'Today',
+    createdAtIso: o.createdAt ? new Date(o.createdAt).toISOString() : undefined,
+    dbStatus: o.status || undefined,
+    merchantCode: o.merchant?.merchantCode || 'MC-101',
+    merchantName: o.merchant?.businessName || "Sabbir's Store",
+    customerName: o.customerName || 'Customer',
+    customerPhone: o.customerPhone || '',
+    customerAddress: o.customerAddress || '',
+    city: o.city || 'Dhaka',
+    productTitle:
+      o.items && o.items.length > 1 ? `${itemTitle} (+${o.items.length - 1} more)` : itemTitle,
+    productImage: firstItem.variant?.imageUrl || firstItem.variant?.product?.imageUrl || '',
+    bin: mappedItems[0]?.bin || resolveDbOrderItemBin(firstItem),
+    color: firstColor,
+    size: firstSize,
+    sku: itemSku,
+    qty: totalQty,
+    stockAvailable: 15,
+    items: mappedItems.length > 0 ? mappedItems : undefined,
+    memoCode: o.memoCode || 'MEMO-DEFAULT',
+    resellerName: o.merchant?.businessName || "Sabbir's Store",
+    resellerPhone: o.merchant?.phone || o.customerPhone,
+    resellerAddress: o.merchant?.location || 'Dhaka, Bangladesh',
+    codAmount: Number(o.codAmount) || Number(o.totalAmount) || 0,
+    subtotal: Number(o.subtotal) || Number(o.totalAmount) || 0,
+    deliveryFee: Number(o.deliveryFee) || 0,
+    discount: Number(o.discount) || 0,
+    advancePayment: Number(o.advancePayment) || 0,
+    paymentStatus:
+      Number(o.codAmount) === 0 && Number(o.totalAmount) > 0
+        ? 'Paid'
+        : o.advancePayment > 0
+        ? 'Partial'
+        : 'Unpaid',
+    courier: (() => {
+      const upper = String(o.courierProvider || '').toUpperCase();
+      if (upper === 'STEADFAST') return 'Steadfast';
+      if (upper === 'PATHAO') return 'Pathao';
+      if (upper === 'REDX') return 'RedX';
+      return '';
+    })() as CourierPartner,
+    trackingCode: o.trackingCode || undefined,
+    stage: DB_STAGE_MAP[o.status] || 'PICK',
+    isMemoPrinted: Boolean(o.isMemoPrinted),
+    isCourierBooked: Boolean(o.trackingCode),
+  };
+}
+
+/**
+ * Fetch single order directly from PostgreSQL database with real bin slotting
+ */
+export async function fetchOrderByIdFromDatabase(
+  orderId: string,
+): Promise<WarehousePipelineOrder | null> {
+  try {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('fulfillio_token') : null;
+    const res = await fetch(`${API_BASE}/orders/${encodeURIComponent(orderId)}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data || !data.id) return null;
+    return mapDbOrderToWarehouseOrder(data);
+  } catch (err) {
+    console.warn('[Sync] Failed to fetch single order from database:', err);
+    return null;
+  }
+}
+
 /**
  * Fetch all warehouse orders directly from PostgreSQL database
  */
@@ -3318,10 +3513,12 @@ export async function fetchOrdersFromDatabase(params?: {
     }
     if (params?.courier && params.courier !== 'ALL') qs.set('courier', params.courier);
 
+    const token = typeof window !== 'undefined' ? localStorage.getItem('fulfillio_token') : null;
     const res = await fetch(`${API_BASE}/orders?${qs.toString()}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
     });
     if (!res.ok) return [];
@@ -3329,105 +3526,7 @@ export async function fetchOrdersFromDatabase(params?: {
     const items = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
     if (items.length === 0) return [];
 
-    const dbStageMap: Record<string, OrderStage> = {
-      ALLOCATED: 'PICK',
-      PICKING: 'PICK',
-      ON_HOLD_STOCK: 'WAITING',
-      ON_HOLD_FRAUD: 'WAITING',
-      PACKED: 'PACK',
-      DISPATCHED: 'DISPATCH',
-      DELIVERED: 'HANDED_OVER',
-      PARTIAL_DELIVERED: 'HANDED_OVER',
-      RETURNED: 'CANCELLED',
-      CANCELLED: 'CANCELLED',
-      PENDING: 'PICK',
-    };
-
-    return items.map((o: any) => {
-      const cleanId = String(o.externalOrderId || o.id || '').replace(/^#/, '').trim();
-      const firstItem = (o.items && o.items[0]) || {};
-      const itemTitle =
-        firstItem.productTitle ||
-        firstItem.variant?.title ||
-        firstItem.variant?.product?.title ||
-        'Product Item';
-      const itemSku = firstItem.sku || firstItem.variant?.sku || 'SKU-001';
-      const totalQty =
-        (o.items || []).reduce((sum: number, it: any) => sum + (it.quantity || 1), 0) || 1;
-
-      const mappedItems: OrderItem[] = (o.items || []).map((it: any) => {
-        const vLabel = it.variantLabel || '';
-        const color = vLabel.includes('·') ? vLabel.split('·')[0].trim() : 'Standard';
-        const size = vLabel.includes('·') ? vLabel.split('·')[1].trim() : 'Standard';
-        return {
-          sku: it.sku || it.variant?.sku || '',
-          title: it.productTitle || it.variant?.title || 'Product Item',
-          image: it.variant?.imageUrl || it.variant?.product?.imageUrl || '',
-          color,
-          size,
-          qty: it.quantity || 1,
-          unitPrice: Number(it.unitPrice) || 0,
-          bin: it.variant?.defaultBinCode || 'A-01-01',
-        };
-      });
-
-      const firstColor = firstItem.variantLabel?.includes('·')
-        ? firstItem.variantLabel.split('·')[0].trim()
-        : 'Standard';
-      const firstSize = firstItem.variantLabel?.includes('·')
-        ? firstItem.variantLabel.split('·')[1].trim()
-        : 'Standard';
-
-      const pipelineOrder: WarehousePipelineOrder = {
-        id: cleanId,
-        createdAt: o.createdAt ? new Date(o.createdAt).toLocaleString() : 'Today',
-        createdAtIso: o.createdAt ? new Date(o.createdAt).toISOString() : undefined,
-        dbStatus: o.status || undefined,
-        merchantCode: o.merchant?.merchantCode || 'MC-101',
-        merchantName: o.merchant?.businessName || "Sabbir's Store",
-        customerName: o.customerName || 'Customer',
-        customerPhone: o.customerPhone || '',
-        customerAddress: o.customerAddress || '',
-        city: o.city || 'Dhaka',
-        productTitle:
-          o.items && o.items.length > 1 ? `${itemTitle} (+${o.items.length - 1} more)` : itemTitle,
-        productImage: firstItem.variant?.imageUrl || firstItem.variant?.product?.imageUrl || '',
-        bin: firstItem.variant?.defaultBinCode || 'A-01-01',
-        color: firstColor,
-        size: firstSize,
-        sku: itemSku,
-        qty: totalQty,
-        stockAvailable: 15,
-        items: mappedItems.length > 0 ? mappedItems : undefined,
-        memoCode: o.memoCode || 'MEMO-DEFAULT',
-        resellerName: o.merchant?.businessName || "Sabbir's Store",
-        resellerPhone: o.merchant?.phone || o.customerPhone,
-        resellerAddress: o.merchant?.location || 'Dhaka, Bangladesh',
-        codAmount: Number(o.codAmount) || Number(o.totalAmount) || 0,
-        subtotal: Number(o.subtotal) || Number(o.totalAmount) || 0,
-        deliveryFee: Number(o.deliveryFee) || 0,
-        discount: Number(o.discount) || 0,
-        advancePayment: Number(o.advancePayment) || 0,
-        paymentStatus:
-          Number(o.codAmount) === 0 && Number(o.totalAmount) > 0
-            ? 'Paid'
-            : o.advancePayment > 0
-            ? 'Partial'
-            : 'Unpaid',
-        courier: (() => {
-          const upper = String(o.courierProvider || '').toUpperCase();
-          if (upper === 'STEADFAST') return 'Steadfast';
-          if (upper === 'PATHAO') return 'Pathao';
-          if (upper === 'REDX') return 'RedX';
-          return '';
-        })() as CourierPartner,
-        trackingCode: o.trackingCode || undefined,
-        stage: dbStageMap[o.status] || 'PICK',
-        isMemoPrinted: Boolean(o.isMemoPrinted),
-        isCourierBooked: Boolean(o.trackingCode),
-      };
-      return pipelineOrder;
-    });
+    return items.map(mapDbOrderToWarehouseOrder);
   } catch (err) {
     console.warn('[Sync] Failed to fetch orders from database:', err);
     return [];
