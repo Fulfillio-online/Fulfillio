@@ -54,4 +54,4 @@ COPY --from=builder /app/packages ./packages
 COPY --from=builder /app/apps/worker ./apps/worker
 COPY --from=builder /app/apps/api/node_modules ./apps/api/node_modules
 
-CMD ["node", "apps/worker/dist/main.js"]
+CMD ["node", "apps/worker/dist/apps/worker/src/main.js"]
