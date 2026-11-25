@@ -75,13 +75,15 @@ export function StoreIdentityHero({ profile, onEdit }: StoreIdentityHeroProps) {
               )}
             </div>
 
-            {/* Verification tick ring */}
-            <span
-              className="absolute -bottom-1 -right-1 h-6 w-6 rounded-full bg-emerald-500 border-2 border-slate-900 flex items-center justify-center shadow-sm"
-              title="Verified Merchant Account"
-            >
-              <Check className="h-3.5 w-3.5 text-white font-bold stroke-[3]" />
-            </span>
+            {/* Verification tick ring (only shown when KYC is verified) */}
+            {profile.kycData?.verificationStatus === 'VERIFIED' && (
+              <span
+                className="absolute -bottom-1 -right-1 h-6 w-6 rounded-full bg-emerald-500 border-2 border-slate-900 flex items-center justify-center shadow-sm"
+                title="KYC Verified Merchant"
+              >
+                <Check className="h-3.5 w-3.5 text-white font-bold stroke-[3]" />
+              </span>
+            )}
           </div>
 
           {/* Store Info */}

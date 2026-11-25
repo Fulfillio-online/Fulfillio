@@ -334,6 +334,45 @@ export class InventoryService {
     return this.inventoryRepo.manageProductStock(productId, merchantId, payload);
   }
 
+  async submitStockManageRequest(
+    productId: string,
+    merchantId: string | undefined,
+    payload: {
+      operationType?: 'ADJUST' | 'RESTOCK' | 'RETURN';
+      requestedQty?: number;
+      variantId?: string;
+      variantSku?: string;
+      color?: string;
+      size?: string;
+      destination?: string;
+      carrier?: string;
+      trackingRef?: string;
+      note?: string;
+      reason?: string;
+      newVariants?: Array<any>;
+      adjustments?: Array<any>;
+    },
+  ) {
+    return this.inventoryRepo.submitStockManageRequest(productId, merchantId, payload);
+  }
+
+  async listStockManageRequests(merchantId?: string, status?: string) {
+    return this.inventoryRepo.listStockManageRequests(merchantId, status);
+  }
+
+  async reviewStockManageRequest(
+    requestId: string,
+    adminId: string,
+    action: 'APPROVE' | 'REJECT',
+    rejectionReason?: string,
+  ) {
+    return this.inventoryRepo.reviewStockManageRequest(requestId, adminId, action, rejectionReason);
+  }
+
+  async cancelStockManageRequest(requestId: string, merchantId?: string) {
+    return this.inventoryRepo.cancelStockManageRequest(requestId, merchantId);
+  }
+
   /**
    * Atomically reserve stock for an order's line items and record audit trail.
    */

@@ -648,4 +648,103 @@ export class InventoryController {
     const parsedQty = qty ? parseInt(qty, 10) : 1;
     return this.inventoryService.checkOrderEligibility(id, parsedQty);
   }
+
+  // ============================================================================
+  // STOCK & VARIANT MANAGE APPROVAL WORKFLOW
+  // ============================================================================
+  private extractMerchantIdFromBearer(req: any): {
+    userId?: string;
+    role?: string;
+    merchantId?: string;
+    merchantCode?: string;
+  } {
+    const authHeader = req?.headers?.authorization;
+    if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.slice(7).trim();
+        const parts = token.split('.');
+        if (parts.length === 3) {
+          const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+          return {
+            userId:
+              payload?.sub || payload?.id ? String(payload.sub || payload.id) : undefined,
+            role: payload?.role ? String(payload.role) : undefined,
+            merchantId: payload?.merchantId ? String(payload.merchantId) : undefined,
+            merchantCode: payload?.merchantCode ? String(payload.merchantCode) : undefined,
+          };
+        }
+      } catch {
+        // ignore malformed token
+      }
+    }
+    return {};
+  }
+
+  @Post('products/:id/stock-manage-requests')
+  async submitStockManageRequest(
+    @Param('id') id: string,
+    @Request() req: any,
+    @Body() body: any,
+  ) {
+    const decoded = this.extractMerchantIdFromBearer(req);
+    const effectiveMerchant =
+      req.user?.merchantId ||
+      decoded.merchantId ||
+      body.merchantId ||
+      body.merchantCode ||
+      decoded.merchantCode ||
+      req.headers['x-merchant-code'];
+    return this.inventoryService.submitStockManageRequest(id, effectiveMerchant, body);
+  }
+
+  @Get('stock-manage-requests')
+  async listStockManageRequests(
+    @Request() req: any,
+    @Query('merchantCode') merchantCode?: string,
+    @Query('merchantId') merchantId?: string,
+    @Query('status') status?: string,
+  ) {
+    const decoded = this.extractMerchantIdFromBearer(req);
+    const role = req.user?.role || decoded.role;
+    const isMerchant = role === UserRole.MERCHANT;
+    const effectiveMerchant = isMerchant
+      ? req.user?.merchantId || decoded.merchantId || merchantId || merchantCode
+      : merchantId || merchantCode;
+    return this.inventoryService.listStockManageRequests(effectiveMerchant, status);
+  }
+
+  @Patch('stock-manage-requests/:requestId/review')
+  async reviewStockManageRequest(
+    @Param('requestId') requestId: string,
+    @Request() req: any,
+    @Body() body: { action: 'APPROVE' | 'REJECT'; rejectionReason?: string },
+  ) {
+    const decoded = this.extractMerchantIdFromBearer(req);
+    const adminId = req.user?.sub || req.user?.id || decoded.userId || 'admin';
+    return this.inventoryService.reviewStockManageRequest(
+      requestId,
+      adminId,
+      body.action,
+      body.rejectionReason,
+    );
+  }
+
+  @Delete('stock-manage-requests/:requestId')
+  async cancelStockManageRequest(
+    @Param('requestId') requestId: string,
+    @Request() req: any,
+  ) {
+    const decoded = this.extractMerchantIdFromBearer(req);
+    const role = req.user?.role || decoded.role;
+    const isMerchant = role === UserRole.MERCHANT;
+    const headerCode = req?.headers?.['x-merchant-code'];
+    const resolvedHeaderCode = Array.isArray(headerCode) ? headerCode[0] : headerCode;
+    const effectiveMerchant = isMerchant
+      ? req.user?.merchantId ||
+        decoded.merchantId ||
+        decoded.merchantCode ||
+        resolvedHeaderCode
+      : undefined;
+    return this.inventoryService.cancelStockManageRequest(requestId, effectiveMerchant);
+  }
 }

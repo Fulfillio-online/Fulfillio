@@ -31,6 +31,7 @@ import {
   syncMerchantOrderCancelledToAdmin,
   cancelOrderInDatabase,
   getMerchantProfileKey,
+  syncMerchantProfileToAdminDirectory,
 } from '@/lib/warehouseSync';
 import { MerchantSidebar } from './components/MerchantSidebar';
 import { MerchantHeader } from './components/MerchantHeader';
@@ -138,8 +139,29 @@ function MerchantPortalInner() {
       }
     }
     loadData();
+
+    const refreshProfile = async () => {
+      try {
+        const fresh = await merchantApi.getProfile();
+        if (isMounted && fresh && fresh.merchantCode) {
+          setProfile((prev) => ({ ...prev, ...fresh }));
+        }
+      } catch {}
+    };
+
+    const onSyncOrStorage = () => {
+      refreshProfile();
+    };
+
+    window.addEventListener('storage', onSyncOrStorage);
+    window.addEventListener('fulfillio-warehouse-sync', onSyncOrStorage);
+    window.addEventListener('focus', onSyncOrStorage);
+
     return () => {
       isMounted = false;
+      window.removeEventListener('storage', onSyncOrStorage);
+      window.removeEventListener('fulfillio-warehouse-sync', onSyncOrStorage);
+      window.removeEventListener('focus', onSyncOrStorage);
     };
   }, []);
 
@@ -157,10 +179,31 @@ function MerchantPortalInner() {
       if (typeof window !== 'undefined') {
         const key = getMerchantProfileKey(next.merchantCode);
         localStorage.setItem(key, JSON.stringify(next));
+        syncMerchantProfileToAdminDirectory(next);
       }
       return next;
     });
-    merchantApi.updateProfile(updated).catch(() => {});
+    merchantApi
+      .updateProfile(updated)
+      .then((saved) => {
+        if (saved && (saved.kycData || saved.personalAddress !== undefined)) {
+          setProfile((prev) => {
+            const synced = {
+              ...prev,
+              ...(saved.personalAddress !== undefined
+                ? { personalAddress: saved.personalAddress }
+                : {}),
+              ...(saved.kycData ? { kycData: saved.kycData } : {}),
+            };
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(getMerchantProfileKey(synced.merchantCode), JSON.stringify(synced));
+              syncMerchantProfileToAdminDirectory(synced);
+            }
+            return synced;
+          });
+        }
+      })
+      .catch(() => {});
   };
 
   const handleAdjustStock = (id: string, delta: number) => {
@@ -284,17 +327,41 @@ function MerchantPortalInner() {
 
   const handleCreateOrder = (
     order: MerchantOrderItem,
-    productIdOrItems?: string | { productId: string; qty: number; variantSku?: string }[],
+    productIdOrItems?:
+      | string
+      | {
+          productId: string;
+          qty: number;
+          variantId?: string;
+          variantSku?: string;
+          color?: string;
+          size?: string;
+        }[],
     qty?: number
   ) => {
-    const itemsToDeduct: { productId: string; qty: number; variantSku?: string }[] = [];
+    const itemsToDeduct: {
+      productId: string;
+      qty: number;
+      variantId?: string;
+      variantSku?: string;
+      color?: string;
+      size?: string;
+    }[] = [];
     if (Array.isArray(productIdOrItems)) {
       itemsToDeduct.push(...productIdOrItems);
     } else if (typeof productIdOrItems === 'string') {
       itemsToDeduct.push({ productId: productIdOrItems, qty: qty || order.qty || 1 });
     } else if (order.lineItems && order.lineItems.length > 0) {
       order.lineItems.forEach((li) => {
-        itemsToDeduct.push({ productId: li.id, qty: li.quantity, variantSku: li.sku });
+        const vParts = (li.variant || '').split(/[·\/]/);
+        itemsToDeduct.push({
+          productId: li.productId || li.id,
+          variantId: li.variantId,
+          qty: li.quantity,
+          variantSku: li.sku,
+          color: li.color || vParts[0]?.trim(),
+          size: li.size || vParts[1]?.trim(),
+        });
       });
     } else if (order.productId) {
       itemsToDeduct.push({ productId: order.productId, qty: order.qty || 1 });
@@ -302,14 +369,42 @@ function MerchantPortalInner() {
 
     setProducts((prev) => {
       const next = prev.map((p) => {
-        const matches = itemsToDeduct.filter((it) => it.productId === p.id);
+        const matches = itemsToDeduct.filter(
+          (it) =>
+            it.productId === p.id ||
+            (it.variantId && p.variantsList?.some((v) => v.id === it.variantId)) ||
+            (it.variantSku &&
+              (p.sku?.toUpperCase() === it.variantSku.toUpperCase() ||
+                p.variantsList?.some(
+                  (v) => v.variantSku?.toUpperCase() === it.variantSku?.toUpperCase()
+                )))
+        );
         if (matches.length > 0) {
           const totalQty = matches.reduce((sum, it) => sum + it.qty, 0);
           let updatedVariants = p.variantsList;
           if (p.variantsList && p.variantsList.length > 0) {
             updatedVariants = p.variantsList.map((v) => {
               const vQty = matches
-                .filter((it) => it.variantSku && it.variantSku === v.variantSku)
+                .filter((it) => {
+                  if (it.variantId && p.variantsList?.some((x) => x.id === it.variantId)) {
+                    return v.id === it.variantId;
+                  }
+                  if (
+                    it.variantSku &&
+                    p.variantsList?.some(
+                      (x) => x.variantSku?.toUpperCase() === it.variantSku?.toUpperCase()
+                    )
+                  ) {
+                    return v.variantSku?.toUpperCase() === it.variantSku.toUpperCase();
+                  }
+                  if (it.color) {
+                    return (
+                      (v.color || '').toLowerCase() === it.color.toLowerCase() &&
+                      (!it.size || (v.size || '').toLowerCase() === it.size.toLowerCase())
+                    );
+                  }
+                  return false;
+                })
                 .reduce((s, it) => s + it.qty, 0);
               if (vQty > 0) {
                 return { ...v, stock: Math.max(0, v.stock - vQty) };
@@ -359,10 +454,25 @@ function MerchantPortalInner() {
     const cleanTargetId = target?.orderNumber || target?.id || cleanReqId;
     const displayOrderNum = cleanTargetId.startsWith('#') ? cleanTargetId : `#${cleanTargetId}`;
 
-    const itemsToRestore: { productId: string; qty: number; variantSku?: string }[] = [];
+    const itemsToRestore: {
+      productId: string;
+      qty: number;
+      variantId?: string;
+      variantSku?: string;
+      color?: string;
+      size?: string;
+    }[] = [];
     if (target?.lineItems && target.lineItems.length > 0) {
       target.lineItems.forEach((li) => {
-        itemsToRestore.push({ productId: li.id, qty: li.quantity, variantSku: li.sku });
+        const vParts = (li.variant || '').split(/[·\/]/);
+        itemsToRestore.push({
+          productId: li.productId || li.id,
+          variantId: li.variantId,
+          qty: li.quantity,
+          variantSku: li.sku,
+          color: li.color || vParts[0]?.trim(),
+          size: li.size || vParts[1]?.trim(),
+        });
       });
     } else if (target?.productId) {
       itemsToRestore.push({ productId: target.productId, qty: target.qty || 1 });
@@ -372,14 +482,42 @@ function MerchantPortalInner() {
     if (itemsToRestore.length > 0) {
       setProducts((prev) => {
         const next = prev.map((p) => {
-          const matches = itemsToRestore.filter((it) => it.productId === p.id);
+          const matches = itemsToRestore.filter(
+            (it) =>
+              it.productId === p.id ||
+              (it.variantId && p.variantsList?.some((v) => v.id === it.variantId)) ||
+              (it.variantSku &&
+                (p.sku?.toUpperCase() === it.variantSku.toUpperCase() ||
+                  p.variantsList?.some(
+                    (v) => v.variantSku?.toUpperCase() === it.variantSku?.toUpperCase()
+                  )))
+          );
           if (matches.length > 0) {
             const totalQty = matches.reduce((sum, it) => sum + it.qty, 0);
             let updatedVariants = p.variantsList;
             if (p.variantsList && p.variantsList.length > 0) {
               updatedVariants = p.variantsList.map((v) => {
                 const vQty = matches
-                  .filter((it) => it.variantSku && it.variantSku === v.variantSku)
+                  .filter((it) => {
+                    if (it.variantId && p.variantsList?.some((x) => x.id === it.variantId)) {
+                      return v.id === it.variantId;
+                    }
+                    if (
+                      it.variantSku &&
+                      p.variantsList?.some(
+                        (x) => x.variantSku?.toUpperCase() === it.variantSku?.toUpperCase()
+                      )
+                    ) {
+                      return v.variantSku?.toUpperCase() === it.variantSku.toUpperCase();
+                    }
+                    if (it.color) {
+                      return (
+                        (v.color || '').toLowerCase() === it.color.toLowerCase() &&
+                        (!it.size || (v.size || '').toLowerCase() === it.size.toLowerCase())
+                      );
+                    }
+                    return false;
+                  })
                   .reduce((s, it) => s + it.qty, 0);
                 if (vQty > 0) {
                   return { ...v, stock: v.stock + vQty };
@@ -582,6 +720,7 @@ function MerchantPortalInner() {
 
           {activeTab === 'memo-designer' && (
             <MerchantMemoDesignerTab
+              profile={profile}
               memoList={memoList}
               onSaveMemo={handleSaveMemo}
               onSetDefaultMemo={handleSetDefaultMemo}

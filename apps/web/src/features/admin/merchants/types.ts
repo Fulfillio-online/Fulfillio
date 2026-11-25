@@ -1,4 +1,4 @@
-export type MerchantSubTab = 'overview' | 'profile' | 'memo' | 'orders' | 'products' | 'payout' | 'ledger';
+export type MerchantSubTab = 'overview' | 'profile' | 'kyc' | 'memo' | 'orders' | 'products' | 'payout' | 'ledger';
 export type OrderPeriodFilter = 'DAY' | 'WEEK' | '1M' | '3M' | '6M' | '1Y' | 'ALL';
 export type OverviewRangeFilter = OrderPeriodFilter;
 
@@ -85,6 +85,7 @@ export interface MerchantRecord {
   email: string;
   phone: string;
   location: string;
+  personalAddress?: string;
   deliveryArea: string;
   status: 'Active' | 'Pending' | 'Suspended';
   verified: boolean;
@@ -92,6 +93,19 @@ export interface MerchantRecord {
   avatarInitials: string;
   avatarBg: string;
   avatarUrl?: string;
+  kycData?: {
+    tradeLicenseNo?: string;
+    tradeLicenseDocUrl?: string;
+    nidNumber?: string;
+    nidDocUrl?: string;
+    nidBackDocUrl?: string;
+    selfieDocUrl?: string;
+    verificationStatus: 'VERIFIED' | 'PENDING_REVIEW' | 'REJECTED' | 'UNVERIFIED';
+    submittedAt?: string;
+    verifiedAt?: string;
+    reviewedAt?: string;
+    rejectionReason?: string;
+  };
   payoutAccount: {
     provider: string;
     accountHolder: string;

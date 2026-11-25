@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { X, Building2, MapPin, Phone, User, Image as ImageIcon } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Building2, MapPin, Phone, User, Image as ImageIcon, Home } from 'lucide-react';
 import { DocumentUploadDropzone } from '@/components/ui';
 
 interface EditProfileModalProps {
@@ -12,6 +12,7 @@ interface EditProfileModalProps {
     storeName: string;
     phone: string;
     location: string;
+    personalAddress?: string;
     logoUrl?: string;
   };
   onSave: (updated: {
@@ -19,6 +20,7 @@ interface EditProfileModalProps {
     storeName: string;
     phone: string;
     location: string;
+    personalAddress?: string;
     logoUrl?: string;
   }) => void;
 }
@@ -33,13 +35,25 @@ export function EditProfileModal({
   const [ownerName, setOwnerName] = useState(initialData.ownerName);
   const [phone, setPhone] = useState(initialData.phone);
   const [location, setLocation] = useState(initialData.location);
+  const [personalAddress, setPersonalAddress] = useState(initialData.personalAddress || '');
   const [logoUrl, setLogoUrl] = useState(initialData.logoUrl || '');
+
+  useEffect(() => {
+    if (isOpen) {
+      setStoreName(initialData.storeName);
+      setOwnerName(initialData.ownerName);
+      setPhone(initialData.phone);
+      setLocation(initialData.location);
+      setPersonalAddress(initialData.personalAddress || '');
+      setLogoUrl(initialData.logoUrl || '');
+    }
+  }, [isOpen, initialData]);
 
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave({ storeName, ownerName, phone, location, logoUrl });
+    onSave({ storeName, ownerName, phone, location, personalAddress: personalAddress.trim(), logoUrl });
     onClose();
   };
 
@@ -119,6 +133,20 @@ export function EditProfileModal({
               value={location}
               onChange={(e) => setLocation(e.target.value)}
               required
+              className="w-full px-3 py-2 bg-slate-100 dark:bg-navy-800 border border-slate-200 dark:border-white/10 rounded-lg text-navy-900 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-orange-500 resize-none"
+            />
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
+              <Home className="h-3.5 w-3.5 text-slate-400" />
+              <span>Owner / Personal Address</span>
+            </label>
+            <textarea
+              rows={2}
+              placeholder="House / Road / Area / City (e.g. House 14, Road 6, Dhanmondi, Dhaka)"
+              value={personalAddress}
+              onChange={(e) => setPersonalAddress(e.target.value)}
               className="w-full px-3 py-2 bg-slate-100 dark:bg-navy-800 border border-slate-200 dark:border-white/10 rounded-lg text-navy-900 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-orange-500 resize-none"
             />
           </div>

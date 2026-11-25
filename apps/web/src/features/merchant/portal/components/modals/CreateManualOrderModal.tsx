@@ -50,9 +50,18 @@ interface CreateManualOrderModalProps {
   baseHandlingFee?: number;
   onCreateOrder: (
     order: MerchantOrderItem,
-    productIdOrItems?: string | { productId: string; qty: number; variantSku?: string }[],
+    productIdOrItems?:
+      | string
+      | {
+          productId: string;
+          qty: number;
+          variantId?: string;
+          variantSku?: string;
+          color?: string;
+          size?: string;
+        }[],
     qty?: number
-  ) => void;
+  ) => void | Promise<{ ok: boolean; error?: string } | void>;
   onTriggerToast: (msg: string) => void;
 }
 
@@ -212,15 +221,32 @@ export function resolveVariantConfig(
   const allSizes = getAllSizesForProduct(p, resolvedColor);
   const resolvedSize = sizeOrAttr || p.sizes?.[0] || allSizes[0] || 'L';
 
-  // 1. Try finding explicit match in variantsList
-  let matchedVariant = p.variantsList?.find((v) => {
-    const colorMatches = !resolvedColor || !v.color || v.color.toLowerCase() === resolvedColor.toLowerCase();
-    const sizeMatches =
-      !resolvedSize ||
-      v.size?.toUpperCase() === resolvedSize.toUpperCase() ||
-      v.attributeValue?.toUpperCase() === resolvedSize.toUpperCase();
-    return colorMatches && sizeMatches;
-  });
+  const isGenericVal = (s?: string) =>
+    ['', 'standard', 'free size', 'free', 'default', 'one size'].includes(
+      (s || '').trim().toLowerCase()
+    );
+  const targetColor = resolvedColor.trim().toLowerCase();
+  const targetSize = resolvedSize.trim().toLowerCase();
+
+  // 1. Try finding explicit match in variantsList (never fall back across colors)
+  const matchedVariant =
+    p.variantsList?.find((v) => {
+      const vColor = (v.color || '').trim().toLowerCase();
+      const vSize = (v.size || v.attributeValue || '').trim().toLowerCase();
+      return vColor === targetColor && vSize === targetSize;
+    }) ||
+    p.variantsList?.find((v) => {
+      const vColor = (v.color || '').trim().toLowerCase();
+      const vSize = (v.size || v.attributeValue || '').trim().toLowerCase();
+      return vColor === targetColor && isGenericVal(targetSize) && isGenericVal(vSize);
+    }) ||
+    p.variantsList?.find((v) => (v.color || '').trim().toLowerCase() === targetColor) ||
+    (isGenericVal(targetColor)
+      ? p.variantsList?.find((v) => {
+          const vSize = (v.size || v.attributeValue || '').trim().toLowerCase();
+          return !v.color && (vSize === targetSize || isGenericVal(vSize));
+        }) || p.variantsList?.[0]
+      : undefined);
 
   if (matchedVariant) {
     const labelParts = [
@@ -233,7 +259,7 @@ export function resolveVariantConfig(
     return {
       sku: matchedVariant.variantSku,
       variantLabel: label,
-      maxStock: matchedVariant.stock > 0 ? matchedVariant.stock : (p.stock > 0 ? p.stock : 0),
+      maxStock: matchedVariant.stock ?? 0,
       basePrice,
       imageUrl: resolvedImage,
       selectedColor: resolvedColor,
@@ -248,7 +274,12 @@ export function resolveVariantConfig(
   const derivedSku = `${p.sku}-${colorCode}-${sizeCode}`;
   const label = `${resolvedColor} / ${resolvedSize}`;
 
-  const stock = typeof p.stock === 'number' && p.stock > 0 ? p.stock : 0;
+  const stock =
+    p.variantsList && p.variantsList.length > 0
+      ? 0
+      : typeof p.stock === 'number' && p.stock > 0
+      ? p.stock
+      : 0;
 
   return {
     sku: derivedSku,
@@ -597,7 +628,7 @@ export function CreateManualOrderModal({
   };
 
   // Form Submit Handler
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!orderCustomer.trim()) {
@@ -652,6 +683,30 @@ export function CreateManualOrderModal({
       }
     }
 
+    // Aggregated per-variant check (handles multiple rows referencing the same variant)
+    const variantTotals = new Map<string, { requested: number; maxStock: number; label: string }>();
+    for (const item of items) {
+      const key = item.selectedVariantId || item.sku || `${item.productId}::${item.variantLabel}`;
+      const existing = variantTotals.get(key);
+      if (existing) {
+        existing.requested += item.qty;
+      } else {
+        variantTotals.set(key, {
+          requested: item.qty,
+          maxStock: item.maxStock,
+          label: `${item.title} (${item.variantLabel})`,
+        });
+      }
+    }
+    for (const entry of variantTotals.values()) {
+      if (entry.requested > entry.maxStock) {
+        onTriggerToast(
+          `Insufficient combined warehouse stock for "${entry.label}"! Total requested: ${entry.requested} pcs, Available: ${entry.maxStock} pcs.`
+        );
+        return;
+      }
+    }
+
     if (!memoList || memoList.length === 0) {
       onTriggerToast('Cannot create order: You must create at least one custom Memo Template in Memo Designer first.');
       return;
@@ -685,8 +740,12 @@ export function CreateManualOrderModal({
 
     const lineItems: OrderLineItem[] = items.map((it) => ({
       id: it.selectedVariantId || it.productId,
+      productId: it.productId,
+      variantId: it.selectedVariantId,
       title: it.title,
       variant: it.variantLabel,
+      color: it.selectedColor,
+      size: it.selectedSize,
       sku: it.sku,
       price: it.unitPrice,
       basePrice: it.declaredPrice,
@@ -738,10 +797,16 @@ export function CreateManualOrderModal({
     const itemsToDeduct = items.map((it) => ({
       productId: it.productId,
       qty: it.qty,
+      variantId: it.selectedVariantId,
       variantSku: it.sku,
+      color: it.selectedColor,
+      size: it.selectedSize,
     }));
 
-    onCreateOrder(newOrder, itemsToDeduct);
+    const result = await onCreateOrder(newOrder, itemsToDeduct);
+    if (result && typeof result === 'object' && 'ok' in result && !result.ok) {
+      return;
+    }
 
     // Reset form fields for next manual order
     setOrderCustomer('');

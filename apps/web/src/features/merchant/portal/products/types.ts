@@ -90,6 +90,7 @@ export interface VariantQuantityAdjustmentInput {
   variantSku?: string;
   color?: string;
   size?: string;
+  previousQuantity?: number;
   newQuantity: number;
   reason?: string;
 }
@@ -99,6 +100,36 @@ export interface ManageVariantsAndStockPayload {
   newVariants: NewVariantStockInput[];
   adjustments: VariantQuantityAdjustmentInput[];
   reason?: string;
+}
+
+export interface StockManageRequestRecord {
+  id: string;
+  productId: string;
+  merchantId?: string;
+  merchantCode?: string;
+  merchantName?: string;
+  productTitle: string;
+  productSku: string;
+  productImageUrl?: string;
+  currentTotalStock: number;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  operationType?: 'ADJUST' | 'RESTOCK' | 'RETURN';
+  requestedQty?: number;
+  variantId?: string;
+  variantSku?: string;
+  color?: string;
+  size?: string;
+  destination?: string;
+  carrier?: string;
+  trackingRef?: string;
+  note?: string;
+  gatePassNo?: string;
+  reason?: string;
+  rejectionReason?: string;
+  newVariants: NewVariantStockInput[];
+  adjustments: VariantQuantityAdjustmentInput[];
+  createdAt: string;
+  reviewedAt?: string;
 }
 
 export interface StockRequestItem {

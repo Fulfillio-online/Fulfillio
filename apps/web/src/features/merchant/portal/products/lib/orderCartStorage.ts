@@ -1,6 +1,7 @@
 export interface OrderCartItem {
   id: string;
   productId: string;
+  variantId?: string;
   title: string;
   imageUrl?: string;
   variantLabel: string;
@@ -39,22 +40,29 @@ export function saveOrderCart(items: OrderCartItem[]): void {
 
 export function addToOrderCart(item: Omit<OrderCartItem, 'id'>): OrderCartItem[] {
   const current = getOrderCart();
-  // Check if identical item (same productId + color + size) already exists
-  const existingIdx = current.findIndex(
-    (it) =>
+  // Check if identical variant/item already exists
+  const existingIdx = current.findIndex((it) => {
+    if (it.variantId && item.variantId) {
+      return it.variantId === item.variantId;
+    }
+    return (
       it.productId === item.productId &&
       it.color.toLowerCase() === item.color.toLowerCase() &&
       it.size.toLowerCase() === item.size.toLowerCase()
-  );
+    );
+  });
 
   let updated: OrderCartItem[];
   if (existingIdx >= 0) {
     updated = [...current];
     const existing = updated[existingIdx];
-    const newQty = Math.min(existing.maxStock || 999, existing.qty + item.qty);
+    const effectiveMaxStock = item.maxStock ?? existing.maxStock;
+    const newQty = Math.min(effectiveMaxStock || 999, existing.qty + item.qty);
     updated[existingIdx] = {
       ...existing,
+      variantId: item.variantId || existing.variantId,
       qty: newQty,
+      maxStock: effectiveMaxStock,
       unitPrice: item.unitPrice,
       declaredPrice: item.declaredPrice ?? existing.declaredPrice ?? item.unitPrice,
       sku: item.sku || existing.sku,

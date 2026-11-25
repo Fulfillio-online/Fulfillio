@@ -114,6 +114,8 @@ interface MerchantContextType {
   memoList: ResellerMemo[];
   asns: MerchantAsnRecord[];
   stockRequests: StockRequestItem[];
+  stockManageRequests: import("./products/types").StockManageRequestRecord[];
+  refreshStockManageRequests: () => Promise<void>;
   toastMessage: string | null;
   isMobileSidebarOpen: boolean;
   setIsMobileSidebarOpen: (open: boolean) => void;
@@ -128,15 +130,27 @@ interface MerchantContextType {
   bulkUpdateStatus: (ids: string[], status: 'PUBLISHED' | 'DRAFT') => void;
   bulkDeleteProducts: (ids: string[]) => void;
   requestStockAdd: (productId: string, requestedQty: number, note?: string) => void;
-  requestStockOperation: (payload: import("./products/modals/ManageStockModal").SubmitStockRequestPayload) => void;
+  requestStockOperation: (
+    payload: import("./products/modals/ManageStockModal").SubmitStockRequestPayload
+  ) => Promise<{ ok: boolean; error?: string }>;
   manageProductVariantsAndStock: (payload: import("./products/types").ManageVariantsAndStockPayload) => Promise<{ ok: boolean; error?: string }>;
+  cancelStockManageRequest: (requestId: string) => Promise<boolean>;
   requestEditAccess: (productId: string, reason: string) => Promise<boolean>;
   cancelPendingEdit: (productId: string) => Promise<boolean>;
   approveStockRequest: (requestId: string) => void;
   cancelStockRequest: (requestId: string) => void;
   createOrder: (
     order: MerchantOrderItem,
-    productIdOrItems?: string | { productId: string; qty: number }[],
+    productIdOrItems?:
+      | string
+      | {
+          productId: string;
+          qty: number;
+          variantId?: string;
+          variantSku?: string;
+          color?: string;
+          size?: string;
+        }[],
     qty?: number
   ) => Promise<{ ok: boolean; error?: string }>;
   syncLocalOrdersToDatabase: () => Promise<{ uploaded: number; failed: number }>;
@@ -185,6 +199,9 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
   const [memoList, setMemoList] = useState<ResellerMemo[]>([]);
   const [asns, setAsns] = useState<MerchantAsnRecord[]>([]);
   const [stockRequests, setStockRequests] = useState<StockRequestItem[]>([]);
+  const [stockManageRequests, setStockManageRequests] = useState<
+    import("./products/types").StockManageRequestRecord[]
+  >([]);
   const [categories, setCategories] = useState<MerchantCategoryItem[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -194,7 +211,9 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     const loadActiveMerchantWorkspace = async () => {
       const session = getActiveMerchantSession();
       const code = session.merchantCode || 'MC-101';
+      let resolvedCode = code;
       const prof = getStoredMerchantProfileForCode(code);
+      let resolvedMerchantId: string | undefined = prof.id;
       setProfile(prof);
 
       try {
@@ -206,6 +225,8 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
 
         if (serverProfile && serverProfile.merchantCode) {
           const effectiveCode = serverProfile.merchantCode || code;
+          resolvedCode = effectiveCode;
+          resolvedMerchantId = serverProfile.id || resolvedMerchantId;
           const reconciledPayout = pickFresherPayout(
             prof.payoutAccount,
             serverProfile.payoutAccount
@@ -225,6 +246,18 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
               getMerchantProfileKey(effectiveCode),
               JSON.stringify(mergedProfile)
             );
+            if (session.merchantCode !== effectiveCode) {
+              safeLocalStorageSet(
+                'fulfillio_active_merchant_session_v1',
+                JSON.stringify({
+                  ...session,
+                  merchantCode: effectiveCode,
+                  storeName: mergedProfile.storeName,
+                  ownerName: mergedProfile.ownerName,
+                  email: mergedProfile.email,
+                })
+              );
+            }
           }
         }
         if (serverProds && serverProds.length > 0) {
@@ -362,6 +395,17 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       setAsns(getStoredMerchantAsnsForCode(code));
       setStockRequests(getStoredMerchantStockRequestsForCode(code));
       setCategories(getStoredMerchantCategoriesForCode(code));
+      try {
+        const remoteManageReqs = await merchantApi.getStockManageRequests(
+          resolvedMerchantId || resolvedCode
+        );
+        if (Array.isArray(remoteManageReqs)) {
+          const mapped = remoteManageReqs.map((r: any) =>
+            mapApiStockManageRequest(r, resolvedCode, prof?.storeName || '')
+          );
+          setStockManageRequests(mapped);
+        }
+      } catch {}
     };
 
     loadActiveMerchantWorkspace();
@@ -908,84 +952,155 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const requestStockOperation = (payload: import("./products/modals/ManageStockModal").SubmitStockRequestPayload) => {
+  const mapApiStockManageRequest = (
+    r: any,
+    fallbackCode: string,
+    fallbackStoreName = ''
+  ): import("./products/types").StockManageRequestRecord => {
+    const changes = r?.requestedChanges || {};
+    const origSnap = r?.originalSnapshot || {};
+    return {
+      id: r.id,
+      productId: r.productId,
+      merchantId: r.merchantId,
+      merchantCode: r.product?.merchant?.merchantCode || fallbackCode,
+      merchantName: r.product?.merchant?.businessName || fallbackStoreName,
+      productTitle: r.product?.title || 'Product',
+      productSku: r.product?.baseSku || '',
+      productImageUrl: r.product?.imageUrl || '',
+      currentTotalStock: Number(origSnap.totalStock ?? 0),
+      status: r.status || 'PENDING',
+      operationType: changes.operationType || 'ADJUST',
+      requestedQty:
+        changes.requestedQty !== undefined ? Number(changes.requestedQty) : undefined,
+      variantId: changes.variantId || undefined,
+      variantSku: changes.variantSku || undefined,
+      color: changes.color || undefined,
+      size: changes.size || undefined,
+      destination: changes.destination || undefined,
+      carrier: changes.carrier || undefined,
+      trackingRef: changes.trackingRef || undefined,
+      note: changes.note || undefined,
+      gatePassNo: changes.gatePassNo || undefined,
+      reason: changes.reason || r.reason || '',
+      rejectionReason: r.rejectionReason || undefined,
+      newVariants: Array.isArray(changes.newVariants) ? changes.newVariants : [],
+      adjustments: Array.isArray(changes.adjustments) ? changes.adjustments : [],
+      createdAt: r.createdAt || new Date().toISOString(),
+      reviewedAt: r.reviewedAt || undefined,
+    };
+  };
+
+  const requestStockOperation = async (
+    payload: import("./products/modals/ManageStockModal").SubmitStockRequestPayload
+  ): Promise<{ ok: boolean; error?: string }> => {
     const product = products.find((p) => p.id === payload.productId);
-    if (!product || payload.requestedQty <= 0) return;
+    if (!product || payload.requestedQty <= 0) {
+      const errMsg = !product
+        ? 'Product not found in store catalog.'
+        : 'Requested quantity must be greater than 0.';
+      showToast(errMsg);
+      return { ok: false, error: errMsg };
+    }
 
     const isReturn = payload.type === 'RETURN';
-    const newReq: StockRequestItem = {
-      id: isReturn ? `SW-${Date.now().toString().slice(-4)}` : `SR-${Date.now().toString().slice(-4)}`,
-      productId: payload.productId,
-      productTitle: product.title,
-      productSku: product.sku,
+
+    if (isReturn) {
+      let availableQty = Number(product.stock) || 0;
+      if (product.variantsList && product.variantsList.length > 0) {
+        const matchedV = product.variantsList.find(
+          (v) =>
+            (payload.variantId && v.id === payload.variantId) ||
+            (payload.variantSku &&
+              v.variantSku?.toUpperCase() === payload.variantSku.toUpperCase()) ||
+            (payload.color &&
+              (v.color || '').toLowerCase() === payload.color.toLowerCase() &&
+              (!payload.size || (v.size || '').toLowerCase() === payload.size.toLowerCase()))
+        );
+        if (matchedV) {
+          availableQty = Number(matchedV.stock) || 0;
+        }
+      }
+      if (payload.requestedQty > availableQty) {
+        const errMsg = `Cannot recall ${payload.requestedQty} units: only ${availableQty} units available in warehouse.`;
+        showToast(errMsg);
+        return { ok: false, error: errMsg };
+      }
+    }
+
+    const apiResult = await merchantApi.submitStockManageRequest(payload.productId, {
+      operationType: payload.type,
+      requestedQty: payload.requestedQty,
+      variantId: payload.variantId,
       variantSku: payload.variantSku,
       color: payload.color,
       size: payload.size,
-      type: payload.type,
-      requestedQty: payload.requestedQty,
-      currentStock: product.stock,
-      status: 'PENDING_APPROVAL',
-      note: payload.note,
-      reason: payload.reason,
       destination: payload.destination,
       carrier: payload.carrier,
-      trackingRef:
-        payload.trackingRef ||
-        (isReturn ? `RET-${Date.now().toString().slice(-6)}` : `INB-${Date.now().toString().slice(-6)}`),
-      createdAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
-      imageUrl: product.imageUrl,
-    };
-
-    setStockRequests((prev) => {
-      const next = [newReq, ...prev];
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(getMerchantStockRequestsKey(profile.merchantCode), JSON.stringify(next));
-      }
-      return next;
+      trackingRef: payload.trackingRef,
+      note: payload.note,
+      reason: payload.reason || payload.note,
     });
 
-    syncMerchantStockRequestToAdmin(newReq, profile);
-
-    // If Return, deduct stock from the product and matching variant
-    if (isReturn) {
-      setProducts((prev) => {
-        let updatedTarget: MerchantProductItem | null = null;
-        const next = prev.map((p) => {
-          if (p.id !== payload.productId) return p;
-          const updatedVariants = (p.variantsList || []).map((v) => {
-            const matches =
-              (payload.variantSku && v.variantSku === payload.variantSku) ||
-              (payload.color &&
-                payload.size &&
-                (v.color || '').toLowerCase() === payload.color.toLowerCase() &&
-                (v.size || '').toLowerCase() === payload.size.toLowerCase());
-            if (matches) {
-              return { ...v, stock: Math.max(0, v.stock - payload.requestedQty) };
-            }
-            return v;
-          });
-          const newTotalStock = Math.max(0, p.stock - payload.requestedQty);
-          updatedTarget = {
-            ...p,
-            stock: newTotalStock,
-            variantsList: updatedVariants.length > 0 ? updatedVariants : p.variantsList,
-          };
-          return updatedTarget;
-        });
-
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
-          if (updatedTarget) {
-            syncMerchantProductUpdatedToAdmin(updatedTarget, profile);
-          }
-        }
-        return next;
-      });
-
-      showToast(`Return request of ${payload.requestedQty} units (${payload.color || ''} ${payload.size || ''}) submitted & warehouse stock updated.`);
-    } else {
-      showToast(`Inbound restock request (+${payload.requestedQty} units) submitted for Admin Approval.`);
+    if (!apiResult.ok) {
+      const errMsg =
+        apiResult.error ||
+        `Failed to submit ${isReturn ? 'recall / return' : 'restock'} request to server.`;
+      showToast(errMsg);
+      return { ok: false, error: errMsg };
     }
+
+    const r = apiResult.data;
+    const mapped = r
+      ? mapApiStockManageRequest(r, profile.merchantCode, profile.storeName)
+      : {
+          id: `smr-${Date.now()}`,
+          productId: payload.productId,
+          merchantCode: profile.merchantCode,
+          merchantName: profile.storeName,
+          productTitle: product.title,
+          productSku: product.sku,
+          productImageUrl: product.imageUrl,
+          currentTotalStock: product.stock,
+          status: 'PENDING' as const,
+          operationType: payload.type,
+          requestedQty: payload.requestedQty,
+          variantId: payload.variantId,
+          variantSku: payload.variantSku,
+          color: payload.color,
+          size: payload.size,
+          destination: payload.destination,
+          carrier: payload.carrier,
+          trackingRef: payload.trackingRef,
+          note: payload.note,
+          reason: payload.reason || payload.note || '',
+          newVariants: [],
+          adjustments: [],
+          createdAt: new Date().toISOString(),
+        };
+
+    // Preserve display metadata in case API returned sparse relation fields
+    if (!mapped.productTitle || mapped.productTitle === 'Product') {
+      mapped.productTitle = product.title;
+      mapped.productSku = product.sku;
+      mapped.productImageUrl = product.imageUrl;
+    }
+
+    setStockManageRequests((prev) => [mapped, ...prev.filter((it) => it.id !== mapped.id)]);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'MerchantPortal' } })
+      );
+    }
+
+    showToast(
+      isReturn
+        ? `Recall / Return request (-${payload.requestedQty} units) submitted for Admin approval! Stock updates & Gate Pass issue once approved.`
+        : `Inbound restock request (+${payload.requestedQty} units) submitted for Admin approval!`
+    );
+
+    return { ok: true };
   };
 
   const requestStockAdd = (productId: string, requestedQty: number, note?: string) => {
@@ -1005,221 +1120,144 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       return { ok: false, error: 'Product not found' };
     }
 
-    let apiResult: { ok: boolean; data?: any; error?: string } = { ok: false };
-    try {
-      apiResult = await merchantApi.manageProductStock(payload.productId, {
-        newVariants: payload.newVariants,
-        adjustments: payload.adjustments.map((a) => ({
-          ...a,
-          reason: a.reason || payload.reason,
-        })),
-      });
-    } catch (err: any) {
-      apiResult = { ok: false, error: err?.message || 'Network error' };
+    const enrichedAdjustments = payload.adjustments.map((adj) => {
+      const matchedVar = (targetProduct.variantsList || []).find(
+        (v) =>
+          (adj.variantId && v.id === adj.variantId) ||
+          (adj.variantSku && v.variantSku === adj.variantSku)
+      );
+      const prevQty = matchedVar
+        ? Math.max(0, Number(matchedVar.stock) || 0)
+        : Math.max(0, Number(targetProduct.stock) || 0);
+      return {
+        ...adj,
+        previousQuantity: adj.previousQuantity ?? prevQty,
+        reason: adj.reason || payload.reason,
+      };
+    });
+
+    const apiResult = await merchantApi.submitStockManageRequest(payload.productId, {
+      newVariants: payload.newVariants,
+      adjustments: enrichedAdjustments,
+      reason: payload.reason,
+    });
+
+    if (!apiResult.ok) {
+      const errMsg = apiResult.error || 'Failed to submit stock manage request to server.';
+      showToast(errMsg);
+      return { ok: false, error: errMsg };
     }
 
-    if (!apiResult.ok && apiResult.error) {
-      if (/suspend|reject/i.test(apiResult.error)) {
-        showToast(apiResult.error);
-        return { ok: false, error: apiResult.error };
-      }
-      console.warn(
-        '[MerchantContext] manageProductStock server sync fallback to local cache:',
-        apiResult.error
+    const r = apiResult.data;
+    const newRecord: import("./products/types").StockManageRequestRecord = {
+      id: r?.id || `smr-${Date.now()}`,
+      productId: payload.productId,
+      merchantCode: profile.merchantCode,
+      merchantName: profile.storeName,
+      productTitle: targetProduct.title,
+      productSku: targetProduct.sku,
+      productImageUrl: targetProduct.imageUrl,
+      currentTotalStock: targetProduct.stock,
+      status: 'PENDING',
+      reason: payload.reason || '',
+      newVariants: payload.newVariants,
+      adjustments: enrichedAdjustments,
+      createdAt: r?.createdAt || new Date().toISOString(),
+    };
+
+    setStockManageRequests((prev) => [newRecord, ...prev]);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'MerchantPortal' } })
       );
     }
-
-    // Update local state (preferring backend-returned variants if available)
-    setProducts((prev) => {
-      let updatedTarget: MerchantProductItem | null = null;
-      const next = prev.map((p) => {
-        if (p.id !== payload.productId) return p;
-
-        let nextVariants = [...(p.variantsList || [])];
-        let nextColors = [...(p.colors || [])];
-        let nextSizes = [...(p.sizes || [])];
-
-        if (apiResult.ok && apiResult.data?.variants && Array.isArray(apiResult.data.variants)) {
-          const remoteVariants = apiResult.data.variants;
-          const colorMap = new Map<string, { id: string; name: string; hex: string; imageUrl?: string; sizes: string[] }>();
-          nextColors.forEach((c) => {
-            colorMap.set(c.name.toLowerCase(), { ...c, sizes: [...(c.sizes || [])] });
-          });
-
-          nextVariants = remoteVariants.map((rv: any) => {
-            const cName = rv.attributes?.color || rv.title?.split('/')[0]?.trim() || '';
-            const sName = rv.attributes?.size || rv.title?.split('/')[1]?.trim() || '';
-            const cHex = rv.attributes?.hex || '#111827';
-            const vImg = rv.imageUrl || rv.attributes?.imageUrl;
-            const vPhysical = rv.inventoryItems?.[0]?.quantityAvailable ?? 0;
-            const vDeclared = Number(rv.attributes?.declaredStock ?? rv.attributes?.stock ?? 0);
-            const vStock = vPhysical > 0 ? vPhysical : vDeclared;
-
-            if (cName) {
-              const key = cName.toLowerCase();
-              if (!colorMap.has(key)) {
-                colorMap.set(key, {
-                  id: `c-${colorMap.size + 1}`,
-                  name: cName,
-                  hex: cHex,
-                  imageUrl: vImg,
-                  sizes: sName ? [sName] : [],
-                });
-              } else {
-                const entry = colorMap.get(key)!;
-                if (sName && !entry.sizes.includes(sName)) {
-                  entry.sizes.push(sName);
-                }
-              }
-            }
-            if (sName && !nextSizes.includes(sName)) {
-              nextSizes.push(sName);
-            }
-
-            return {
-              id: rv.id,
-              variantSku: rv.sku,
-              color: cName,
-              size: sName,
-              imageUrl: vImg,
-              attributeName: rv.attributes?.attributeName,
-              attributeValue: rv.attributes?.attributeValue,
-              stock: vStock,
-            };
-          });
-
-          nextColors = Array.from(colorMap.values());
-        } else {
-          // Offline / localStorage fallback
-          if (
-            nextVariants.length === 0 &&
-            payload.adjustments.length > 0 &&
-            payload.newVariants.length > 0
-          ) {
-            nextVariants.push({
-              id: `var-std-${Date.now()}`,
-              variantSku: `${p.sku}-STD`,
-              color: 'Standard',
-              size: 'Standard',
-              imageUrl: p.imageUrl,
-              stock: Math.max(0, Math.round(payload.adjustments[0].newQuantity)),
-            });
-          }
-
-          for (const adj of payload.adjustments) {
-            const idx = nextVariants.findIndex(
-              (v) =>
-                (adj.variantId && v.id === adj.variantId) ||
-                (adj.variantSku && v.variantSku === adj.variantSku) ||
-                (adj.color &&
-                  adj.size &&
-                  (v.color || '').toLowerCase() === adj.color.toLowerCase() &&
-                  (v.size || '').toLowerCase() === adj.size.toLowerCase())
-            );
-            if (idx >= 0) {
-              nextVariants[idx] = {
-                ...nextVariants[idx],
-                stock: Math.max(0, Math.round(adj.newQuantity)),
-              };
-            }
-          }
-
-          for (const nv of payload.newVariants) {
-            const cName = (nv.color || '').trim();
-            const sName = (nv.size || '').trim();
-            const qty = Math.max(0, Math.round(nv.stock || 0));
-            const varCode = [cName, sName].filter(Boolean).join('-').toUpperCase().replace(/[^A-Z0-9_-]/g, '-') || `V${nextVariants.length + 1}`;
-            const generatedSku = `${p.sku}-${varCode}`;
-
-            nextVariants.push({
-              id: `var-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-              variantSku: generatedSku,
-              color: cName || undefined,
-              size: sName || undefined,
-              attributeName: nv.attributeName,
-              attributeValue: nv.attributeValue,
-              imageUrl: nv.imageUrl || p.imageUrl,
-              stock: qty,
-            });
-
-            if (cName) {
-              const existingColor = nextColors.find(
-                (c) => c.name.toLowerCase() === cName.toLowerCase()
-              );
-              if (!existingColor) {
-                nextColors.push({
-                  id: `c-${nextColors.length + 1}`,
-                  name: cName,
-                  hex: nv.hex || '#111827',
-                  imageUrl: nv.imageUrl,
-                  sizes: sName ? [sName] : [],
-                });
-              } else if (sName && !(existingColor.sizes || []).includes(sName)) {
-                existingColor.sizes = [...(existingColor.sizes || []), sName];
-              }
-            }
-            if (sName && !nextSizes.includes(sName)) {
-              nextSizes.push(sName);
-            }
-          }
-        }
-
-        const totalStock =
-          nextVariants.length > 0
-            ? nextVariants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0)
-            : payload.adjustments.length > 0
-            ? Math.max(0, Math.round(payload.adjustments[0].newQuantity))
-            : p.stock;
-
-        const nextVariantLabel =
-          nextVariants.length > 1
-            ? `${nextVariants.length} Variants`
-            : nextVariants.length === 1
-            ? [nextVariants[0].color, nextVariants[0].size].filter(Boolean).join(' / ') || 'Standard'
-            : p.variantLabel;
-
-        const nextStatus =
-          p.status === 'APPROVED' && totalStock > 0 ? ('STOCK_STORED' as const) : p.status;
-        const nextStockAccepted =
-          nextStatus === 'STOCK_STORED' ? true : p.stockAccepted;
-        const nextStockStatus =
-          nextStatus === 'STOCK_STORED' || nextStatus === 'PUBLISHED'
-            ? totalStock > 0
-              ? ('IN_STOCK' as const)
-              : ('OUT_OF_STOCK' as const)
-            : p.stockStatus;
-
-        updatedTarget = {
-          ...p,
-          variantLabel: nextVariantLabel,
-          stock: totalStock,
-          status: nextStatus,
-          stockAccepted: nextStockAccepted,
-          stockStatus: nextStockStatus,
-          variantsList: nextVariants,
-          colors: nextColors,
-          sizes: nextSizes,
-        };
-        return updatedTarget;
-      });
-
-      if (typeof window !== 'undefined') {
-        safeSetLocalStorage(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
-        if (updatedTarget) {
-          syncMerchantProductUpdatedToAdmin(updatedTarget, profile);
-        }
-      }
-      return next;
-    });
 
     const addedCount = payload.newVariants.length;
     const adjCount = payload.adjustments.length;
     const summaryParts: string[] = [];
-    if (addedCount > 0) summaryParts.push(`${addedCount} new variant${addedCount > 1 ? 's' : ''} added`);
-    if (adjCount > 0) summaryParts.push(`${adjCount} quantity adjustment${adjCount > 1 ? 's' : ''} saved`);
-    showToast(summaryParts.length > 0 ? `Stock updated: ${summaryParts.join(' & ')}.` : 'Stock updated.');
+    if (addedCount > 0) summaryParts.push(`${addedCount} new variant${addedCount > 1 ? 's' : ''}`);
+    if (adjCount > 0) summaryParts.push(`${adjCount} qty adjustment${adjCount > 1 ? 's' : ''}`);
+    showToast(
+      summaryParts.length > 0
+        ? `Submitted ${summaryParts.join(' & ')} for Admin approval! Live stock will update after approval.`
+        : 'Stock update submitted for Admin approval!'
+    );
 
     return { ok: true };
+  };
+
+  const refreshStockManageRequests = async () => {
+    try {
+      const code = profile.merchantCode || 'MC-101';
+      // Auto-migrate any legacy localStorage PENDING_APPROVAL recall/restock items for real DB UUID products
+      const isUuid = (val?: string) =>
+        Boolean(val && /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(val.trim()));
+      const localStored = getStoredMerchantStockRequestsForCode(code);
+      const migratedIds = new Set<string>();
+
+      for (const localReq of localStored) {
+        if (localReq.status === 'PENDING_APPROVAL' && isUuid(localReq.productId)) {
+          try {
+            const res = await merchantApi.submitStockManageRequest(localReq.productId, {
+              operationType: localReq.type === 'RETURN' ? 'RETURN' : 'RESTOCK',
+              requestedQty: localReq.requestedQty,
+              variantSku: localReq.variantSku,
+              color: localReq.color,
+              size: localReq.size,
+              destination: localReq.destination,
+              carrier: localReq.carrier,
+              trackingRef: localReq.trackingRef,
+              note: localReq.note,
+              reason: localReq.reason || localReq.note,
+            });
+            if (res.ok) {
+              migratedIds.add(localReq.id);
+            }
+          } catch {}
+        }
+      }
+
+      if (migratedIds.size > 0 && typeof window !== 'undefined') {
+        const remaining = localStored.filter((lr) => !migratedIds.has(lr.id));
+        localStorage.setItem(getMerchantStockRequestsKey(code), JSON.stringify(remaining));
+        setStockRequests(remaining);
+      }
+
+      const identifier = profile.id || code;
+      const [remoteManageReqs, remoteProds] = await Promise.all([
+        merchantApi.getStockManageRequests(identifier),
+        merchantApi.getProducts(),
+      ]);
+      if (Array.isArray(remoteManageReqs)) {
+        const mapped = remoteManageReqs.map((r: any) =>
+          mapApiStockManageRequest(r, code, profile.storeName || '')
+        );
+        setStockManageRequests(mapped);
+      }
+      if (Array.isArray(remoteProds) && remoteProds.length > 0) {
+        setProducts(remoteProds);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(getMerchantProductsKey(code), JSON.stringify(remoteProds));
+        }
+      }
+    } catch {}
+  };
+
+  const cancelStockManageRequest = async (requestId: string): Promise<boolean> => {
+    const res = await merchantApi.cancelStockManageRequest(requestId);
+    if (!res.ok) {
+      showToast(res.error || 'Failed to cancel stock request.');
+      return false;
+    }
+    setStockManageRequests((prev) => prev.filter((r) => r.id !== requestId));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'MerchantPortal' } })
+      );
+    }
+    showToast('Stock request cancelled.');
+    return true;
   };
 
   const approveStockRequest = (requestId: string) => {
@@ -1338,9 +1376,121 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     return true;
   };
 
+  type OrderStockItemOp = {
+    productId: string;
+    qty: number;
+    variantId?: string;
+    variantSku?: string;
+    color?: string;
+    size?: string;
+  };
+
+  const resolveVariantForStockOp = (
+    p: MerchantProductItem,
+    it: OrderStockItemOp
+  ) => {
+    const variants = p.variantsList || [];
+    if (variants.length === 0) return undefined;
+    const isGeneric = (s?: string) =>
+      ['', 'standard', 'free size', 'free', 'default', 'one size'].includes(
+        (s || '').trim().toLowerCase()
+      );
+    if (it.variantId) {
+      const byId = variants.find((v) => v.id === it.variantId);
+      if (byId) return byId;
+    }
+    if (it.variantSku) {
+      const targetSku = it.variantSku.trim().toUpperCase();
+      const bySku = variants.find((v) => v.variantSku?.trim().toUpperCase() === targetSku);
+      if (bySku) return bySku;
+    }
+    if (it.color) {
+      const tColor = it.color.trim().toLowerCase();
+      const tSize = (it.size || '').trim().toLowerCase();
+      return (
+        variants.find(
+          (v) =>
+            (v.color || '').trim().toLowerCase() === tColor &&
+            (!tSize || (v.size || '').trim().toLowerCase() === tSize)
+        ) ||
+        variants.find(
+          (v) =>
+            (v.color || '').trim().toLowerCase() === tColor &&
+            isGeneric(tSize) &&
+            isGeneric(v.size)
+        ) ||
+        variants.find((v) => (v.color || '').trim().toLowerCase() === tColor)
+      );
+    }
+    if (variants.length === 1) return variants[0];
+    return undefined;
+  };
+
+  const applyOrderStockOpsToProducts = (
+    prevProducts: MerchantProductItem[],
+    ops: OrderStockItemOp[],
+    direction: -1 | 1
+  ): MerchantProductItem[] => {
+    return prevProducts.map((p) => {
+      const matches = ops.filter(
+        (it) =>
+          it.productId === p.id ||
+          (it.variantId && p.variantsList?.some((v) => v.id === it.variantId)) ||
+          (it.variantSku &&
+            (p.sku?.toUpperCase() === it.variantSku.toUpperCase() ||
+              p.variantsList?.some(
+                (v) => v.variantSku?.toUpperCase() === it.variantSku?.toUpperCase()
+              )))
+      );
+      if (matches.length === 0) return p;
+
+      const deltaByVariantIdx = new Map<number, number>();
+      let unmatchedDelta = 0;
+      let totalQty = 0;
+
+      for (const m of matches) {
+        const q = Math.max(0, Number(m.qty) || 0);
+        totalQty += q;
+        const matchedV = resolveVariantForStockOp(p, m);
+        if (matchedV && p.variantsList) {
+          const vIdx = p.variantsList.indexOf(matchedV);
+          if (vIdx >= 0) {
+            deltaByVariantIdx.set(vIdx, (deltaByVariantIdx.get(vIdx) || 0) + q);
+            continue;
+          }
+        }
+        unmatchedDelta += q;
+      }
+
+      const updatedVariants = (p.variantsList || []).map((v, idx) => {
+        const vQty = (deltaByVariantIdx.get(idx) || 0) + (idx === 0 && !deltaByVariantIdx.size ? unmatchedDelta : 0);
+        if (vQty <= 0) return v;
+        return {
+          ...v,
+          stock: direction === -1 ? Math.max(0, v.stock - vQty) : v.stock + vQty,
+        };
+      });
+
+      const nextStock =
+        direction === -1
+          ? Math.max(0, p.stock - totalQty)
+          : p.stock + totalQty;
+
+      return {
+        ...p,
+        stock: nextStock,
+        reserved:
+          direction === -1
+            ? (p.reserved || 0) + totalQty
+            : Math.max(0, (p.reserved || 0) - totalQty),
+        variantsList: updatedVariants.length > 0 ? updatedVariants : p.variantsList,
+      };
+    });
+  };
+
   const createOrder = async (
     rawOrder: MerchantOrderItem,
-    productIdOrItems?: string | { productId: string; qty: number }[],
+    productIdOrItems?: string | OrderStockItemOp[],
     qty?: number
   ): Promise<{ ok: boolean; error?: string }> => {
     const cleanId = (rawOrder.id || rawOrder.orderNumber || `ORD-${Date.now()}`).replace(/^#/, '').trim();
@@ -1350,14 +1500,22 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
       id: cleanId,
       orderNumber: cleanOrderNumber,
     };
-    const itemsToDeduct: { productId: string; qty: number }[] = [];
+    const itemsToDeduct: OrderStockItemOp[] = [];
     if (Array.isArray(productIdOrItems)) {
       itemsToDeduct.push(...productIdOrItems);
     } else if (typeof productIdOrItems === 'string') {
       itemsToDeduct.push({ productId: productIdOrItems, qty: qty || order.qty || 1 });
     } else if (order.lineItems && order.lineItems.length > 0) {
       order.lineItems.forEach((li) => {
-        itemsToDeduct.push({ productId: li.id, qty: li.quantity });
+        const vParts = (li.variant || '').split(/[·\/]/);
+        itemsToDeduct.push({
+          productId: li.productId || li.id,
+          variantId: li.variantId,
+          variantSku: li.sku,
+          color: li.color || vParts[0]?.trim(),
+          size: li.size || vParts[1]?.trim(),
+          qty: li.quantity,
+        });
       });
     } else if (order.productId) {
       itemsToDeduct.push({ productId: order.productId, qty: order.qty || 1 });
@@ -1384,8 +1542,20 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     }
 
     // Strict Business Logic: Orders can only be placed for approved products with verified stored stock
+    const requestedByProduct = new Map<string, { prod: MerchantProductItem; qty: number }>();
+    const requestedByVariant = new Map<string, { label: string; available: number; requested: number }>();
+
     for (const it of itemsToDeduct) {
-      const prod = products.find((p) => p.id === it.productId);
+      const prod = products.find(
+        (p) =>
+          p.id === it.productId ||
+          (it.variantId && p.variantsList?.some((v) => v.id === it.variantId)) ||
+          (it.variantSku &&
+            (p.sku?.toUpperCase() === it.variantSku.toUpperCase() ||
+              p.variantsList?.some(
+                (v) => v.variantSku?.toUpperCase() === it.variantSku?.toUpperCase()
+              )))
+      );
       if (prod) {
         if (Boolean((prod as any).isSuspended)) {
           const err = `Cannot order "${prod.title}": Product is currently suspended by warehouse admin.`;
@@ -1402,73 +1572,64 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
           showToast(err);
           return { ok: false, error: err };
         }
-        if ((prod.stock || 0) < it.qty) {
-          const err = `Cannot create order: "${prod.title}" has insufficient warehouse stock (Available: ${prod.stock || 0}, Requested: ${it.qty}). Please wait for stock intake.`;
-          showToast(err);
-          return { ok: false, error: err };
+
+        const prevProdReq = requestedByProduct.get(prod.id);
+        requestedByProduct.set(prod.id, {
+          prod,
+          qty: (prevProdReq?.qty || 0) + (Number(it.qty) || 0),
+        });
+
+        const matchedVar = resolveVariantForStockOp(prod, it);
+        if (matchedVar) {
+          const varKey = matchedVar.id || matchedVar.variantSku || `${prod.id}:${matchedVar.color}:${matchedVar.size}`;
+          const prevVarReq = requestedByVariant.get(varKey);
+          requestedByVariant.set(varKey, {
+            label: `${prod.title} (${matchedVar.color || ''} ${matchedVar.size || ''})`.trim(),
+            available: matchedVar.stock || 0,
+            requested: (prevVarReq?.requested || 0) + (Number(it.qty) || 0),
+          });
         }
       }
     }
 
-    let latestProducts = products;
-    setProducts((prev) => {
-      const next = prev.map((p) => {
-        const match = itemsToDeduct.find(
-          (it: any) =>
-            it.productId === p.id ||
-            (it.variantSku && (p.sku === it.variantSku || (p.variantsList && p.variantsList.some((v) => v.variantSku === it.variantSku))))
-        );
-        if (match) {
-          const matchAny = match as any;
-          const updatedVariants = (p.variantsList || []).map((v) => {
-            const isMatch =
-              (matchAny.variantSku && v.variantSku.toUpperCase() === matchAny.variantSku.toUpperCase()) ||
-              (matchAny.color && matchAny.size &&
-                (v.color || '').toLowerCase() === matchAny.color.toLowerCase() &&
-                (v.size || '').toLowerCase() === matchAny.size.toLowerCase());
-            if (isMatch) {
-              return { ...v, stock: Math.max(0, v.stock - match.qty) };
-            }
-            return v;
-          });
-
-          return {
-            ...p,
-            stock: Math.max(0, p.stock - match.qty),
-            reserved: (p.reserved || 0) + match.qty,
-            variantsList: updatedVariants.length > 0 ? updatedVariants : p.variantsList,
-          };
-        }
-        return p;
-      });
-      latestProducts = next;
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
+    for (const entry of requestedByVariant.values()) {
+      if (entry.available < entry.requested) {
+        const err = `Cannot create order: "${entry.label}" has insufficient warehouse stock (Available: ${entry.available}, Requested: ${entry.requested}).`;
+        showToast(err);
+        return { ok: false, error: err };
       }
-      return next;
-    });
+    }
+    for (const entry of requestedByProduct.values()) {
+      if ((entry.prod.stock || 0) < entry.qty) {
+        const err = `Cannot create order: "${entry.prod.title}" has insufficient warehouse stock (Available: ${entry.prod.stock || 0}, Requested: ${entry.qty}). Please wait for stock intake.`;
+        showToast(err);
+        return { ok: false, error: err };
+      }
+    }
 
-    // 1. Upload order directly to PostgreSQL backend
+    // 1. Upload order directly to PostgreSQL backend FIRST before mutating local stock
     const res = await merchantApi.createOrder(order);
 
     if (!res.ok) {
-      console.warn('Backend order upload notice:', res.error);
-      // Fallback: preserve in local cache memory so no user data is lost
-      setOrders((prev) => {
-        const next = [order, ...prev];
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(getMerchantOrdersKey(profile.merchantCode), JSON.stringify(next));
-        }
-        return next;
-      });
-      syncMerchantOrderCreatedToAdmin(order, itemsToDeduct, latestProducts, memoList, profile);
-      showToast(`সতর্কতা: ডাটাবেজে সেভ হতে সমস্যা হয়েছে (${res.error}), লোকাল ক্যাশে সেভ করা হয়েছে।`);
-      return { ok: false, error: res.error };
+      console.warn('Backend order upload failed:', res.error);
+      const err = res.error || 'অর্ডার তৈরি করা যায়নি। অনুগ্রহ করে পর্যাপ্ত স্টক যাচাই করে আবার চেষ্টা করুন।';
+      showToast(err);
+      return { ok: false, error: err };
     }
 
-    // 2. If uploaded successfully, refresh orders from PostgreSQL
+    // 2. Apply accurate multi-variant local deduction immediately, then sync with Admin & DB
+    const latestProducts = applyOrderStockOpsToProducts(products, itemsToDeduct, -1);
+    setProducts(latestProducts);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(getMerchantProductsKey(profile.merchantCode), JSON.stringify(latestProducts));
+    }
+
+    // 3. Refresh orders & products from PostgreSQL so UI always mirrors true DB balances
     try {
-      const serverOrds = await merchantApi.getOrders();
+      const [serverOrds, serverProds] = await Promise.all([
+        merchantApi.getOrders(),
+        merchantApi.getProducts(),
+      ]);
       if (serverOrds && serverOrds.length > 0) {
         setOrders(serverOrds);
         if (typeof window !== 'undefined') {
@@ -1482,6 +1643,12 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
           }
           return next;
         });
+      }
+      if (serverProds && serverProds.length > 0) {
+        setProducts(serverProds);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(getMerchantProductsKey(profile.merchantCode), JSON.stringify(serverProds));
+        }
       }
     } catch {
       setOrders((prev) => {
@@ -1558,60 +1725,31 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     }
 
     // 2. Identify items to restore from target
-    const itemsToRestore: Array<{ productId: string; qty: number; variantSku?: string; color?: string; size?: string }> = [];
+    const itemsToRestore: OrderStockItemOp[] = [];
     if (target?.lineItems && target.lineItems.length > 0) {
       target.lineItems.forEach((li) => {
-        const vParts = (li.variant || '').split('·');
+        const vParts = (li.variant || '').split(/[·\/]/);
         itemsToRestore.push({
-          productId: li.id,
+          productId: li.productId || li.id,
+          variantId: li.variantId,
           qty: li.quantity,
           variantSku: li.sku,
-          color: vParts[0]?.trim(),
-          size: vParts[1]?.trim(),
+          color: li.color || vParts[0]?.trim(),
+          size: li.size || vParts[1]?.trim(),
         });
       });
     } else if (target?.productId) {
       itemsToRestore.push({ productId: target.productId, qty: target.qty || 1 });
     }
 
-    // 3. Restore inventory in Merchant products
+    // 3. Restore inventory in Merchant products (handles multiple variants per product)
     let latestProducts = products;
     if (itemsToRestore.length > 0) {
-      setProducts((prev) => {
-        const next = prev.map((p) => {
-          const match = itemsToRestore.find(
-            (it) =>
-              it.productId === p.id ||
-              (it.variantSku && (p.sku === it.variantSku || (p.variantsList && p.variantsList.some((v) => v.variantSku === it.variantSku))))
-          );
-          if (match) {
-            const updatedVariants = (p.variantsList || []).map((v) => {
-              const isMatch =
-                (match.variantSku && v.variantSku.toUpperCase() === match.variantSku.toUpperCase()) ||
-                (match.color && match.size &&
-                  (v.color || '').toLowerCase() === match.color.toLowerCase() &&
-                  (v.size || '').toLowerCase() === match.size.toLowerCase());
-              if (isMatch) {
-                return { ...v, stock: v.stock + match.qty };
-              }
-              return v;
-            });
-
-            return {
-              ...p,
-              stock: p.stock + match.qty,
-              reserved: Math.max(0, (p.reserved || 0) - match.qty),
-              variantsList: updatedVariants.length > 0 ? updatedVariants : p.variantsList,
-            };
-          }
-          return p;
-        });
-        latestProducts = next;
-        if (typeof window !== 'undefined') {
-          safeLocalStorageSet(getMerchantProductsKey(profile.merchantCode), JSON.stringify(next));
-        }
-        return next;
-      });
+      latestProducts = applyOrderStockOpsToProducts(products, itemsToRestore, 1);
+      setProducts(latestProducts);
+      if (typeof window !== 'undefined') {
+        safeLocalStorageSet(getMerchantProductsKey(profile.merchantCode), JSON.stringify(latestProducts));
+      }
     }
 
     // 4. Update orders in Merchant state & localStorage immediately
@@ -1908,6 +2046,8 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
         memoList,
         asns,
         stockRequests,
+        stockManageRequests,
+        refreshStockManageRequests,
         toastMessage,
         isMobileSidebarOpen,
         setIsMobileSidebarOpen,
@@ -1924,6 +2064,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
         requestStockAdd,
         requestStockOperation,
         manageProductVariantsAndStock,
+        cancelStockManageRequest,
         requestEditAccess,
         cancelPendingEdit,
         approveStockRequest,

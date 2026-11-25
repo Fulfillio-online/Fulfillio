@@ -11,6 +11,96 @@ export interface PdfJobData {
   memoCode?: string;
 }
 
+// Shared Chromium browser manager to avoid launching a new browser per PDF job
+let sharedBrowser: any = null;
+let browserLaunchPromise: Promise<any> | null = null;
+let activePages = 0;
+let jobsProcessedWithCurrentBrowser = 0;
+let idleTimer: NodeJS.Timeout | null = null;
+
+function clearIdleTimer() {
+  if (idleTimer) {
+    clearTimeout(idleTimer);
+    idleTimer = null;
+  }
+}
+
+export async function closeSharedBrowser() {
+  clearIdleTimer();
+  const browserToClose = sharedBrowser;
+  sharedBrowser = null;
+  jobsProcessedWithCurrentBrowser = 0;
+  if (browserToClose) {
+    try {
+      await browserToClose.close();
+      console.log('[Worker - PDF] Shared Chromium browser closed cleanly.');
+    } catch (err: any) {
+      console.warn(`[Worker - PDF] Error closing shared browser: ${err?.message}`);
+    }
+  }
+}
+
+function scheduleIdleClose() {
+  clearIdleTimer();
+  idleTimer = setTimeout(() => {
+    if (activePages === 0 && sharedBrowser) {
+      console.log('[Worker - PDF] Browser idle timeout reached. Closing Chromium to free RAM.');
+      void closeSharedBrowser();
+    }
+  }, workerConfig.pdf.idleTimeoutMs);
+  if (typeof idleTimer.unref === 'function') {
+    idleTimer.unref();
+  }
+}
+
+async function getSharedBrowser(puppeteer: any) {
+  clearIdleTimer();
+
+  if (sharedBrowser && sharedBrowser.isConnected()) {
+    return sharedBrowser;
+  }
+
+  if (browserLaunchPromise) {
+    return browserLaunchPromise;
+  }
+
+  browserLaunchPromise = (async () => {
+    const launchOptions: any = {
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--disable-extensions',
+      ],
+    };
+
+    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+      launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+    }
+
+    const browser = await puppeteer.launch(launchOptions);
+    browser.on('disconnected', () => {
+      if (sharedBrowser === browser) {
+        sharedBrowser = null;
+        jobsProcessedWithCurrentBrowser = 0;
+      }
+    });
+
+    sharedBrowser = browser;
+    jobsProcessedWithCurrentBrowser = 0;
+    console.log('[Worker - PDF] Launched shared Chromium browser instance.');
+    return browser;
+  })();
+
+  try {
+    return await browserLaunchPromise;
+  } finally {
+    browserLaunchPromise = null;
+  }
+}
+
 export async function processPdfJob(job: Job<PdfJobData>) {
   const { orderId, memoCode } = job.data;
   console.log(`[Worker - PDF] Processing invoice render for Order ID: ${orderId} (Memo: ${memoCode || 'default'})`);
@@ -139,13 +229,12 @@ export async function processPdfJob(job: Job<PdfJobData>) {
       throw new Error('Puppeteer package not installed or binary missing');
     }
 
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-    });
+    const browser = await getSharedBrowser(puppeteer);
+    let page: any = null;
+    activePages += 1;
 
     try {
-      const page = await browser.newPage();
+      page = await browser.newPage();
       await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
 
       const isThermal =
@@ -163,7 +252,22 @@ export async function processPdfJob(job: Job<PdfJobData>) {
           : { top: '10mm', bottom: '10mm', left: '10mm', right: '10mm' },
       });
     } finally {
-      await browser.close();
+      if (page) {
+        await page.close().catch(() => {});
+      }
+      activePages = Math.max(0, activePages - 1);
+      jobsProcessedWithCurrentBrowser += 1;
+
+      if (activePages === 0) {
+        if (jobsProcessedWithCurrentBrowser >= workerConfig.pdf.maxJobsPerBrowser) {
+          console.log(
+            `[Worker - PDF] Reached ${jobsProcessedWithCurrentBrowser} PDFs on current Chromium. Recycling browser to prevent memory leaks.`,
+          );
+          await closeSharedBrowser();
+        } else {
+          scheduleIdleClose();
+        }
+      }
     }
   } catch (err: any) {
     console.warn(`[Worker - PDF] Puppeteer render failed, falling back to printable HTML: ${err.message}`);

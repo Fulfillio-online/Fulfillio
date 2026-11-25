@@ -31,8 +31,15 @@ interface QuickOrderCheckoutModalProps {
   onUpdateItemPrice?: (id: string, unitPrice: number) => void;
   onOrderPlaced: (
     newOrder: MerchantOrderItem,
-    itemsToDeduct: { productId: string; qty: number; variantSku?: string }[]
-  ) => void;
+    itemsToDeduct: {
+      productId: string;
+      qty: number;
+      variantId?: string;
+      variantSku?: string;
+      color?: string;
+      size?: string;
+    }[]
+  ) => void | Promise<{ ok: boolean; error?: string } | void>;
   onTriggerToast: (msg: string) => void;
 }
 
@@ -129,7 +136,7 @@ export function QuickOrderCheckoutModal({
   const estPackagingFee = 5;
   const estNetEarning = Math.max(0, orderTotal - deliveryFee - estHandlingFee - estPackagingFee);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: Record<string, string> = {};
 
@@ -162,13 +169,39 @@ export function QuickOrderCheckoutModal({
     }
 
     // Business check: Every item must have accepted warehouse stock & valid selling price
+    const variantTotals = new Map<string, { requested: number; maxStock: number; title: string }>();
     for (const it of effectiveCartItems) {
       if ((it.maxStock || 0) <= 0 || it.qty <= 0) {
-        onTriggerToast(`Cannot create order: "${it.title}" has 0 stock stored in warehouse bins.`);
+        onTriggerToast(`Cannot create order: "${it.title} (${it.variantLabel})" has 0 stock stored in warehouse bins.`);
+        return;
+      }
+      if (it.qty > (it.maxStock || 0)) {
+        onTriggerToast(
+          `Insufficient stock for "${it.title} (${it.variantLabel})"! Requested: ${it.qty}, Available: ${it.maxStock}.`
+        );
         return;
       }
       if (!Number.isFinite(it.unitPrice) || it.unitPrice <= 0) {
         onTriggerToast(`Please enter a valid selling price (> ৳0) for "${it.title}".`);
+        return;
+      }
+      const key = it.variantId || it.sku || `${it.productId}::${it.color}::${it.size}`;
+      const existing = variantTotals.get(key);
+      if (existing) {
+        existing.requested += it.qty;
+      } else {
+        variantTotals.set(key, {
+          requested: it.qty,
+          maxStock: it.maxStock || 0,
+          title: `${it.title} (${it.variantLabel})`,
+        });
+      }
+    }
+    for (const entry of variantTotals.values()) {
+      if (entry.requested > entry.maxStock) {
+        onTriggerToast(
+          `Insufficient combined stock for "${entry.title}"! Requested: ${entry.requested}, Available: ${entry.maxStock}.`
+        );
         return;
       }
     }
@@ -192,9 +225,13 @@ export function QuickOrderCheckoutModal({
         : 'Cash on Delivery';
 
       const lineItems: OrderLineItem[] = effectiveCartItems.map((it) => ({
-        id: it.productId,
+        id: it.variantId || it.productId,
+        productId: it.productId,
+        variantId: it.variantId,
         title: it.title,
         variant: it.variantLabel || `${it.color} · ${it.size}`,
+        color: it.color,
+        size: it.size,
         sku: it.sku,
         price: it.unitPrice,
         basePrice: it.declaredPrice,
@@ -241,10 +278,19 @@ export function QuickOrderCheckoutModal({
       const itemsToDeduct = effectiveCartItems.map((it) => ({
         productId: it.productId,
         qty: it.qty,
+        variantId: it.variantId,
         variantSku: it.sku,
+        color: it.color,
+        size: it.size,
       }));
 
-      onOrderPlaced(newOrder, itemsToDeduct);
+      const result = await onOrderPlaced(newOrder, itemsToDeduct);
+      if (result && typeof result === 'object' && 'ok' in result && !result.ok) {
+        if (result.error) {
+          onTriggerToast(result.error);
+        }
+        return;
+      }
       onTriggerToast(`Order #${generatedId} successfully created with ${totalItemCount} item(s)!`);
       onClose();
     } catch (err) {

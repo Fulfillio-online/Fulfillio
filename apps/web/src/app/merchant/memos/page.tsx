@@ -6,6 +6,7 @@ import { MerchantMemoDesignerTab } from '@/features/merchant/portal/components/t
 
 export default function MerchantMemosPage() {
   const {
+    profile,
     memoList,
     saveMemo,
     setDefaultMemo,
@@ -15,6 +16,7 @@ export default function MerchantMemosPage() {
 
   return (
     <MerchantMemoDesignerTab
+      profile={profile}
       memoList={memoList}
       onSaveMemo={saveMemo}
       onSetDefaultMemo={setDefaultMemo}

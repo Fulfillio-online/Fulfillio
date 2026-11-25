@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { MerchantRepository } from './merchant.repository';
 import { MerchantStatus } from '@fulfillio/contracts';
@@ -95,13 +95,45 @@ export class MerchantService {
         }
       : defaultPayout;
 
-    const defaultKyc = {
-      tradeLicenseNo: 'TRAD/DNCC/092140/2024',
-      tradeLicenseDocUrl: '/uploads/trade-license-sample.pdf',
-      nidNumber: '19922692810000192',
-      verificationStatus: merchant.status === 'APPROVED' ? 'VERIFIED' : 'PENDING_REVIEW',
-      verifiedAt: merchant.status === 'APPROVED' ? '2026-10-15' : undefined,
-    };
+    const rawKyc = ((merchant as any).kycData as Record<string, any>) || null;
+    const hasKycDocs = Boolean(
+      rawKyc &&
+        String(rawKyc.nidDocUrl || '').trim() &&
+        String(rawKyc.selfieDocUrl || '').trim(),
+    );
+
+    const resolvedKyc = rawKyc
+      ? {
+          tradeLicenseNo: rawKyc.tradeLicenseNo || '',
+          tradeLicenseDocUrl: rawKyc.tradeLicenseDocUrl || '',
+          nidNumber: rawKyc.nidNumber || '',
+          nidDocUrl: rawKyc.nidDocUrl || '',
+          nidBackDocUrl: rawKyc.nidBackDocUrl || '',
+          selfieDocUrl: rawKyc.selfieDocUrl || '',
+          verificationStatus:
+            rawKyc.verificationStatus === 'VERIFIED'
+              ? 'VERIFIED'
+              : rawKyc.verificationStatus === 'REJECTED'
+                ? 'REJECTED'
+                : hasKycDocs
+                  ? rawKyc.verificationStatus || 'PENDING_REVIEW'
+                  : 'UNVERIFIED',
+          submittedAt: rawKyc.submittedAt,
+          verifiedAt:
+            rawKyc.verificationStatus === 'VERIFIED' ? rawKyc.verifiedAt : undefined,
+          reviewedAt: rawKyc.reviewedAt,
+          rejectionReason: rawKyc.rejectionReason || undefined,
+          notes: rawKyc.notes || undefined,
+        }
+      : {
+          tradeLicenseNo: '',
+          tradeLicenseDocUrl: '',
+          nidNumber: '',
+          nidDocUrl: '',
+          nidBackDocUrl: '',
+          selfieDocUrl: '',
+          verificationStatus: 'UNVERIFIED',
+        };
 
     return {
       id: merchant.id,
@@ -112,6 +144,7 @@ export class MerchantService {
       email: merchant.email,
       phone: merchant.phone || '+880 1711-000000',
       location: merchant.location || 'Dhaka, Bangladesh',
+      personalAddress: (merchant as any).personalAddress || '',
       logoUrl: (merchant as any).logoUrl || null,
       status: merchant.status,
       verified: merchant.status === 'APPROVED',
@@ -121,7 +154,7 @@ export class MerchantService {
       payoutMethod: 'Bank Transfer / bKash',
       payoutSchedule: resolvedPayout.frequency || 'Weekly',
       payoutAccount: resolvedPayout,
-      kycData: ((merchant as any).kycData as Record<string, any>) || defaultKyc,
+      kycData: resolvedKyc,
       socialChannels: (merchant.socialChannels as Array<any>) || [
         {
           id: '1',
@@ -169,6 +202,27 @@ export class MerchantService {
         }
       : undefined;
 
+    const existingKyc = ((existing as any).kycData as Record<string, any>) || {};
+    let kycPayload: Record<string, any> | undefined;
+    if (data.kycData) {
+      const mergedKyc = {
+        ...existingKyc,
+        ...data.kycData,
+      };
+      const hasRequiredDocs = Boolean(
+        String(mergedKyc.nidDocUrl || '').trim() &&
+          String(mergedKyc.selfieDocUrl || '').trim(),
+      );
+      kycPayload = {
+        ...mergedKyc,
+        // Never allow client to self-verify KYC; require system/admin review once NID + photo are uploaded
+        verificationStatus: hasRequiredDocs ? 'PENDING_REVIEW' : 'UNVERIFIED',
+        submittedAt: hasRequiredDocs ? nowIso : mergedKyc.submittedAt || null,
+        verifiedAt: null,
+        rejectionReason: null,
+      };
+    }
+
     const resolvedBusinessName = data.businessName || data.storeName;
     const resolvedLogoUrl = data.logoUrl || data.avatarUrl;
 
@@ -177,9 +231,12 @@ export class MerchantService {
       ...(data.ownerName && { ownerName: data.ownerName }),
       ...(data.phone && { phone: data.phone }),
       ...(data.location && { location: data.location }),
+      ...(data.personalAddress !== undefined && {
+        personalAddress: data.personalAddress,
+      }),
       ...(resolvedLogoUrl && { logoUrl: resolvedLogoUrl }),
       ...(payoutPayload && { payoutAccount: payoutPayload }),
-      ...(data.kycData && { kycData: data.kycData }),
+      ...(kycPayload && { kycData: kycPayload }),
       ...(data.socialChannels && { socialChannels: data.socialChannels }),
     });
 
@@ -188,6 +245,7 @@ export class MerchantService {
       merchant: updated,
       payoutAccount: payoutPayload || (updated.payoutAccount as Record<string, any>),
       payoutStatus: payoutPayload ? 'PENDING_REVIEW' : 'UNCHANGED',
+      kycData: kycPayload || ((updated as any).kycData as Record<string, any>),
     };
   }
 
@@ -243,6 +301,50 @@ export class MerchantService {
 
     return this.merchantRepository.update(merchant.id, {
       payoutAccount: updatedPayout,
+    });
+  }
+
+  /**
+   * Super Admin: Approve or Reject merchant KYC documents (NID + Owner Photo)
+   */
+  async updateKycStatus(
+    merchantId: string,
+    payload: {
+      status: 'VERIFIED' | 'REJECTED' | 'PENDING_REVIEW';
+      rejectionReason?: string;
+    },
+  ) {
+    const merchant = await this.merchantRepository.findByIdOrCode(merchantId);
+    if (!merchant) {
+      throw new NotFoundException(`Merchant with ID '${merchantId}' not found`);
+    }
+
+    const existingKyc = ((merchant as any).kycData as Record<string, any>) || {};
+    const hasRequiredDocs = Boolean(
+      String(existingKyc.nidDocUrl || '').trim() &&
+        String(existingKyc.selfieDocUrl || '').trim(),
+    );
+
+    if (payload.status === 'VERIFIED' && !hasRequiredDocs) {
+      throw new BadRequestException(
+        'Cannot verify KYC before National ID card photo and Owner photo are uploaded.',
+      );
+    }
+
+    const nowIso = new Date().toISOString();
+    const updatedKyc = {
+      ...existingKyc,
+      verificationStatus: payload.status,
+      reviewedAt: nowIso,
+      rejectionReason:
+        payload.status === 'REJECTED'
+          ? payload.rejectionReason || 'KYC verification failed'
+          : null,
+      verifiedAt: payload.status === 'VERIFIED' ? nowIso : null,
+    };
+
+    return this.merchantRepository.update(merchant.id, {
+      kycData: updatedKyc,
     });
   }
 

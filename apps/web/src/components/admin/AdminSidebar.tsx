@@ -173,6 +173,25 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                 </span>
               </Link>
 
+              {/* Stock Requests: Dedicated Approval Page */}
+              <Link
+                href="/admin/stock-requests"
+                onClick={onClose}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  isCurrent('/admin/stock-requests')
+                    ? 'bg-orange-600 text-white shadow-sm'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-slate-100 hover:bg-slate-100/60 dark:hover:bg-navy-800/60'
+                }`}
+              >
+                <span className="flex items-center gap-3">
+                  <Layers className="h-4 w-4" />
+                  <span>Stock Requests</span>
+                </span>
+                <span className="text-[11px] tabular-nums px-1.5 py-0.5 rounded bg-black/20">
+                  Approvals
+                </span>
+              </Link>
+
               {/* Inbound Restock: Dedicated Menu Item */}
               <Link
                 href="/admin/inbound"

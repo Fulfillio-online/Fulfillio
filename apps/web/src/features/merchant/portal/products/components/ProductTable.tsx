@@ -420,6 +420,20 @@ export function ProductTable({
         {/* Manage Stock & Variants */}
         {manageStockItem}
 
+        {!isSuspended && (p.stock || 0) > 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              closeMenu();
+              onManageStock(p, "RETURN");
+            }}
+            className="w-full px-3.5 py-2 text-xs text-amber-600 dark:text-amber-400 hover:bg-slate-100 dark:hover:bg-navy-800 flex items-center gap-2 cursor-pointer transition-colors font-semibold"
+          >
+            <RotateCcw className="h-3.5 w-3.5 text-amber-500" />
+            <span>Recall / Return Stock</span>
+          </button>
+        )}
+
         {/* Print Thermal Barcode Sticker */}
         <button
           type="button"

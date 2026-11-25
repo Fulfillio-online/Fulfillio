@@ -152,4 +152,121 @@ describe('OrderService Custom Order Selling Price Calculation', () => {
       BadRequestException,
     );
   });
+
+  it('resolves distinct color variants sharing productId/variantId via variantLabel and reserves each variant separately (Brown 7 + Pink 7)', async () => {
+    const merchant = {
+      id: 'm-uuid-101',
+      merchantCode: 'MC-101',
+      businessName: "Sabbir's Store",
+      baseHandlingFee: 45,
+    };
+
+    const hatProduct = {
+      id: 'prod-hat-1',
+      title: 'Classic Baseball Hat',
+      baseSku: 'HAT-BASE',
+    };
+
+    const variants = [
+      {
+        id: 'var-brown',
+        productId: 'prod-hat-1',
+        sku: 'HAT-BRN',
+        title: 'Brown / Free Size',
+        attributes: { color: 'Brown', size: 'Free Size', declaredStock: 20 },
+        price: 500,
+        product: hatProduct,
+      },
+      {
+        id: 'var-pink',
+        productId: 'prod-hat-1',
+        sku: 'HAT-PNK',
+        title: 'Pink / Free Size',
+        attributes: { color: 'Pink', size: 'Free Size', declaredStock: 20 },
+        price: 500,
+        product: hatProduct,
+      },
+    ];
+
+    let createdOrderPayload: any = null;
+    let reservedItemsCaptured: any[] = [];
+
+    const matchCondition = (v: any, cond: any) =>
+      (cond.id && v.id === cond.id) ||
+      (cond.sku && v.sku === cond.sku) ||
+      (cond.productId && v.productId === cond.productId) ||
+      (cond.product?.id && v.productId === cond.product.id) ||
+      (cond.product?.baseSku && v.product?.baseSku === cond.product.baseSku);
+
+    const mockPrisma: any = {
+      merchant: {
+        findFirst: async () => merchant,
+      },
+      productVariant: {
+        findFirst: async ({ where }: any) => {
+          const conds = where?.OR || [where];
+          return variants.find((v) => conds.some((c: any) => c && matchCondition(v, c))) || null;
+        },
+        findMany: async ({ where }: any) => {
+          const conds = where?.OR || [where];
+          return variants.filter((v) => conds.some((c: any) => c && matchCondition(v, c)));
+        },
+      },
+    };
+
+    const mockOrderRepo: any = {
+      countCustomerOrders: async () => 0,
+      createOrderWithItems: async (data: any) => {
+        createdOrderPayload = data;
+        return { id: 'ORD-MULTI-1', ...data };
+      },
+    };
+
+    const mockInventoryService: any = {
+      reserveStockForOrder: async (items: any[]) => {
+        reservedItemsCaptured = items;
+      },
+    };
+
+    const service = new OrderService(
+      mockOrderRepo,
+      mockInventoryService,
+      {} as any,
+      mockPrisma,
+    );
+
+    await service.createOrder('MC-101', {
+      customerName: 'Multi Variant Buyer',
+      customerPhone: '01715882211',
+      customerAddress: 'Dhaka',
+      memoCode: 'MEMO-DEFAULT',
+      items: [
+        {
+          variantId: 'prod-hat-1',
+          productId: 'prod-hat-1',
+          variantLabel: 'Brown · Free Size',
+          quantity: 7,
+          unitPrice: 500,
+        },
+        {
+          variantId: 'prod-hat-1',
+          productId: 'prod-hat-1',
+          variantLabel: 'Pink · Free Size',
+          quantity: 7,
+          unitPrice: 500,
+        },
+      ],
+    } as any);
+
+    assert.equal(reservedItemsCaptured.length, 2);
+    assert.deepEqual(reservedItemsCaptured, [
+      { variantId: 'var-brown', quantity: 7 },
+      { variantId: 'var-pink', quantity: 7 },
+    ]);
+    assert.equal(createdOrderPayload.items.length, 2);
+    assert.equal(createdOrderPayload.items[0].variantId, 'var-brown');
+    assert.equal(createdOrderPayload.items[0].quantity, 7);
+    assert.equal(createdOrderPayload.items[1].variantId, 'var-pink');
+    assert.equal(createdOrderPayload.items[1].quantity, 7);
+  });
 });

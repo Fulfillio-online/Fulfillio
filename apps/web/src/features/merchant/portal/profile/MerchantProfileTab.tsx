@@ -37,6 +37,7 @@ export function MerchantProfileTab({
     storeName: string;
     phone: string;
     location: string;
+    personalAddress?: string;
     logoUrl?: string;
   }) => {
     onUpdateProfile(updated);
@@ -147,6 +148,7 @@ export function MerchantProfileTab({
           storeName: profile.storeName,
           phone: profile.phone,
           location: profile.location,
+          personalAddress: profile.personalAddress || '',
           logoUrl: profile.logoUrl,
         }}
         onSave={handleSaveProfileDetails}

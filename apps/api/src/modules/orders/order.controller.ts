@@ -24,6 +24,27 @@ export class OrderController {
   /**
    * List orders with pagination, search, status filtering, and multi-tenant security
    */
+  private extractMerchantFromBearer(req: any): string | undefined {
+    const authHeader = req?.headers?.authorization;
+    if (typeof authHeader !== 'string' || !authHeader.startsWith('Bearer ')) {
+      return undefined;
+    }
+    try {
+      const parts = authHeader.slice(7).trim().split('.');
+      if (parts.length !== 3) return undefined;
+      const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+      if (payload?.merchantId) {
+        return String(payload.merchantId);
+      }
+      if (payload?.role === 'MERCHANT' && payload?.merchantCode) {
+        return String(payload.merchantCode);
+      }
+      return undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   @Get()
   async listOrders(
     @Request() req: any,
@@ -37,11 +58,13 @@ export class OrderController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
+    const headerMerchant = req.headers?.['x-merchant-code'];
     const rawMerchant =
       req.user?.merchantId ||
+      this.extractMerchantFromBearer(req) ||
       merchantIdQuery ||
       merchantCodeQuery ||
-      req.headers['x-merchant-code'];
+      (Array.isArray(headerMerchant) ? headerMerchant[0] : headerMerchant);
 
     let effectiveMerchantId: string | undefined = undefined;
     if (rawMerchant) {
@@ -68,7 +91,11 @@ export class OrderController {
    */
   @Get(':id')
   async getOrderById(@Request() req: any, @Param('id') id: string) {
-    const rawMerchant = req.user?.merchantId || req.headers['x-merchant-code'];
+    const headerMerchant = req.headers?.['x-merchant-code'];
+    const rawMerchant =
+      req.user?.merchantId ||
+      this.extractMerchantFromBearer(req) ||
+      (Array.isArray(headerMerchant) ? headerMerchant[0] : headerMerchant);
     let effectiveMerchantId: string | undefined = undefined;
     if (rawMerchant) {
       const merchant = await this.orderService.resolveMerchant(rawMerchant);
@@ -86,7 +113,11 @@ export class OrderController {
     @Param('id') id: string,
     @Body('status') status: OrderStatus,
   ) {
-    const rawMerchant = req.user?.merchantId || req.headers['x-merchant-code'];
+    const headerMerchant = req.headers?.['x-merchant-code'];
+    const rawMerchant =
+      req.user?.merchantId ||
+      this.extractMerchantFromBearer(req) ||
+      (Array.isArray(headerMerchant) ? headerMerchant[0] : headerMerchant);
     let effectiveMerchantId: string | undefined = undefined;
     if (rawMerchant) {
       const merchant = await this.orderService.resolveMerchant(rawMerchant);
@@ -132,12 +163,14 @@ export class OrderController {
   @Post()
   async ingestOrder(@Request() req: any, @Body() body: any) {
     try {
+      const headerMerchant = req.headers?.['x-merchant-code'];
       const effectiveMerchant =
         req.merchant?.id ||
         req.user?.merchantId ||
+        this.extractMerchantFromBearer(req) ||
         body?.merchantId ||
         body?.merchantCode ||
-        req.headers['x-merchant-code'] ||
+        (Array.isArray(headerMerchant) ? headerMerchant[0] : headerMerchant) ||
         'MC-101';
       return await this.orderService.createOrder(effectiveMerchant, body);
     } catch (err: any) {
@@ -151,12 +184,14 @@ export class OrderController {
    */
   @Post('bulk')
   async bulkCreateOrders(@Request() req: any, @Body() body: any) {
+    const headerMerchant = req.headers?.['x-merchant-code'];
     const effectiveMerchant =
       req.merchant?.id ||
       req.user?.merchantId ||
+      this.extractMerchantFromBearer(req) ||
       body.merchantId ||
       body.merchantCode ||
-      req.headers['x-merchant-code'] ||
+      (Array.isArray(headerMerchant) ? headerMerchant[0] : headerMerchant) ||
       'MC-101';
     const ordersList = Array.isArray(body) ? body : body.orders || [];
     return this.orderService.bulkCreateOrders(effectiveMerchant, ordersList);

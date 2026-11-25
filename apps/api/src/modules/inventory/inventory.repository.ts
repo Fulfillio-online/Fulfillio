@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StockMovementReason } from '@fulfillio/contracts';
 
@@ -1149,13 +1149,45 @@ export class InventoryRepository {
           );
         }
 
-        await tx.$executeRaw`
-          UPDATE inventory_items
-          SET "quantityAvailable" = "quantityAvailable" - ${item.quantity},
-              "quantityReserved" = "quantityReserved" + ${item.quantity},
-              "updatedAt" = NOW()
-          WHERE id = ${rows[0].id}
-        `;
+        let remaining = item.quantity;
+        for (const row of rows) {
+          if (remaining <= 0) break;
+          const avail = Number(row.quantity_available) || 0;
+          if (avail <= 0) continue;
+          const take = Math.min(avail, remaining);
+          await tx.$executeRaw`
+            UPDATE inventory_items
+            SET "quantityAvailable" = "quantityAvailable" - ${take},
+                "quantityReserved" = "quantityReserved" + ${take},
+                "updatedAt" = NOW()
+            WHERE id = ${row.id}
+          `;
+          remaining -= take;
+        }
+
+        const newAvailable = Math.max(0, totalAvailable - item.quantity);
+        if (typeof (tx as any).productVariant?.findUnique === 'function') {
+          const variantRow = await (tx as any).productVariant.findUnique({
+            where: { id: item.variantId },
+            select: { attributes: true },
+          });
+          if (variantRow) {
+            const existingAttrs =
+              variantRow.attributes && typeof variantRow.attributes === 'object'
+                ? { ...(variantRow.attributes as Record<string, any>) }
+                : {};
+            await (tx as any).productVariant.update({
+              where: { id: item.variantId },
+              data: {
+                attributes: {
+                  ...existingAttrs,
+                  declaredStock: newAvailable,
+                  stock: newAvailable,
+                },
+              },
+            });
+          }
+        }
 
         if (merchantId) {
           await tx.inventoryAuditLog.create({
@@ -2929,33 +2961,13 @@ export class InventoryRepository {
 
       // 1. Process adjustments on existing variants
       for (const adj of payload.adjustments || []) {
-        const target = existingVariants.find((v) => {
-          if (adj.variantId && v.id === adj.variantId) return true;
-          if (adj.variantSku && v.sku.toLowerCase() === adj.variantSku.toLowerCase()) return true;
-          const attrs = (v.attributes as Record<string, any>) || {};
-          const vColor = (attrs.color || v.title?.split('/')[0] || '').trim().toLowerCase();
-          const vSize = (attrs.size || attrs.attributeValue || v.title?.split('/')[1] || '')
-            .trim()
-            .toLowerCase();
-          if (adj.color && adj.size) {
-            return (
-              vColor === adj.color.trim().toLowerCase() &&
-              vSize === adj.size.trim().toLowerCase()
-            );
-          }
-          if (adj.size && !adj.color) {
-            return vSize === adj.size.trim().toLowerCase();
-          }
-          return false;
-        });
+        const target = this.matchVariantForStockOp(existingVariants, adj);
 
         if (!target) continue;
 
         const newQty = Math.max(0, Math.round(Number(adj.newQuantity) || 0));
         const existingAttrs = (target.attributes as Record<string, any>) || {};
-        const oldPhysical = target.inventoryItems?.[0]?.quantityAvailable ?? 0;
-        const oldDeclared = Number(existingAttrs.declaredStock ?? existingAttrs.stock ?? 0);
-        const oldQty = oldPhysical > 0 ? oldPhysical : oldDeclared;
+        const oldQty = this.computeVariantLiveStock(target, isAcceptedOrStored);
 
         await tx.productVariant.update({
           where: { id: target.id },
@@ -2986,6 +2998,18 @@ export class InventoryRepository {
               quantityDamaged: 0,
             },
           });
+
+          // If a variant had multiple bin rows, zero out secondary rows so total across rows equals newQty
+          if (target.inventoryItems && target.inventoryItems.length > 1) {
+            for (const extraInv of target.inventoryItems.slice(1)) {
+              if (extraInv.id && extraInv.locationId !== locId) {
+                await tx.inventoryItem.update({
+                  where: { id: extraInv.id },
+                  data: { quantityAvailable: 0 },
+                });
+              }
+            }
+          }
         }
 
         if (newQty !== oldQty && product.merchantId) {
@@ -3238,5 +3262,589 @@ export class InventoryRepository {
         },
       },
     });
+  }
+
+  private isProductStocked(product: any): boolean {
+    const rawStatus = String(product?.status || product?.lifecycleStatus || '')
+      .trim()
+      .toUpperCase();
+    const variants = product?.variants || [];
+    const hasApprovedBin = variants.some(
+      (v: any) =>
+        v.defaultBinCode &&
+        v.defaultBinCode !== 'Pending Approval' &&
+        v.defaultBinCode !== 'Assigned on intake',
+    );
+    const hasPhysicalInventory = variants.some((v: any) =>
+      (v.inventoryItems || []).some(
+        (it: any) =>
+          (Number(it?.quantityAvailable) || 0) > 0 ||
+          (Number(it?.quantityReserved) || 0) > 0,
+      ),
+    );
+    return (
+      ['IN_STOCK', 'STOCKED', 'STOCK_STORED', 'APPROVED', 'PUBLISHED', 'ACTIVE'].includes(
+        rawStatus,
+      ) ||
+      hasApprovedBin ||
+      hasPhysicalInventory
+    );
+  }
+
+  private computeVariantLiveStock(variant: any, isStocked: boolean): number {
+    const invItems = Array.isArray(variant?.inventoryItems) ? variant.inventoryItems : [];
+    const phys = invItems.reduce(
+      (s: number, it: any) => s + (Number(it?.quantityAvailable) || 0),
+      0,
+    );
+    const resv = invItems.reduce(
+      (s: number, it: any) => s + (Number(it?.quantityReserved) || 0),
+      0,
+    );
+    const attrs =
+      variant?.attributes && typeof variant.attributes === 'object'
+        ? (variant.attributes as Record<string, any>)
+        : {};
+    const decl = Number(attrs.declaredStock ?? attrs.stock ?? 0);
+    const usePhysical = invItems.length > 0 && (isStocked || phys > 0 || resv > 0);
+    return usePhysical ? phys : decl;
+  }
+
+  private matchVariantForStockOp(
+    variants: any[],
+    criteria: {
+      variantId?: string;
+      variantSku?: string;
+      color?: string;
+      size?: string;
+    },
+  ): any {
+    if (!variants || variants.length === 0) return undefined;
+
+    if (criteria.variantId) {
+      const byId = variants.find((v) => v.id === criteria.variantId);
+      if (byId) return byId;
+    }
+
+    if (criteria.variantSku) {
+      const skuUpper = criteria.variantSku.trim().toUpperCase();
+      const bySku = variants.find((v) => String(v.sku || '').trim().toUpperCase() === skuUpper);
+      if (bySku) return bySku;
+    }
+
+    const isGeneric = (s?: string) =>
+      ['', 'standard', 'free size', 'free', 'default', 'one size'].includes(
+        (s || '').trim().toLowerCase(),
+      );
+
+    const getColor = (v: any) => {
+      const attrs = (v.attributes as Record<string, any>) || {};
+      return String(attrs.color || v.title?.split('/')[0] || '')
+        .trim()
+        .toLowerCase();
+    };
+    const getSize = (v: any) => {
+      const attrs = (v.attributes as Record<string, any>) || {};
+      return String(attrs.size || attrs.attributeValue || v.title?.split('/')[1] || '')
+        .trim()
+        .toLowerCase();
+    };
+
+    const tColor = (criteria.color || '').trim().toLowerCase();
+    const tSize = (criteria.size || '').trim().toLowerCase();
+
+    if (tColor && tSize) {
+      const exact = variants.find((v) => getColor(v) === tColor && getSize(v) === tSize);
+      if (exact) return exact;
+
+      if (isGeneric(tSize)) {
+        const genericMatch = variants.find(
+          (v) => getColor(v) === tColor && isGeneric(getSize(v)),
+        );
+        if (genericMatch) return genericMatch;
+      }
+
+      const colorOnlyFallback = variants.find((v) => getColor(v) === tColor);
+      if (colorOnlyFallback) return colorOnlyFallback;
+    }
+
+    if (tColor && !tSize) {
+      const byColor = variants.find((v) => getColor(v) === tColor);
+      if (byColor) return byColor;
+    }
+
+    if (tSize && !tColor) {
+      const bySize = variants.find((v) => getSize(v) === tSize);
+      if (bySize) return bySize;
+    }
+
+    if (!tColor && !tSize && variants.length === 1) {
+      return variants[0];
+    }
+
+    if (!criteria.variantId && !tColor && !tSize && variants.length > 0) {
+      return variants[0];
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Submit a Stock, Variant, Recall/Return, or Inbound Restock request for Admin approval (does NOT mutate live stock).
+   */
+  async submitStockManageRequest(
+    productId: string,
+    merchantIdOrCode: string | undefined,
+    payload: {
+      operationType?: 'ADJUST' | 'RESTOCK' | 'RETURN';
+      requestedQty?: number;
+      variantId?: string;
+      variantSku?: string;
+      color?: string;
+      size?: string;
+      destination?: string;
+      carrier?: string;
+      trackingRef?: string;
+      note?: string;
+      newVariants?: Array<{
+        title?: string;
+        color?: string;
+        hex?: string;
+        size?: string;
+        attributeName?: string;
+        attributeValue?: string;
+        variantCode?: string;
+        price?: number;
+        wholesalePrice?: number;
+        imageUrl?: string;
+        stock: number;
+      }>;
+      adjustments?: Array<{
+        variantId?: string;
+        variantSku?: string;
+        color?: string;
+        size?: string;
+        previousQuantity?: number;
+        newQuantity: number;
+        reason?: string;
+      }>;
+      reason?: string;
+    },
+  ) {
+    let resolvedMerchantId = merchantIdOrCode;
+    if (merchantIdOrCode && merchantIdOrCode.toUpperCase().startsWith('MC-')) {
+      const m = await this.prisma.merchant.findFirst({
+        where: { merchantCode: { equals: merchantIdOrCode.toUpperCase(), mode: 'insensitive' } },
+      });
+      if (m) resolvedMerchantId = m.id;
+    }
+
+    const product = await this.prisma.product.findFirst({
+      where: {
+        OR: [{ id: productId }, { baseSku: productId }],
+        ...(resolvedMerchantId ? { merchantId: resolvedMerchantId } : {}),
+      },
+      include: {
+        variants: {
+          include: { inventoryItems: true },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+
+    if (!product) {
+      throw new NotFoundException(`Product '${productId}' not found`);
+    }
+
+    const isStocked = this.isProductStocked(product);
+    const operationType: 'ADJUST' | 'RESTOCK' | 'RETURN' = payload.operationType || 'ADJUST';
+
+    const originalVariants = product.variants.map((v) => ({
+      id: v.id,
+      sku: v.sku,
+      title: v.title,
+      color: (v.attributes as any)?.color || '',
+      size: (v.attributes as any)?.size || '',
+      stock: this.computeVariantLiveStock(v, isStocked),
+    }));
+    const originalTotalStock = originalVariants.reduce((s, v) => s + v.stock, 0);
+
+    const newVariants = payload.newVariants || [];
+    let matchedVariant: any = undefined;
+    let resolvedRequestedQty: number | undefined = payload.requestedQty;
+    let adjustments: Array<any>;
+
+    if (operationType === 'RETURN' || operationType === 'RESTOCK') {
+      const requestedQty = Math.round(Number(payload.requestedQty) || 0);
+      if (requestedQty <= 0) {
+        throw new BadRequestException(
+          `${operationType === 'RETURN' ? 'Recall' : 'Restock'} quantity must be greater than 0.`,
+        );
+      }
+      resolvedRequestedQty = requestedQty;
+
+      matchedVariant = this.matchVariantForStockOp(product.variants, {
+        variantId: payload.variantId,
+        variantSku: payload.variantSku,
+        color: payload.color,
+        size: payload.size,
+      });
+
+      const targetCurrentQty = matchedVariant
+        ? this.computeVariantLiveStock(matchedVariant, isStocked)
+        : originalTotalStock;
+
+      if (operationType === 'RETURN' && requestedQty > targetCurrentQty) {
+        throw new BadRequestException(
+          `Cannot recall ${requestedQty} units: only ${targetCurrentQty} units available in warehouse.`,
+        );
+      }
+
+      if (payload.adjustments && payload.adjustments.length > 0) {
+        adjustments = payload.adjustments;
+      } else {
+        const matchedAttrs = (matchedVariant?.attributes as Record<string, any>) || {};
+        adjustments = [
+          {
+            variantId: matchedVariant?.id,
+            variantSku: matchedVariant?.sku || payload.variantSku,
+            color: payload.color || matchedAttrs.color || '',
+            size: payload.size || matchedAttrs.size || '',
+            previousQuantity: targetCurrentQty,
+            newQuantity:
+              operationType === 'RETURN'
+                ? Math.max(0, targetCurrentQty - requestedQty)
+                : targetCurrentQty + requestedQty,
+            reason:
+              payload.reason ||
+              payload.note ||
+              (operationType === 'RETURN'
+                ? 'Product recall / return to merchant'
+                : 'Inbound restock request'),
+          },
+        ];
+      }
+    } else {
+      adjustments = (payload.adjustments || []).map((adj) => {
+        const matched = this.matchVariantForStockOp(product.variants, adj);
+        const currentQty = matched
+          ? this.computeVariantLiveStock(matched, isStocked)
+          : originalTotalStock;
+        return {
+          ...adj,
+          previousQuantity: adj.previousQuantity ?? currentQty,
+        };
+      });
+    }
+
+    const reasonText =
+      payload.reason ||
+      payload.note ||
+      (operationType === 'RETURN'
+        ? 'Product recall / return to merchant'
+        : operationType === 'RESTOCK'
+        ? 'Inbound restock request'
+        : 'Stock & variant manage request');
+
+    return this.prisma.productEditRequest.create({
+      data: {
+        productId: product.id,
+        merchantId: product.merchantId,
+        requestType: 'REVISION_APPROVAL',
+        status: 'PENDING',
+        reason: reasonText,
+        requestedChanges: {
+          kind: 'STOCK_MANAGE',
+          operationType,
+          ...(resolvedRequestedQty !== undefined ? { requestedQty: resolvedRequestedQty } : {}),
+          ...(matchedVariant?.id || payload.variantId
+            ? { variantId: matchedVariant?.id || payload.variantId }
+            : {}),
+          ...(matchedVariant?.sku || payload.variantSku
+            ? { variantSku: matchedVariant?.sku || payload.variantSku }
+            : {}),
+          ...(payload.color ? { color: payload.color } : {}),
+          ...(payload.size ? { size: payload.size } : {}),
+          ...(payload.destination ? { destination: payload.destination } : {}),
+          ...(payload.carrier ? { carrier: payload.carrier } : {}),
+          ...(payload.trackingRef ? { trackingRef: payload.trackingRef } : {}),
+          ...(payload.note ? { note: payload.note } : {}),
+          newVariants,
+          adjustments,
+          reason: payload.reason || payload.note || '',
+        } as any,
+        originalSnapshot: {
+          totalStock: originalTotalStock,
+          variants: originalVariants,
+        } as any,
+        proposedSnapshot: {
+          operationType,
+          ...(resolvedRequestedQty !== undefined ? { requestedQty: resolvedRequestedQty } : {}),
+          newVariantsCount: newVariants.length,
+          adjustmentsCount: adjustments.length,
+        } as any,
+      },
+      include: {
+        product: {
+          include: {
+            merchant: { select: { id: true, merchantCode: true, businessName: true } },
+          },
+        },
+      },
+    });
+  }
+
+  /**
+   * List Stock & Variant manage requests (for Merchant or Admin).
+   */
+  async listStockManageRequests(merchantIdOrCode?: string, status?: string) {
+    let resolvedMerchantId = merchantIdOrCode;
+    if (merchantIdOrCode && merchantIdOrCode.toUpperCase().startsWith('MC-')) {
+      const m = await this.prisma.merchant.findFirst({
+        where: { merchantCode: { equals: merchantIdOrCode.toUpperCase(), mode: 'insensitive' } },
+      });
+      if (m) resolvedMerchantId = m.id;
+    }
+
+    const where: any = {
+      requestedChanges: {
+        path: ['kind'],
+        equals: 'STOCK_MANAGE',
+      },
+    };
+    if (resolvedMerchantId) where.merchantId = resolvedMerchantId;
+    if (status) where.status = status;
+
+    return this.prisma.productEditRequest.findMany({
+      where,
+      include: {
+        product: {
+          include: {
+            merchant: { select: { id: true, merchantCode: true, businessName: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /**
+   * Admin: Approve or Reject a pending Stock, Variant, Recall/Return, or Restock request.
+   */
+  async reviewStockManageRequest(
+    requestId: string,
+    adminId: string,
+    action: 'APPROVE' | 'REJECT',
+    rejectionReason?: string,
+  ) {
+    const reqRecord = await this.prisma.productEditRequest.findUnique({
+      where: { id: requestId },
+    });
+
+    if (!reqRecord) {
+      throw new NotFoundException(`Stock manage request '${requestId}' not found`);
+    }
+
+    if (reqRecord.status !== 'PENDING') {
+      throw new BadRequestException(`Request is already ${reqRecord.status}`);
+    }
+
+    const changes = (reqRecord.requestedChanges as Record<string, any>) || {};
+    if (action === 'APPROVE') {
+      const opType: 'ADJUST' | 'RESTOCK' | 'RETURN' = changes.operationType || 'ADJUST';
+      let updatedProduct: any;
+      let updatedRequestedChanges = changes;
+
+      if (opType === 'RETURN' || opType === 'RESTOCK') {
+        const liveProduct = await this.prisma.product.findFirst({
+          where: { id: reqRecord.productId },
+          include: {
+            variants: {
+              include: { inventoryItems: true },
+              orderBy: { createdAt: 'asc' },
+            },
+          },
+        });
+
+        if (!liveProduct) {
+          throw new NotFoundException(`Product '${reqRecord.productId}' not found`);
+        }
+
+        const isStocked = this.isProductStocked(liveProduct);
+        const firstAdj = Array.isArray(changes.adjustments) ? changes.adjustments[0] : undefined;
+        const matched = this.matchVariantForStockOp(liveProduct.variants || [], {
+          variantId: changes.variantId || firstAdj?.variantId,
+          variantSku: changes.variantSku || firstAdj?.variantSku,
+          color: changes.color || firstAdj?.color,
+          size: changes.size || firstAdj?.size,
+        });
+
+        const liveQty = matched
+          ? this.computeVariantLiveStock(matched, isStocked)
+          : (liveProduct.variants || []).reduce(
+              (s: number, v: any) => s + this.computeVariantLiveStock(v, isStocked),
+              0,
+            );
+
+        const opQty = Math.round(
+          Number(changes.requestedQty) ||
+            Math.abs(
+              (Number(firstAdj?.newQuantity) || 0) -
+                (Number(firstAdj?.previousQuantity) || 0),
+            ),
+        );
+
+        if (opQty <= 0) {
+          throw new BadRequestException('Invalid request quantity for approval.');
+        }
+
+        if (opType === 'RETURN' && liveQty < opQty) {
+          throw new BadRequestException(
+            `Insufficient live warehouse stock to approve recall: requested ${opQty} pcs, currently available ${liveQty} pcs.`,
+          );
+        }
+
+        const matchedAttrs = (matched?.attributes as Record<string, any>) || {};
+        const liveAdjustments = [
+          {
+            ...(firstAdj || {}),
+            variantId: matched?.id || changes.variantId,
+            variantSku: matched?.sku || changes.variantSku,
+            color: changes.color || matchedAttrs.color || firstAdj?.color || '',
+            size: changes.size || matchedAttrs.size || firstAdj?.size || '',
+            previousQuantity: liveQty,
+            newQuantity: opType === 'RETURN' ? liveQty - opQty : liveQty + opQty,
+            reason: changes.reason || changes.note,
+          },
+        ];
+
+        updatedProduct = await this.manageProductStock(
+          reqRecord.productId,
+          reqRecord.merchantId,
+          {
+            newVariants: [],
+            adjustments: liveAdjustments,
+          },
+        );
+
+        const gatePassNo =
+          opType === 'RETURN'
+            ? changes.gatePassNo ||
+              `GP-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
+            : undefined;
+
+        if (typeof (this.prisma as any).inventoryTransaction?.create === 'function') {
+          await (this.prisma as any).inventoryTransaction.create({
+            data: {
+              productId: reqRecord.productId,
+              merchantId: reqRecord.merchantId,
+              transactionType: opType === 'RETURN' ? 'RETURN_TO_MERCHANT' : 'RESTOCK_IN',
+              quantity: opQty,
+              referenceType: opType === 'RETURN' ? 'STOCK_RECALL' : 'RESTOCK_REQUEST',
+              referenceId: requestId,
+              performedBy: adminId,
+              notes:
+                opType === 'RETURN'
+                  ? `Stock recall approved. Gate Pass ${gatePassNo}. Destination: ${
+                      changes.destination || 'Merchant Outlet'
+                    }.`
+                  : `Inbound restock approved. Carrier: ${changes.carrier || 'N/A'}${
+                      changes.trackingRef ? ` (${changes.trackingRef})` : ''
+                    }.`,
+            },
+          });
+        }
+
+        updatedRequestedChanges = {
+          ...changes,
+          ...(gatePassNo ? { gatePassNo } : {}),
+          adjustments: liveAdjustments,
+        };
+      } else {
+        updatedProduct = await this.manageProductStock(
+          reqRecord.productId,
+          reqRecord.merchantId,
+          {
+            newVariants: changes.newVariants || [],
+            adjustments: changes.adjustments || [],
+          },
+        );
+      }
+
+      const updatedRequest = await this.prisma.productEditRequest.update({
+        where: { id: requestId },
+        data: {
+          status: 'APPROVED',
+          adminId,
+          reviewedAt: new Date(),
+          rejectionReason: null,
+          ...(opType === 'RETURN' || opType === 'RESTOCK'
+            ? { requestedChanges: updatedRequestedChanges as any }
+            : {}),
+        },
+        include: {
+          product: {
+            include: {
+              merchant: { select: { id: true, merchantCode: true, businessName: true } },
+            },
+          },
+        },
+      });
+
+      return { request: updatedRequest, product: updatedProduct };
+    }
+
+    const rejectedRequest = await this.prisma.productEditRequest.update({
+      where: { id: requestId },
+      data: {
+        status: 'REJECTED',
+        adminId,
+        rejectionReason: rejectionReason?.trim() || 'Rejected by Admin',
+        reviewedAt: new Date(),
+      },
+      include: {
+        product: {
+          include: {
+            merchant: { select: { id: true, merchantCode: true, businessName: true } },
+          },
+        },
+      },
+    });
+
+    return { request: rejectedRequest };
+  }
+
+  async cancelStockManageRequest(requestId: string, merchantIdOrCode?: string) {
+    let resolvedMerchantId = merchantIdOrCode;
+    if (merchantIdOrCode && merchantIdOrCode.toUpperCase().startsWith('MC-')) {
+      const m = await this.prisma.merchant.findFirst({
+        where: { merchantCode: { equals: merchantIdOrCode.toUpperCase(), mode: 'insensitive' } },
+      });
+      if (m) resolvedMerchantId = m.id;
+    }
+
+    const existing = await this.prisma.productEditRequest.findUnique({
+      where: { id: requestId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException(`Stock manage request '${requestId}' not found`);
+    }
+
+    if (resolvedMerchantId && existing.merchantId !== resolvedMerchantId) {
+      throw new BadRequestException('Unauthorized to cancel another merchant stock request');
+    }
+
+    if (existing.status !== 'PENDING') {
+      throw new BadRequestException(
+        `Only PENDING requests can be cancelled (current status: ${existing.status})`,
+      );
+    }
+
+    await this.prisma.productEditRequest.delete({
+      where: { id: requestId },
+    });
+
+    return { ok: true, id: requestId };
   }
 }

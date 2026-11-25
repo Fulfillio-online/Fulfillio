@@ -50,6 +50,12 @@ export function MerchantSidebar({
       icon: Package,
     },
     {
+      id: 'stock-requests' as MerchantTab,
+      label: 'Stock Requests',
+      href: '/merchant/stock-requests',
+      icon: Layers,
+    },
+    {
       id: 'orders' as MerchantTab,
       label: 'Orders',
       href: '/merchant/orders',

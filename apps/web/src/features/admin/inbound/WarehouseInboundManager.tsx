@@ -47,6 +47,18 @@ import {
   rejectAdminStockWithdrawal,
 } from '@/lib/warehouseSync';
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+
+function getAdminAuthHeader(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  const token = localStorage.getItem('fulfillio_token') || localStorage.getItem('token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function isDbUuid(id?: string): boolean {
+  return Boolean(id && /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(id.trim()));
+}
+
 export function WarehouseInboundManager() {
   // Main view tab: Restocks vs Returns
   const [activeMainTab, setActiveMainTab] = useState<'RESTOCK' | 'RETURNS'>('RESTOCK');
@@ -82,18 +94,20 @@ export function WarehouseInboundManager() {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  // Load state from localStorage
-  const loadInboundData = () => {
+  // Load state from localStorage + PostgreSQL stock-manage-requests
+  const loadInboundData = async () => {
+    let localReplenishments: InboundStockReplenishment[] = INITIAL_STOCK_REPLENISHMENTS;
+    let localWithdrawals: StockWithdrawalRequest[] = INITIAL_STOCK_WITHDRAWALS;
     try {
       const savedReqs = localStorage.getItem(STORAGE_KEY_STOCK_REQUESTS);
       if (savedReqs) {
         const parsed = JSON.parse(savedReqs);
-        if (Array.isArray(parsed) && parsed.length > 0) setReplenishments(parsed);
+        if (Array.isArray(parsed) && parsed.length > 0) localReplenishments = parsed;
       }
       const savedWiths = localStorage.getItem(STORAGE_KEY_STOCK_WITHDRAWALS);
       if (savedWiths) {
         const parsed = JSON.parse(savedWiths);
-        if (Array.isArray(parsed) && parsed.length > 0) setWithdrawals(parsed);
+        if (Array.isArray(parsed) && parsed.length > 0) localWithdrawals = parsed;
       }
       const savedProds = localStorage.getItem(STORAGE_KEY_PRODUCTS);
       if (savedProds) {
@@ -106,6 +120,79 @@ export function WarehouseInboundManager() {
         if (Array.isArray(parsed) && parsed.length > 0) setBins(parsed);
       }
     } catch {}
+
+    let dbReplenishments: InboundStockReplenishment[] = [];
+    let dbWithdrawals: StockWithdrawalRequest[] = [];
+    try {
+      const res = await fetch(`${API_BASE}/inventory/stock-manage-requests`, {
+        headers: { ...getAdminAuthHeader() },
+      });
+      if (res.ok) {
+        const rows = await res.json();
+        if (Array.isArray(rows)) {
+          for (const r of rows) {
+            const changes = r.requestedChanges || {};
+            const origSnap = r.originalSnapshot || {};
+            const opType = changes.operationType;
+            const mappedStatus: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' =
+              r.status === 'APPROVED'
+                ? 'APPROVED'
+                : r.status === 'REJECTED'
+                ? 'REJECTED'
+                : 'PENDING_APPROVAL';
+            const firstAdj = Array.isArray(changes.adjustments) ? changes.adjustments[0] : undefined;
+            const currentStock = Number(firstAdj?.previousQuantity ?? origSnap.totalStock ?? 0);
+            const mCode = r.product?.merchant?.merchantCode || 'MC-101';
+            const mName = r.product?.merchant?.businessName || `Merchant (${mCode})`;
+
+            if (opType === 'RETURN') {
+              dbWithdrawals.push({
+                id: r.id,
+                productId: r.productId,
+                productTitle: r.product?.title || 'Product',
+                productSku: changes.variantSku || r.product?.baseSku || '',
+                merchantCode: mCode,
+                merchantName: mName,
+                category: r.product?.category || 'General',
+                currentStock,
+                withdrawQty: Number(changes.requestedQty) || 1,
+                binCode: 'A-01-01',
+                status: mappedStatus,
+                reason: changes.reason || r.reason || 'Merchant Stock Recall',
+                destination: changes.destination,
+                gatePassNo: changes.gatePassNo,
+                trackingRef: changes.trackingRef,
+                submittedAt: new Date(r.createdAt || Date.now()).toLocaleString(),
+                imageUrl: r.product?.imageUrl || '',
+              });
+            } else if (opType === 'RESTOCK') {
+              dbReplenishments.push({
+                id: r.id,
+                productId: r.productId,
+                productTitle: r.product?.title || 'Product',
+                productSku: changes.variantSku || r.product?.baseSku || '',
+                merchantCode: mCode,
+                merchantName: mName,
+                category: r.product?.category || 'General',
+                currentStock,
+                requestedQty: Number(changes.requestedQty) || 1,
+                binCode: 'A-01-01',
+                status: mappedStatus,
+                note: changes.note || changes.reason || r.reason,
+                trackingRef: changes.trackingRef,
+                submittedAt: new Date(r.createdAt || Date.now()).toLocaleString(),
+                imageUrl: r.product?.imageUrl || '',
+              });
+            }
+          }
+        }
+      }
+    } catch {}
+
+    const dbWithIds = new Set(dbWithdrawals.map((w) => w.id));
+    const dbRepIds = new Set(dbReplenishments.map((r) => r.id));
+    setWithdrawals([...dbWithdrawals, ...localWithdrawals.filter((w) => !dbWithIds.has(w.id))]);
+    setReplenishments([...dbReplenishments, ...localReplenishments.filter((r) => !dbRepIds.has(r.id))]);
   };
 
   useEffect(() => {
@@ -127,46 +214,148 @@ export function WarehouseInboundManager() {
   }, [activeMainTab, searchQuery, merchantFilter, statusFilter]);
 
   // Handle Restock Approval
-  const handleConfirmRestock = (
+  const handleConfirmRestock = async (
     item: InboundStockReplenishment,
     finalQty: number,
     targetBin: string
   ) => {
+    if (isDbUuid(item.id)) {
+      const res = await fetch(
+        `${API_BASE}/inventory/stock-manage-requests/${encodeURIComponent(item.id)}/review`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', ...getAdminAuthHeader() },
+          body: JSON.stringify({ action: 'APPROVE' }),
+        }
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        triggerToast(err?.message || 'Failed to approve restock request.');
+        return;
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'AdminInbound' } })
+        );
+      }
+      await loadInboundData();
+      triggerToast(`Approved restock (+${item.requestedQty} units) for "${item.productTitle}".`);
+      return;
+    }
+
     const success = approveAdminStockReplenishment(item.id, finalQty, targetBin);
     if (success) {
-      loadInboundData();
+      await loadInboundData();
       triggerToast(
         `Received ${finalQty} units of "${item.productTitle}". Slotted into Bin ${targetBin}.`
       );
     }
   };
 
-  const handleDeclineRestock = (item: InboundStockReplenishment) => {
+  const handleDeclineRestock = async (item: InboundStockReplenishment) => {
+    if (isDbUuid(item.id)) {
+      const res = await fetch(
+        `${API_BASE}/inventory/stock-manage-requests/${encodeURIComponent(item.id)}/review`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', ...getAdminAuthHeader() },
+          body: JSON.stringify({ action: 'REJECT', rejectionReason: 'Declined at warehouse intake' }),
+        }
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        triggerToast(err?.message || 'Failed to decline restock request.');
+        return;
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'AdminInbound' } })
+        );
+      }
+      await loadInboundData();
+      triggerToast(`Declined restock consignment for "${item.productTitle}".`);
+      return;
+    }
+
     const success = rejectAdminStockReplenishment(item.id);
     if (success) {
-      loadInboundData();
+      await loadInboundData();
       triggerToast(`Declined restock consignment for "${item.productTitle}".`);
     }
   };
 
   // Handle Return Approval
-  const handleConfirmReturn = (
+  const handleConfirmReturn = async (
     item: StockWithdrawalRequest,
     approvedQty: number
   ) => {
+    if (isDbUuid(item.id)) {
+      const res = await fetch(
+        `${API_BASE}/inventory/stock-manage-requests/${encodeURIComponent(item.id)}/review`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', ...getAdminAuthHeader() },
+          body: JSON.stringify({ action: 'APPROVE' }),
+        }
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        triggerToast(err?.message || 'Failed to approve product recall request.');
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      const gp = data?.request?.requestedChanges?.gatePassNo;
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'AdminInbound' } })
+        );
+      }
+      await loadInboundData();
+      triggerToast(
+        `Return / recall approved for "${item.productTitle}" (-${item.withdrawQty} pcs).${
+          gp ? ` Gate Pass ${gp} issued.` : ''
+        }`
+      );
+      return;
+    }
+
     const result = approveAdminStockWithdrawal(item.id, approvedQty);
     if (result.ok) {
-      loadInboundData();
+      await loadInboundData();
       triggerToast(
         `Return approved for "${item.productTitle}" (-${approvedQty} pcs). Delivery Gate Pass ${result.gatePassNo} issued.`
       );
     }
   };
 
-  const handleDeclineReturn = (item: StockWithdrawalRequest) => {
+  const handleDeclineReturn = async (item: StockWithdrawalRequest) => {
+    if (isDbUuid(item.id)) {
+      const res = await fetch(
+        `${API_BASE}/inventory/stock-manage-requests/${encodeURIComponent(item.id)}/review`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', ...getAdminAuthHeader() },
+          body: JSON.stringify({ action: 'REJECT', rejectionReason: 'Declined by Warehouse Admin' }),
+        }
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        triggerToast(err?.message || 'Failed to decline product recall request.');
+        return;
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'AdminInbound' } })
+        );
+      }
+      await loadInboundData();
+      triggerToast(`Declined stock return request for "${item.productTitle}".`);
+      return;
+    }
+
     const success = rejectAdminStockWithdrawal(item.id);
     if (success) {
-      loadInboundData();
+      await loadInboundData();
       triggerToast(`Declined stock return request for "${item.productTitle}".`);
     }
   };

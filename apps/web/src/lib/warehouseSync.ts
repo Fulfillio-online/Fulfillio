@@ -170,6 +170,16 @@ function hasAdminPayoutDetails(payout?: MerchantRecord['payoutAccount'] | null):
   );
 }
 
+function hasKycDocs(
+  kyc?: { nidDocUrl?: string; selfieDocUrl?: string } | null
+): boolean {
+  return Boolean(
+    kyc &&
+      String(kyc.nidDocUrl || '').trim() &&
+      String(kyc.selfieDocUrl || '').trim()
+  );
+}
+
 function mapProfileToMerchantRecord(
   profile: MerchantProfileData,
   existing?: MerchantRecord
@@ -191,6 +201,10 @@ function mapProfileToMerchantRecord(
     email: profile.email || existing?.email || '',
     phone: profile.phone || existing?.phone || '',
     location: profile.location || existing?.location || 'Dhaka, Bangladesh',
+    personalAddress:
+      profile.personalAddress !== undefined
+        ? profile.personalAddress
+        : existing?.personalAddress || '',
     deliveryArea: existing?.deliveryArea || 'Nationwide Bangladesh',
     status: mappedStatus,
     verified: profile.verified !== undefined ? Boolean(profile.verified) : Boolean(existing?.verified),
@@ -246,6 +260,42 @@ function mapProfileToMerchantRecord(
       availableBalance: existing?.payoutAccount?.availableBalance ?? 0,
       lastPayoutAmount: existing?.payoutAccount?.lastPayoutAmount ?? 0,
     },
+    kycData: (() => {
+      const pKyc = profile.kycData;
+      const eKyc = existing?.kycData;
+      const pHas = hasKycDocs(pKyc);
+      const eHas = hasKycDocs(eKyc);
+      if (!pKyc && !eKyc) return undefined;
+      const pTs = getTimestampMs(pKyc?.reviewedAt || pKyc?.submittedAt);
+      const eTs = getTimestampMs(eKyc?.reviewedAt || eKyc?.submittedAt);
+      const primary =
+        pHas && !eHas
+          ? pKyc
+          : eHas && !pHas
+            ? eKyc
+            : pTs >= eTs
+              ? pKyc || eKyc
+              : eKyc || pKyc;
+      if (!primary) return undefined;
+      return {
+        tradeLicenseNo: primary.tradeLicenseNo || '',
+        tradeLicenseDocUrl: primary.tradeLicenseDocUrl || '',
+        nidNumber: primary.nidNumber || '',
+        nidDocUrl: primary.nidDocUrl || '',
+        nidBackDocUrl: primary.nidBackDocUrl || '',
+        selfieDocUrl: primary.selfieDocUrl || '',
+        verificationStatus: hasKycDocs(primary)
+          ? primary.verificationStatus || 'PENDING_REVIEW'
+          : primary.verificationStatus === 'REJECTED'
+            ? 'REJECTED'
+            : 'UNVERIFIED',
+        submittedAt: primary.submittedAt,
+        verifiedAt: primary.verifiedAt,
+        reviewedAt: primary.reviewedAt,
+        rejectionReason:
+          primary.verificationStatus === 'REJECTED' ? primary.rejectionReason : undefined,
+      };
+    })(),
   };
 }
 
@@ -262,9 +312,8 @@ export function getStoredMerchantDirectory(): MerchantRecord[] {
         const pRaw = localStorage.getItem(getMerchantProfileKey(m.merchantCode));
         if (!pRaw) return m;
         const parsedProfile: MerchantProfileData = JSON.parse(pRaw);
-        if (!parsedProfile?.payoutAccount) return m;
         const profTs = getTimestampMs(
-          parsedProfile.payoutAccount.updatedAt || parsedProfile.payoutAccount.submittedAt
+          parsedProfile.payoutAccount?.updatedAt || parsedProfile.payoutAccount?.submittedAt
         );
         const dirTs = getTimestampMs(
           m.payoutAccount?.updatedAt || m.payoutAccount?.submittedAt
@@ -272,7 +321,25 @@ export function getStoredMerchantDirectory(): MerchantRecord[] {
         const profHas = hasPortalPayoutDetails(parsedProfile.payoutAccount);
         const dirHas = hasAdminPayoutDetails(m.payoutAccount);
 
-        if ((profHas && !dirHas) || (profTs > dirTs && profTs > 0)) {
+        const profKycTs = getTimestampMs(
+          parsedProfile.kycData?.reviewedAt || parsedProfile.kycData?.submittedAt
+        );
+        const dirKycTs = getTimestampMs(
+          m.kycData?.reviewedAt || m.kycData?.submittedAt
+        );
+        const profHasKyc = hasKycDocs(parsedProfile.kycData);
+        const dirHasKyc = hasKycDocs(m.kycData);
+        const addressChanged =
+          parsedProfile.personalAddress !== undefined &&
+          parsedProfile.personalAddress !== (m.personalAddress || '');
+
+        if (
+          (profHas && !dirHas) ||
+          (profTs > dirTs && profTs > 0) ||
+          (profHasKyc && !dirHasKyc) ||
+          (profKycTs > dirKycTs && profKycTs > 0) ||
+          addressChanged
+        ) {
           return mapProfileToMerchantRecord(
             { ...parsedProfile, merchantCode: parsedProfile.merchantCode || m.merchantCode },
             m
@@ -388,6 +455,7 @@ export function buildProfileFromMerchantRecord(record: MerchantRecord): Merchant
     email: record.email,
     phone: record.phone,
     location: record.location || 'Dhaka, Bangladesh',
+    personalAddress: record.personalAddress || '',
     status: record.status,
     verified: record.verified,
     logoUrl: record.avatarUrl,
@@ -417,11 +485,15 @@ export function buildProfileFromMerchantRecord(record: MerchantRecord): Merchant
         ? { updatedAt: record.payoutAccount.updatedAt }
         : {}),
     },
-    kycData: {
-      tradeLicenseNo: '',
-      nidNumber: '',
-      verificationStatus: record.verified ? 'VERIFIED' : 'PENDING_REVIEW',
-    },
+    kycData: record.kycData
+      ? {
+          ...record.kycData,
+        }
+      : {
+          tradeLicenseNo: '',
+          nidNumber: '',
+          verificationStatus: 'UNVERIFIED',
+        },
     socialChannels: [],
   };
 }
@@ -838,6 +910,7 @@ export function syncMerchantDirectoryToProfiles(merchants: MerchantRecord[]): vo
           email: m.email,
           phone: m.phone,
           location: m.location || parsed.location,
+          personalAddress: m.personalAddress !== undefined ? m.personalAddress : parsed.personalAddress,
           status: m.status,
           verified: m.verified,
           logoUrl: m.avatarUrl || parsed.logoUrl,
@@ -869,6 +942,12 @@ export function syncMerchantDirectoryToProfiles(merchants: MerchantRecord[]): vo
                     : undefined,
               }
             : parsed.payoutAccount,
+          kycData: m.kycData
+            ? {
+                ...(parsed.kycData || {}),
+                ...m.kycData,
+              }
+            : parsed.kycData,
         };
         localStorage.setItem(key, JSON.stringify(updated));
       } else {
@@ -1800,9 +1879,152 @@ export function convertMerchantOrderToWarehouse(
 /**
  * Merchant -> Admin: When Merchant creates a new order, add it to Admin Orders Pipeline and deduct Admin stock.
  */
+type AdminOrderStockDeltaOp = {
+  productId?: string;
+  qty: number;
+  variantId?: string;
+  variantSku?: string;
+  color?: string;
+  size?: string;
+};
+
+function applyAdminProductsOrderStockDelta(
+  items: AdminOrderStockDeltaOp[],
+  merchantProducts: MerchantProductItem[],
+  orderId: string,
+  mode: 'WITHDRAWAL' | 'RESTOCK',
+  profile?: MerchantProfileData
+): void {
+  if (items.length === 0) return;
+  const adminProducts = getStoredAdminProducts();
+  const cleanOrderRef = orderId.replace(/^#/, '').trim();
+  const isGenericSize = (s?: string) =>
+    ['', 'standard', 'free size', 'free', 'default', 'one size'].includes(
+      (s || '').trim().toLowerCase()
+    );
+
+  const nextAdminProducts = adminProducts.map((ap) => {
+    const matchedMerchantProd = merchantProducts.find((mp) => isMatchingProduct(mp, ap));
+    const matchingEntries = items.filter(
+      (entry) =>
+        entry.productId === ap.id ||
+        (matchedMerchantProd && entry.productId === matchedMerchantProd.id) ||
+        (entry.variantId && ap.variantsList?.some((v) => v.id === entry.variantId)) ||
+        (entry.variantSku &&
+          (ap.fullSku === entry.variantSku ||
+            ap.variantsList?.some(
+              (v) => v.variantSku?.toUpperCase() === entry.variantSku?.toUpperCase()
+            )))
+    );
+    if (matchingEntries.length === 0) return ap;
+
+    const totalQty = matchingEntries.reduce((s, e) => s + (Number(e.qty) || 0), 0);
+    const prevStock = ap.stock;
+    const newStock = mode === 'WITHDRAWAL' ? Math.max(0, ap.stock - totalQty) : ap.stock + totalQty;
+    let updatedVariants = ap.variantsList;
+
+    if (ap.variantsList && ap.variantsList.length > 0) {
+      updatedVariants = ap.variantsList.map((v) => {
+        const varMatches = matchingEntries.filter((entry) => {
+          if (entry.variantId && ap.variantsList?.some((x) => x.id === entry.variantId)) {
+            return v.id === entry.variantId;
+          }
+          if (
+            entry.variantSku &&
+            ap.variantsList?.some(
+              (x) => x.variantSku?.toUpperCase() === entry.variantSku?.toUpperCase()
+            )
+          ) {
+            return v.variantSku?.toUpperCase() === entry.variantSku.toUpperCase();
+          }
+          if (entry.color) {
+            const colorMatch = (v.color || '').toLowerCase() === entry.color.toLowerCase();
+            if (!colorMatch) return false;
+            return (
+              !entry.size ||
+              (v.size || '').toLowerCase() === entry.size.toLowerCase() ||
+              (isGenericSize(entry.size) && isGenericSize(v.size))
+            );
+          }
+          return ap.variantsList?.length === 1;
+        });
+
+        if (varMatches.length === 0) return v;
+
+        const vQty = varMatches.reduce((s, e) => s + (Number(e.qty) || 0), 0);
+        const firstEntry = varMatches[0];
+        const prevVar = v.stock;
+        const newVar = mode === 'WITHDRAWAL' ? Math.max(0, v.stock - vQty) : v.stock + vQty;
+
+        appendStockLedgerRecord({
+          type: mode,
+          merchantCode: ap.merchantCode || profile?.merchantCode || 'MC-101',
+          merchantName: ap.merchantName || profile?.storeName || "Sabbir's Store",
+          productId: ap.id,
+          productTitle: `${ap.title}${
+            firstEntry.color || firstEntry.size
+              ? ` (${[firstEntry.color, firstEntry.size].filter(Boolean).join(' · ')})`
+              : ''
+          }`,
+          sku: v.variantSku || firstEntry.variantSku || ap.fullSku,
+          deltaQty: mode === 'WITHDRAWAL' ? -vQty : vQty,
+          previousStock: prevVar,
+          newStock: newVar,
+          binCode: ap.binCode || 'A-01-01',
+          referenceDocType: 'INTERNAL_AUDIT',
+          referenceNumber: cleanOrderRef,
+          notes:
+            mode === 'WITHDRAWAL'
+              ? `Order reservation: #${cleanOrderRef} (${vQty} units reserved)`
+              : `Stock released from cancelled order #${cleanOrderRef} (+${vQty} units restored)`,
+          operator:
+            mode === 'WITHDRAWAL'
+              ? 'System / Order Allocation'
+              : 'Warehouse Admin / Order Cancel',
+        });
+        return { ...v, stock: newVar };
+      });
+    } else {
+      appendStockLedgerRecord({
+        type: mode,
+        merchantCode: ap.merchantCode || profile?.merchantCode || 'MC-101',
+        merchantName: ap.merchantName || profile?.storeName || "Sabbir's Store",
+        productId: ap.id,
+        productTitle: ap.title,
+        sku: ap.fullSku,
+        deltaQty: mode === 'WITHDRAWAL' ? -totalQty : totalQty,
+        previousStock: prevStock,
+        newStock: newStock,
+        binCode: ap.binCode || 'A-01-01',
+        referenceDocType: 'INTERNAL_AUDIT',
+        referenceNumber: cleanOrderRef,
+        notes:
+          mode === 'WITHDRAWAL'
+            ? `Order reservation: #${cleanOrderRef} (${totalQty} units reserved)`
+            : `Stock released from cancelled order #${cleanOrderRef} (+${totalQty} units restored)`,
+        operator:
+          mode === 'WITHDRAWAL'
+            ? 'System / Order Allocation'
+            : 'Warehouse Admin / Order Cancel',
+      });
+    }
+
+    return {
+      ...ap,
+      stock: newStock,
+      reserved:
+        mode === 'WITHDRAWAL'
+          ? (ap.reserved || 0) + totalQty
+          : Math.max(0, (ap.reserved || 0) - totalQty),
+      variantsList: updatedVariants,
+    };
+  });
+  localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(nextAdminProducts));
+}
+
 export function syncMerchantOrderCreatedToAdmin(
   order: MerchantOrderItem,
-  itemsToDeduct: Array<{ productId: string; qty: number; variantSku?: string; color?: string; size?: string }>,
+  itemsToDeduct: AdminOrderStockDeltaOp[],
   merchantProducts: MerchantProductItem[],
   memoList: ResellerMemo[],
   profile: MerchantProfileData = INITIAL_MERCHANT_PROFILE
@@ -1830,83 +2052,14 @@ export function syncMerchantOrderCreatedToAdmin(
     }
     localStorage.setItem(STORAGE_KEY_ORDERS, JSON.stringify(nextAdminOrders));
 
-    // Deduct stock on matching Admin products and variants
-    if (itemsToDeduct.length > 0) {
-      const adminProducts = getStoredAdminProducts();
-      const nextAdminProducts = adminProducts.map((ap) => {
-        const matchedMerchantProd = merchantProducts.find((mp) =>
-          isMatchingProduct(mp, ap)
-        );
-        const deductEntry = itemsToDeduct.find(
-          (d) =>
-            d.productId === ap.id ||
-            (matchedMerchantProd && d.productId === matchedMerchantProd.id) ||
-            (d.variantSku && (ap.fullSku === d.variantSku || (ap.variantsList && ap.variantsList.some((v) => v.variantSku === d.variantSku))))
-        );
-        if (!deductEntry) return ap;
-
-        let prevStock = ap.stock;
-        let newStock = Math.max(0, ap.stock - deductEntry.qty);
-        let updatedVariants = ap.variantsList;
-
-        if (ap.variantsList && ap.variantsList.length > 0) {
-          updatedVariants = ap.variantsList.map((v) => {
-            const isMatch =
-              (deductEntry.variantSku && v.variantSku.toUpperCase() === deductEntry.variantSku.toUpperCase()) ||
-              (deductEntry.color && deductEntry.size &&
-                (v.color || '').toLowerCase() === deductEntry.color.toLowerCase() &&
-                (v.size || '').toLowerCase() === deductEntry.size.toLowerCase());
-            if (isMatch) {
-              const prevVar = v.stock;
-              const newVar = Math.max(0, v.stock - deductEntry.qty);
-              appendStockLedgerRecord({
-                type: 'WITHDRAWAL',
-                merchantCode: ap.merchantCode || profile.merchantCode,
-                merchantName: ap.merchantName || profile.storeName,
-                productId: ap.id,
-                productTitle: `${ap.title}${deductEntry.color || deductEntry.size ? ` (${[deductEntry.color, deductEntry.size].filter(Boolean).join(' · ')})` : ''}`,
-                sku: v.variantSku || deductEntry.variantSku || ap.fullSku,
-                deltaQty: -deductEntry.qty,
-                previousStock: prevVar,
-                newStock: newVar,
-                binCode: ap.binCode || 'A-01-01',
-                referenceDocType: 'INTERNAL_AUDIT',
-                referenceNumber: orderId,
-                notes: `Order reservation: #${orderId} (${deductEntry.qty} units reserved)`,
-                operator: 'System / Order Allocation',
-              });
-              return { ...v, stock: newVar };
-            }
-            return v;
-          });
-        } else {
-          appendStockLedgerRecord({
-            type: 'WITHDRAWAL',
-            merchantCode: ap.merchantCode || profile.merchantCode,
-            merchantName: ap.merchantName || profile.storeName,
-            productId: ap.id,
-            productTitle: ap.title,
-            sku: ap.fullSku,
-            deltaQty: -deductEntry.qty,
-            previousStock: prevStock,
-            newStock: newStock,
-            binCode: ap.binCode || 'A-01-01',
-            referenceDocType: 'INTERNAL_AUDIT',
-            referenceNumber: orderId,
-            notes: `Order reservation: #${orderId} (${deductEntry.qty} units reserved)`,
-            operator: 'System / Order Allocation',
-          });
-        }
-
-        return {
-          ...ap,
-          stock: newStock,
-          reserved: (ap.reserved || 0) + deductEntry.qty,
-          variantsList: updatedVariants,
-        };
-      });
-      localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(nextAdminProducts));
-    }
+    // Deduct stock on matching Admin products and variants (supports multiple variants per product)
+    applyAdminProductsOrderStockDelta(
+      itemsToDeduct,
+      merchantProducts,
+      orderId,
+      'WITHDRAWAL',
+      profile
+    );
 
     window.dispatchEvent(
       new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'MerchantContext' } })
@@ -1921,7 +2074,7 @@ export function syncMerchantOrderCreatedToAdmin(
  */
 export function syncMerchantOrderCancelledToAdmin(
   orderId: string,
-  itemsToRestore: Array<{ productId?: string; qty: number; variantSku?: string; color?: string; size?: string }>,
+  itemsToRestore: AdminOrderStockDeltaOp[],
   merchantProducts: MerchantProductItem[]
 ): void {
   if (typeof window === 'undefined') return;
@@ -1936,82 +2089,12 @@ export function syncMerchantOrderCancelledToAdmin(
     });
     localStorage.setItem(STORAGE_KEY_ORDERS, JSON.stringify(nextAdminOrders));
 
-    if (itemsToRestore.length > 0) {
-      const adminProducts = getStoredAdminProducts();
-      const nextAdminProducts = adminProducts.map((ap) => {
-        const matchedMerchantProd = merchantProducts.find((mp) =>
-          isMatchingProduct(mp, ap)
-        );
-        const restoreEntry = itemsToRestore.find(
-          (r) =>
-            r.productId === ap.id ||
-            (matchedMerchantProd && r.productId === matchedMerchantProd.id) ||
-            (r.variantSku && (ap.fullSku === r.variantSku || (ap.variantsList && ap.variantsList.some((v) => v.variantSku === r.variantSku))))
-        );
-        if (!restoreEntry) return ap;
-
-        let prevStock = ap.stock;
-        let newStock = ap.stock + restoreEntry.qty;
-        let updatedVariants = ap.variantsList;
-
-        if (ap.variantsList && ap.variantsList.length > 0) {
-          updatedVariants = ap.variantsList.map((v) => {
-            const isMatch =
-              (restoreEntry.variantSku && v.variantSku.toUpperCase() === restoreEntry.variantSku.toUpperCase()) ||
-              (restoreEntry.color && restoreEntry.size &&
-                (v.color || '').toLowerCase() === restoreEntry.color.toLowerCase() &&
-                (v.size || '').toLowerCase() === restoreEntry.size.toLowerCase());
-            if (isMatch) {
-              const prevVar = v.stock;
-              const newVar = v.stock + restoreEntry.qty;
-              appendStockLedgerRecord({
-                type: 'RESTOCK',
-                merchantCode: ap.merchantCode || 'MC-101',
-                merchantName: ap.merchantName || "Sabbir's Store",
-                productId: ap.id,
-                productTitle: `${ap.title}${restoreEntry.color || restoreEntry.size ? ` (${[restoreEntry.color, restoreEntry.size].filter(Boolean).join(' · ')})` : ''}`,
-                sku: v.variantSku || restoreEntry.variantSku || ap.fullSku,
-                deltaQty: restoreEntry.qty,
-                previousStock: prevVar,
-                newStock: newVar,
-                binCode: ap.binCode || 'A-01-01',
-                referenceDocType: 'INTERNAL_AUDIT',
-                referenceNumber: cleanId,
-                notes: `Stock released from cancelled order #${cleanId} (+${restoreEntry.qty} units restored)`,
-                operator: 'Warehouse Admin / Order Cancel',
-              });
-              return { ...v, stock: newVar };
-            }
-            return v;
-          });
-        } else {
-          appendStockLedgerRecord({
-            type: 'RESTOCK',
-            merchantCode: ap.merchantCode || 'MC-101',
-            merchantName: ap.merchantName || "Sabbir's Store",
-            productId: ap.id,
-            productTitle: ap.title,
-            sku: ap.fullSku,
-            deltaQty: restoreEntry.qty,
-            previousStock: prevStock,
-            newStock: newStock,
-            binCode: ap.binCode || 'A-01-01',
-            referenceDocType: 'INTERNAL_AUDIT',
-            referenceNumber: cleanId,
-            notes: `Stock released from cancelled order #${cleanId} (+${restoreEntry.qty} units restored)`,
-            operator: 'Warehouse Admin / Order Cancel',
-          });
-        }
-
-        return {
-          ...ap,
-          stock: newStock,
-          reserved: Math.max(0, (ap.reserved || 0) - restoreEntry.qty),
-          variantsList: updatedVariants,
-        };
-      });
-      localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(nextAdminProducts));
-    }
+    applyAdminProductsOrderStockDelta(
+      itemsToRestore,
+      merchantProducts,
+      cleanId,
+      'RESTOCK'
+    );
 
     window.dispatchEvent(
       new CustomEvent('fulfillio-warehouse-sync', { detail: { source: 'MerchantContext' } })

@@ -18,6 +18,7 @@ export default function ProductDetailsPage({ params }: ProductDetailsPageProps) 
     requestStockAdd,
     requestStockOperation,
     manageProductVariantsAndStock,
+    stockManageRequests,
     showToast,
     createOrder,
     memoList,
@@ -56,6 +57,11 @@ export default function ProductDetailsPage({ params }: ProductDetailsPageProps) 
         onRequestStockAdd={requestStockAdd}
         onRequestStockOperation={requestStockOperation}
         onManageVariantsAndStock={manageProductVariantsAndStock}
+        pendingStockManageCount={
+          stockManageRequests.filter(
+            (r) => r.productId === product.id && r.status === 'PENDING'
+          ).length
+        }
         onCancelPendingEdit={cancelPendingEdit}
         onTriggerToast={showToast}
       />

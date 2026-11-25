@@ -9,6 +9,7 @@ import {
   AlertCircle,
   XCircle,
   Edit2,
+  ArrowUpRight,
 } from 'lucide-react';
 import { ProductFilterTab } from '../types';
 
@@ -91,10 +92,17 @@ export function ProductStatusTabs({
       icon: <AlertCircle className="h-3.5 w-3.5 text-rose-500" />,
       badgeStyle: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20',
     },
+    {
+      id: 'STOCK_REQUESTS',
+      label: 'Stock Requests',
+      count: counts.stockRequests ?? 0,
+      icon: <ArrowUpRight className="h-3.5 w-3.5 text-indigo-500" />,
+      badgeStyle: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20',
+    },
   ];
 
   return (
-    <div className="flex items-center gap-1 sm:gap-2 border-b border-slate-200 dark:border-white/10 overflow-x-auto no-scrollbar">
+    <div className="flex flex-wrap items-center gap-1 sm:gap-2 border-b border-slate-200 dark:border-white/10">
       {tabs.map((tab) => {
         const isActive =
           activeTab === tab.id ||

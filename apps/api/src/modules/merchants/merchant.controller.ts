@@ -54,6 +54,21 @@ export class MerchantController {
   }
 
   /**
+   * Approve or Reject merchant KYC identity documents (NID + Owner Photo) from Admin console
+   */
+  @Patch(':id/kyc-status')
+  async updateKycStatus(
+    @Param('id') merchantId: string,
+    @Body()
+    body: {
+      status: 'VERIFIED' | 'REJECTED' | 'PENDING_REVIEW';
+      rejectionReason?: string;
+    },
+  ) {
+    return this.merchantService.updateKycStatus(merchantId, body);
+  }
+
+  /**
    * Super Admin: List all registered merchants with stats
    */
   @Get()

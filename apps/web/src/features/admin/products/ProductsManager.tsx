@@ -379,10 +379,31 @@ export function ProductsManager({
             if (backendProds && Array.isArray(backendProds) && backendProds.length > 0) {
               const mappedBackend: WarehouseProductItem[] = backendProds.map((p: any) => {
                 const variants = p.variants || [];
+                const rawProdStatus = String(p.status || p.lifecycleStatus || '').trim().toUpperCase();
+                const isProdStocked = [
+                  'IN_STOCK',
+                  'STOCKED',
+                  'STOCK_STORED',
+                  'APPROVED',
+                  'PUBLISHED',
+                  'ACTIVE',
+                ].includes(rawProdStatus);
+                const computeVariantStock = (v: any) => {
+                  const invItems = Array.isArray(v?.inventoryItems) ? v.inventoryItems : [];
+                  const phys = invItems.reduce(
+                    (s: number, ii: any) => s + (Number(ii?.quantityAvailable) || 0),
+                    0
+                  );
+                  const resv = invItems.reduce(
+                    (s: number, ii: any) => s + (Number(ii?.quantityReserved) || 0),
+                    0
+                  );
+                  const decl = Number(v?.attributes?.declaredStock ?? v?.attributes?.stock ?? 0);
+                  const usePhysical = invItems.length > 0 && (isProdStocked || phys > 0 || resv > 0);
+                  return usePhysical ? phys : decl;
+                };
                 const totalStock = variants.reduce((sum: number, v: any) => {
-                  const phys = v.inventoryItems?.[0]?.quantityAvailable ?? 0;
-                  const decl = Number(v.attributes?.declaredStock ?? v.attributes?.stock ?? 0);
-                  return sum + (phys > 0 ? phys : decl);
+                  return sum + computeVariantStock(v);
                 }, 0);
                 const mCode = p.merchant?.merchantCode || p.merchantCode || 'MC-101';
                 const mName = p.merchant?.businessName || `Merchant (${mCode})`;
@@ -490,14 +511,12 @@ export function ProductsManager({
                   colors: derivedColors,
                   sizes: (firstVariant?.attributes as any)?.sizes || [],
                   variantsList: variants.map((v: any) => {
-                    const phys = v.inventoryItems?.[0]?.quantityAvailable ?? 0;
-                    const decl = Number(v.attributes?.declaredStock ?? v.attributes?.stock ?? 0);
                     return {
                       id: v.id,
                       variantSku: v.sku,
                       color: v.attributes?.color || v.title?.split('/')[0]?.trim() || '',
                       size: v.attributes?.size || v.title?.split('/')[1]?.trim() || '',
-                      stock: phys > 0 ? phys : decl,
+                      stock: computeVariantStock(v),
                       imageUrl: v.imageUrl || p.imageUrl || '',
                     };
                   }),
@@ -1935,6 +1954,20 @@ syncAdminProductsToMerchant(next);
           stockWithdrawals.filter((w) => w.status === 'PENDING_APPROVAL').length
         }
       />
+
+      {/* Quick Link to Dedicated Stock & Variant Approval Page */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-slate-100/80 dark:bg-navy-900/70 border border-slate-200 dark:border-white/10">
+        <div className="text-xs text-slate-600 dark:text-slate-300">
+          <strong className="text-navy-900 dark:text-white">Stock &amp; Variant Approvals:</strong>{' '}
+          Review merchant stock quantity changes and new color/size variants in the dedicated approval queue.
+        </div>
+        <Link
+          href="/admin/stock-requests"
+          className="px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold shrink-0 text-center transition-colors"
+        >
+          Open Stock Requests Page
+        </Link>
+      </div>
 
       {/* The Single Master Table with All Products & Approvals */}
       <ProductsCatalogTab

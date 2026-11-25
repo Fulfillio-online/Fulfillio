@@ -347,7 +347,7 @@ export class OrderService {
         let resolvedLabel = item.variantLabel || item.variant || null;
         let resolvedBasePrice = 0;
 
-        // Try lookup by variantId
+        // Try lookup by exact variantId or variant SKU (never match arbitrary variant by productId here)
         if (item.variantId) {
           try {
             const v = await this.prisma.productVariant.findFirst({
@@ -355,7 +355,6 @@ export class OrderService {
                 OR: [
                   { id: item.variantId },
                   { sku: item.variantId },
-                  { productId: item.variantId },
                 ],
               },
               include: { product: true },
@@ -370,16 +369,11 @@ export class OrderService {
           } catch {}
         }
 
-        // Try lookup by sku or product baseSku
+        // Try lookup by exact variant SKU (defer baseSku lookup to Step C so variantLabel selects the exact color/size)
         if (!resolvedVariantId && item.sku) {
           try {
             const v = await this.prisma.productVariant.findFirst({
-              where: {
-                OR: [
-                  { sku: item.sku },
-                  { product: { baseSku: item.sku } },
-                ],
-              },
+              where: { sku: item.sku },
               include: { product: true },
             });
             if (v) {
@@ -392,19 +386,91 @@ export class OrderService {
           } catch {}
         }
 
-        // Try lookup by productId
-        if (!resolvedVariantId && item.productId) {
+        // Try lookup by productId / baseSku / fallback variantId as productId, matching variantLabel/color/size
+        const lookupProductRef = item.productId || item.variantId || item.sku;
+        if (!resolvedVariantId && lookupProductRef) {
           try {
-            const v = await this.prisma.productVariant.findFirst({
-              where: {
-                OR: [
-                  { productId: item.productId },
-                  { product: { id: item.productId } },
-                  { product: { baseSku: item.productId } },
-                ],
-              },
-              include: { product: true },
-            });
+            const whereClause = {
+              OR: [
+                { productId: lookupProductRef },
+                { product: { id: lookupProductRef } },
+                { product: { baseSku: lookupProductRef } },
+              ],
+            };
+            let v: any = null;
+            if (typeof this.prisma.productVariant?.findMany === 'function') {
+              const candidates = await this.prisma.productVariant.findMany({
+                where: whereClause,
+                include: { product: true },
+              });
+              if (candidates.length === 1) {
+                v = candidates[0];
+              } else if (candidates.length > 1) {
+                const rawLabel = String((item as any).variantLabel || (item as any).variant || '').trim();
+                const rawColor = String((item as any).color || '').trim();
+                const rawSize = String((item as any).size || '').trim();
+                const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+                const isGenericSize = (s: string) =>
+                  ['', 'standard', 'free size', 'free', 'default', 'one size', 'n/a'].includes(
+                    s.toLowerCase().trim(),
+                  );
+                const labelParts = rawLabel
+                  .split(/[·•\/|,]+|\s+-\s+/)
+                  .map((p) => p.trim())
+                  .filter(Boolean);
+                const targetColor = (rawColor || labelParts[0] || '').toLowerCase();
+                const targetSize = (rawSize || labelParts[1] || '').toLowerCase();
+                const normLabel = norm(rawLabel);
+
+                let bestCandidate = candidates[0];
+                let bestScore = -Infinity;
+                for (const cand of candidates) {
+                  const attrs =
+                    cand.attributes && typeof cand.attributes === 'object'
+                      ? (cand.attributes as any)
+                      : {};
+                  const candColor = String(attrs.color || '').trim().toLowerCase();
+                  const candSize = String(attrs.size || '').trim().toLowerCase();
+                  const candTitle = String(cand.title || '').trim().toLowerCase();
+                  const normTitle = norm(candTitle);
+                  let score = 0;
+
+                  if (normLabel && normTitle && normTitle === normLabel) {
+                    score += 100;
+                  }
+                  if (targetColor) {
+                    if (candColor && candColor === targetColor) {
+                      score += 50;
+                    } else if (candTitle && (candTitle === targetColor || normTitle.split(' ').includes(norm(targetColor)) || candTitle.includes(targetColor))) {
+                      score += 30;
+                    } else if (candColor && candColor !== targetColor) {
+                      score -= 50;
+                    }
+                  }
+                  if (targetSize) {
+                    if (candSize && candSize === targetSize) {
+                      score += 40;
+                    } else if (isGenericSize(targetSize) && (!candSize || isGenericSize(candSize))) {
+                      score += 20;
+                    } else if (candTitle && candTitle.includes(targetSize)) {
+                      score += 20;
+                    } else if (candSize && !isGenericSize(targetSize) && candSize !== targetSize) {
+                      score -= 20;
+                    }
+                  }
+                  if (score > bestScore) {
+                    bestScore = score;
+                    bestCandidate = cand;
+                  }
+                }
+                v = bestCandidate;
+              }
+            } else {
+              v = await this.prisma.productVariant.findFirst({
+                where: whereClause,
+                include: { product: true },
+              });
+            }
             if (v) {
               resolvedVariantId = v.id;
               resolvedSku = resolvedSku || v.sku;
@@ -459,10 +525,22 @@ export class OrderService {
       }),
     );
 
-    if (itemsToReserve.length > 0) {
+    const aggregatedReserveMap = new Map<string, number>();
+    for (const rItem of itemsToReserve) {
+      if (!rItem?.variantId) continue;
+      aggregatedReserveMap.set(
+        rItem.variantId,
+        (aggregatedReserveMap.get(rItem.variantId) || 0) + (Number(rItem.quantity) || 0),
+      );
+    }
+    const mergedItemsToReserve = Array.from(aggregatedReserveMap.entries()).map(
+      ([variantId, quantity]) => ({ variantId, quantity }),
+    );
+
+    if (mergedItemsToReserve.length > 0) {
       try {
         await this.inventoryService.reserveStockForOrder(
-          itemsToReserve,
+          mergedItemsToReserve,
           merchantId,
           payload.externalOrderId,
         );

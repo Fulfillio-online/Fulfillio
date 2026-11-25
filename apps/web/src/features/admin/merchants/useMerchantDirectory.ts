@@ -64,6 +64,41 @@ function pickFresherAdminPayout(
   return dbPayout;
 }
 
+function hasKycDocs(k?: MerchantRecord['kycData'] | null): boolean {
+  return Boolean(
+    k && String(k.nidDocUrl || '').trim() && String(k.selfieDocUrl || '').trim(),
+  );
+}
+
+function getKycTime(k?: MerchantRecord['kycData'] | null): number {
+  if (!k) return 0;
+  const raw = k.reviewedAt || k.submittedAt;
+  if (!raw) return 0;
+  const ms = Date.parse(raw);
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function pickFresherAdminKyc(
+  localKyc?: MerchantRecord['kycData'],
+  dbKyc?: MerchantRecord['kycData'],
+): MerchantRecord['kycData'] | undefined {
+  if (!localKyc) return dbKyc;
+  if (!dbKyc) return localKyc;
+  const localHas = hasKycDocs(localKyc);
+  const dbHas = hasKycDocs(dbKyc);
+  if (localHas && !dbHas) return localKyc;
+  if (dbHas && !localHas) return dbKyc;
+
+  const localTs = getKycTime(localKyc);
+  const dbTs = getKycTime(dbKyc);
+  if (dbTs > 0 && localTs > 0) {
+    return dbTs >= localTs ? dbKyc : localKyc;
+  }
+  if (dbTs > 0) return dbKyc;
+  if (localTs > 0) return localKyc;
+  return dbKyc;
+}
+
 /**
  * Shared data layer for the admin merchant list page and the dedicated
  * merchant profile page (/admin/merchants/[id]). Both read from the same
@@ -126,6 +161,8 @@ export function useMerchantDirectory() {
             ? existing.phone
             : dbItem.phone || existing.phone,
         location: existing.location || dbItem.location,
+        personalAddress: dbItem.personalAddress || existing.personalAddress || '',
+        kycData: pickFresherAdminKyc(existing.kycData, dbItem.kycData),
         joinedDate: existing.joinedDate || dbItem.joinedDate,
         avatarUrl: existing.avatarUrl || dbItem.avatarUrl,
         avatarBg: existing.avatarBg || dbItem.avatarBg,
@@ -240,6 +277,8 @@ export function useMerchantDirectory() {
               email: m.email,
               phone: m.phone || '01700-000000',
               location: m.location || 'Dhaka, Bangladesh',
+              personalAddress: m.personalAddress || '',
+              kycData: m.kycData || undefined,
               deliveryArea: 'Nationwide Bangladesh',
               status: m.status === 'APPROVED' ? 'Active' : m.status === 'SUSPENDED' ? 'Suspended' : 'Pending',
               verified: m.status === 'APPROVED',
@@ -441,13 +480,26 @@ export function useMerchantDirectory() {
       triggerToast(`Saved settings for ${updatedMerchant.storeName}!`);
     }
 
-    // Sync with backend API
+    // Sync status & profile fields with backend API (PostgreSQL)
     const targetIdentifier = updatedMerchant.merchantCode || updatedMerchant.id;
     fetch(`${API_BASE}/merchants/${encodeURIComponent(targetIdentifier)}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         status: updatedMerchant.status === 'Active' ? 'APPROVED' : 'SUSPENDED',
+      }),
+    }).catch(() => {});
+
+    fetch(`${API_BASE}/merchants/profile?merchantCode=${encodeURIComponent(targetIdentifier)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        merchantCode: targetIdentifier,
+        businessName: updatedMerchant.storeName,
+        ownerName: updatedMerchant.ownerName,
+        phone: updatedMerchant.phone,
+        location: updatedMerchant.location,
+        personalAddress: updatedMerchant.personalAddress ?? '',
       }),
     }).catch(() => {});
   };
@@ -600,6 +652,85 @@ export function useMerchantDirectory() {
     );
   };
 
+  const handleReviewKyc = (
+    merchantId: string,
+    action: 'APPROVE' | 'REJECT',
+    rejectionReason?: string,
+  ) => {
+    const nextStatus: 'VERIFIED' | 'REJECTED' = action === 'APPROVE' ? 'VERIFIED' : 'REJECTED';
+    const nowIso = new Date().toISOString();
+    const resolvedReason =
+      nextStatus === 'REJECTED'
+        ? rejectionReason?.trim() || 'KYC verification failed'
+        : undefined;
+
+    const patchList = (list: MerchantRecord[]) =>
+      list.map((m) =>
+        m.id === merchantId || m.merchantCode === merchantId
+          ? {
+              ...m,
+              kycData: {
+                ...(m.kycData || {}),
+                verificationStatus: nextStatus,
+                reviewedAt: nowIso,
+                verifiedAt: nextStatus === 'VERIFIED' ? nowIso : undefined,
+                rejectionReason: resolvedReason,
+              },
+            }
+          : m,
+      );
+
+    const target = merchants.find((m) => m.id === merchantId || m.merchantCode === merchantId);
+    const updated = patchList(merchants);
+    if (dbMerchantsRef.current) {
+      dbMerchantsRef.current = patchList(dbMerchantsRef.current);
+    }
+    setMerchants(updated);
+    syncMerchantDirectoryToProfiles(updated);
+
+    const targetIdentifier = target?.merchantCode || target?.id || merchantId;
+    fetch(`${API_BASE}/merchants/${encodeURIComponent(targetIdentifier)}/kyc-status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: nextStatus,
+        ...(resolvedReason ? { rejectionReason: resolvedReason } : {}),
+      }),
+    })
+      .then(async (res) => {
+        // If DB didn't have the merchant's kycData yet (e.g. uploaded while offline), sync it first then retry
+        if (!res.ok && target?.kycData) {
+          await fetch(
+            `${API_BASE}/merchants/profile?merchantCode=${encodeURIComponent(targetIdentifier)}`,
+            {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                merchantCode: targetIdentifier,
+                kycData: target.kycData,
+              }),
+            },
+          );
+          await fetch(`${API_BASE}/merchants/${encodeURIComponent(targetIdentifier)}/kyc-status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              status: nextStatus,
+              ...(resolvedReason ? { rejectionReason: resolvedReason } : {}),
+            }),
+          });
+        }
+      })
+      .catch(() => {});
+
+    const targetLabel = target?.storeName || target?.merchantCode || merchantId;
+    triggerToast(
+      action === 'APPROVE'
+        ? `KYC for "${targetLabel}" verified!`
+        : `KYC for "${targetLabel}" rejected.`,
+    );
+  };
+
   return {
     merchants,
     productsList,
@@ -613,6 +744,7 @@ export function useMerchantDirectory() {
     handleUpdateMerchant,
     handleReviewPayoutAccount,
     handleBulkReviewPayoutAccounts,
+    handleReviewKyc,
     handleAdjustStock,
     handleAddProduct,
     handleApproveProduct,

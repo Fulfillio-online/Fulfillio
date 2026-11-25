@@ -3,6 +3,7 @@ import type { ProductPendingEditInfo } from '@/lib/productRevision';
 export type MerchantTab =
   | 'overview'
   | 'products'
+  | 'stock-requests'
   | 'categories'
   | 'orders'
   | 'returns'
@@ -53,8 +54,13 @@ export interface KycDocumentData {
   tradeLicenseDocUrl?: string;
   nidNumber?: string;
   nidDocUrl?: string;
+  nidBackDocUrl?: string;
+  selfieDocUrl?: string;
   verificationStatus: VerificationStatus;
+  submittedAt?: string;
   verifiedAt?: string;
+  reviewedAt?: string;
+  rejectionReason?: string;
   notes?: string;
 }
 
@@ -72,6 +78,7 @@ export interface MerchantProfileData {
   email: string;
   phone: string;
   location: string;
+  personalAddress?: string;
   logoUrl?: string;
   status: string;
   verified: boolean;
@@ -107,8 +114,12 @@ export interface ResellerMemo {
 
 export interface OrderLineItem {
   id: string;
+  productId?: string;
+  variantId?: string;
   title: string;
   variant: string;
+  color?: string;
+  size?: string;
   sku: string;
   price: number;
   basePrice?: number;

@@ -1,4 +1,4 @@
-import {
+﻿import {
   getActiveMerchantSession,
   getMerchantProductsKey,
   getMerchantOrdersKey,
@@ -87,14 +87,36 @@ export const merchantApi = {
     const code = session?.merchantCode || 'MC-101';
     const remote = await safeFetch<any>(`/merchants/profile?merchantCode=${encodeURIComponent(code)}`);
     if (remote && (remote.storeName || remote.businessName) && remote.merchantCode) {
+      const localStored =
+        typeof window !== 'undefined' ? getStoredMerchantProfileForCode(code) : null;
       const rawPayout = remote.payoutAccount || {};
       const hasCoords = Boolean(
         String(rawPayout.accountNumber || '').trim() ||
           String(rawPayout.bkashMerchantNumber || '').trim() ||
           String(rawPayout.bkashNumber || '').trim()
       );
+
+      const rKyc = remote.kycData;
+      const lKyc = localStored?.kycData;
+      const rHasDocs = Boolean(rKyc?.nidDocUrl?.trim() && rKyc?.selfieDocUrl?.trim());
+      const lHasDocs = Boolean(lKyc?.nidDocUrl?.trim() && lKyc?.selfieDocUrl?.trim());
+      const rTs = Date.parse(rKyc?.reviewedAt || rKyc?.submittedAt || '') || 0;
+      const lTs = Date.parse(lKyc?.reviewedAt || lKyc?.submittedAt || '') || 0;
+      const resolvedKyc =
+        lKyc &&
+        ((lHasDocs && !rHasDocs) ||
+          (lKyc.verificationStatus === 'VERIFIED' && rKyc?.verificationStatus !== 'VERIFIED') ||
+          (lTs > rTs && lTs > 0))
+          ? lKyc
+          : rKyc || lKyc;
+
+      const resolvedPersonalAddress =
+        remote.personalAddress?.trim() || localStored?.personalAddress?.trim() || '';
+
       return {
         ...remote,
+        personalAddress: resolvedPersonalAddress,
+        kycData: resolvedKyc,
         storeName: remote.storeName || remote.businessName,
         ownerName: remote.ownerName || session?.ownerName || remote.businessName || '',
         logoUrl: remote.logoUrl || undefined,
@@ -170,9 +192,13 @@ export const merchantApi = {
                 : undefined,
           }
         : prev.payoutAccount;
+      const serverKyc = remote?.kycData || remote?.merchant?.kycData;
+      const serverPersonalAddress = remote?.merchant?.personalAddress ?? remote?.personalAddress;
       const next: MerchantProfileData = {
         ...prev,
         ...updates,
+        ...(serverPersonalAddress !== undefined ? { personalAddress: serverPersonalAddress } : {}),
+        ...(serverKyc ? { kycData: serverKyc } : {}),
         merchantCode: code,
         payoutAccount: nextPayout,
       };
@@ -208,20 +234,33 @@ export const merchantApi = {
     if (remote && Array.isArray(remote)) {
       return remote.map((p) => {
         const variants = p.variants || [];
-        const physicalTotal = variants.reduce(
-          (sum: number, v: any) => sum + (v.inventoryItems?.[0]?.quantityAvailable ?? 0),
+        const rawStatus = String(p.status || p.lifecycleStatus || '').trim().toUpperCase();
+        const isStocked = [
+          'IN_STOCK',
+          'STOCKED',
+          'STOCK_STORED',
+          'APPROVED',
+          'PUBLISHED',
+          'ACTIVE',
+        ].includes(rawStatus);
+        const computeVariantStock = (v: any) => {
+          const invItems = Array.isArray(v?.inventoryItems) ? v.inventoryItems : [];
+          const phys = invItems.reduce(
+            (sum: number, ii: any) => sum + (Number(ii?.quantityAvailable) || 0),
+            0
+          );
+          const resv = invItems.reduce(
+            (sum: number, ii: any) => sum + (Number(ii?.quantityReserved) || 0),
+            0
+          );
+          const decl = Number(v?.attributes?.declaredStock ?? v?.attributes?.stock ?? 0);
+          const usePhysical = invItems.length > 0 && (isStocked || phys > 0 || resv > 0);
+          return usePhysical ? phys : decl;
+        };
+        const totalStock = variants.reduce(
+          (sum: number, v: any) => sum + computeVariantStock(v),
           0
         );
-        const declaredTotal = variants.reduce(
-          (sum: number, v: any) => sum + (Number(v.attributes?.declaredStock ?? v.attributes?.stock) || 0),
-          0
-        );
-        const totalStock =
-          physicalTotal > 0
-            ? physicalTotal
-            : declaredTotal > 0
-            ? declaredTotal
-            : Number(variants[0]?.attributes?.declaredStock ?? 0);
         const totalReserved = variants.reduce(
           (sum: number, v: any) => sum + (v.inventoryItems?.[0]?.quantityReserved ?? 0),
           0
@@ -262,9 +301,7 @@ export const merchantApi = {
             if (!entry.sizes.includes(sizeName)) entry.sizes.push(sizeName);
           }
 
-          const vPhysical = v.inventoryItems?.[0]?.quantityAvailable ?? 0;
-          const vDeclared = Number(v.attributes?.declaredStock ?? v.attributes?.stock ?? 0);
-          const vStock = vPhysical > 0 ? vPhysical : vDeclared;
+          const vStock = computeVariantStock(v);
           return {
             id: v.id,
             variantSku: v.sku,
@@ -456,7 +493,13 @@ export const merchantApi = {
           const itemNames =
             o.items && o.items.length > 0
               ? o.items
-                  .map((it: any) => `${it.productTitle || it.variant?.title || 'Product'} x ${it.quantity}`)
+                  .map((it: any) => {
+                    const title = it.productTitle || it.variant?.product?.title || it.variant?.title || 'Product';
+                    const label =
+                      it.variantLabel ||
+                      (it.variant?.title && it.variant.title !== title ? it.variant.title : '');
+                    return `${title}${label ? ` (${label})` : ''} x ${it.quantity}`;
+                  })
                   .join(', ')
               : 'Ordered Items';
           const totalQty =
@@ -465,9 +508,13 @@ export const merchantApi = {
               : 1;
 
           const mappedLineItems: OrderLineItem[] = (o.items || []).map((it: any) => ({
-            id: it.id || it.variantId || 'item-1',
+            id: it.variant?.productId || it.productId || it.variantId || it.id || 'item-1',
+            productId: it.variant?.productId || it.productId || undefined,
+            variantId: it.variantId || it.variant?.id || undefined,
             title: it.productTitle || it.variant?.product?.title || it.variant?.title || 'Product',
             variant: it.variantLabel || it.variant?.title || 'Standard',
+            color: it.variant?.attributes?.color || undefined,
+            size: it.variant?.attributes?.size || undefined,
             sku: it.sku || it.variant?.sku || '',
             price: Number(it.unitPrice) || 0,
             quantity: it.quantity || 1,
@@ -485,7 +532,7 @@ export const merchantApi = {
             customer: o.customerName || 'Customer',
             phone: o.customerPhone || '',
             address: o.customerAddress || '',
-            productId: o.items?.[0]?.variantId || '',
+            productId: o.items?.[0]?.variant?.productId || o.items?.[0]?.productId || o.items?.[0]?.variantId || '',
             items: itemNames,
             qty: totalQty,
             amount: Number(o.totalAmount) || Number(o.codAmount) || 0,
@@ -521,7 +568,7 @@ export const merchantApi = {
           };
         });
       }
-      if (code !== 'MC-101') {
+      if (remote.items.length > 0 || code !== 'MC-101') {
         return [];
       }
     }
@@ -1006,6 +1053,102 @@ export const merchantApi = {
     }
   },
 
+  async submitStockManageRequest(
+    productId: string,
+    payload: {
+      operationType?: 'ADJUST' | 'RESTOCK' | 'RETURN';
+      requestedQty?: number;
+      variantId?: string;
+      variantSku?: string;
+      color?: string;
+      size?: string;
+      destination?: string;
+      carrier?: string;
+      trackingRef?: string;
+      note?: string;
+      newVariants?: Array<any>;
+      adjustments?: Array<any>;
+      reason?: string;
+    }
+  ): Promise<{ ok: boolean; data?: any; error?: string }> {
+    const session = typeof window !== 'undefined' ? getActiveMerchantSession() : null;
+    const code = session?.merchantCode || 'MC-101';
+    try {
+      const res = await fetchWithTimeout(
+        `${API_BASE}/inventory/products/${encodeURIComponent(productId)}/stock-manage-requests`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-merchant-code': code,
+            ...getAuthHeader(),
+          },
+          body: JSON.stringify({
+            merchantCode: code,
+            ...payload,
+          }),
+        },
+        15000
+      );
+      if (!res.ok) {
+        let errMessage = `HTTP ${res.status}`;
+        try {
+          const errData = await res.json();
+          if (errData?.message) {
+            errMessage = Array.isArray(errData.message) ? errData.message.join(', ') : errData.message;
+          }
+        } catch {}
+        return { ok: false, error: errMessage };
+      }
+      const data = await res.json();
+      return { ok: true, data };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Network request failed' };
+    }
+  },
+
+  async getStockManageRequests(merchantIdentifier?: string): Promise<any[] | null> {
+    const session = typeof window !== 'undefined' ? getActiveMerchantSession() : null;
+    const identifier = merchantIdentifier || session?.merchantCode || '';
+    const query = identifier ? `?merchantCode=${encodeURIComponent(identifier)}` : '';
+    return safeFetch<any[]>(`/inventory/stock-manage-requests${query}`);
+  },
+
+  async cancelStockManageRequest(
+    requestId: string
+  ): Promise<{ ok: boolean; error?: string }> {
+    const session = typeof window !== 'undefined' ? getActiveMerchantSession() : null;
+    const code = session?.merchantCode || 'MC-101';
+    try {
+      const res = await fetchWithTimeout(
+        `${API_BASE}/inventory/stock-manage-requests/${encodeURIComponent(requestId)}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'x-merchant-code': code,
+            ...getAuthHeader(),
+          },
+        },
+        10000
+      );
+      if (!res.ok) {
+        let errMessage = `HTTP ${res.status}`;
+        try {
+          const errData = await res.json();
+          if (errData?.message) {
+            errMessage = Array.isArray(errData.message)
+              ? errData.message.join(', ')
+              : errData.message;
+          }
+        } catch {}
+        return { ok: false, error: errMessage };
+      }
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Network request failed' };
+    }
+  },
+
   async deleteProduct(productId: string): Promise<{ ok: boolean; error?: string }> {
     const session = typeof window !== 'undefined' ? getActiveMerchantSession() : null;
     const code = session?.merchantCode || 'MC-101';
@@ -1058,20 +1201,22 @@ export const merchantApi = {
       advancePaymentMethod: order.advancePaymentMethod,
       advanceTrxId: order.advanceTrxId,
       timeline: order.timeline,
-      allowBackorder: true,
+      allowBackorder: false,
       items: (order.lineItems && order.lineItems.length > 0)
         ? order.lineItems.map((li) => ({
-            variantId: li.id,
-            productId: li.id,
+            variantId: li.variantId || (li.id !== li.productId ? li.id : undefined),
+            productId: li.productId || order.productId || li.id,
             sku: li.sku,
             title: li.title,
             productTitle: li.title,
             variantLabel: li.variant,
+            color: li.color,
+            size: li.size,
             quantity: li.quantity || 1,
             unitPrice: Number(li.price) || 0,
           }))
         : [{
-            variantId: order.productId,
+            variantId: undefined,
             productId: order.productId,
             sku: '',
             title: order.items || 'Product',

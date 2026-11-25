@@ -28,4 +28,9 @@ export const workerConfig = {
   storage: {
     invoicesDir: process.env.INVOICES_DIR || './uploads/invoices',
   },
+  pdf: {
+    concurrency: Number(process.env.PDF_WORKER_CONCURRENCY) || 3,
+    maxJobsPerBrowser: Number(process.env.PDF_MAX_JOBS_PER_BROWSER) || 200,
+    idleTimeoutMs: Number(process.env.PDF_BROWSER_IDLE_TIMEOUT_MS) || 5 * 60 * 1000,
+  },
 };

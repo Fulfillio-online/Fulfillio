@@ -25,6 +25,7 @@ export const INITIAL_MERCHANT_PROFILE: MerchantProfileData = {
   email: '',
   phone: '',
   location: '',
+  personalAddress: '',
   status: 'Pending',
   verified: false,
   payoutMethod: '',

@@ -9,6 +9,7 @@ export default function MerchantProductsPage() {
     products,
     orders,
     stockRequests,
+    stockManageRequests,
     profile,
     deleteProduct,
     addProducts,
@@ -18,6 +19,7 @@ export default function MerchantProductsPage() {
     bulkDeleteProducts,
     requestStockAdd,
     requestStockOperation,
+    manageProductVariantsAndStock,
     approveStockRequest,
     cancelStockRequest,
     showToast,
@@ -28,6 +30,7 @@ export default function MerchantProductsPage() {
       products={products}
       orders={orders}
       stockRequests={stockRequests}
+      stockManageRequests={stockManageRequests}
       merchantCode={profile.merchantCode}
       storeName={profile.storeName}
       onDeleteProduct={deleteProduct}
@@ -38,6 +41,7 @@ export default function MerchantProductsPage() {
       onBulkDelete={bulkDeleteProducts}
       onRequestStockAdd={requestStockAdd}
       onRequestStockOperation={requestStockOperation}
+      onManageVariantsAndStock={manageProductVariantsAndStock}
       onApproveStockRequest={approveStockRequest}
       onCancelStockRequest={cancelStockRequest}
       onTriggerToast={showToast}

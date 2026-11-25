@@ -162,6 +162,7 @@ model Merchant {
   email             String         @unique
   phone             String?
   location          String?        @default("Dhaka, Bangladesh")
+  personalAddress   String?
   logoUrl           String?
   status            MerchantStatus @default(PENDING)
   payoutAccount     Json?          @db.JsonB

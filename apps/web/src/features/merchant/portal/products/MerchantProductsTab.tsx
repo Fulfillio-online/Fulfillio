@@ -12,8 +12,10 @@ import {
   ProductViewMode,
   ProductStats,
   StockRequestItem,
+  StockManageRequestRecord,
   StockRequestType,
   ManageStockMode,
+  ManageVariantsAndStockPayload,
 } from './types';
 import { SubmitStockRequestPayload } from './modals/ManageStockModal';
 import { ProductStatsGrid } from './components/ProductStatsGrid';
@@ -68,6 +70,7 @@ export interface MerchantProductsTabProps {
   products: MerchantProductItem[];
   orders?: MerchantOrderItem[];
   stockRequests?: StockRequestItem[];
+  stockManageRequests?: StockManageRequestRecord[];
   merchantCode: string;
   storeName: string;
   onDeleteProduct: (id: string) => void;
@@ -77,7 +80,12 @@ export interface MerchantProductsTabProps {
   onBulkUpdateStatus: (ids: string[], status: 'PUBLISHED' | 'DRAFT') => void;
   onBulkDelete: (ids: string[]) => void;
   onRequestStockAdd?: (productId: string, qty: number, note?: string) => void;
-  onRequestStockOperation?: (payload: SubmitStockRequestPayload) => void;
+  onRequestStockOperation?: (
+    payload: SubmitStockRequestPayload
+  ) => void | Promise<{ ok: boolean; error?: string } | void>;
+  onManageVariantsAndStock?: (
+    payload: ManageVariantsAndStockPayload
+  ) => Promise<{ ok: boolean; error?: string }>;
   onApproveStockRequest?: (requestId: string) => void;
   onCancelStockRequest?: (requestId: string) => void;
   onTriggerToast: (msg: string) => void;
@@ -87,6 +95,7 @@ export function MerchantProductsTab({
   products,
   orders = [],
   stockRequests = [],
+  stockManageRequests: propStockManageRequests,
   merchantCode,
   storeName,
   onDeleteProduct,
@@ -97,11 +106,23 @@ export function MerchantProductsTab({
   onBulkDelete,
   onRequestStockAdd,
   onRequestStockOperation,
+  onManageVariantsAndStock,
   onApproveStockRequest,
   onCancelStockRequest,
   onTriggerToast,
 }: MerchantProductsTabProps) {
   const router = useRouter();
+  const {
+    requestEditAccess,
+    cancelPendingEdit,
+    manageProductVariantsAndStock: ctxManageStock,
+    requestStockOperation: ctxRequestStockOperation,
+    cancelStockManageRequest: ctxCancelManageRequest,
+    stockManageRequests: ctxStockManageRequests,
+  } = useMerchant();
+  const effectiveManageStock = onManageVariantsAndStock || ctxManageStock;
+  const effectiveRequestStockOperation = onRequestStockOperation || ctxRequestStockOperation;
+  const stockManageRequests = propStockManageRequests ?? ctxStockManageRequests ?? [];
 
   // Filters & State
   const [activeTab, setActiveTab] = useState<ProductFilterTab>('ALL');
@@ -147,9 +168,6 @@ export function MerchantProductsTab({
 
   const {
     categories: storeCategories = [],
-    requestEditAccess,
-    cancelPendingEdit,
-    manageProductVariantsAndStock,
   } = useMerchant();
 
   // Category options extraction
@@ -219,8 +237,9 @@ export function MerchantProductsTab({
       draft: draftCount,
       rejected: rejectedCount,
       outOfStock: outOfStockCount,
+      stockRequests: stockRequests.length + stockManageRequests.length,
     };
-  }, [products]);
+  }, [products, stockRequests, stockManageRequests]);
 
   // Filtered & Sorted Product List
   const filteredProducts = useMemo(() => {
@@ -411,8 +430,10 @@ export function MerchantProductsTab({
         {activeTab === 'STOCK_REQUESTS' ? (
           <StockRequestsTable
             requests={stockRequests}
+            stockManageRequests={stockManageRequests}
             onApproveRequest={(id) => onApproveStockRequest?.(id)}
             onCancelRequest={(id) => onCancelStockRequest?.(id)}
+            onCancelManageRequest={ctxCancelManageRequest}
           />
         ) : (
           <>
@@ -611,13 +632,12 @@ export function MerchantProductsTab({
         products={products}
         initialMode={stockModalInitialMode}
         onClose={() => setIsStockModalOpen(false)}
-        onManageVariantsAndStock={manageProductVariantsAndStock}
+        onManageVariantsAndStock={effectiveManageStock}
         onSubmitRequest={(payload) => {
-          if (onRequestStockOperation) {
-            onRequestStockOperation(payload);
-          } else {
-            onRequestStockAdd?.(payload.productId, payload.requestedQty, payload.note);
+          if (effectiveRequestStockOperation) {
+            return effectiveRequestStockOperation(payload);
           }
+          onRequestStockAdd?.(payload.productId, payload.requestedQty, payload.note);
         }}
       />
 

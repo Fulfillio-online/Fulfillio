@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Layers,
   Sparkles,
@@ -13,9 +13,63 @@ import {
   Check,
   X,
 } from 'lucide-react';
-import { ResellerMemo } from '../../types';
+import { MerchantProfileData, ResellerMemo } from '../../types';
+
+interface PaperSizeSpec {
+  id: string;
+  label: string;
+  shortLabel: string;
+  dimensions: string;
+  previewClass: string;
+  pageCss: string;
+  bodyWidthCss: string;
+}
+
+const PAPER_SIZE_CONFIG: Record<string, PaperSizeSpec> = {
+  THERMAL_4X6: {
+    id: 'THERMAL_4X6',
+    label: '4x6 Inch Thermal Sticker',
+    shortLabel: '4x6 Thermal',
+    dimensions: '101.6 × 152.4 mm',
+    previewClass: 'max-w-[340px] min-h-[440px] p-5 sm:p-6',
+    pageCss: '4in 6in',
+    bodyWidthCss: '4in',
+  },
+  POS_80MM: {
+    id: 'POS_80MM',
+    label: '80mm POS Slip',
+    shortLabel: '80mm POS',
+    dimensions: '80 × auto mm',
+    previewClass: 'max-w-[250px] p-3.5 text-[11px]',
+    pageCss: '80mm auto',
+    bodyWidthCss: '76mm',
+  },
+  A5: {
+    id: 'A5',
+    label: 'A5 Invoice Slip',
+    shortLabel: 'A5',
+    dimensions: '148 × 210 mm',
+    previewClass: 'max-w-[440px] min-h-[540px] p-6 sm:p-7',
+    pageCss: 'A5',
+    bodyWidthCss: '138mm',
+  },
+  A4: {
+    id: 'A4',
+    label: 'A4 Full Invoice',
+    shortLabel: 'A4',
+    dimensions: '210 × 297 mm',
+    previewClass: 'max-w-[560px] min-h-[680px] p-7 sm:p-9',
+    pageCss: 'A4',
+    bodyWidthCss: '190mm',
+  },
+};
+
+function getPaperSpec(size?: string): PaperSizeSpec {
+  return PAPER_SIZE_CONFIG[size || 'THERMAL_4X6'] || PAPER_SIZE_CONFIG.THERMAL_4X6;
+}
 
 interface MerchantMemoDesignerTabProps {
+  profile?: MerchantProfileData;
   memoList: ResellerMemo[];
   onSaveMemo: (memo: ResellerMemo) => void;
   onSetDefaultMemo: (id: string) => void;
@@ -24,23 +78,129 @@ interface MerchantMemoDesignerTabProps {
 }
 
 export function MerchantMemoDesignerTab({
+  profile,
   memoList,
   onSaveMemo,
   onSetDefaultMemo,
   onDeleteMemo,
   onTriggerToast,
 }: MerchantMemoDesignerTabProps) {
-  const [designerName, setDesignerName] = useState('Festive Season Branded Slip');
-  const [resellerStoreName, setResellerStoreName] = useState('URBAN THREADS OFFICIAL');
-  const [resellerPhone, setResellerPhone] = useState('+880 1711-234567');
-  const [resellerAddress, setResellerAddress] = useState('Banani, Dhaka');
+  const defaultAddress = profile?.personalAddress?.trim() || profile?.location?.trim() || '';
+
+  const [designerName, setDesignerName] = useState('Default Branded Slip');
+  const [resellerStoreName, setResellerStoreName] = useState(profile?.storeName || '');
+  const [resellerPhone, setResellerPhone] = useState(profile?.phone || '');
+  const [resellerAddress, setResellerAddress] = useState(defaultAddress);
   const [resellerNote, setResellerNote] = useState('Thank you for shopping! Return within 7 days with invoice.');
-  const [resellerLogo, setResellerLogo] = useState<string>('');
+  const [resellerLogo, setResellerLogo] = useState<string>(profile?.logoUrl || '');
   const [paperSize, setPaperSize] = useState('THERMAL_4X6');
   const [memoSavedAlert, setMemoSavedAlert] = useState(false);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
+  // Track whether user manually edited fields so async profile hydration pre-fills untouched fields
+  const dirtyRef = useRef({
+    storeName: false,
+    phone: false,
+    address: false,
+    logo: false,
+  });
+
+  useEffect(() => {
+    if (!profile) return;
+    if (!dirtyRef.current.storeName && profile.storeName) {
+      setResellerStoreName(profile.storeName);
+    }
+    if (!dirtyRef.current.phone && profile.phone) {
+      setResellerPhone(profile.phone);
+    }
+    const addr = profile.personalAddress?.trim() || profile.location?.trim() || '';
+    if (!dirtyRef.current.address && addr) {
+      setResellerAddress(addr);
+    }
+    if (!dirtyRef.current.logo && profile.logoUrl) {
+      setResellerLogo(profile.logoUrl);
+    }
+  }, [profile]);
+
   const logoInputRef = useRef<HTMLInputElement>(null);
+  const currentSpec = getPaperSpec(paperSize);
+
+  const handlePrintMemo = (memoData: {
+    storeName: string;
+    phone: string;
+    address: string;
+    note: string;
+    logoUrl?: string;
+    paperSize: string;
+    code?: string;
+  }) => {
+    const spec = getPaperSpec(memoData.paperSize);
+    if (typeof window === 'undefined') return;
+    const printWin = window.open('', '_blank', 'width=720,height=840');
+    if (!printWin) {
+      onTriggerToast(`Popup blocked — allow popups to print ${spec.shortLabel} slip.`);
+      return;
+    }
+    const safeHtml = (val: string) =>
+      String(val || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    printWin.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <title>Memo Print Preview - ${safeHtml(memoData.code || spec.shortLabel)}</title>
+  <style>
+    @page { size: ${spec.pageCss}; margin: 4mm; }
+    * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
+    body { margin: 0; padding: 12px; display: flex; justify-content: center; background: #f8fafc; }
+    .slip {
+      width: ${spec.bodyWidthCss};
+      background: #fff;
+      color: #0f172a;
+      border: 1px dashed #cbd5e1;
+      padding: ${memoData.paperSize === 'POS_80MM' ? '10px' : '18px'};
+    }
+    .center { text-align: center; }
+    .brand { color: #4f46e5; font-weight: 900; font-size: ${memoData.paperSize === 'A4' ? '20px' : '15px'}; text-transform: uppercase; margin: 4px 0; }
+    .muted { color: #64748b; font-size: 11px; margin: 2px 0; }
+    hr { border: none; border-top: 1px solid #e2e8f0; margin: 10px 0; }
+    .row { display: flex; justify-content: space-between; align-items: flex-start; font-size: 12px; }
+    .cod { background: #f1f5f9; border-radius: 8px; padding: 10px; display: flex; justify-content: space-between; font-weight: 800; margin-top: 10px; font-size: 13px; }
+    .note { font-size: 11px; font-style: italic; color: #64748b; text-align: center; margin-top: 12px; }
+    @media print { body { background: #fff; padding: 0; } .slip { border: none; } }
+  </style>
+</head>
+<body>
+  <div class="slip">
+    <div class="center">
+      ${memoData.logoUrl ? `<img src="${memoData.logoUrl}" alt="Logo" style="max-height:48px;max-width:160px;object-fit:contain;margin-bottom:6px;" />` : ''}
+      <div class="brand">${safeHtml(memoData.storeName || 'STORE NAME')}</div>
+      <div class="muted">${safeHtml(memoData.phone)}</div>
+      <div class="muted">Return: ${safeHtml(memoData.address)}</div>
+    </div>
+    <hr />
+    <div class="row">
+      <div><strong>Customer: Tariqul Islam</strong><div class="muted">Banani Block-D, Dhaka</div></div>
+      <strong>#ORD-9824</strong>
+    </div>
+    <hr />
+    <div class="row">
+      <span>Heavyweight Hoodie (XL) x 1</span>
+      <strong>৳ 3,450</strong>
+    </div>
+    <div class="cod">
+      <span>Cash on Delivery (COD):</span>
+      <span>৳ 3,450</span>
+    </div>
+    ${memoData.note ? `<div class="note">"${safeHtml(memoData.note)}"</div>` : ''}
+  </div>
+  <script>window.onload = function() { window.print(); };</script>
+</body>
+</html>`);
+    printWin.document.close();
+    onTriggerToast(`Opened ${spec.shortLabel} (${spec.dimensions}) print preview!`);
+  };
 
   const handleCopyCode = (code: string) => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -159,8 +319,11 @@ export function MerchantMemoDesignerTab({
                 <input
                   type="text"
                   value={resellerStoreName}
-                  onChange={(e) => setResellerStoreName(e.target.value)}
-                  placeholder="e.g. URBAN THREADS OFFICIAL"
+                  onChange={(e) => {
+                    dirtyRef.current.storeName = true;
+                    setResellerStoreName(e.target.value);
+                  }}
+                  placeholder={profile?.storeName || 'e.g. Your Store Name'}
                   required
                   className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-sm text-navy-900 dark:text-white focus:outline-none focus:border-indigo-500"
                 />
@@ -175,8 +338,11 @@ export function MerchantMemoDesignerTab({
                 <input
                   type="text"
                   value={resellerPhone}
-                  onChange={(e) => setResellerPhone(e.target.value)}
-                  placeholder="+880 1711-234567"
+                  onChange={(e) => {
+                    dirtyRef.current.phone = true;
+                    setResellerPhone(e.target.value);
+                  }}
+                  placeholder={profile?.phone || '+880 17XX-XXXXXX'}
                   required
                   className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-sm text-navy-900 dark:text-white focus:outline-none focus:border-indigo-500"
                 />
@@ -191,8 +357,10 @@ export function MerchantMemoDesignerTab({
                   onChange={(e) => setPaperSize(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-sm text-navy-900 dark:text-white focus:outline-none focus:border-indigo-500"
                 >
-                  <option value="THERMAL_4X6">4x6 Inch Thermal Sticker</option>
-                  <option value="POS_80MM">80mm POS Slip</option>
+                  <option value="THERMAL_4X6">4x6 Inch Thermal Sticker (101.6 × 152.4 mm)</option>
+                  <option value="POS_80MM">80mm POS Receipt Slip (80 mm)</option>
+                  <option value="A5">A5 Invoice Slip (148 × 210 mm)</option>
+                  <option value="A4">A4 Full Invoice (210 × 297 mm)</option>
                 </select>
               </div>
             </div>
@@ -204,8 +372,11 @@ export function MerchantMemoDesignerTab({
               <input
                 type="text"
                 value={resellerAddress}
-                onChange={(e) => setResellerAddress(e.target.value)}
-                placeholder="e.g. Banani, Dhaka"
+                onChange={(e) => {
+                  dirtyRef.current.address = true;
+                  setResellerAddress(e.target.value);
+                }}
+                placeholder={defaultAddress || 'Enter return / shop address'}
                 required
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-lg text-sm text-navy-900 dark:text-white focus:outline-none focus:border-indigo-500"
               />
@@ -302,34 +473,48 @@ export function MerchantMemoDesignerTab({
           </form>
         </div>
 
-        {/* Live 4x6 Thermal Slip Preview matching Screenshot_35.png */}
+        {/* Live Slip Preview scaled to selected Paper Size */}
         <div className="lg:col-span-6 space-y-4">
           <div className="p-4 sm:p-6 rounded-2xl bg-white dark:bg-navy-900 border border-slate-200/80 dark:border-white/10 shadow-xs space-y-4 shadow-sm">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-white/10 pb-3">
               <div>
-                <h3 className="font-bold text-base text-navy-900 dark:text-white">
-                  Thermal 4x6 Slip Real Preview
-                </h3>
-                <p className="text-xs text-slate-400">
-                  Exact layout sent to Zebra/TSC thermal label printer at packing station.
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-bold text-base text-navy-900 dark:text-white">
+                    {currentSpec.shortLabel} Real Preview
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-indigo-500/10 text-indigo-500 dark:text-indigo-300 border border-indigo-500/20">
+                    {currentSpec.dimensions}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Exact {currentSpec.label} layout used for printing at the packing station.
                 </p>
               </div>
 
               <button
                 type="button"
-                onClick={() => {
-                  onTriggerToast('Triggered 4x6 thermal test print preview!');
-                }}
-                className="px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shadow-sm shrink-0"
+                onClick={() =>
+                  handlePrintMemo({
+                    storeName: resellerStoreName,
+                    phone: resellerPhone,
+                    address: resellerAddress,
+                    note: resellerNote,
+                    logoUrl: resellerLogo,
+                    paperSize,
+                  })
+                }
+                className="px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shadow-sm shrink-0 cursor-pointer"
               >
                 <Printer className="h-3.5 w-3.5" />
-                <span>Print 4x6 Test</span>
+                <span>Print {currentSpec.shortLabel} Test</span>
               </button>
             </div>
 
-            {/* Realistic 4x6 Thermal Label Simulation matching Screenshot_35.png */}
+            {/* Dynamic Paper Size Simulation */}
             <div className="overflow-x-auto py-2">
-              <div className="mx-auto w-full max-w-[340px] bg-white text-slate-800 p-5 sm:p-6 rounded-2xl shadow-xl font-sans border-2 border-dashed border-slate-300">
+              <div
+                className={`mx-auto w-full ${currentSpec.previewClass} bg-white text-slate-800 rounded-2xl shadow-xl font-sans border-2 border-dashed border-slate-300 transition-all duration-200 flex flex-col justify-between`}
+              >
                 {/* Header */}
                 <div className="text-center space-y-0.5">
                   {resellerLogo ? (
@@ -391,10 +576,17 @@ export function MerchantMemoDesignerTab({
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    onTriggerToast('Triggered 4x6 thermal test print preview!');
-                  }}
-                  className="px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+                  onClick={() =>
+                    handlePrintMemo({
+                      storeName: resellerStoreName,
+                      phone: resellerPhone,
+                      address: resellerAddress,
+                      note: resellerNote,
+                      logoUrl: resellerLogo,
+                      paperSize,
+                    })
+                  }
+                  className="px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
                 >
                   <Printer className="h-3.5 w-3.5" />
                   <span>Print Preview Test</span>
@@ -418,7 +610,9 @@ export function MerchantMemoDesignerTab({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {memoList.map((memo) => (
+          {memoList.map((memo) => {
+            const memoSpec = getPaperSpec(memo.paperSize);
+            return (
             <div
               key={memo.id}
               className="p-5 rounded-2xl bg-white dark:bg-navy-900 border border-slate-200/80 dark:border-white/10 shadow-xs space-y-4 relative group hover:border-slate-200 dark:border-white/10 transition-colors shadow-sm flex flex-col justify-between"
@@ -426,9 +620,12 @@ export function MerchantMemoDesignerTab({
               {/* Card Header */}
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-mono text-xs font-bold text-indigo-300 bg-slate-50 dark:bg-navy-950 px-2 py-0.5 rounded border border-slate-200/80 dark:border-white/10 inline-block">
                       {memo.code}
+                    </span>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-500/10 text-indigo-500 dark:text-indigo-300 border border-indigo-500/20">
+                      {memoSpec.shortLabel}
                     </span>
                     {memo.isDefault && (
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
@@ -547,10 +744,18 @@ export function MerchantMemoDesignerTab({
 
                   <button
                     type="button"
-                    onClick={() => {
-                      onTriggerToast(`Printed 4x6 test slip for ${memo.code}`);
-                    }}
-                    className="px-2.5 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-semibold flex items-center gap-1 transition-colors shadow-sm"
+                    onClick={() =>
+                      handlePrintMemo({
+                        storeName: memo.resellerName,
+                        phone: memo.phone,
+                        address: memo.address,
+                        note: memo.note,
+                        logoUrl: memo.logoUrl,
+                        paperSize: memo.paperSize,
+                        code: memo.code,
+                      })
+                    }
+                    className="px-2.5 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-semibold flex items-center gap-1 transition-colors shadow-sm cursor-pointer"
                   >
                     <Printer className="h-3.5 w-3.5" />
                     <span>Print Test</span>
@@ -558,7 +763,8 @@ export function MerchantMemoDesignerTab({
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

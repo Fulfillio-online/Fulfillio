@@ -146,17 +146,39 @@ export function ProductOrderListSection({
     };
   }, []);
 
-  // Compute matched variant details
+  // Compute matched variant details (never fall back across colors)
   const matchedVariant = useMemo(() => {
-    if (product.variantsList && product.variantsList.length > 0) {
-      const match = product.variantsList.find(
-        (v) =>
-          (v.color?.toLowerCase() === selectedColor.toLowerCase() || !v.color) &&
-          (v.size?.toLowerCase() === selectedSize.toLowerCase() || !v.size)
+    if (!product.variantsList || product.variantsList.length === 0) return null;
+    const isGenericSize = (s?: string) =>
+      ['', 'standard', 'free size', 'free', 'default', 'one size'].includes(
+        (s || '').trim().toLowerCase(),
       );
-      if (match) return match;
-    }
-    return null;
+    const targetColor = selectedColor.trim().toLowerCase();
+    const targetSize = selectedSize.trim().toLowerCase();
+
+    return (
+      product.variantsList.find(
+        (v) =>
+          (v.color || '').trim().toLowerCase() === targetColor &&
+          (v.size || '').trim().toLowerCase() === targetSize,
+      ) ||
+      product.variantsList.find(
+        (v) =>
+          (v.color || '').trim().toLowerCase() === targetColor &&
+          isGenericSize(targetSize) &&
+          isGenericSize(v.size),
+      ) ||
+      product.variantsList.find(
+        (v) => (v.color || '').trim().toLowerCase() === targetColor,
+      ) ||
+      (isGenericSize(targetColor)
+        ? product.variantsList.find(
+            (v) =>
+              !v.color &&
+              ((v.size || '').trim().toLowerCase() === targetSize || isGenericSize(v.size)),
+          ) || product.variantsList[0]
+        : null)
+    );
   }, [product, selectedColor, selectedSize]);
 
   const currentVariantSku = useMemo(() => {
@@ -166,7 +188,7 @@ export function ProductOrderListSection({
     return `${product.sku}-${cCode}-${sCode}`;
   }, [product.sku, matchedVariant, selectedColor, selectedSize]);
 
-  const maxStock = matchedVariant?.stock ?? product.stock ?? 0;
+  const maxStock = matchedVariant ? matchedVariant.stock : (product.variantsList?.length ? 0 : product.stock ?? 0);
   const isStockStored =
     product.status !== 'DRAFT' &&
     product.status !== 'PENDING_APPROVAL' &&
@@ -194,6 +216,7 @@ export function ProductOrderListSection({
 
     const updated = addToOrderCart({
       productId: product.id,
+      variantId: matchedVariant?.id,
       title: product.title,
       imageUrl: itemImage,
       variantLabel: `${selectedColor} · ${selectedSize}`,
@@ -648,10 +671,14 @@ export function ProductOrderListSection({
         initialMemoCode={selectedMemoCode}
         baseHandlingFee={merchantCtx.profile?.baseHandlingFee ?? 45}
         onUpdateItemPrice={handleUpdatePrice}
-        onOrderPlaced={(newOrder, itemsToDeduct) => {
-          effectiveCreateOrder(newOrder, itemsToDeduct);
+        onOrderPlaced={async (newOrder, itemsToDeduct) => {
+          const res = await (effectiveCreateOrder as any)(newOrder, itemsToDeduct);
+          if (res && typeof res === 'object' && 'ok' in res && !res.ok) {
+            return res;
+          }
           clearOrderCart();
           setCartItems([]);
+          return res;
         }}
         onTriggerToast={effectiveToast || (() => {})}
       />

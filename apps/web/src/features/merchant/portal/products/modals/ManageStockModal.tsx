@@ -13,7 +13,10 @@ import {
   SlidersHorizontal,
   Check,
   Loader2,
+  Upload,
+  Image as ImageIcon,
 } from 'lucide-react';
+import { compressImage } from '../utils/imageCompressor';
 import { MerchantProductItem } from '../../types';
 import {
   ManageStockMode,
@@ -44,7 +47,9 @@ interface ManageStockModalProps {
   products?: MerchantProductItem[];
   initialMode?: ManageStockMode;
   onClose: () => void;
-  onSubmitRequest: (payload: SubmitStockRequestPayload) => void;
+  onSubmitRequest: (
+    payload: SubmitStockRequestPayload
+  ) => void | Promise<{ ok: boolean; error?: string } | void>;
   onManageVariantsAndStock?: (
     payload: ManageVariantsAndStockPayload
   ) => Promise<{ ok: boolean; error?: string }>;
@@ -67,6 +72,7 @@ const COURIER_OPTIONS = [
 ];
 
 const QUICK_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', 'Free Size'];
+const EMPTY_PRODUCTS: MerchantProductItem[] = [];
 
 interface StagedNewVariant extends NewVariantStockInput {
   tempId: string;
@@ -76,7 +82,7 @@ interface StagedNewVariant extends NewVariantStockInput {
 export function ManageStockModal({
   isOpen,
   product,
-  products = [],
+  products = EMPTY_PRODUCTS,
   initialMode = 'ADJUST',
   onClose,
   onSubmitRequest,
@@ -94,6 +100,7 @@ export function ManageStockModal({
   const [showAddVariantForm, setShowAddVariantForm] = useState(false);
   const [newColorName, setNewColorName] = useState('');
   const [newColorHex, setNewColorHex] = useState('#111827');
+  const [newVariantImageUrl, setNewVariantImageUrl] = useState('');
   const [selectedQuickSizes, setSelectedQuickSizes] = useState<string[]>([]);
   const [perSizeQtys, setPerSizeQtys] = useState<Record<string, number>>({});
   const [customSizeInput, setCustomSizeInput] = useState('');
@@ -119,10 +126,14 @@ export function ManageStockModal({
   const [destination, setDestination] = useState('Dhanmondi Branch, Road 27, Dhaka');
   const [recipientContact, setRecipientContact] = useState('01711-000000 (Outlet Manager)');
   const [returnNote, setReturnNote] = useState('');
+  const [requestError, setRequestError] = useState<string | null>(null);
+  const [isSubmittingOp, setIsSubmittingOp] = useState(false);
+
+  const firstProduct = products.length > 0 ? products[0] : null;
 
   useEffect(() => {
     if (isOpen) {
-      const target = product || (products.length > 0 ? products[0] : null);
+      const target = product || firstProduct;
       setActiveProduct(target);
       setActiveMode(initialMode || 'ADJUST');
       setStagedNewVariants([]);
@@ -130,14 +141,18 @@ export function ManageStockModal({
       setShowAddVariantForm(false);
       setNewColorName('');
       setNewColorHex('#111827');
+      setNewVariantImageUrl('');
       setSelectedQuickSizes([]);
       setPerSizeQtys({});
       setCustomSizeInput('');
       setNewVariantQty(10);
       setAdjustReason('');
       setAdjustError(null);
+      setRequestError(null);
+      setIsSubmittingOp(false);
     }
-  }, [isOpen, initialMode, product, products]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, initialMode, product?.id, firstProduct?.id]);
 
   // Initialize adjustedQtys whenever activeProduct changes
   useEffect(() => {
@@ -224,26 +239,42 @@ export function ManageStockModal({
 
   const matchedVariant = useMemo(() => {
     if (!activeProduct?.variantsList || activeProduct.variantsList.length === 0) return null;
+    const isGenericSize = (s?: string) =>
+      ['', 'standard', 'free size', 'free', 'default', 'one size'].includes(
+        (s || '').trim().toLowerCase()
+      );
+    const tColor = selectedColor.trim().toLowerCase();
+    const tSize = selectedSize.trim().toLowerCase();
     return (
       activeProduct.variantsList.find((v) => {
-        const matchColor =
-          !selectedColor || (v.color || '').toLowerCase() === selectedColor.toLowerCase();
-        const matchSize =
-          !selectedSize || (v.size || '').toLowerCase() === selectedSize.toLowerCase();
-        return matchColor && matchSize;
-      }) || null
+        const vColor = (v.color || '').trim().toLowerCase();
+        const vSize = (v.size || v.attributeValue || '').trim().toLowerCase();
+        return (!tColor || vColor === tColor) && (!tSize || vSize === tSize);
+      }) ||
+      activeProduct.variantsList.find((v) => {
+        const vColor = (v.color || '').trim().toLowerCase();
+        const vSize = (v.size || v.attributeValue || '').trim().toLowerCase();
+        return (!tColor || vColor === tColor) && isGenericSize(tSize) && isGenericSize(vSize);
+      }) ||
+      (tColor
+        ? activeProduct.variantsList.find(
+            (v) => (v.color || '').trim().toLowerCase() === tColor
+          ) || null
+        : null)
     );
   }, [activeProduct, selectedColor, selectedSize]);
 
   const currentVariantStock = useMemo(() => {
     if (!activeProduct) return 0;
     if (matchedVariant !== null) return matchedVariant.stock;
-    return activeProduct.stock;
+    return activeProduct.variantsList && activeProduct.variantsList.length > 0
+      ? 0
+      : activeProduct.stock;
   }, [activeProduct, matchedVariant]);
 
   useEffect(() => {
     if (currentVariantStock > 0) {
-      setReturnQty((prev) => Math.min(prev, currentVariantStock));
+      setReturnQty((prev) => Math.min(prev > 0 ? prev : 1, currentVariantStock));
     } else {
       setReturnQty(0);
     }
@@ -323,6 +354,7 @@ export function ManageStockModal({
         hex: newColorHex || '#111827',
         size: sz || undefined,
         price: activeProduct.price,
+        imageUrl: newVariantImageUrl || undefined,
         stock: qty,
         previewSku: `${activeProduct.sku}-${varCode}`,
       });
@@ -334,6 +366,7 @@ export function ManageStockModal({
     activeProduct,
     newColorName,
     newColorHex,
+    newVariantImageUrl,
     activeChosenSizes,
     perSizeQtys,
     newVariantQty,
@@ -400,6 +433,7 @@ export function ManageStockModal({
     setShowAddVariantForm(true);
     setNewColorName(colorName);
     if (matchedColorObj?.hex) setNewColorHex(matchedColorObj.hex);
+    setNewVariantImageUrl(matchedColorObj?.imageUrl || '');
     setSelectedQuickSizes([]);
     setPerSizeQtys({});
     setCustomSizeInput('');
@@ -432,6 +466,7 @@ export function ManageStockModal({
       setSelectedQuickSizes([]);
       setPerSizeQtys({});
       setCustomSizeInput('');
+      setNewVariantImageUrl('');
       setShowAddVariantForm(false);
     }
 
@@ -480,6 +515,7 @@ export function ManageStockModal({
       hex: nv.hex,
       size: nv.size,
       price: nv.price,
+      imageUrl: nv.imageUrl,
       stock: Math.max(0, Math.round(Number(nv.stock) || 0)),
     }));
 
@@ -516,28 +552,47 @@ export function ManageStockModal({
     }
   };
 
-  const handleSubmitRequest = (e: React.FormEvent) => {
+  const handleSubmitRequest = async (e: React.FormEvent) => {
     e.preventDefault();
+    setRequestError(null);
 
     if (activeMode === 'RESTOCK') {
-      if (restockQty <= 0) return;
-      onSubmitRequest({
-        productId: activeProduct.id,
-        type: 'RESTOCK',
-        requestedQty: restockQty,
-        variantId: matchedVariant?.id,
-        variantSku: matchedVariant?.variantSku || activeProduct.sku,
-        color: selectedColor || undefined,
-        size: selectedSize || undefined,
-        carrier,
-        trackingRef: trackingRef.trim() || undefined,
-        note: restockNote.trim() || undefined,
-      });
+      if (restockQty <= 0) {
+        setRequestError('Restock quantity must be at least 1 unit.');
+        return;
+      }
+      setIsSubmittingOp(true);
+      try {
+        const res = await onSubmitRequest({
+          productId: activeProduct.id,
+          type: 'RESTOCK',
+          requestedQty: restockQty,
+          variantId: matchedVariant?.id,
+          variantSku: matchedVariant?.variantSku || activeProduct.sku,
+          color: selectedColor || undefined,
+          size: selectedSize || undefined,
+          carrier,
+          trackingRef: trackingRef.trim() || undefined,
+          note: restockNote.trim() || undefined,
+        });
+        if (res && typeof res === 'object' && 'ok' in res && !res.ok) {
+          setRequestError(res.error || 'Failed to submit inbound restock request.');
+          return;
+        }
+        onClose();
+      } finally {
+        setIsSubmittingOp(false);
+      }
     } else if (activeMode === 'RETURN') {
-      if (returnQty <= 0) return;
+      if (returnQty <= 0) {
+        setRequestError('Recall / Return quantity must be at least 1 unit.');
+        return;
+      }
       if (returnQty > currentVariantStock) {
-        alert(
-          `Cannot return more than available warehouse stock (${currentVariantStock} units) for ${selectedColor} / ${selectedSize}.`
+        setRequestError(
+          `Cannot recall more than available warehouse stock (${currentVariantStock} units) for ${
+            [selectedColor, selectedSize].filter(Boolean).join(' / ') || 'this product'
+          }.`
         );
         return;
       }
@@ -546,24 +601,32 @@ export function ManageStockModal({
           ? customReason.trim()
           : returnReason;
 
-      onSubmitRequest({
-        productId: activeProduct.id,
-        type: 'RETURN',
-        requestedQty: returnQty,
-        variantId: matchedVariant?.id,
-        variantSku: matchedVariant?.variantSku || activeProduct.sku,
-        color: selectedColor || undefined,
-        size: selectedSize || undefined,
-        reason: finalReason,
-        destination: `${destination.trim()}${
-          recipientContact.trim() ? ` (Contact: ${recipientContact.trim()})` : ''
-        }`,
-        note: returnNote.trim() || undefined,
-        trackingRef: `RET-${Date.now().toString().slice(-6)}`,
-      });
+      setIsSubmittingOp(true);
+      try {
+        const res = await onSubmitRequest({
+          productId: activeProduct.id,
+          type: 'RETURN',
+          requestedQty: returnQty,
+          variantId: matchedVariant?.id,
+          variantSku: matchedVariant?.variantSku || activeProduct.sku,
+          color: selectedColor || undefined,
+          size: selectedSize || undefined,
+          reason: finalReason,
+          destination: `${destination.trim()}${
+            recipientContact.trim() ? ` (Contact: ${recipientContact.trim()})` : ''
+          }`,
+          note: returnNote.trim() || undefined,
+          trackingRef: `RET-${Date.now().toString().slice(-6)}`,
+        });
+        if (res && typeof res === 'object' && 'ok' in res && !res.ok) {
+          setRequestError(res.error || 'Failed to submit product recall / return request.');
+          return;
+        }
+        onClose();
+      } finally {
+        setIsSubmittingOp(false);
+      }
     }
-
-    onClose();
   };
 
   const existingVariants = activeProduct.variantsList || [];
@@ -658,7 +721,10 @@ export function ManageStockModal({
 
           <button
             type="button"
-            onClick={() => setActiveMode('RETURN')}
+            onClick={() => {
+              setRequestError(null);
+              setActiveMode('RETURN');
+            }}
             className={`py-2 px-2.5 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
               activeMode === 'RETURN'
                 ? 'bg-white dark:bg-navy-800 text-amber-600 dark:text-amber-400 shadow-sm font-bold border border-amber-500/20'
@@ -666,7 +732,7 @@ export function ManageStockModal({
             }`}
           >
             <RotateCcw className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate">Return (-)</span>
+            <span className="truncate">Recall / Return (-)</span>
           </button>
         </div>
 
@@ -855,6 +921,7 @@ export function ManageStockModal({
                               onClick={() => {
                                 setNewColorName(c);
                                 if (matchedColorObj?.hex) setNewColorHex(matchedColorObj.hex);
+                                setNewVariantImageUrl(matchedColorObj?.imageUrl || '');
                               }}
                               className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-colors cursor-pointer flex items-center gap-1 ${
                                 newColorName.toLowerCase() === c.toLowerCase()
@@ -902,6 +969,61 @@ export function ManageStockModal({
                       onChange={(e) => setNewVariantQty(Math.max(0, Number(e.target.value) || 0))}
                       className="w-full px-3 py-1.5 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-bold font-mono text-navy-900 dark:text-white focus:outline-none focus:border-orange-500"
                     />
+                  </div>
+                </div>
+
+                {/* Color / Variant Image Upload */}
+                <div className="pt-2 border-t border-orange-200/70 dark:border-orange-500/20">
+                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Variant / Color Image (Optional)
+                  </label>
+                  <div className="flex items-center gap-3">
+                    {newVariantImageUrl ? (
+                      <div className="relative h-12 w-12 rounded-lg overflow-hidden border border-orange-300 dark:border-orange-500/40 bg-white shrink-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={newVariantImageUrl}
+                          alt="Variant preview"
+                          className="h-full w-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setNewVariantImageUrl('')}
+                          className="absolute top-0.5 right-0.5 p-0.5 rounded-full bg-rose-600 text-white hover:bg-rose-500"
+                          title="Remove image"
+                        >
+                          <X className="h-2.5 w-2.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="h-12 w-12 rounded-lg border border-dashed border-slate-300 dark:border-white/15 bg-white dark:bg-navy-900 flex items-center justify-center text-slate-400 shrink-0">
+                        <ImageIcon className="h-5 w-5 opacity-60" />
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-navy-900 hover:bg-slate-50 dark:hover:bg-navy-800 border border-slate-200 dark:border-white/10 text-xs font-semibold text-navy-900 dark:text-white cursor-pointer transition-colors">
+                        <Upload className="h-3.5 w-3.5 text-orange-500" />
+                        <span>{newVariantImageUrl ? 'Change Variant Photo' : 'Upload Variant Photo'}</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            try {
+                              const compressed = await compressImage(file);
+                              setNewVariantImageUrl(compressed);
+                            } catch {
+                              setAdjustError('Failed to process variant image.');
+                            }
+                          }}
+                        />
+                      </label>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+                        Upload a photo for this color/variant (auto-compressed for fast sync).
+                      </p>
+                    </div>
                   </div>
                 </div>
 
@@ -1269,7 +1391,16 @@ export function ManageStockModal({
                     key={nv.tempId}
                     className="flex items-center justify-between gap-3 px-3.5 py-2.5 bg-emerald-50/60 dark:bg-emerald-950/20"
                   >
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1 flex items-center gap-2.5">
+                      {nv.imageUrl && (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
+                          src={nv.imageUrl}
+                          alt={nv.color || 'Variant'}
+                          className="h-8 w-8 rounded-lg object-cover border border-emerald-300 dark:border-emerald-500/40 shrink-0"
+                        />
+                      )}
+                      <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[9px] font-bold uppercase tracking-wider">
                           New
@@ -1291,6 +1422,7 @@ export function ManageStockModal({
                       </div>
                       <div className="text-[10px] font-mono text-emerald-700/80 dark:text-emerald-400/80 mt-0.5 truncate">
                         {nv.previewSku}
+                      </div>
                       </div>
                     </div>
 
@@ -1744,22 +1876,29 @@ export function ManageStockModal({
                         <AlertCircle className="h-4 w-4 text-orange-600 dark:text-orange-400 shrink-0 mt-0.5" />
                         <div className="leading-relaxed">
                           <strong className="block font-semibold mb-0.5">
-                            Warehouse Dispatch &amp; Gate Pass Policy:
+                            Warehouse Recall &amp; Gate Pass Approval Policy:
                           </strong>
-                          When submitted, the warehouse is dispatched to pack{' '}
+                          This request to recall{' '}
                           <span className="font-bold text-orange-600 dark:text-orange-300">
                             {returnQty} units
                           </span>{' '}
                           of SKU{' '}
                           <strong className="font-mono">
                             {matchedVariant?.variantSku || activeProduct.sku}
-                          </strong>
-                          , issue an official <strong>Delivery Gate Pass</strong>, and dispatch to your specified address. Stock is deducted immediately.
+                          </strong>{' '}
+                          will be sent to the Warehouse Admin queue for approval. Live stock is deducted and an official <strong>Delivery Gate Pass</strong> is issued automatically once Admin approves.
                         </div>
                       </div>
                     </>
                   )}
                 </>
+              )}
+
+              {requestError && (
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs font-semibold flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{requestError}</span>
+                </div>
               )}
 
               <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-slate-200 dark:border-white/10">
@@ -1772,14 +1911,19 @@ export function ManageStockModal({
                 </button>
                 <button
                   type="submit"
-                  disabled={activeMode === 'RETURN' && currentVariantStock <= 0}
+                  disabled={isSubmittingOp || (activeMode === 'RETURN' && currentVariantStock <= 0)}
                   className={`px-5 py-2 rounded-lg text-white text-xs font-bold transition-all cursor-pointer shadow-md flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed ${
                     activeMode === 'RESTOCK'
                       ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/20'
                       : 'bg-orange-600 hover:bg-orange-500 shadow-orange-500/20'
                   }`}
                 >
-                  {activeMode === 'RESTOCK' ? (
+                  {isSubmittingOp ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span>Submitting...</span>
+                    </>
+                  ) : activeMode === 'RESTOCK' ? (
                     <>
                       <ArrowUpRight className="h-3.5 w-3.5" />
                       <span>Submit Restock for Admin Approval (+{restockQty})</span>
@@ -1787,7 +1931,7 @@ export function ManageStockModal({
                   ) : (
                     <>
                       <RotateCcw className="h-3.5 w-3.5" />
-                      <span>Submit Return Request ({returnQty} units)</span>
+                      <span>Submit Recall / Return for Approval (-{returnQty})</span>
                     </>
                   )}
                 </button>

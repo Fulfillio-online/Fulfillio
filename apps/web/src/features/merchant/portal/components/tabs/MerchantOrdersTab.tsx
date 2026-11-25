@@ -33,9 +33,18 @@ interface MerchantOrdersTabProps {
   memoList: ResellerMemo[];
   onCreateOrder: (
     order: MerchantOrderItem,
-    productIdOrItems?: string | { productId: string; qty: number }[],
+    productIdOrItems?:
+      | string
+      | {
+          productId: string;
+          qty: number;
+          variantId?: string;
+          variantSku?: string;
+          color?: string;
+          size?: string;
+        }[],
     qty?: number
-  ) => void;
+  ) => void | Promise<{ ok: boolean; error?: string } | void>;
   onCancelOrder: (orderId: string, reason?: string) => Promise<boolean> | void;
   onTriggerToast: (msg: string) => void;
 }

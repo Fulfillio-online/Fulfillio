@@ -30,6 +30,9 @@ export function MerchantDirectoryManager(_props: MerchantDirectoryManagerProps) 
   const pendingPayoutMerchants = merchants.filter(
     (m) => m.payoutAccount?.status === 'PENDING_REVIEW'
   );
+  const pendingKycMerchants = merchants.filter(
+    (m) => m.kycData?.verificationStatus === 'PENDING_REVIEW'
+  );
 
   return (
     <div className="space-y-6">
@@ -52,6 +55,19 @@ export function MerchantDirectoryManager(_props: MerchantDirectoryManagerProps) 
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            {pendingKycMerchants.length > 0 && (
+              <button
+                type="button"
+                onClick={() =>
+                  router.push(
+                    `/admin/merchants/${encodeURIComponent(pendingKycMerchants[0].id)}?tab=kyc`
+                  )
+                }
+                className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30 hover:bg-sky-500/25 transition-colors cursor-pointer"
+              >
+                {pendingKycMerchants.length} KYC Verification{pendingKycMerchants.length > 1 ? 's' : ''} Pending
+              </button>
+            )}
             {pendingPayoutMerchants.length > 0 && (
               <button
                 type="button"

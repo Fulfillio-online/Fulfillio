@@ -1,6 +1,6 @@
 import { Worker } from 'bullmq';
 import { workerConfig } from './config/worker.config';
-import { processPdfJob } from './processors/pdf.processor';
+import { closeSharedBrowser, processPdfJob } from './processors/pdf.processor';
 import { processCourierJob } from './processors/courier.processor';
 import { processWebhookJob } from './processors/webhook.processor';
 import { disconnectPrisma } from './db/prisma.client';
@@ -25,7 +25,7 @@ const pdfWorker = new Worker(
   },
   {
     connection: redisConnection,
-    concurrency: 5,
+    concurrency: workerConfig.pdf.concurrency,
   },
 );
 
@@ -86,6 +86,7 @@ async function shutdown(signal: string) {
       webhookWorker.close(),
       courierWorker.close(),
     ]);
+    await closeSharedBrowser();
     await disconnectPrisma();
     console.log('[Fulfillio Worker] All workers and DB connections closed cleanly.');
     process.exit(0);

@@ -28,6 +28,7 @@ import { MerchantStoreInfoTab } from './profile-tabs/MerchantStoreInfoTab';
 import { MerchantOrdersTab } from './profile-tabs/MerchantOrdersTab';
 import { MerchantProductsTab } from './profile-tabs/MerchantProductsTab';
 import { MerchantBankDetailsTab } from './profile-tabs/MerchantBankDetailsTab';
+import { MerchantKycTab } from './profile-tabs/MerchantKycTab';
 import { MerchantResellerMemosTab } from './profile-tabs/MerchantResellerMemosTab';
 import { MerchantStockLedgerTab } from './profile-tabs/MerchantStockLedgerTab';
 
@@ -41,6 +42,7 @@ export interface MerchantProfileDrawerProps {
   onSwitchMerchant: (merchant: MerchantRecord) => void;
   onUpdateMerchant: (updated: MerchantRecord) => void;
   onReviewPayout?: (merchantId: string, action: 'APPROVE' | 'REJECT', rejectionReason?: string) => void;
+  onReviewKyc?: (merchantId: string, action: 'APPROVE' | 'REJECT', rejectionReason?: string) => void;
   onAdjustStock: (productId: string, delta: number) => void;
   onAddProduct: (newProduct: MerchantProductItem) => void;
   onApproveProduct: (productId: string, finalQty: number, finalBin: string) => void;
@@ -50,6 +52,7 @@ export interface MerchantProfileDrawerProps {
 const VALID_SUB_TABS: MerchantSubTab[] = [
   'overview',
   'profile',
+  'kyc',
   'orders',
   'products',
   'payout',
@@ -67,6 +70,7 @@ export function MerchantProfileDrawer({
   onSwitchMerchant,
   onUpdateMerchant,
   onReviewPayout,
+  onReviewKyc,
   onAdjustStock,
   onAddProduct,
   onApproveProduct,
@@ -329,6 +333,12 @@ export function MerchantProfileDrawer({
             { id: 'overview' as const, label: 'Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
             { id: 'profile' as const, label: 'Store Profile', icon: <Store className="w-4 h-4" /> },
             {
+              id: 'kyc' as const,
+              label: 'KYC Verification',
+              icon: <ShieldCheck className="w-4 h-4" />,
+              pendingCount: merchant.kycData?.verificationStatus === 'PENDING_REVIEW' ? 1 : 0,
+            },
+            {
               id: 'orders' as const,
               label: 'Orders',
               icon: <ShoppingCart className="w-4 h-4" />,
@@ -408,6 +418,18 @@ export function MerchantProfileDrawer({
         <MerchantStoreInfoTab
           merchant={merchant}
           onSave={onUpdateMerchant}
+        />
+      )}
+
+      {activeTab === 'kyc' && (
+        <MerchantKycTab
+          merchant={merchant}
+          onApproveKyc={
+            onReviewKyc ? () => onReviewKyc(merchant.id, 'APPROVE') : undefined
+          }
+          onRejectKyc={
+            onReviewKyc ? (reason) => onReviewKyc(merchant.id, 'REJECT', reason) : undefined
+          }
         />
       )}
 

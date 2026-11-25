@@ -21,6 +21,7 @@ import {
   Lock,
   XCircle,
   Eye,
+  RotateCcw,
 } from 'lucide-react';
 import { MerchantProductItem, ResellerMemo, MerchantOrderItem } from '../../types';
 import { ManageVariantsAndStockPayload } from '../types';
@@ -113,8 +114,11 @@ interface ProductDetailsViewProps {
     qty?: number
   ) => void;
   onRequestStockAdd: (productId: string, qty: number, note?: string) => void;
-  onRequestStockOperation?: (payload: SubmitStockRequestPayload) => void;
+  onRequestStockOperation?: (
+    payload: SubmitStockRequestPayload
+  ) => void | Promise<{ ok: boolean; error?: string } | void>;
   onManageVariantsAndStock?: (payload: ManageVariantsAndStockPayload) => Promise<{ ok: boolean; error?: string }>;
+  pendingStockManageCount?: number;
   onCancelPendingEdit?: (productId: string) => Promise<boolean> | void;
   onTriggerToast: (msg: string) => void;
 }
@@ -128,10 +132,12 @@ export function ProductDetailsView({
   onRequestStockAdd,
   onRequestStockOperation,
   onManageVariantsAndStock,
+  pendingStockManageCount = 0,
   onCancelPendingEdit,
   onTriggerToast,
 }: ProductDetailsViewProps) {
   const [isStockModalOpen, setIsStockModalOpen] = useState(false);
+  const [stockModalMode, setStockModalMode] = useState<'ADJUST' | 'RESTOCK' | 'RETURN'>('ADJUST');
   const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
   const [isPendingEditModalOpen, setIsPendingEditModalOpen] = useState(false);
 
@@ -291,13 +297,26 @@ export function ProductDetailsView({
 
   // Stock for each size of currently selected color
   const sizeStockMap = useMemo(() => {
+    const isGenericSize = (s?: string) =>
+      ['', 'standard', 'free size', 'free', 'default', 'one size'].includes(
+        (s || '').trim().toLowerCase(),
+      );
     const map = new Map<string, number>();
     availableSizes.forEach((s) => {
-      const matchV = (product.variantsList || []).find(
-        (v) =>
-          (!selectedColor || (v.color || '').toLowerCase() === selectedColor.toLowerCase()) &&
-          (v.size || '').toLowerCase() === s.toLowerCase()
-      );
+      const targetColor = (selectedColor || '').trim().toLowerCase();
+      const targetSize = s.trim().toLowerCase();
+      const matchV =
+        (product.variantsList || []).find(
+          (v) =>
+            (!targetColor || (v.color || '').trim().toLowerCase() === targetColor) &&
+            (v.size || '').trim().toLowerCase() === targetSize
+        ) ||
+        (product.variantsList || []).find(
+          (v) =>
+            (!targetColor || (v.color || '').trim().toLowerCase() === targetColor) &&
+            isGenericSize(targetSize) &&
+            isGenericSize(v.size)
+        );
       const stock = matchV ? matchV.stock : product.variantsList?.length ? 0 : product.stock;
       map.set(s.toLowerCase(), stock);
     });
@@ -365,14 +384,33 @@ export function ProductDetailsView({
 
   // Find active variant details
   const selectedVariant = useMemo(() => {
+    const variants = product.variantsList || [];
+    if (variants.length === 0) return undefined;
+    const isGenericSize = (s?: string) =>
+      ['', 'standard', 'free size', 'free', 'default', 'one size'].includes(
+        (s || '').trim().toLowerCase(),
+      );
+    const targetColor = (selectedColor || '').trim().toLowerCase();
+    const targetSize = (selectedSize || '').trim().toLowerCase();
+
     return (
-      (product.variantsList || []).find((v) => {
+      variants.find((v) => {
         const matchColor =
-          !selectedColor || (v.color || '').toLowerCase() === selectedColor.toLowerCase();
+          !targetColor || (v.color || '').trim().toLowerCase() === targetColor;
         const matchSize =
-          !selectedSize || (v.size || '').toLowerCase() === selectedSize.toLowerCase();
+          !targetSize || (v.size || '').trim().toLowerCase() === targetSize;
         return matchColor && matchSize;
-      }) || product.variantsList?.[0]
+      }) ||
+      variants.find(
+        (v) =>
+          (!targetColor || (v.color || '').trim().toLowerCase() === targetColor) &&
+          isGenericSize(targetSize) &&
+          isGenericSize(v.size),
+      ) ||
+      variants.find(
+        (v) => Boolean(targetColor) && (v.color || '').trim().toLowerCase() === targetColor,
+      ) ||
+      (!targetColor || targetColor === 'standard' ? variants[0] : undefined)
     );
   }, [product, selectedColor, selectedSize]);
 
@@ -455,6 +493,7 @@ export function ProductDetailsView({
 
     addToOrderCart({
       productId: product.id,
+      variantId: selectedVariant?.id,
       title: product.title,
       imageUrl: itemImage,
       variantLabel: `${selectedColor} · ${selectedSize}`,
@@ -561,14 +600,32 @@ export function ProductDetailsView({
             </button>
           )}
           {canManageStock && (
-            <button
-              type="button"
-              onClick={() => setIsStockModalOpen(true)}
-              className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-navy-900 dark:bg-navy-800 dark:hover:bg-navy-700 dark:text-slate-200 border border-slate-200 dark:border-white/10 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-            >
-              <Layers className="h-3.5 w-3.5 text-emerald-500" />
-              <span>Manage Stock</span>
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setStockModalMode('ADJUST');
+                  setIsStockModalOpen(true);
+                }}
+                className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-navy-900 dark:bg-navy-800 dark:hover:bg-navy-700 dark:text-slate-200 border border-slate-200 dark:border-white/10 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+              >
+                <Layers className="h-3.5 w-3.5 text-emerald-500" />
+                <span>Manage Stock</span>
+              </button>
+              {(product.stock || 0) > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStockModalMode('RETURN');
+                    setIsStockModalOpen(true);
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                >
+                  <RotateCcw className="h-3.5 w-3.5 text-amber-500" />
+                  <span>Recall / Return</span>
+                </button>
+              )}
+            </>
           )}
           {canDirectEdit ? (
             <Link
@@ -589,6 +646,24 @@ export function ProductDetailsView({
           )}
         </div>
       </div>
+
+      {pendingStockManageCount > 0 && (
+        <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-200 text-xs flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-amber-500 shrink-0" />
+            <span>
+              <strong>{pendingStockManageCount}</strong> stock/variant update request
+              {pendingStockManageCount > 1 ? 's are' : ' is'} pending Admin approval. Live stock will update once approved.
+            </span>
+          </div>
+          <Link
+            href="/merchant/products"
+            className="text-xs font-bold text-amber-700 dark:text-amber-300 underline shrink-0"
+          >
+            View in Stock Requests
+          </Link>
+        </div>
+      )}
 
       {/* Pending Edit Approval Banner (Live product stays published while changes wait for Admin approval) */}
       {isEditPending && product.pendingEdit && (
@@ -1526,15 +1601,14 @@ export function ProductDetailsView({
       <ManageStockModal
         isOpen={isStockModalOpen}
         product={product}
-        initialMode="ADJUST"
+        initialMode={stockModalMode}
         onClose={() => setIsStockModalOpen(false)}
         onManageVariantsAndStock={onManageVariantsAndStock}
         onSubmitRequest={(payload) => {
           if (onRequestStockOperation) {
-            onRequestStockOperation(payload);
-          } else {
-            onRequestStockAdd(payload.productId, payload.requestedQty, payload.note);
+            return onRequestStockOperation(payload);
           }
+          onRequestStockAdd(payload.productId, payload.requestedQty, payload.note);
         }}
       />
 

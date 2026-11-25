@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Building2, User, Phone, Mail, MapPin, Pencil } from 'lucide-react';
+import { Building2, User, Phone, Mail, MapPin, Pencil, Home } from 'lucide-react';
 import { StoreProfileData } from '../types';
 
 interface StoreIdentityCardProps {
@@ -67,6 +67,22 @@ export function StoreIdentityCard({ profile, onEdit }: StoreIdentityCardProps) {
           </span>
           <p className="text-navy-900 dark:text-slate-200 font-medium truncate" title={profile.location}>
             {profile.location}
+          </p>
+        </div>
+
+        <div className="sm:col-span-2 p-3.5 rounded-xl bg-slate-50 dark:bg-navy-950/70 border border-slate-200/80 dark:border-white/10 space-y-1">
+          <span className="text-slate-500 uppercase tracking-wider font-semibold text-[10px] flex items-center gap-1.5">
+            <Home className="h-3 w-3 text-slate-500 dark:text-slate-400" /> Owner / Personal Address
+          </span>
+          <p
+            className={`font-medium ${
+              profile.personalAddress
+                ? 'text-navy-900 dark:text-slate-200'
+                : 'text-slate-400 dark:text-slate-500 italic'
+            }`}
+            title={profile.personalAddress || 'Not provided'}
+          >
+            {profile.personalAddress || 'Not provided — click Edit Details to add your personal address'}
           </p>
         </div>
       </div>

@@ -14,6 +14,7 @@ export function MerchantStoreInfoTab({ merchant, onSave }: MerchantStoreInfoTabP
   const [email, setEmail] = useState(merchant.email);
   const [phone, setPhone] = useState(merchant.phone);
   const [location, setLocation] = useState(merchant.location);
+  const [personalAddress, setPersonalAddress] = useState(merchant.personalAddress || '');
   const [deliveryArea, setDeliveryArea] = useState(merchant.deliveryArea);
 
   const hasChanges = useMemo(() => {
@@ -23,9 +24,10 @@ export function MerchantStoreInfoTab({ merchant, onSave }: MerchantStoreInfoTabP
       email.trim() !== merchant.email ||
       phone.trim() !== merchant.phone ||
       location.trim() !== merchant.location ||
+      personalAddress.trim() !== (merchant.personalAddress || '') ||
       deliveryArea.trim() !== merchant.deliveryArea
     );
-  }, [merchant, storeName, ownerName, email, phone, location, deliveryArea]);
+  }, [merchant, storeName, ownerName, email, phone, location, personalAddress, deliveryArea]);
 
   const handleCancel = () => {
     setStoreName(merchant.storeName);
@@ -33,6 +35,7 @@ export function MerchantStoreInfoTab({ merchant, onSave }: MerchantStoreInfoTabP
     setEmail(merchant.email);
     setPhone(merchant.phone);
     setLocation(merchant.location);
+    setPersonalAddress(merchant.personalAddress || '');
     setDeliveryArea(merchant.deliveryArea);
     setIsEditing(false);
   };
@@ -45,6 +48,7 @@ export function MerchantStoreInfoTab({ merchant, onSave }: MerchantStoreInfoTabP
       email: email.trim() || merchant.email,
       phone: phone.trim() || merchant.phone,
       location: location.trim() || merchant.location,
+      personalAddress: personalAddress.trim(),
       deliveryArea: deliveryArea.trim() || merchant.deliveryArea,
     });
     setIsEditing(false);
@@ -182,6 +186,24 @@ export function MerchantStoreInfoTab({ merchant, onSave }: MerchantStoreInfoTabP
               disabled={!isEditing}
               value={location}
               onChange={(e) => setLocation(e.target.value)}
+              className={`w-full rounded-xl border px-3.5 py-2.5 text-sm text-navy-800 dark:text-white focus:outline-none transition-colors ${
+                isEditing
+                  ? 'border-slate-300 dark:border-white/15 bg-slate-50 dark:bg-navy-950 focus:border-orange-500'
+                  : 'border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-navy-950/50 text-slate-700 dark:text-slate-200 cursor-not-allowed'
+              }`}
+            />
+          </div>
+
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-bold text-navy-800 dark:text-slate-100 mb-1.5">
+              Owner / Personal address
+            </label>
+            <input
+              type="text"
+              disabled={!isEditing}
+              value={personalAddress}
+              placeholder="Not provided"
+              onChange={(e) => setPersonalAddress(e.target.value)}
               className={`w-full rounded-xl border px-3.5 py-2.5 text-sm text-navy-800 dark:text-white focus:outline-none transition-colors ${
                 isEditing
                   ? 'border-slate-300 dark:border-white/15 bg-slate-50 dark:bg-navy-950 focus:border-orange-500'
