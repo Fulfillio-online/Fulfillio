@@ -223,74 +223,86 @@ export function WmsProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  // Step 3: Courier API Booking (Optimistic local + Courier API consignment)
-  const bookCourier = (orderId: string) => {
+  // Step 3: Synchronous Courier API Booking (Strict Real Mode — no fake fallback on error)
+  const bookCourier = async (orderId: string) => {
     const target = orders.find((o) => o.id === orderId);
     if (!target) return;
 
-    const courierPrefix =
-      target.courier === 'Steadfast' ? 'SF' : target.courier === 'Pathao' ? 'PT' : 'RX';
-    const randNum = Math.floor(1000 + Math.random() * 9000);
-    const tracking = `${courierPrefix}-${target.id.replace('ORD-', '')}-${randNum}`;
-    const timeString = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    try {
+      const res = await wmsApi.bookCourier(orderId, target.courier);
+      const timeString = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-    const updated = orders.map((o) =>
-      o.id === orderId
-        ? {
-            ...o,
-            stage: 'BOOKED' as WmsStage,
-            trackingNumber: tracking,
-            bookedAt: timeString,
-          }
-        : o,
-    );
+      const updated = orders.map((o) =>
+        o.id === orderId
+          ? {
+              ...o,
+              stage: 'BOOKED' as WmsStage,
+              trackingNumber: res.trackingCode,
+              bookedAt: timeString,
+            }
+          : o,
+      );
 
-    saveOrders(updated);
-    playAudio('success');
-    showToast(`Consignment booked with ${target.courier}! Tracking: ${tracking}`);
-
-    // Call real courier booking in backend
-    wmsApi.bookCourier(orderId, target.courier).then((res) => {
-      if (res && res.trackingCode) {
-        setOrders((prev) =>
-          prev.map((o) => (o.id === orderId ? { ...o, trackingNumber: res.trackingCode } : o)),
-        );
-      }
-    }).catch(() => {});
+      saveOrders(updated);
+      playAudio('success');
+      showToast(
+        `Consignment booked with ${target.courier}${res.isSimulated ? ' (Sandbox)' : ''}! Tracking: ${res.trackingCode}`,
+      );
+    } catch (err: any) {
+      playAudio('error');
+      showToast(`Booking failed for ${orderId}: ${err?.message || 'Courier API error'}`);
+    }
   };
 
-  const bookAllByCourier = (courierName: string) => {
+  const bookAllByCourier = async (courierName: string) => {
     const eligible = orders.filter((o) => o.stage === 'PACKED' && o.courier === courierName);
     if (eligible.length === 0) {
       showToast(`No packed parcels found waiting for ${courierName} booking!`);
       return;
     }
 
-    const timeString = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const courierPrefix =
-      courierName === 'Steadfast' ? 'SF' : courierName === 'Pathao' ? 'PT' : 'RX';
+    try {
+      const bulkRes = await wmsApi.bookBulkCouriers(
+        eligible.map((o) => o.id),
+        courierName,
+      );
+      const timeString = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const successMap = new Map(
+        bulkRes.results
+          .filter((r) => r.success && r.trackingCode)
+          .map((r) => [r.orderId, r.trackingCode as string]),
+      );
 
-    const updated = orders.map((o) => {
-      if (o.stage === 'PACKED' && o.courier === courierName) {
-        const randNum = Math.floor(1000 + Math.random() * 9000);
-        return {
-          ...o,
-          stage: 'BOOKED' as WmsStage,
-          trackingNumber: `${courierPrefix}-${o.id.replace('ORD-', '')}-${randNum}`,
-          bookedAt: timeString,
-        };
+      if (successMap.size > 0) {
+        const updated = orders.map((o) => {
+          const tracking = successMap.get(o.id);
+          if (tracking) {
+            return {
+              ...o,
+              stage: 'BOOKED' as WmsStage,
+              trackingNumber: tracking,
+              bookedAt: timeString,
+            };
+          }
+          return o;
+        });
+        saveOrders(updated);
       }
-      return o;
-    });
 
-    saveOrders(updated);
-    playAudio('success');
-    showToast(`Batch booked ${eligible.length} parcels to ${courierName} API!`);
-
-    // Trigger backend booking for each
-    eligible.forEach((ord) => {
-      wmsApi.bookCourier(ord.id, courierName).catch(() => {});
-    });
+      if (bulkRes.failed === 0) {
+        playAudio('success');
+        showToast(`Bulk booked ${bulkRes.succeeded} parcel(s) to ${courierName}!`);
+      } else {
+        const firstErr = bulkRes.results.find((r) => !r.success)?.error;
+        playAudio(bulkRes.succeeded > 0 ? 'success' : 'error');
+        showToast(
+          `${courierName} bulk booking: ${bulkRes.succeeded} succeeded, ${bulkRes.failed} failed${firstErr ? ` (${firstErr})` : ''}.`,
+        );
+      }
+    } catch (err: any) {
+      playAudio('error');
+      showToast(`Bulk ${courierName} booking failed: ${err?.message || 'Courier API error'}`);
+    }
   };
 
   // Step 4: Courier Handover & Manifest Dispatch

@@ -31,6 +31,7 @@ import { CancelledOrdersTable } from './components/CancelledOrdersTable';
 import { ReturnsStockLedgerTab } from './components/ReturnsStockLedgerTab';
 import { QcInspectionModal } from './components/modals/QcInspectionModal';
 import { LogNewReturnModal } from './components/modals/LogNewReturnModal';
+import { getAuthHeaders } from '@/lib/warehouseSync';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 
@@ -72,12 +73,13 @@ export function WarehouseReturnsManager({
   // Load all Returns, Cancelled Orders, Recovery Ledger, Bins, and Merchants directly from Neon PostgreSQL
   const syncDataFromDatabase = useCallback(async () => {
     try {
+      const authHeaders = getAuthHeaders();
       const [cancelledRes, returnsRes, ledgerRes, binsRes, merchantsRes] = await Promise.all([
-        fetch(`${API_BASE}/returns/cancelled`).catch(() => null),
-        fetch(`${API_BASE}/returns`).catch(() => null),
-        fetch(`${API_BASE}/returns/ledger`).catch(() => null),
-        fetch(`${API_BASE}/returns/bins`).catch(() => null),
-        fetch(`${API_BASE}/merchants/public-directory`).catch(() => null),
+        fetch(`${API_BASE}/returns/cancelled`, { headers: authHeaders }).catch(() => null),
+        fetch(`${API_BASE}/returns`, { headers: authHeaders }).catch(() => null),
+        fetch(`${API_BASE}/returns/ledger`, { headers: authHeaders }).catch(() => null),
+        fetch(`${API_BASE}/returns/bins`, { headers: authHeaders }).catch(() => null),
+        fetch(`${API_BASE}/merchants/public-directory`, { headers: authHeaders }).catch(() => null),
       ]);
 
       if (cancelledRes?.ok) {
@@ -184,7 +186,7 @@ export function WarehouseReturnsManager({
         `${API_BASE}/returns/cancelled/${encodeURIComponent(cleanId)}/restock`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
           body: JSON.stringify({
             binCode,
             notes: `Manually restocked cancelled order #${cleanId} (+${order.qty} pcs) into Bin ${binCode}`,
@@ -436,7 +438,7 @@ export function WarehouseReturnsManager({
             className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold flex items-center gap-1.5 shadow-lg shadow-orange-500/25 transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            <span>+ Log Inbound Return</span>
+            <span>Log Inbound Return</span>
           </button>
         </div>
       </div>

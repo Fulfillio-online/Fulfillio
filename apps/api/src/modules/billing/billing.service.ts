@@ -84,14 +84,22 @@ export class BillingService {
 
     const rawTotal = Number(order.totalAmount) || 0;
     const rawCod = Number(order.codAmount) || 0;
-    const grossAmount = this.round2(
+    const orderBill = this.round2(
       computedFromItems > 0 ? computedFromItems : rawTotal > 0 ? rawTotal : rawCod,
     );
+
+    const advancePayment = this.round2(Math.max(0, Number(order.advancePayment) || 0));
+    const codCollected =
+      advancePayment > 0 ? this.round2(Math.max(0, orderBill - advancePayment)) : orderBill;
+    const grossAmount = codCollected;
 
     const handlingFee = this.round2(Number(merchant?.baseHandlingFee) || 0);
     const packagingFee = this.round2(Number(order.packagingCost) || 0);
     const feeAmount = this.round2(deliveryFee + handlingFee + packagingFee);
-    const netAmount = this.round2(Math.max(0, grossAmount - feeAmount));
+    const netAmount =
+      advancePayment > 0
+        ? this.round2(grossAmount - feeAmount)
+        : this.round2(Math.max(0, grossAmount - feeAmount));
 
     const itemSummary =
       items.length > 0
@@ -191,7 +199,7 @@ export class BillingService {
     };
   }
 
-  private computeBalances(earnings: any[], payoutRequests: any[]) {
+  private computeBalances(earnings: any[], payoutRequests: any[], settlements: any[] = []) {
     const pendingEarnings = this.round2(
       earnings
         .filter((e) => e.status === 'PENDING')
@@ -219,8 +227,14 @@ export class BillingService {
         .reduce((sum, r) => sum + Number(r.amount), 0),
     );
     const paidRequests = payoutRequests.filter((r) => r.status === 'PAID');
+    const legacyPaidSettlements = (settlements || []).filter(
+      (s) => s.isPaid && !s.payoutRequestId,
+    );
+    const legacyPaidTotal = this.round2(
+      legacyPaidSettlements.reduce((sum, s) => sum + Number(s.netPayout), 0),
+    );
     const totalPaidOut = this.round2(
-      paidRequests.reduce((sum, r) => sum + Number(r.amount), 0),
+      paidRequests.reduce((sum, r) => sum + Number(r.amount), 0) + legacyPaidTotal,
     );
 
     const reservedOrPaid = this.round2(upcomingPayout + totalPaidOut);
@@ -241,7 +255,7 @@ export class BillingService {
       availableBalance,
       clawbackDeficit,
       withdrawableTotal,
-      paidPayoutsCount: paidRequests.length,
+      paidPayoutsCount: paidRequests.length + legacyPaidSettlements.length,
     };
   }
 
@@ -595,12 +609,15 @@ export class BillingService {
 
     await this.syncMerchantEarnings(merchant.id);
 
-    const [earnings, payoutRequests] = await Promise.all([
+    const [earnings, payoutRequests, settlements] = await Promise.all([
       this.repository.findMerchantEarnings(merchant.id),
       this.repository.findMerchantPayoutRequests(merchant.id),
+      typeof this.repository.getMerchantSettlements === 'function'
+        ? this.repository.getMerchantSettlements(merchant.id)
+        : Promise.resolve([]),
     ]);
 
-    const balances = this.computeBalances(earnings, payoutRequests);
+    const balances = this.computeBalances(earnings, payoutRequests, settlements);
     const activeEarnings = earnings.filter((e) => e.status !== 'REFUNDED');
 
     const totalGrossEarnings = this.round2(
@@ -776,12 +793,15 @@ export class BillingService {
       await this.repository.lockMerchantRow(tx, merchant.id);
       await this.syncMerchantEarnings(merchant.id, tx);
 
-      const [earnings, payoutRequests] = await Promise.all([
+      const [earnings, payoutRequests, settlements] = await Promise.all([
         this.repository.findMerchantEarnings(merchant.id, tx),
         this.repository.findMerchantPayoutRequests(merchant.id, tx),
+        typeof tx.settlement?.findMany === 'function'
+          ? tx.settlement.findMany({ where: { merchantId: merchant.id } })
+          : Promise.resolve([]),
       ]);
 
-      const balances = this.computeBalances(earnings, payoutRequests);
+      const balances = this.computeBalances(earnings, payoutRequests, settlements);
       if (amount > balances.withdrawableTotal) {
         throw new BadRequestException(
           `Requested amount (৳${amount.toLocaleString()}) exceeds your withdrawable balance (৳${balances.withdrawableTotal.toLocaleString()} — Wallet: ৳${balances.availableBalance.toLocaleString()} + Ready to Claim: ৳${balances.readyToClaim.toLocaleString()}).`,
@@ -1405,24 +1425,40 @@ export class BillingService {
     let totalGrossCod = grossCod;
     let count = ordersCount;
 
+    const lastSettlement =
+      typeof this.prisma.settlement?.findFirst === 'function'
+        ? await this.prisma.settlement.findFirst({
+            where: { merchantId: merchant.id, payoutRequestId: null },
+            orderBy: { cycleEnd: 'desc' },
+          })
+        : null;
+
     if (totalGrossCod === undefined || count === undefined) {
       const delivered = await this.prisma.order.findMany({
-        where: { merchantId: merchant.id, status: 'DELIVERED' },
+        where: {
+          merchantId: merchant.id,
+          status: 'DELIVERED',
+          ...(lastSettlement?.cycleEnd
+            ? { deliveredAt: { gt: lastSettlement.cycleEnd } }
+            : {}),
+        },
         select: { codAmount: true, totalAmount: true },
       });
       totalGrossCod = delivered.reduce(
-        (sum, o) => sum + Number(o.totalAmount || o.codAmount),
+        (sum, o) => sum + Number(o.codAmount ?? o.totalAmount),
         0,
       );
       count = delivered.length;
     }
 
     const totalHandlingFees = count * baseHandlingRate;
-    const weeklyStorageFees = Math.round(monthlyStorage / 4);
+    const weeklyStorageFees = count > 0 ? Math.round(monthlyStorage / 4) : 0;
     const netPayout = Math.max(0, totalGrossCod - totalHandlingFees - weeklyStorageFees);
 
     const cycleEnd = new Date();
-    const cycleStart = new Date(Date.now() - 7 * DAY_MS);
+    const cycleStart = lastSettlement?.cycleEnd
+      ? new Date(lastSettlement.cycleEnd)
+      : new Date(Date.now() - 7 * DAY_MS);
 
     return this.repository.createSettlement({
       merchantId: merchant.id,
@@ -2122,7 +2158,8 @@ export class BillingService {
     for (const m of scopedMerchants) {
       const mEarnings = raw.earnings.filter((e: any) => e.merchantId === m.id);
       const mRequests = raw.payoutRequests.filter((r: any) => r.merchantId === m.id);
-      const bal = this.computeBalances(mEarnings, mRequests);
+      const mSettlements = (raw.settlements || []).filter((s: any) => s.merchantId === m.id);
+      const bal = this.computeBalances(mEarnings, mRequests, mSettlements);
       pendingReturnWindowHold = this.round2(pendingReturnWindowHold + bal.pendingEarnings);
       readyToClaimAndWalletBalance = this.round2(
         readyToClaimAndWalletBalance + bal.withdrawableTotal,
@@ -2282,7 +2319,8 @@ export class BillingService {
       const mPeriodEarn = periodActiveEarnings.filter((e: any) => e.merchantId === m.id);
       const mAllEarnings = raw.earnings.filter((e: any) => e.merchantId === m.id);
       const mAllRequests = raw.payoutRequests.filter((r: any) => r.merchantId === m.id);
-      const mBal = this.computeBalances(mAllEarnings, mAllRequests);
+      const mAllSettlements = (raw.settlements || []).filter((s: any) => s.merchantId === m.id);
+      const mBal = this.computeBalances(mAllEarnings, mAllRequests, mAllSettlements);
 
       const mPeriodPaidReq = mAllRequests
         .filter(

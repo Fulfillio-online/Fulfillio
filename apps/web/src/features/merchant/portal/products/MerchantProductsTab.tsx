@@ -28,6 +28,7 @@ import { StockRequestsTable } from './components/StockRequestsTable';
 import { ManageStockModal } from './modals/ManageStockModal';
 import { DeleteConfirmModal } from './modals/DeleteConfirmModal';
 import { PrintBarcodeModal } from '../components/modals/PrintBarcodeModal';
+import { getAuthHeaders } from '@/lib/warehouseSync';
 import { ThermalStickerModal } from './modals/ThermalStickerModal';
 import { RequestEditModal } from './modals/RequestEditModal';
 import { ProductRevisionReviewModal } from '@/features/shared';
@@ -713,9 +714,10 @@ export function MerchantProductsTab({
             await requestEditAccess(productId, reason);
           } else {
             try {
-              await fetch(`/api/inventory/products/${productId}/request-edit`, {
+              const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+              await fetch(`${apiBase}/inventory/products/${productId}/request-edit`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                 body: JSON.stringify({ reason }),
               });
               onTriggerToast?.('Product edit request submitted for warehouse admin review');

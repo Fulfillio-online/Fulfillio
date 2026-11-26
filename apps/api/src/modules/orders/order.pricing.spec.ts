@@ -269,4 +269,83 @@ describe('OrderService Custom Order Selling Price Calculation', () => {
     assert.equal(createdOrderPayload.items[1].variantId, 'var-pink');
     assert.equal(createdOrderPayload.items[1].quantity, 7);
   });
+
+  it('consumes reserved stock exactly once on DISPATCHED, enforces state machine, and marks ON_HOLD_STOCK cancel as already restocked', async () => {
+    const consumeCalls: any[] = [];
+    const billingReversals: string[] = [];
+    let currentStatus: string = 'ALLOCATED';
+    let rawSqlCalls = 0;
+
+    const mockPrisma: any = {
+      order: {
+        update: async ({ data }: any) => {
+          currentStatus = data.status;
+          return { id: 'ORD-RES-1', merchantId: 'm-1', status: data.status };
+        },
+      },
+      $executeRaw: async () => {
+        rawSqlCalls += 1;
+        return 1;
+      },
+    };
+
+    const mockOrderRepo: any = {
+      findById: async () => ({
+        id: 'ORD-RES-1',
+        merchantId: 'm-1',
+        status: currentStatus,
+        items: [{ variantId: 'var-1', quantity: 4 }],
+      }),
+      updateStatus: async (_id: string, status: any) => {
+        currentStatus = status;
+        return { id: 'ORD-RES-1', merchantId: 'm-1', status };
+      },
+    };
+
+    const mockInventoryService: any = {
+      consumeReservedStockForOrder: async (items: any[], merchantId: string, orderId: string) => {
+        consumeCalls.push({ items, merchantId, orderId });
+        return true;
+      },
+    };
+
+    const mockBillingService: any = {
+      recordCompletedOrderEarning: async () => ({}),
+      reverseOrderEarning: async (orderId: string) => {
+        billingReversals.push(orderId);
+        return {};
+      },
+    };
+
+    const service = new OrderService(
+      mockOrderRepo,
+      mockInventoryService,
+      mockBillingService,
+      mockPrisma,
+    );
+
+    // 1. ALLOCATED -> DISPATCHED consumes reserved stock once
+    await service.updateOrderStatus('ORD-RES-1', 'DISPATCHED' as any);
+    assert.equal(consumeCalls.length, 1);
+    assert.deepEqual(consumeCalls[0].items, [{ variantId: 'var-1', quantity: 4 }]);
+
+    // 2. DISPATCHED -> DELIVERED does NOT consume reserved stock a second time
+    await service.updateOrderStatus('ORD-RES-1', 'DELIVERED' as any);
+    assert.equal(consumeCalls.length, 1);
+
+    // 3. CANCELLED -> DELIVERED throws BadRequestException
+    currentStatus = 'CANCELLED';
+    await assert.rejects(
+      () => service.updateOrderStatus('ORD-RES-1', 'DELIVERED' as any),
+      BadRequestException,
+    );
+
+    // 4. ON_HOLD_STOCK cancel marks isRestocked = true ('N/A (No Stock Reserved)')
+    currentStatus = 'ON_HOLD_STOCK';
+    const cancelRes: any = await service.cancelOrder('ORD-RES-1', 'Out of stock');
+    assert.equal(rawSqlCalls, 1);
+    assert.equal(cancelRes.isRestocked, true);
+    assert.equal(cancelRes.restockedBin, 'N/A (No Stock Reserved)');
+    assert.deepEqual(billingReversals, ['ORD-RES-1']);
+  });
 });

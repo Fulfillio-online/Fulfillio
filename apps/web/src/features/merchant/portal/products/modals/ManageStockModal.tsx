@@ -29,6 +29,7 @@ import {
 export interface SubmitStockRequestPayload {
   productId: string;
   type: StockRequestType;
+  scope?: 'VARIANT' | 'ALL_VARIANTS';
   requestedQty: number;
   variantId?: string;
   variantSku?: string;
@@ -121,6 +122,7 @@ export function ManageStockModal({
   const [restockNote, setRestockNote] = useState('');
 
   const [returnQty, setReturnQty] = useState(1);
+  const [recallScope, setRecallScope] = useState<'VARIANT' | 'ALL_VARIANTS'>('VARIANT');
   const [returnReason, setReturnReason] = useState(RETURN_REASONS[0]);
   const [customReason, setCustomReason] = useState('');
   const [destination, setDestination] = useState('Dhanmondi Branch, Road 27, Dhaka');
@@ -150,6 +152,7 @@ export function ManageStockModal({
       setAdjustError(null);
       setRequestError(null);
       setIsSubmittingOp(false);
+      setRecallScope('VARIANT');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, initialMode, product?.id, firstProduct?.id]);
@@ -174,22 +177,24 @@ export function ManageStockModal({
     setStagedNewVariants([]);
     setPerSizeQtys({});
     setAdjustError(null);
+    setRecallScope('VARIANT');
   }, [activeProduct]);
 
-  // Available colors
+  // Available colors (prefer live variantsList colors so stale/deleted ghost colors never appear)
   const availableColors = useMemo(() => {
     if (!activeProduct) return [];
-    if (activeProduct.colors && activeProduct.colors.length > 0) {
-      return activeProduct.colors.map((c) => c.name);
-    }
     if (activeProduct.variantsList && activeProduct.variantsList.length > 0) {
-      return Array.from(
+      const fromVariants = Array.from(
         new Set(
           activeProduct.variantsList
             .map((v) => v.color)
             .filter((c): c is string => Boolean(c && c.trim()))
         )
       );
+      if (fromVariants.length > 0) return fromVariants;
+    }
+    if (activeProduct.colors && activeProduct.colors.length > 0) {
+      return activeProduct.colors.map((c) => c.name);
     }
     return [];
   }, [activeProduct]);
@@ -272,13 +277,31 @@ export function ManageStockModal({
       : activeProduct.stock;
   }, [activeProduct, matchedVariant]);
 
+  const totalProductStock = useMemo(() => {
+    if (!activeProduct) return 0;
+    if (activeProduct.variantsList && activeProduct.variantsList.length > 0) {
+      return activeProduct.variantsList.reduce(
+        (sum, v) => sum + (Number(v.stock) || 0),
+        0
+      );
+    }
+    return Number(activeProduct.stock) || 0;
+  }, [activeProduct]);
+
+  const effectiveReturnAvailableStock =
+    activeMode === 'RETURN' && recallScope === 'ALL_VARIANTS'
+      ? totalProductStock
+      : currentVariantStock;
+
   useEffect(() => {
-    if (currentVariantStock > 0) {
-      setReturnQty((prev) => Math.min(prev > 0 ? prev : 1, currentVariantStock));
+    if (effectiveReturnAvailableStock > 0) {
+      setReturnQty((prev) =>
+        Math.min(prev > 0 ? prev : 1, effectiveReturnAvailableStock)
+      );
     } else {
       setReturnQty(0);
     }
-  }, [currentVariantStock]);
+  }, [effectiveReturnAvailableStock]);
 
   const quickSizeOptions = useMemo(() => {
     const prodSizes = activeProduct?.sizes || [];
@@ -584,14 +607,22 @@ export function ManageStockModal({
         setIsSubmittingOp(false);
       }
     } else if (activeMode === 'RETURN') {
+      const isAllVariantsScope =
+        recallScope === 'ALL_VARIANTS' && existingVariants.length > 1;
+      const availableForReturn = isAllVariantsScope
+        ? totalProductStock
+        : currentVariantStock;
+
       if (returnQty <= 0) {
         setRequestError('Recall / Return quantity must be at least 1 unit.');
         return;
       }
-      if (returnQty > currentVariantStock) {
+      if (returnQty > availableForReturn) {
         setRequestError(
-          `Cannot recall more than available warehouse stock (${currentVariantStock} units) for ${
-            [selectedColor, selectedSize].filter(Boolean).join(' / ') || 'this product'
+          `Cannot recall more than available warehouse stock (${availableForReturn} units) for ${
+            isAllVariantsScope
+              ? 'all variants'
+              : [selectedColor, selectedSize].filter(Boolean).join(' / ') || 'this product'
           }.`
         );
         return;
@@ -606,11 +637,14 @@ export function ManageStockModal({
         const res = await onSubmitRequest({
           productId: activeProduct.id,
           type: 'RETURN',
+          scope: isAllVariantsScope ? 'ALL_VARIANTS' : 'VARIANT',
           requestedQty: returnQty,
-          variantId: matchedVariant?.id,
-          variantSku: matchedVariant?.variantSku || activeProduct.sku,
-          color: selectedColor || undefined,
-          size: selectedSize || undefined,
+          variantId: isAllVariantsScope ? undefined : matchedVariant?.id,
+          variantSku: isAllVariantsScope
+            ? activeProduct.sku
+            : matchedVariant?.variantSku || activeProduct.sku,
+          color: isAllVariantsScope ? undefined : selectedColor || undefined,
+          size: isAllVariantsScope ? undefined : selectedSize || undefined,
           reason: finalReason,
           destination: `${destination.trim()}${
             recipientContact.trim() ? ` (Contact: ${recipientContact.trim()})` : ''
@@ -1565,62 +1599,110 @@ export function ManageStockModal({
           /* MODE 2 & 3: RESTOCK & RETURN REQUESTS (EXISTING FLOW)             */
           /* ================================================================= */
           <>
-            {(availableColors.length > 0 || availableSizes.length > 0) && (
+            {(availableColors.length > 0 ||
+              availableSizes.length > 0 ||
+              (activeMode === 'RETURN' && existingVariants.length > 1)) && (
               <div className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-navy-950/70 border border-slate-200 dark:border-white/10 space-y-3">
-                <div className="flex items-center justify-between text-xs font-bold text-navy-900 dark:text-slate-200">
-                  <span>Select Color &amp; Size Variant:</span>
-                  <span className="text-[11px] text-slate-500 font-normal">
-                    {activeMode === 'RESTOCK' ? 'Target for restock' : 'Target for return'}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {availableColors.length > 0 && (
-                    <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                        Color:
-                      </label>
-                      <select
-                        value={selectedColor}
-                        onChange={(e) => setSelectedColor(e.target.value)}
-                        className="w-full px-2.5 py-1.5 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-semibold text-navy-900 dark:text-white focus:outline-none focus:border-orange-500 cursor-pointer"
+                {activeMode === 'RETURN' && existingVariants.length > 1 && (
+                  <div className="space-y-1.5">
+                    <span className="block text-[11px] font-bold text-navy-900 dark:text-slate-200">
+                      Recall Scope:
+                    </span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setRecallScope('VARIANT')}
+                        className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                          recallScope === 'VARIANT'
+                            ? 'bg-orange-600 text-white border-orange-500 shadow-xs'
+                            : 'bg-white dark:bg-navy-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-white/10 hover:border-orange-400'
+                        }`}
                       >
-                        {availableColors.map((c) => (
-                          <option key={c} value={c}>
-                            {c}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  {availableSizes.length > 0 && (
-                    <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                        Size / Spec:
-                      </label>
-                      <select
-                        value={selectedSize}
-                        onChange={(e) => setSelectedSize(e.target.value)}
-                        className="w-full px-2.5 py-1.5 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-semibold text-navy-900 dark:text-white focus:outline-none focus:border-orange-500 cursor-pointer"
+                        Specific Variant
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRecallScope('ALL_VARIANTS');
+                          if (totalProductStock > 0) {
+                            setReturnQty(totalProductStock);
+                          }
+                        }}
+                        className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                          recallScope === 'ALL_VARIANTS'
+                            ? 'bg-orange-600 text-white border-orange-500 shadow-xs'
+                            : 'bg-white dark:bg-navy-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-white/10 hover:border-orange-400'
+                        }`}
                       >
-                        {availableSizes.map((s) => (
-                          <option key={s} value={s}>
-                            {s}
-                          </option>
-                        ))}
-                      </select>
+                        All Variants ({totalProductStock} pcs)
+                      </button>
                     </div>
+                  </div>
+                )}
+
+                {!(activeMode === 'RETURN' && recallScope === 'ALL_VARIANTS') &&
+                  (availableColors.length > 0 || availableSizes.length > 0) && (
+                    <>
+                      <div className="flex items-center justify-between text-xs font-bold text-navy-900 dark:text-slate-200">
+                        <span>Select Color &amp; Size Variant:</span>
+                        <span className="text-[11px] text-slate-500 font-normal">
+                          {activeMode === 'RESTOCK' ? 'Target for restock' : 'Target for return'}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {availableColors.length > 0 && (
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                              Color:
+                            </label>
+                            <select
+                              value={selectedColor}
+                              onChange={(e) => setSelectedColor(e.target.value)}
+                              className="w-full px-2.5 py-1.5 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-semibold text-navy-900 dark:text-white focus:outline-none focus:border-orange-500 cursor-pointer"
+                            >
+                              {availableColors.map((c) => (
+                                <option key={c} value={c}>
+                                  {c}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        {availableSizes.length > 0 && (
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                              Size / Spec:
+                            </label>
+                            <select
+                              value={selectedSize}
+                              onChange={(e) => setSelectedSize(e.target.value)}
+                              className="w-full px-2.5 py-1.5 bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-semibold text-navy-900 dark:text-white focus:outline-none focus:border-orange-500 cursor-pointer"
+                            >
+                              {availableSizes.map((s) => (
+                                <option key={s} value={s}>
+                                  {s}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    </>
                   )}
-                </div>
 
                 <div className="p-2.5 rounded-lg bg-white dark:bg-navy-900 border border-slate-200/80 dark:border-white/10 flex items-center justify-between text-xs">
                   <div>
                     <span className="text-[10px] text-slate-400 uppercase font-semibold block">
-                      Target Variant SKU
+                      {activeMode === 'RETURN' && recallScope === 'ALL_VARIANTS'
+                        ? 'Target Scope'
+                        : 'Target Variant SKU'}
                     </span>
                     <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold block mt-0.5">
-                      {matchedVariant?.variantSku || activeProduct.sku}
+                      {activeMode === 'RETURN' && recallScope === 'ALL_VARIANTS'
+                        ? `${activeProduct.sku} · All Variants (${existingVariants.length} variants)`
+                        : matchedVariant?.variantSku || activeProduct.sku}
                     </span>
                   </div>
                   <div className="text-right">
@@ -1629,12 +1711,17 @@ export function ManageStockModal({
                     </span>
                     <span
                       className={`font-mono font-extrabold text-sm block mt-0.5 ${
-                        currentVariantStock > 0
+                        (activeMode === 'RETURN'
+                          ? effectiveReturnAvailableStock
+                          : currentVariantStock) > 0
                           ? 'text-emerald-600 dark:text-emerald-400'
                           : 'text-rose-500 dark:text-rose-400'
                       }`}
                     >
-                      {currentVariantStock} units
+                      {activeMode === 'RETURN'
+                        ? effectiveReturnAvailableStock
+                        : currentVariantStock}{' '}
+                      units
                     </span>
                   </div>
                 </div>
@@ -1735,14 +1822,24 @@ export function ManageStockModal({
                 </>
               ) : (
                 <>
-                  {currentVariantStock <= 0 ? (
+                  {effectiveReturnAvailableStock <= 0 ? (
                     <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs space-y-1">
                       <div className="flex items-center gap-2 font-bold">
                         <AlertCircle className="h-4 w-4 shrink-0" />
-                        <span>No Warehouse Stock Available for this Variant</span>
+                        <span>
+                          {recallScope === 'ALL_VARIANTS'
+                            ? 'No Warehouse Stock Available for this Product'
+                            : 'No Warehouse Stock Available for this Variant'}
+                        </span>
                       </div>
                       <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
-                        নির্বাচিত ভ্যারিয়েন্টে (<strong className="text-navy-900 dark:text-white">{selectedColor} · {selectedSize}</strong>) বর্তমানে ওয়্যারহাউসে কোনো পণ্য নেই (স্টক ০)। পণ্য ফেরত নেওয়ার পূর্বে ওয়্যারহাউসে পণ্য মজুদ থাকতে হবে।
+                        {recallScope === 'ALL_VARIANTS' ? (
+                          <>এই প্রোডাক্টে বর্তমানে ওয়্যারহাউসে কোনো স্টক নেই (মোট স্টক ০)।</>
+                        ) : (
+                          <>
+                            নির্বাচিত ভ্যারিয়েন্টে (<strong className="text-navy-900 dark:text-white">{selectedColor} · {selectedSize}</strong>) বর্তমানে ওয়্যারহাউসে কোনো পণ্য নেই (স্টক ০)। পণ্য ফেরত নেওয়ার পূর্বে ওয়্যারহাউসে পণ্য মজুদ থাকতে হবে।
+                          </>
+                        )}
                       </p>
                     </div>
                   ) : (
@@ -1753,9 +1850,11 @@ export function ManageStockModal({
                             Units to Withdraw / Return <span className="text-rose-500">*</span>
                           </label>
                           <span className="text-[11px] text-slate-500">
-                            Available for Variant:{' '}
+                            {recallScope === 'ALL_VARIANTS'
+                              ? 'Total Product Stock: '
+                              : 'Available for Variant: '}
                             <strong className="font-mono text-orange-600 dark:text-orange-400">
-                              {currentVariantStock}
+                              {effectiveReturnAvailableStock}
                             </strong>
                           </span>
                         </div>
@@ -1763,13 +1862,13 @@ export function ManageStockModal({
                           <input
                             type="number"
                             min="1"
-                            max={Math.max(1, currentVariantStock)}
+                            max={Math.max(1, effectiveReturnAvailableStock)}
                             required
                             value={returnQty}
                             onChange={(e) =>
                               setReturnQty(
                                 Math.min(
-                                  currentVariantStock,
+                                  effectiveReturnAvailableStock,
                                   Math.max(1, Number(e.target.value) || 1)
                                 )
                               )
@@ -1781,7 +1880,7 @@ export function ManageStockModal({
                         </div>
                         <div className="flex gap-2 mt-2">
                           {[1, 5, 10]
-                            .filter((n) => n <= currentVariantStock)
+                            .filter((n) => n <= effectiveReturnAvailableStock)
                             .map((preset) => (
                               <button
                                 key={preset}
@@ -1792,13 +1891,13 @@ export function ManageStockModal({
                                 {preset} unit{preset > 1 ? 's' : ''}
                               </button>
                             ))}
-                          {currentVariantStock > 0 && (
+                          {effectiveReturnAvailableStock > 0 && (
                             <button
                               type="button"
-                              onClick={() => setReturnQty(currentVariantStock)}
+                              onClick={() => setReturnQty(effectiveReturnAvailableStock)}
                               className="px-2.5 py-1 text-xs rounded bg-orange-500/10 text-orange-600 dark:text-orange-400 hover:bg-orange-500/20 font-semibold transition-colors cursor-pointer font-mono"
                             >
-                              All ({currentVariantStock})
+                              All ({effectiveReturnAvailableStock})
                             </button>
                           )}
                         </div>
@@ -1911,7 +2010,10 @@ export function ManageStockModal({
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmittingOp || (activeMode === 'RETURN' && currentVariantStock <= 0)}
+                  disabled={
+                    isSubmittingOp ||
+                    (activeMode === 'RETURN' && effectiveReturnAvailableStock <= 0)
+                  }
                   className={`px-5 py-2 rounded-lg text-white text-xs font-bold transition-all cursor-pointer shadow-md flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed ${
                     activeMode === 'RESTOCK'
                       ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/20'

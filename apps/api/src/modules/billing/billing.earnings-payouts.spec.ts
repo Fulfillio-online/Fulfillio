@@ -658,4 +658,124 @@ describe('Dynamic Merchant Earnings, Return Window, Claim Stage & Digital-Proof 
     assert.ok(e.itemSummary.includes('@৳1,350'));
     assert.equal(dash.summary.pendingEarnings, 2550);
   });
+
+  it('9. deducts customer advancePayment from COD earning math (partial & 100% prepaid)', async () => {
+    const { orders, service } = createBillingTestHarness();
+    const now = new Date();
+    // Case A: Partial advance (Order Bill = 1000 + 60 = 1060, advance = 500 -> codCollected = 560, fees = 60 + 45 + 5 = 110 -> net = 450)
+    orders.push({
+      id: 'ORD-ADV-PARTIAL',
+      merchantId: 'm-uuid-101',
+      externalOrderId: 'ORD-ADV-PARTIAL',
+      customerName: 'Advance Partial Buyer',
+      status: 'DELIVERED',
+      totalAmount: 1060,
+      advancePayment: 500,
+      codAmount: 560,
+      deliveryFee: 60,
+      packagingCost: 5,
+      deliveredAt: now,
+      updatedAt: now,
+      items: [{ productTitle: 'Shirt', quantity: 1, unitPrice: 1000 }],
+    });
+
+    // Case B: 100% Prepaid directly to merchant (Order Bill = 1060, advance = 1060 -> codCollected = 0, fees = 110 -> net = -110)
+    orders.push({
+      id: 'ORD-ADV-FULL',
+      merchantId: 'm-uuid-101',
+      externalOrderId: 'ORD-ADV-FULL',
+      customerName: 'Advance Full Buyer',
+      status: 'DELIVERED',
+      totalAmount: 1060,
+      advancePayment: 1060,
+      codAmount: 0,
+      deliveryFee: 60,
+      packagingCost: 5,
+      deliveredAt: now,
+      updatedAt: now,
+      items: [{ productTitle: 'Shirt', quantity: 1, unitPrice: 1000 }],
+    });
+
+    await service.recordCompletedOrderEarning('ORD-ADV-PARTIAL');
+    await service.recordCompletedOrderEarning('ORD-ADV-FULL');
+
+    const dash = await service.getMerchantEarningsDashboard('MC-101');
+    const partialE = dash.earnings.find((e) => e.orderNumber === 'ORD-ADV-PARTIAL')!;
+    const fullE = dash.earnings.find((e) => e.orderNumber === 'ORD-ADV-FULL')!;
+
+    assert.equal(partialE.grossAmount, 560);
+    assert.equal(partialE.feeAmount, 110);
+    assert.equal(partialE.netAmount, 450);
+
+    assert.equal(fullE.grossAmount, 0);
+    assert.equal(fullE.feeAmount, 110);
+    assert.equal(fullE.netAmount, -110);
+  });
+
+  it('10. reverses CLAIMED earnings when order is cancelled/returned AND subtracts legacy paid settlements from wallet balance', async () => {
+    const { orders, settlements, service } = createBillingTestHarness();
+    const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+    orders.push(
+      {
+        id: 'ORD-CLM-1',
+        merchantId: 'm-uuid-101',
+        externalOrderId: 'ORD-CLM-1',
+        customerName: 'Buyer One',
+        status: 'DELIVERED',
+        totalAmount: 2110,
+        codAmount: 2110,
+        deliveryFee: 60,
+        packagingCost: 5,
+        deliveredAt: fiveDaysAgo,
+        updatedAt: fiveDaysAgo,
+        items: [{ productTitle: 'Item 1', quantity: 1, unitPrice: 2050 }],
+      },
+      {
+        id: 'ORD-CLM-2',
+        merchantId: 'm-uuid-101',
+        externalOrderId: 'ORD-CLM-2',
+        customerName: 'Buyer Two',
+        status: 'DELIVERED',
+        totalAmount: 1110,
+        codAmount: 1110,
+        deliveryFee: 60,
+        packagingCost: 5,
+        deliveredAt: fiveDaysAgo,
+        updatedAt: fiveDaysAgo,
+        items: [{ productTitle: 'Item 2', quantity: 1, unitPrice: 1050 }],
+      },
+    );
+
+    // Net for ORD-CLM-1 = 2000, ORD-CLM-2 = 1000. Claim all -> 3000 wallet balance.
+    await service.claimEarnings('MC-101', { claimAll: true });
+
+    // Record a legacy direct disbursement (isPaid: true, no payoutRequestId) of 500
+    settlements.push({
+      id: 'set-legacy-1',
+      merchantId: 'm-uuid-101',
+      payoutRequestId: null,
+      netPayout: 500,
+      totalCodCollected: 500,
+      storageFees: 0,
+      handlingFees: 0,
+      packagingFees: 0,
+      isPaid: true,
+      paidAt: new Date(),
+      createdAt: new Date(),
+    });
+
+    let dash = await service.getMerchantEarningsDashboard('MC-101');
+    assert.equal(dash.summary.availableBalance, 2500);
+    assert.equal(dash.summary.totalPaidOut, 500);
+
+    // Now ORD-CLM-2 (net 1000) gets CANCELLED -> CLAIMED earning must sync to REFUNDED
+    orders[1].status = 'CANCELLED';
+    orders[1].cancelReason = 'Late cancellation';
+
+    dash = await service.getMerchantEarningsDashboard('MC-101');
+    const refundedRow = dash.earnings.find((e) => e.orderNumber === 'ORD-CLM-2')!;
+    assert.equal(refundedRow.status, 'REFUNDED');
+    assert.equal(dash.summary.availableBalance, 1500);
+    assert.equal(dash.summary.totalRefunded, 1000);
+  });
 });

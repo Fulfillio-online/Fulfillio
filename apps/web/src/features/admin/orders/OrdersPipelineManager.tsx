@@ -24,6 +24,7 @@ import {
   fetchOrdersFromDatabase,
   updateOrderStatusInDatabase,
   cancelOrderInDatabase,
+  getAuthHeaders,
 } from '@/lib/warehouseSync';
 
 export interface OrdersPipelineManagerProps {
@@ -299,7 +300,7 @@ export function OrdersPipelineManager({
     const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
     fetch(`${API_BASE}/orders/${encodeURIComponent(orderId)}/courier`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify({ courierProvider: newCourier || null }),
     }).catch(() => {});
     showToast(
@@ -377,7 +378,7 @@ export function OrdersPipelineManager({
           if (courierOverride && courierOverride !== 'KEEP_ORDER_COURIER') {
             fetch(`${API_BASE}/orders/${encodeURIComponent(id)}/courier`, {
               method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
               body: JSON.stringify({ courierProvider: courierOverride }),
             }).catch(() => {});
           }

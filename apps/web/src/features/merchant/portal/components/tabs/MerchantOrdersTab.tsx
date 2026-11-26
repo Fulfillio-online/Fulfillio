@@ -622,17 +622,17 @@ export function MerchantOrdersTab({
 
         {/* Desktop Orders Data Table (hidden md:block) */}
         <div className="hidden md:block overflow-x-auto rounded-lg border border-slate-200 dark:border-white/10">
-          <table className="w-full min-w-[840px] text-left text-xs">
+          <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 dark:bg-navy-950/70 text-slate-600 dark:text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-200 dark:border-white/10">
               <tr>
-                <th className="py-3.5 px-4">Order</th>
-                <th className="py-3.5 px-4">Customer</th>
-                <th className="py-3.5 px-4">Date</th>
-                <th className="py-3.5 px-4">Amount</th>
-                <th className="py-3.5 px-4">Payment</th>
-                <th className="py-3.5 px-4">Delivery</th>
-                <th className="py-3.5 px-4">Status</th>
-                <th className="py-3.5 px-4 text-center">Action</th>
+                <th className="py-3 px-2.5 xl:px-3.5">Order</th>
+                <th className="py-3 px-2.5 xl:px-3.5">Customer</th>
+                <th className="py-3 px-2.5 xl:px-3.5">Date</th>
+                <th className="py-3 px-2.5 xl:px-3.5">Amount</th>
+                <th className="py-3 px-2.5 xl:px-3.5">Payment</th>
+                <th className="py-3 px-2.5 xl:px-3.5">Delivery</th>
+                <th className="py-3 px-2.5 xl:px-3.5">Status</th>
+                <th className="py-3 px-2.5 xl:px-3.5 text-center">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200/80 dark:divide-white/5 bg-white dark:bg-navy-900/60">
@@ -650,7 +650,7 @@ export function MerchantOrdersTab({
                     className="hover:bg-slate-50/80 dark:hover:bg-navy-800/40 cursor-pointer transition-colors group"
                   >
                     {/* ORDER ID & Items */}
-                    <td className="py-3.5 px-4">
+                    <td className="py-3 px-2.5 xl:px-3.5">
                       <div className="flex items-center gap-2.5">
                         <div className="p-1.5 bg-slate-100 dark:bg-navy-800 rounded text-slate-500 dark:text-slate-400 group-hover:text-orange-600 dark:hover:text-orange-400 group-hover:bg-slate-200 dark:hover:bg-navy-700/80 transition-colors">
                           <Package className="h-3.5 w-3.5" />
@@ -667,16 +667,16 @@ export function MerchantOrdersTab({
                     </td>
 
                     {/* CUSTOMER */}
-                    <td className="py-3.5 px-4">
+                    <td className="py-3 px-2.5 xl:px-3.5">
                       <div className="font-semibold text-navy-900 dark:text-white">{o.customer}</div>
                       <div className="text-[11px] font-mono text-slate-400">{o.phone}</div>
                     </td>
 
                     {/* DATE */}
-                    <td className="py-3.5 px-4 text-slate-700 dark:text-slate-300 font-medium">{o.date}</td>
+                    <td className="py-3 px-2.5 xl:px-3.5 text-slate-700 dark:text-slate-300 font-medium">{o.date}</td>
 
                     {/* AMOUNT */}
-                    <td className="py-3.5 px-4">
+                    <td className="py-3 px-2.5 xl:px-3.5">
                       <div className="font-bold text-navy-900 dark:text-white">৳{Number(o.amount).toLocaleString()}</div>
                       {o.advancePayment && o.advancePayment > 0 ? (
                         <div className="text-[10px] text-emerald-400 font-medium">
@@ -686,7 +686,7 @@ export function MerchantOrdersTab({
                     </td>
 
                     {/* PAYMENT */}
-                    <td className="py-3.5 px-4">
+                    <td className="py-3 px-2.5 xl:px-3.5">
                       <div className="text-navy-900 dark:text-white font-medium">{o.paymentMethod || 'Cash on Delivery'}</div>
                       <div
                         className={`text-[11px] font-semibold ${
@@ -706,16 +706,16 @@ export function MerchantOrdersTab({
                     </td>
 
                     {/* DELIVERY */}
-                    <td className="py-3.5 px-4">
+                    <td className="py-3 px-2.5 xl:px-3.5">
                       <div className="text-navy-900 dark:text-white font-semibold">{o.courier}</div>
                       <div className="text-[11px] text-slate-400">Charge: ৳{o.deliveryFee ?? 60}</div>
                     </td>
 
                     {/* STATUS */}
-                    <td className="py-3.5 px-4">{getStatusBadge(o.status)}</td>
+                    <td className="py-3 px-2.5 xl:px-3.5">{getStatusBadge(o.status)}</td>
 
                     {/* ACTION */}
-                    <td className="py-3.5 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                    <td className="py-3 px-2.5 xl:px-3.5 text-center" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-center gap-2">
                         <Link
                           href={`/print/memo/${encodeURIComponent(getCleanOrderId(o))}?memoCode=${encodeURIComponent(o.memoCode || 'MEMO-DEFAULT')}&customerName=${encodeURIComponent(o.customer)}&customerPhone=${encodeURIComponent(o.phone)}&customerAddress=${encodeURIComponent(o.address)}&codAmount=${o.amount}`}

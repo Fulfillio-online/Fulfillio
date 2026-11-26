@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { MerchantTab, MerchantOrderItem } from '../../types';
 import { useMerchant } from '../../MerchantContext';
+import { useMerchantEarnings } from '@/lib/hooks/useBilling';
 
 interface MerchantOverviewTabProps {
   memoCount: number;
@@ -76,6 +77,10 @@ function getPieSectorPath(
 export function MerchantOverviewTab({ memoCount, onSelectTab }: MerchantOverviewTabProps) {
   const router = useRouter();
   const { profile, products, orders, asns } = useMerchant();
+  const { data: billingData, refetch: refetchBilling } = useMerchantEarnings(
+    profile.merchantCode,
+    'ALL_TIME',
+  );
 
   const [timeframe, setTimeframe] = useState<MerchantTimeframe>('7d');
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -86,6 +91,7 @@ export function MerchantOverviewTab({ memoCount, onSelectTab }: MerchantOverview
 
   const handleRefresh = () => {
     setIsRefreshing(true);
+    refetchBilling?.();
     setTimeout(() => {
       setIsRefreshing(false);
     }, 500);
@@ -95,66 +101,84 @@ export function MerchantOverviewTab({ memoCount, onSelectTab }: MerchantOverview
   // E-Commerce Core Metrics & Live Calculations
   // ---------------------------------------------------------------------------
   const validOrders = useMemo(
-    () => orders.filter((o) => o.status !== 'CANCELLED'),
-    [orders]
+    () =>
+      orders.filter((o) => {
+        const st = String(o.status || '').toUpperCase();
+        return st !== 'CANCELLED' && st !== 'RETURNED';
+      }),
+    [orders],
   );
 
   const totalOrdersCount = orders.length;
-  const cancelledOrdersCount = orders.filter((o) => o.status === 'CANCELLED').length;
+  const cancelledOrdersCount = orders.filter(
+    (o) => String(o.status || '').toUpperCase() === 'CANCELLED',
+  ).length;
   const totalGrossRevenue = validOrders.reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
   const avgOrderValue = validOrders.length > 0 ? Math.round(totalGrossRevenue / validOrders.length) : 0;
 
   // Order Pipeline Counts
-  const pendingOrdersCount = orders.filter(
-    (o) => o.status === 'PENDING' || o.status === 'ALLOCATED'
+  const pendingOrdersCount = orders.filter((o) => {
+    const st = String(o.status || '').toUpperCase();
+    return st === 'PENDING' || st === 'ALLOCATED';
+  }).length;
+  const packedOrdersCount = orders.filter((o) => {
+    const st = String(o.status || '').toUpperCase();
+    return st === 'PICKING' || st === 'PICKED' || st === 'PACKED';
+  }).length;
+  const dispatchedOrdersCount = orders.filter(
+    (o) => String(o.status || '').toUpperCase() === 'DISPATCHED',
   ).length;
-  const packedOrdersCount = orders.filter(
-    (o) => o.status === 'PICKED' || o.status === 'PACKED'
-  ).length;
-  const dispatchedOrdersCount = orders.filter((o) => o.status === 'DISPATCHED').length;
-  const deliveredOrdersCount = orders.filter((o) => o.status === 'DELIVERED').length;
+  const deliveredOrdersCount = orders.filter((o) => {
+    const st = String(o.status || '').toUpperCase();
+    return st === 'DELIVERED' || st === 'PARTIAL_DELIVERED';
+  }).length;
   const fulfilledAndTransitCount = dispatchedOrdersCount + deliveredOrdersCount;
+  const terminalOrdersCount =
+    deliveredOrdersCount +
+    orders.filter((o) => String(o.status || '').toUpperCase() === 'RETURNED').length;
+  const deliveryRatePercent =
+    terminalOrdersCount > 0 ? Math.round((deliveredOrdersCount / terminalOrdersCount) * 100) : 0;
 
   // Inventory & Catalog Metrics
   const totalStockUnits = products.reduce((sum, p) => sum + (Number(p.stock) || 0), 0);
   const totalInventoryValue = products.reduce(
     (sum, p) => sum + (Number(p.stock) || 0) * (Number(p.price) || 0),
-    0
+    0,
   );
   const activeSkusCount = products.filter(
-    (p) => p.status !== 'DRAFT' && !p.isDraft
+    (p) => p.status !== 'DRAFT' && !p.isDraft,
   ).length;
   const lowStockProducts = useMemo(
     () =>
       products.filter(
-        (p) => p.status !== 'DRAFT' && !p.isDraft && (p.stock || 0) > 0 && (p.stock || 0) <= 15
+        (p) => p.status !== 'DRAFT' && !p.isDraft && (p.stock || 0) > 0 && (p.stock || 0) <= 15,
       ),
-    [products]
+    [products],
   );
   const outOfStockProducts = useMemo(
     () =>
       products.filter(
-        (p) => p.status !== 'DRAFT' && !p.isDraft && (p.stock || 0) === 0
+        (p) => p.status !== 'DRAFT' && !p.isDraft && (p.stock || 0) === 0,
       ),
-    [products]
+    [products],
   );
 
-  // 3PL Financial Settlement Calculations
-  const estFulfillmentFees = Math.round(totalGrossRevenue * 0.045);
-  const estCourierFees = validOrders.length * 60;
-  const estNetWalletBalance = Math.max(
-    0,
-    totalGrossRevenue - estFulfillmentFees - estCourierFees
-  );
+  // Real 3PL Financial Settlement Figures (sourced from /api/billing/earnings)
+  const billingSummary = billingData?.summary;
+  const estNetWalletBalance = billingSummary?.withdrawableTotal ?? 0;
+  const estCourierFees = billingSummary?.totalDeliveryFees ?? 0;
+  const estFulfillmentFees =
+    (billingSummary?.totalHandlingFees ?? 0) + (billingSummary?.totalPackagingFees ?? 0);
+  const realGrossBilling = billingSummary?.totalGrossEarnings ?? 0;
+  const realNetEarned = billingSummary?.totalNetEarnings ?? 0;
 
-  // Solid Pie Chart Percentages
+  // Solid Pie Chart Percentages (Real billing proportions)
   const netPercent =
-    totalGrossRevenue > 0
-      ? Math.max(0, Math.round((estNetWalletBalance / totalGrossRevenue) * 100))
-      : 82;
-  const feePercent = 5;
+    realGrossBilling > 0 ? Math.max(0, Math.round((realNetEarned / realGrossBilling) * 100)) : 0;
   const courierPercent =
-    totalGrossRevenue > 0 ? Math.max(0, 100 - netPercent - feePercent) : 13;
+    realGrossBilling > 0 ? Math.max(0, Math.round((estCourierFees / realGrossBilling) * 100)) : 0;
+  const feePercent =
+    realGrossBilling > 0 ? Math.max(0, 100 - netPercent - courierPercent) : 0;
 
   const angleNet = (netPercent / 100) * 360;
   const angleCourier = (courierPercent / 100) * 360;
@@ -183,110 +207,86 @@ export function MerchantOverviewTab({ memoCount, onSelectTab }: MerchantOverview
     { id: '1y', label: 'This Year (12 Months)' },
   ];
 
-  // Vertical Column Chart Data
+  // Real Order-Timestamp Vertical Column Chart Data
   const barChartData: TimeframeDataPoint[] = useMemo(() => {
-    if (totalGrossRevenue === 0 || validOrders.length === 0) {
-      switch (timeframe) {
-        case 'today':
-          return ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00'].map((label) => ({
-            label,
-            amount: 0,
-            orderCount: 0,
-          }));
-        case '7d':
-          return ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'].map((label) => ({
-            label,
-            amount: 0,
-            orderCount: 0,
-          }));
-        case '30d':
-          return ['Week 1', 'Week 2', 'Week 3', 'Week 4'].map((label) => ({
-            label,
-            amount: 0,
-            orderCount: 0,
-          }));
-        case '3m':
-          return ['2 Months Ago', 'Last Month', 'This Month'].map((label) => ({
-            label,
-            amount: 0,
-            orderCount: 0,
-          }));
-        case '6m':
-          return ['Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov'].map((label) => ({
-            label,
-            amount: 0,
-            orderCount: 0,
-          }));
-        case '1y':
-          return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map(
-            (label) => ({ label, amount: 0, orderCount: 0 })
-          );
-      }
+    const now = new Date();
+    const parseOrderDate = (o: MerchantOrderItem): Date | null => {
+      const raw = (o as any).createdAt || o.date;
+      if (!raw) return null;
+      const d = new Date(raw);
+      return Number.isNaN(d.getTime()) ? null : d;
+    };
+
+    const parsedOrders = validOrders.map((o) => ({
+      order: o,
+      dt: parseOrderDate(o),
+      amt: Number(o.amount) || 0,
+    }));
+
+    if (timeframe === 'today') {
+      const slots = [0, 3, 6, 9, 12, 15, 18, 21];
+      const todayKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
+      return slots.map((hr) => {
+        const label =
+          hr === 0 ? '12AM' : hr < 12 ? `${hr}AM` : hr === 12 ? '12PM' : `${hr - 12}PM`;
+        const matches = parsedOrders.filter(({ dt }) => {
+          if (!dt) return false;
+          const k = `${dt.getFullYear()}-${dt.getMonth()}-${dt.getDate()}`;
+          return k === todayKey && dt.getHours() >= hr && dt.getHours() < hr + 3;
+        });
+        return {
+          label,
+          amount: Math.round(matches.reduce((s, m) => s + m.amt, 0)),
+          orderCount: matches.length,
+        };
+      });
     }
 
-    const rev = totalGrossRevenue;
-    const ord = validOrders.length;
-
-    switch (timeframe) {
-      case 'today':
-        return [
-          { label: '08:00', amount: Math.round(rev * 0.08), orderCount: Math.max(1, Math.round(ord * 0.08)) },
-          { label: '10:00', amount: Math.round(rev * 0.16), orderCount: Math.max(1, Math.round(ord * 0.16)) },
-          { label: '12:00', amount: Math.round(rev * 0.22), orderCount: Math.max(1, Math.round(ord * 0.22)) },
-          { label: '14:00', amount: Math.round(rev * 0.18), orderCount: Math.max(1, Math.round(ord * 0.18)) },
-          { label: '16:00', amount: Math.round(rev * 0.14), orderCount: Math.max(1, Math.round(ord * 0.14)) },
-          { label: '18:00', amount: Math.round(rev * 0.12), orderCount: Math.max(1, Math.round(ord * 0.12)) },
-          { label: '20:00', amount: Math.round(rev * 0.10), orderCount: Math.max(1, Math.round(ord * 0.10)) },
-        ];
-      case '7d':
-        return [
-          { label: 'Sat', amount: Math.round(rev * 0.12), orderCount: Math.max(1, Math.round(ord * 0.12)) },
-          { label: 'Sun', amount: Math.round(rev * 0.15), orderCount: Math.max(1, Math.round(ord * 0.15)) },
-          { label: 'Mon', amount: Math.round(rev * 0.20), orderCount: Math.max(1, Math.round(ord * 0.20)) },
-          { label: 'Tue', amount: Math.round(rev * 0.14), orderCount: Math.max(1, Math.round(ord * 0.14)) },
-          { label: 'Wed', amount: Math.round(rev * 0.18), orderCount: Math.max(1, Math.round(ord * 0.18)) },
-          { label: 'Thu', amount: Math.round(rev * 0.13), orderCount: Math.max(1, Math.round(ord * 0.13)) },
-          { label: 'Fri', amount: Math.round(rev * 0.08), orderCount: Math.max(1, Math.round(ord * 0.08)) },
-        ];
-      case '30d':
-        return [
-          { label: 'Week 1', amount: Math.round(rev * 0.22), orderCount: Math.max(1, Math.round(ord * 0.22)) },
-          { label: 'Week 2', amount: Math.round(rev * 0.28), orderCount: Math.max(1, Math.round(ord * 0.28)) },
-          { label: 'Week 3', amount: Math.round(rev * 0.30), orderCount: Math.max(1, Math.round(ord * 0.30)) },
-          { label: 'Week 4', amount: Math.round(rev * 0.20), orderCount: Math.max(1, Math.round(ord * 0.20)) },
-        ];
-      case '3m':
-        return [
-          { label: '2 Months Ago', amount: Math.round(rev * 0.28), orderCount: Math.max(1, Math.round(ord * 0.28)) },
-          { label: 'Last Month', amount: Math.round(rev * 0.34), orderCount: Math.max(1, Math.round(ord * 0.34)) },
-          { label: 'This Month', amount: Math.round(rev * 0.38), orderCount: Math.max(1, Math.round(ord * 0.38)) },
-        ];
-      case '6m':
-        return [
-          { label: 'Jun', amount: Math.round(rev * 0.12), orderCount: Math.max(1, Math.round(ord * 0.12)) },
-          { label: 'Jul', amount: Math.round(rev * 0.14), orderCount: Math.max(1, Math.round(ord * 0.14)) },
-          { label: 'Aug', amount: Math.round(rev * 0.18), orderCount: Math.max(1, Math.round(ord * 0.18)) },
-          { label: 'Sep', amount: Math.round(rev * 0.16), orderCount: Math.max(1, Math.round(ord * 0.16)) },
-          { label: 'Oct', amount: Math.round(rev * 0.22), orderCount: Math.max(1, Math.round(ord * 0.22)) },
-          { label: 'Nov', amount: Math.round(rev * 0.18), orderCount: Math.max(1, Math.round(ord * 0.18)) },
-        ];
-      case '1y':
-        return [
-          { label: 'Jan', amount: Math.round(rev * 0.06), orderCount: Math.max(1, Math.round(ord * 0.06)) },
-          { label: 'Feb', amount: Math.round(rev * 0.07), orderCount: Math.max(1, Math.round(ord * 0.07)) },
-          { label: 'Mar', amount: Math.round(rev * 0.09), orderCount: Math.max(1, Math.round(ord * 0.09)) },
-          { label: 'Apr', amount: Math.round(rev * 0.08), orderCount: Math.max(1, Math.round(ord * 0.08)) },
-          { label: 'May', amount: Math.round(rev * 0.10), orderCount: Math.max(1, Math.round(ord * 0.10)) },
-          { label: 'Jun', amount: Math.round(rev * 0.08), orderCount: Math.max(1, Math.round(ord * 0.08)) },
-          { label: 'Jul', amount: Math.round(rev * 0.11), orderCount: Math.max(1, Math.round(ord * 0.11)) },
-          { label: 'Aug', amount: Math.round(rev * 0.09), orderCount: Math.max(1, Math.round(ord * 0.09)) },
-          { label: 'Sep', amount: Math.round(rev * 0.10), orderCount: Math.max(1, Math.round(ord * 0.10)) },
-          { label: 'Oct', amount: Math.round(rev * 0.12), orderCount: Math.max(1, Math.round(ord * 0.12)) },
-          { label: 'Nov', amount: Math.round(rev * 0.14), orderCount: Math.max(1, Math.round(ord * 0.14)) },
-          { label: 'Dec', amount: Math.round(rev * 0.16), orderCount: Math.max(1, Math.round(ord * 0.16)) },
-        ];
+    if (timeframe === '7d') {
+      return Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (6 - i));
+        const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+        const matches = parsedOrders.filter(
+          ({ dt }) => dt && `${dt.getFullYear()}-${dt.getMonth()}-${dt.getDate()}` === key,
+        );
+        return {
+          label: d.toLocaleDateString('en-US', { weekday: 'short' }),
+          amount: Math.round(matches.reduce((s, m) => s + m.amt, 0)),
+          orderCount: matches.length,
+        };
+      });
     }
-  }, [timeframe, totalGrossRevenue, validOrders.length]);
+
+    if (timeframe === '30d') {
+      const DAY_MS = 24 * 60 * 60 * 1000;
+      return Array.from({ length: 4 }, (_, w) => {
+        const bucketEnd = new Date(now.getTime() - (3 - w) * 7 * DAY_MS);
+        const bucketStart = new Date(bucketEnd.getTime() - 7 * DAY_MS);
+        const matches = parsedOrders.filter(
+          ({ dt }) => dt && dt.getTime() > bucketStart.getTime() && dt.getTime() <= bucketEnd.getTime(),
+        );
+        return {
+          label: bucketStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          amount: Math.round(matches.reduce((s, m) => s + m.amt, 0)),
+          orderCount: matches.length,
+        };
+      });
+    }
+
+    const monthsCount = timeframe === '3m' ? 3 : timeframe === '6m' ? 6 : 12;
+    return Array.from({ length: monthsCount }, (_, idx) => {
+      const target = new Date(now.getFullYear(), now.getMonth() - (monthsCount - 1 - idx), 1);
+      const matches = parsedOrders.filter(
+        ({ dt }) =>
+          dt && dt.getFullYear() === target.getFullYear() && dt.getMonth() === target.getMonth(),
+      );
+      return {
+        label: target.toLocaleDateString('en-US', { month: 'short' }),
+        amount: Math.round(matches.reduce((s, m) => s + m.amt, 0)),
+        orderCount: matches.length,
+      };
+    });
+  }, [timeframe, validOrders]);
 
   const maxBarAmount = useMemo(() => {
     const max = Math.max(...barChartData.map((d) => d.amount), 0);
@@ -296,12 +296,21 @@ export function MerchantOverviewTab({ memoCount, onSelectTab }: MerchantOverview
   // Filtered Recent Orders for the Live Orders Table
   const filteredRecentOrders = useMemo(() => {
     const list = orders.filter((o) => {
+      const st = String(o.status || '').toUpperCase();
       if (orderFilter === 'ALL') return true;
       if (orderFilter === 'PENDING') {
-        return o.status === 'PENDING' || o.status === 'ALLOCATED' || o.status === 'PICKED' || o.status === 'PACKED';
+        return (
+          st === 'PENDING' ||
+          st === 'ALLOCATED' ||
+          st === 'PICKING' ||
+          st === 'PICKED' ||
+          st === 'PACKED'
+        );
       }
-      if (orderFilter === 'IN_TRANSIT') return o.status === 'DISPATCHED';
-      if (orderFilter === 'DELIVERED') return o.status === 'DELIVERED';
+      if (orderFilter === 'IN_TRANSIT') return st === 'DISPATCHED';
+      if (orderFilter === 'DELIVERED') {
+        return st === 'DELIVERED' || st === 'PARTIAL_DELIVERED';
+      }
       return true;
     });
     return list.slice(0, 6);
@@ -493,7 +502,7 @@ export function MerchantOverviewTab({ memoCount, onSelectTab }: MerchantOverview
               <div className="flex items-center gap-1.5 mt-1.5 text-xs">
                 <span className="inline-flex items-center gap-0.5 font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-md">
                   <ArrowUpRight className="h-3 w-3" />
-                  14.8%
+                  {validOrders.length} Active
                 </span>
                 <span className="text-slate-500 dark:text-slate-400">
                   AOV: <strong className="text-navy-900 dark:text-white font-mono">৳{avgOrderValue.toLocaleString()}</strong>
@@ -530,9 +539,15 @@ export function MerchantOverviewTab({ memoCount, onSelectTab }: MerchantOverview
                 ৳ {estNetWalletBalance.toLocaleString()}
               </div>
               <div className="flex items-center gap-1.5 mt-1.5 text-xs text-slate-500 dark:text-slate-400">
-                <span>Net margin:</span>
-                <strong className="text-navy-900 dark:text-white font-mono">{netPercent}%</strong>
-                <span>after fees</span>
+                <span>Wallet:</span>
+                <strong className="text-navy-900 dark:text-white font-mono">
+                  ৳{(billingSummary?.availableBalance ?? 0).toLocaleString()}
+                </strong>
+                <span>·</span>
+                <span>Pending:</span>
+                <strong className="text-navy-900 dark:text-white font-mono">
+                  ৳{(billingSummary?.pendingEarnings ?? 0).toLocaleString()}
+                </strong>
               </div>
             </div>
           </div>
@@ -581,8 +596,10 @@ export function MerchantOverviewTab({ memoCount, onSelectTab }: MerchantOverview
             </div>
           </div>
           <div className="mt-4 pt-3 border-t border-slate-100 dark:border-white/10 flex items-center justify-between text-xs">
-            <span className="text-slate-500 dark:text-slate-400">Dispatch SLA</span>
-            <span className="font-bold text-emerald-600 dark:text-emerald-400">99.8% On-Time</span>
+            <span className="text-slate-500 dark:text-slate-400">Delivery Rate</span>
+            <span className="font-bold text-emerald-600 dark:text-emerald-400">
+              {terminalOrdersCount > 0 ? `${deliveryRatePercent}% Delivered` : '0 Delivered'}
+            </span>
           </div>
         </div>
 
@@ -792,7 +809,7 @@ export function MerchantOverviewTab({ memoCount, onSelectTab }: MerchantOverview
                 viewBox="0 0 172 172"
                 className="drop-shadow-sm overflow-visible"
               >
-                {totalGrossRevenue > 0 ? (
+                {realGrossBilling > 0 ? (
                   <>
                     <path
                       d={pathNet}

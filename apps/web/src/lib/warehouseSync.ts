@@ -410,6 +410,43 @@ export function getActiveMerchantSession(): ActiveMerchantSession {
   };
 }
 
+export function getPortalAuthToken(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    const pathname = window.location?.pathname || '';
+    if (pathname.startsWith('/admin') || pathname.startsWith('/wms')) {
+      return (
+        localStorage.getItem('fulfillio_admin_token') ||
+        localStorage.getItem('fulfillio_token') ||
+        localStorage.getItem('token') ||
+        ''
+      );
+    }
+    if (pathname.startsWith('/merchant')) {
+      return (
+        localStorage.getItem('fulfillio_merchant_token') ||
+        localStorage.getItem('fulfillio_token') ||
+        localStorage.getItem('token') ||
+        ''
+      );
+    }
+    return (
+      localStorage.getItem('fulfillio_token') ||
+      localStorage.getItem('fulfillio_merchant_token') ||
+      localStorage.getItem('fulfillio_admin_token') ||
+      localStorage.getItem('token') ||
+      ''
+    );
+  } catch {
+    return '';
+  }
+}
+
+export function getAuthHeaders(): Record<string, string> {
+  const token = getPortalAuthToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export function isMerchantLoggedIn(): boolean {
   if (typeof window === 'undefined') return false;
   try {
@@ -417,6 +454,22 @@ export function isMerchantLoggedIn(): boolean {
     if (!raw) return false;
     const parsed = JSON.parse(raw);
     return Boolean(parsed && parsed.merchantCode && parsed.email);
+  } catch {
+    return false;
+  }
+}
+
+export function isAdminLoggedIn(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const raw = localStorage.getItem('fulfillio_active_admin_session_v1');
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.email) return false;
+    const token =
+      localStorage.getItem('fulfillio_admin_token') ||
+      localStorage.getItem('fulfillio_token');
+    return Boolean(token);
   } catch {
     return false;
   }
@@ -438,6 +491,19 @@ export function clearActiveMerchantSession(): void {
   if (typeof window === 'undefined') return;
   try {
     localStorage.removeItem(STORAGE_KEY_ACTIVE_MERCHANT_SESSION);
+    localStorage.removeItem('fulfillio_merchant_token');
+    localStorage.removeItem('fulfillio_token');
+    localStorage.removeItem('token');
+  } catch {
+    // ignore
+  }
+}
+
+export function clearActiveAdminSession(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem('fulfillio_active_admin_session_v1');
+    localStorage.removeItem('fulfillio_admin_token');
     localStorage.removeItem('fulfillio_token');
     localStorage.removeItem('token');
   } catch {
@@ -870,6 +936,7 @@ export async function authenticateMerchantLogin(
     }
 
     if (data?.accessToken) {
+      localStorage.setItem('fulfillio_merchant_token', data.accessToken);
       localStorage.setItem('fulfillio_token', data.accessToken);
     }
 
@@ -1865,10 +1932,13 @@ export function convertMerchantOrderToWarehouse(
     resellerAddress: matchedMemo?.address || profile.location || 'Dhaka, Bangladesh',
     resellerLogo: matchedMemo?.logoUrl || profile.logoUrl,
     codAmount: calculatedCod,
+    totalAmount:
+      order.amount ?? Math.max(0, calculatedSubtotal + calculatedDeliveryFee - calculatedDiscount),
     subtotal: calculatedSubtotal,
     deliveryFee: calculatedDeliveryFee,
     discount: calculatedDiscount,
     advancePayment: calculatedAdvancePayment,
+    advancePaymentMethod: order.advancePaymentMethod,
     paymentStatus: order.paymentStatus ?? (order.status === 'DELIVERED' ? 'Paid' : 'Unpaid'),
     courier: validCourier,
     trackingCode: order.trackingId,
@@ -3163,6 +3233,7 @@ export async function syncProductStatusToDatabase(
       headers: {
         'Content-Type': 'application/json',
         ...(merchantCode ? { 'x-merchant-code': merchantCode } : {}),
+        ...getAuthHeaders(),
       },
       body: JSON.stringify({ status }),
     });
@@ -3225,6 +3296,7 @@ export async function reviewProductRevisionInDatabase(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...getAuthHeaders(),
         },
         body: JSON.stringify({ action, reason }),
       }
@@ -3261,6 +3333,7 @@ export async function rejectProductInDatabase(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...getAuthHeaders(),
         },
         body: JSON.stringify({
           reason: reason?.trim() || 'Rejected by admin',
@@ -3288,6 +3361,7 @@ export async function deleteProductFromDatabase(
       headers: {
         'Content-Type': 'application/json',
         ...(merchantCode ? { 'x-merchant-code': merchantCode } : {}),
+        ...getAuthHeaders(),
       },
     });
     if (!res.ok) {
@@ -3317,6 +3391,7 @@ export async function approveProductInDatabase(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...getAuthHeaders(),
       },
       body: JSON.stringify({
         binCode,
@@ -3348,6 +3423,7 @@ export async function acceptStockInDatabase(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...getAuthHeaders(),
       },
       body: JSON.stringify({
         quantity,
@@ -3377,6 +3453,7 @@ export async function updateOrderStatusInDatabase(
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
+        ...getAuthHeaders(),
       },
       body: JSON.stringify({ status }),
     });
@@ -3401,6 +3478,7 @@ export async function cancelOrderInDatabase(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...getAuthHeaders(),
       },
       body: JSON.stringify({ reason: reason || '' }),
     });
@@ -3497,6 +3575,27 @@ export function mapDbOrderToWarehouseOrder(o: any): WarehousePipelineOrder {
     ? firstItem.variantLabel.split('·')[1].trim()
     : 'Standard';
 
+  const dbSubtotal = Number(o.subtotal ?? 0);
+  const dbDeliveryFee = Number(o.deliveryFee ?? 0);
+  const dbDiscount = Number(o.discount ?? 0);
+  const dbAdvancePayment = Number(o.advancePayment ?? 0);
+  const dbTotalAmount = Number(o.totalAmount ?? 0);
+  const itemsSubtotal = mappedItems.reduce((sum, it) => sum + it.unitPrice * it.qty, 0);
+  const resolvedSubtotal =
+    dbSubtotal > 0
+      ? dbSubtotal
+      : itemsSubtotal > 0
+      ? itemsSubtotal
+      : Math.max(0, dbTotalAmount - dbDeliveryFee + dbDiscount);
+  const resolvedTotalAmount =
+    dbTotalAmount > 0
+      ? dbTotalAmount
+      : Math.max(0, resolvedSubtotal + dbDeliveryFee - dbDiscount);
+  const resolvedCodAmount =
+    o.codAmount !== null && o.codAmount !== undefined
+      ? Number(o.codAmount)
+      : Math.max(0, resolvedTotalAmount - dbAdvancePayment);
+
   return {
     id: cleanId,
     createdAt: o.createdAt ? new Date(o.createdAt).toLocaleString() : 'Today',
@@ -3520,17 +3619,20 @@ export function mapDbOrderToWarehouseOrder(o: any): WarehousePipelineOrder {
     items: mappedItems.length > 0 ? mappedItems : undefined,
     memoCode: o.memoCode || 'MEMO-DEFAULT',
     resellerName: o.merchant?.businessName || "Sabbir's Store",
-    resellerPhone: o.merchant?.phone || o.customerPhone,
+    resellerPhone: o.merchant?.phone || '',
     resellerAddress: o.merchant?.location || 'Dhaka, Bangladesh',
-    codAmount: Number(o.codAmount) || Number(o.totalAmount) || 0,
-    subtotal: Number(o.subtotal) || Number(o.totalAmount) || 0,
-    deliveryFee: Number(o.deliveryFee) || 0,
-    discount: Number(o.discount) || 0,
-    advancePayment: Number(o.advancePayment) || 0,
+    resellerLogo: o.merchant?.logoUrl || undefined,
+    codAmount: resolvedCodAmount,
+    totalAmount: resolvedTotalAmount,
+    subtotal: resolvedSubtotal,
+    deliveryFee: dbDeliveryFee,
+    discount: dbDiscount,
+    advancePayment: dbAdvancePayment,
+    advancePaymentMethod: o.advancePaymentMethod || undefined,
     paymentStatus:
-      Number(o.codAmount) === 0 && Number(o.totalAmount) > 0
+      resolvedCodAmount === 0 && resolvedTotalAmount > 0
         ? 'Paid'
-        : o.advancePayment > 0
+        : dbAdvancePayment > 0
         ? 'Partial'
         : 'Unpaid',
     courier: (() => {
@@ -3554,12 +3656,11 @@ export async function fetchOrderByIdFromDatabase(
   orderId: string,
 ): Promise<WarehousePipelineOrder | null> {
   try {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('fulfillio_token') : null;
     const res = await fetch(`${API_BASE}/orders/${encodeURIComponent(orderId)}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...getAuthHeaders(),
       },
     });
     if (!res.ok) return null;
@@ -3596,12 +3697,11 @@ export async function fetchOrdersFromDatabase(params?: {
     }
     if (params?.courier && params.courier !== 'ALL') qs.set('courier', params.courier);
 
-    const token = typeof window !== 'undefined' ? localStorage.getItem('fulfillio_token') : null;
     const res = await fetch(`${API_BASE}/orders?${qs.toString()}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...getAuthHeaders(),
       },
     });
     if (!res.ok) return [];

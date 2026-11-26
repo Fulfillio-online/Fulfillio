@@ -55,6 +55,7 @@ import {
   getMerchantCategoriesKey,
   updateOrderStatusInDatabase,
   cancelOrderInDatabase,
+  getAuthHeaders,
 } from '@/lib/warehouseSync';
 
 function getPayoutTimestamp(p?: Partial<PayoutAccount> | null): number {
@@ -1007,7 +1008,11 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
 
     if (isReturn) {
       let availableQty = Number(product.stock) || 0;
-      if (product.variantsList && product.variantsList.length > 0) {
+      if (
+        payload.scope !== 'ALL_VARIANTS' &&
+        product.variantsList &&
+        product.variantsList.length > 0
+      ) {
         const matchedV = product.variantsList.find(
           (v) =>
             (payload.variantId && v.id === payload.variantId) ||
@@ -1030,6 +1035,7 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
 
     const apiResult = await merchantApi.submitStockManageRequest(payload.productId, {
       operationType: payload.type,
+      scope: payload.scope,
       requestedQty: payload.requestedQty,
       variantId: payload.variantId,
       variantSku: payload.variantSku,
@@ -1334,9 +1340,10 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
     syncMerchantProductUpdatedToAdmin(updatedTarget, profile);
 
     try {
-      await fetch(`/api/inventory/products/${productId}/request-edit`, {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+      await fetch(`${apiBase}/inventory/products/${productId}/request-edit`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ reason }),
       });
     } catch {}

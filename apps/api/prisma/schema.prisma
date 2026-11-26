@@ -43,6 +43,12 @@ enum CourierProvider {
   CUSTOM
 }
 
+enum CourierConnectionStatus {
+  CONNECTED
+  SANDBOX
+  DISCONNECTED
+}
+
 enum InboundShipmentStatus {
   DRAFT
   IN_TRANSIT
@@ -384,9 +390,12 @@ model Order {
   packagingCost     Decimal          @default(5.00) @db.Decimal(10, 2)
   customerRiskScore Int?             @default(92)
   customerRiskLevel String?          @default("SAFE")
-  courierProvider   CourierProvider?
-  consignmentId     String?
-  trackingCode      String?
+  courierProvider       CourierProvider?
+  consignmentId         String?
+  trackingCode          String?
+  courierTrackingLink   String?
+  courierDeliveryStatus String?
+  courierSyncedAt       DateTime?
   totalAmount       Decimal          @db.Decimal(10, 2)
   codAmount         Decimal          @default(0) @db.Decimal(10, 2)
   subtotal          Decimal?         @default(0) @db.Decimal(10, 2)
@@ -772,4 +781,52 @@ model CompanyFinanceEntry {
   @@index([category, entryDate])
   @@index([merchantId, entryDate])
   @@map("company_finance_entries")
+}
+
+model CourierIntegration {
+  id                    String                  @id @default(uuid())
+  provider              CourierProvider         @unique
+  displayName           String
+  status                CourierConnectionStatus @default(DISCONNECTED)
+  isSandbox             Boolean                 @default(false)
+  baseUrl               String
+  encryptedCredentials  String?                 @db.Text
+  storeId               String?
+  webhookSecret         String?                 @db.Text
+  codChargePercent      Decimal                 @default(1.00) @db.Decimal(5, 2)
+  insideDhakaRate       Decimal                 @default(60.00) @db.Decimal(10, 2)
+  outsideDhakaRate      Decimal                 @default(120.00) @db.Decimal(10, 2)
+  autoBookingEnabled    Boolean                 @default(false)
+  allowPipelineOverride Boolean                 @default(true)
+  lastHealthStatus      String?
+  lastLatencyMs         Int?
+  lastBalance           Decimal?                @db.Decimal(12, 2)
+  lastCheckedAt         DateTime?
+  lastError             String?                 @db.Text
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+
+  @@map("courier_integrations")
+}
+
+model CourierWebhookLog {
+  id                String          @id @default(uuid())
+  provider          CourierProvider
+  idempotencyKey    String?         @unique
+  notificationType  String?
+  consignmentId     String?
+  invoice           String?
+  orderId           String?
+  rawStatus         String?
+  mappedOrderStatus OrderStatus?
+  signatureValid    Boolean         @default(false)
+  processed         Boolean         @default(false)
+  errorMessage      String?         @db.Text
+  payload           Json            @db.JsonB
+  createdAt         DateTime        @default(now())
+
+  @@index([provider, createdAt])
+  @@index([consignmentId])
+  @@index([orderId])
+  @@map("courier_webhook_logs")
 }

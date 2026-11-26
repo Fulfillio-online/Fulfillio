@@ -28,6 +28,7 @@ import {
   MerchantProductItem,
   MerchantProfileData,
 } from '../../types';
+import { getAuthHeaders } from '@/lib/warehouseSync';
 import {
   WarehouseReturnRecord,
   CancelledOrderItemRecord,
@@ -68,10 +69,11 @@ export function MerchantReturnsTab({
     const syncData = async () => {
       try {
         const qs = `merchantCode=${encodeURIComponent(merchantCode)}`;
+        const authHeaders = getAuthHeaders();
         const [cancelledRes, returnsRes, ledgerRes] = await Promise.all([
-          fetch(`${API_BASE}/returns/cancelled?${qs}`).catch(() => null),
-          fetch(`${API_BASE}/returns?${qs}`).catch(() => null),
-          fetch(`${API_BASE}/returns/ledger?${qs}`).catch(() => null),
+          fetch(`${API_BASE}/returns/cancelled?${qs}`, { headers: authHeaders }).catch(() => null),
+          fetch(`${API_BASE}/returns?${qs}`, { headers: authHeaders }).catch(() => null),
+          fetch(`${API_BASE}/returns/ledger?${qs}`, { headers: authHeaders }).catch(() => null),
         ]);
 
         if (cancelledRes?.ok) {

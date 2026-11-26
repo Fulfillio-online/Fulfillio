@@ -108,15 +108,26 @@ export class MemoEngineService {
         city: order.city,
       },
       items: order.items.map((item) => ({
-        productTitle: item.variant.product.title,
-        sku: item.variant.sku,
+        productTitle:
+          item.productTitle || item.variant?.product?.title || item.variant?.title || 'Product Item',
+        variantLabel: item.variantLabel || item.variant?.title || undefined,
+        sku: item.sku || item.variant?.sku || '',
         quantity: item.quantity,
-        unitPrice: item.unitPrice,
+        unitPrice: Number(item.unitPrice),
         total: Number(item.unitPrice) * item.quantity,
       })),
       financials: {
-        totalAmount: order.totalAmount,
-        codAmount: order.codAmount,
+        subtotal:
+          Number(order.subtotal ?? 0) ||
+          order.items.reduce((sum, it) => sum + Number(it.unitPrice) * it.quantity, 0),
+        deliveryFee: Number(order.deliveryFee ?? 0),
+        discount: Number(order.discount ?? 0),
+        totalAmount: Number(order.totalAmount ?? 0),
+        advancePayment: Number(order.advancePayment ?? 0),
+        advancePaymentMethod: order.advancePaymentMethod || undefined,
+        codAmount: Number(order.codAmount ?? 0),
+        paymentMethod: order.paymentMethod || undefined,
+        paymentStatus: order.paymentStatus || undefined,
       },
       compiledAt: new Date().toISOString(),
     };

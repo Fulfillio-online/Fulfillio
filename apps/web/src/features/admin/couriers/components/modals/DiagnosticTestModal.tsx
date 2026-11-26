@@ -19,7 +19,7 @@ export function DiagnosticTestModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-navy-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
+      <div className="bg-white dark:bg-navy-900 border border-slate-200 dark:border-white/10 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
         <div className="flex items-start justify-between gap-3 border-b border-slate-200 dark:border-white/10 pb-3">
           <div className="flex items-center gap-3">
             <div
@@ -37,19 +37,19 @@ export function DiagnosticTestModal({
             </div>
             <div>
               <h3 className="text-base font-bold text-navy-800 dark:text-white">
-                {testResult.courier.name} — API Test
+                {testResult.courier.name} — Live API Test
               </h3>
               <p className="text-xs text-slate-600 dark:text-slate-300">
                 {testResult.success
-                  ? `Handshake verified in ${testResult.latencyMs}ms`
-                  : 'Configuration required'}
+                  ? `Verified in ${testResult.latencyMs}ms`
+                  : `Failed${testResult.statusCode ? ` (HTTP ${testResult.statusCode})` : ''}`}
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1 text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-white"
+            className="p-1 text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-white cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -57,30 +57,42 @@ export function DiagnosticTestModal({
 
         <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 space-y-2 text-xs tabular-nums">
           <div className="flex items-center justify-between">
-            <span className="text-slate-600 dark:text-slate-300">1. Endpoint Reachability:</span>
-            <span className="text-orange-600 dark:text-orange-400 font-bold">200 OK</span>
+            <span className="text-slate-600 dark:text-slate-300">1. Endpoint Reachability (/ping):</span>
+            <span
+              className={
+                testResult.reachable
+                  ? 'text-emerald-600 dark:text-emerald-400 font-bold'
+                  : 'text-rose-600 dark:text-rose-400 font-bold'
+              }
+            >
+              {testResult.reachable ? `200 OK (${testResult.latencyMs}ms)` : 'UNREACHABLE ✕'}
+            </span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-slate-600 dark:text-slate-300">2. API Key &amp; Secret Auth:</span>
             <span
               className={
-                testResult.success
-                  ? 'text-orange-600 dark:text-orange-400 font-bold'
+                testResult.authenticated
+                  ? 'text-emerald-600 dark:text-emerald-400 font-bold'
                   : 'text-rose-600 dark:text-rose-400 font-bold'
               }
             >
-              {testResult.success ? 'AUTHENTICATED ✓' : 'MISSING KEY ✕'}
+              {testResult.authenticated ? 'AUTHENTICATED ✓' : 'FAILED ✕'}
             </span>
           </div>
+          {testResult.balance != null && (
+            <div className="flex items-center justify-between">
+              <span className="text-slate-600 dark:text-slate-300">3. Withdrawable Balance:</span>
+              <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                ৳{testResult.balance.toLocaleString()} BDT
+              </span>
+            </div>
+          )}
           <div className="flex items-center justify-between">
-            <span className="text-slate-600 dark:text-slate-300">3. Pickup Hub / Store ID:</span>
-            <span className="text-indigo-700 dark:text-indigo-300 font-bold">
-              {testResult.courier.storeId}
+            <span className="text-slate-600 dark:text-slate-300">4. Webhook Receiver:</span>
+            <span className="text-orange-600 dark:text-orange-400 font-bold">
+              {testResult.courier.hasWebhookSecret ? 'HMAC READY' : 'OPEN READY'}
             </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-slate-600 dark:text-slate-300">4. Webhook Listener:</span>
-            <span className="text-orange-600 dark:text-orange-400 font-bold">READY</span>
           </div>
         </div>
 
@@ -93,7 +105,7 @@ export function DiagnosticTestModal({
               onClick={() => onConfigureNow(testResult.courier)}
               className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-xs font-bold text-white cursor-pointer"
             >
-              Configure Credentials Now
+              Configure Credentials
             </button>
           )}
           <button

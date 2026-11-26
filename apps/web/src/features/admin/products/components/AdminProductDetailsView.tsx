@@ -33,6 +33,7 @@ import {
   Eye,
 } from 'lucide-react';
 import { StatusBadge } from '@/components/ui';
+import { getAuthHeaders } from '@/lib/warehouseSync';
 import { Modal } from '@/components/admin/AdminModal';
 import { AcceptStockModal } from './modals/AcceptStockModal';
 import { ApprovalActionModal } from './modals/ApprovalActionModal';
@@ -272,7 +273,9 @@ export function AdminProductDetailsView({ productId }: AdminProductDetailsViewPr
 
     const fetchFreshProduct = async () => {
       try {
-        const res = await fetch(`${API_BASE}/inventory/products/${encodeURIComponent(productId)}`);
+        const res = await fetch(`${API_BASE}/inventory/products/${encodeURIComponent(productId)}`, {
+          headers: getAuthHeaders(),
+        });
         if (!res.ok) return;
         const p = await res.json();
         if (!p || cancelled) return;

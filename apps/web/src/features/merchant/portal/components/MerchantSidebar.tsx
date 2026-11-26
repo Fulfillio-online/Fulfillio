@@ -63,7 +63,7 @@ export function MerchantSidebar({
     },
     {
       id: 'returns' as MerchantTab,
-      label: 'Returns & Cancellations',
+      label: 'Returns & Cancels',
       href: '/merchant/returns',
       icon: RotateCcw,
       badge: 'Hub',
@@ -76,7 +76,7 @@ export function MerchantSidebar({
     },
     {
       id: 'inbound' as MerchantTab,
-      label: 'Inbound ASNs & Warehouse',
+      label: 'Inbound & ASNs',
       href: '/merchant/inbound',
       icon: Truck,
     },
@@ -204,6 +204,8 @@ export function MerchantSidebar({
               onClick={() => {
                 try {
                   localStorage.removeItem('fulfillio_active_merchant_session_v1');
+                  localStorage.removeItem('fulfillio_merchant_token');
+                  localStorage.removeItem('fulfillio_token');
                 } catch {}
               }}
               className="text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 font-semibold transition-colors flex items-center gap-1 cursor-pointer py-1 px-2 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/30"

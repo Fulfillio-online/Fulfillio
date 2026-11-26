@@ -128,6 +128,13 @@ export function AdminHeader({ onOpenMobileSidebar }: AdminHeaderProps) {
         subtitle: 'Reverse Logistics & Restocking',
       };
     }
+    if (pathname.startsWith('/admin/stock-requests')) {
+      return {
+        title: 'Stock Requests',
+        icon: Layers,
+        subtitle: 'Merchant Restock, Recall & Variant Approvals',
+      };
+    }
     if (pathname.startsWith('/admin/stock')) {
       return {
         title: 'Stock & Cycle Count',
@@ -176,7 +183,7 @@ export function AdminHeader({ onOpenMobileSidebar }: AdminHeaderProps) {
   return (
     <header className="py-3 border-b border-slate-200 dark:border-white/10 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3 bg-white/90 dark:bg-navy-950/90 sticky top-0 z-30 backdrop-blur-md shadow-xs transition-colors duration-200">
       {/* Left: Mobile Toggle + Prominent Brand & Page Title */}
-      <div className="flex items-center gap-3 min-w-0">
+      <div className="flex items-center gap-3 flex-1 min-w-0">
         <button
           type="button"
           onClick={onOpenMobileSidebar}
@@ -186,10 +193,10 @@ export function AdminHeader({ onOpenMobileSidebar }: AdminHeaderProps) {
           <Menu className="h-5 w-5" />
         </button>
 
-        <div className="flex items-center gap-2.5 min-w-0">
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
           
           {/* Active Page Title - Prominent, clean, and never small */}
-          <div className="hidden sm:flex items-center gap-2 min-w-0 truncate">
+          <div className="hidden sm:flex items-center gap-2.5 min-w-0 flex-1">
             <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-navy-900 text-orange-600 dark:text-orange-400 border border-slate-200/70 dark:border-white/10 shrink-0">
               <PageIcon className="h-4 w-4" />
             </div>
@@ -206,27 +213,28 @@ export function AdminHeader({ onOpenMobileSidebar }: AdminHeaderProps) {
       </div>
 
       {/* Right: Search + Health Status + Dark/Light Mode Button */}
-      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+      <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
         {/* Search Input */}
-        <div className="relative hidden md:block w-56 lg:w-72 xl:w-80">
+        <div className="relative hidden md:block w-48 lg:w-56 xl:w-72">
           <Search className="h-4 w-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
           <input
             type="text"
             placeholder="Search orders, SKU, merchants..."
             className="w-full pl-9 pr-12 py-2 bg-slate-100/90 dark:bg-navy-900/90 border border-slate-200 dark:border-white/10 rounded-xl text-xs sm:text-sm text-navy-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500 transition-all"
           />
-          <kbd className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none hidden lg:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-white dark:bg-navy-800 border border-slate-200 dark:border-white/10 text-[10px] text-slate-500 font-mono">
+          <kbd className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none hidden xl:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-white dark:bg-navy-800 border border-slate-200 dark:border-white/10 text-[10px] text-slate-500 font-mono">
             ⌘K
           </kbd>
         </div>
 
         {/* 3PL System Health status pill */}
-        <div className="flex items-center gap-2 text-xs bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-300/70 dark:border-emerald-800/60 px-3 py-2 rounded-xl shrink-0 font-medium shadow-2xs">
+        <div className="flex items-center gap-2 text-xs bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-300/70 dark:border-emerald-800/60 px-2.5 xl:px-3 py-2 rounded-xl shrink-0 font-medium shadow-2xs">
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
           </span>
-          <span className="hidden sm:inline font-semibold">All 3PL Nodes Healthy</span>
+          <span className="hidden xl:inline font-semibold">All 3PL Nodes Healthy</span>
+          <span className="hidden sm:inline xl:hidden font-semibold">Nodes Live</span>
           <span className="sm:hidden font-semibold">Live</span>
         </div>
 

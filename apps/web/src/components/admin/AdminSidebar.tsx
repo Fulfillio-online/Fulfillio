@@ -435,6 +435,11 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
           </div>
           <Link
             href="/login"
+            onClick={() => {
+              try {
+                localStorage.removeItem('fulfillio_active_admin_session_v1');
+              } catch {}
+            }}
             className="flex items-center gap-1.5 text-xs font-bold text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 px-2.5 py-1.5 rounded-lg border border-transparent hover:border-rose-200 dark:hover:border-rose-900/50 transition-colors shrink-0 cursor-pointer"
             title="Sign out of Admin Console"
           >

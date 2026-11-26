@@ -3,7 +3,10 @@
 import React from 'react';
 import { Printer } from 'lucide-react';
 import { Modal } from '@/components/admin/AdminModal';
-import { UnifiedThermalSticker } from '@/features/shared/thermal-print/UnifiedThermalSticker';
+import {
+  UnifiedThermalSticker,
+  ThermalStickerItem,
+} from '@/features/shared/thermal-print/UnifiedThermalSticker';
 import { WarehousePipelineOrder } from '../../types';
 
 interface MemoPreviewModalProps {
@@ -13,6 +16,39 @@ interface MemoPreviewModalProps {
   onPrint: () => void;
 }
 
+function resolveStickerItems(order: WarehousePipelineOrder): ThermalStickerItem[] {
+  if (order.items && order.items.length > 0) {
+    return order.items.map((item) => ({
+      sku: item.sku || order.sku || 'SKU',
+      title: (item.title || 'Ordered Product')
+        .replace(/\s*\(\+\d+\s*more\)/gi, '')
+        .replace(/\s*\+\s*\d+\s*more/gi, '')
+        .trim(),
+      color: item.color,
+      size: item.size,
+      qty: item.qty || 1,
+      price: Number(item.unitPrice) || 0,
+    }));
+  }
+
+  const qty = order.qty || 1;
+  const fallbackUnitPrice =
+    order.subtotal && order.subtotal > 0
+      ? Math.round(order.subtotal / qty)
+      : Math.round((order.totalAmount ?? order.codAmount) / qty);
+
+  return [
+    {
+      sku: order.sku,
+      title: order.productTitle,
+      color: order.color,
+      size: order.size,
+      qty,
+      price: fallbackUnitPrice,
+    },
+  ];
+}
+
 export function MemoPreviewModal({
   isOpen,
   onClose,
@@ -20,6 +56,9 @@ export function MemoPreviewModal({
   onPrint,
 }: MemoPreviewModalProps) {
   if (!order) return null;
+
+  const stickerItems = resolveStickerItems(order);
+  const courierLabel = (order.courier || 'STANDARD').toUpperCase();
 
   return (
     <Modal
@@ -59,22 +98,20 @@ export function MemoPreviewModal({
             customerAddress={order.customerAddress}
             city={order.city}
             codAmount={order.codAmount}
-            courierProvider={order.courier.toUpperCase()}
-            consignmentId={`CN-${order.id.replace(/\D/g, '')}`}
+            subtotal={order.subtotal}
+            deliveryFee={order.deliveryFee}
+            discount={order.discount}
+            totalAmount={order.totalAmount}
+            advancePayment={order.advancePayment}
+            advancePaymentMethod={order.advancePaymentMethod}
+            paymentStatus={order.paymentStatus}
+            courierProvider={courierLabel}
+            consignmentId={`CN-${order.id.replace(/\D/g, '') || order.id.slice(-6)}`}
             trackingCode={
               order.trackingCode ||
-              `TRK-${order.courier.slice(0, 3).toUpperCase()}-${order.id.replace(/\D/g, '')}`
+              `TRK-${courierLabel.slice(0, 3)}-${order.id.replace(/\D/g, '') || order.id.slice(-6)}`
             }
-            items={[
-              {
-                sku: order.sku,
-                title: order.productTitle,
-                color: order.color,
-                size: order.size,
-                qty: order.qty,
-                price: order.codAmount,
-              },
-            ]}
+            items={stickerItems}
           />
         </div>
       </div>

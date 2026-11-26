@@ -29,6 +29,7 @@ import {
   deleteProductFromDatabase,
   rejectProductInDatabase,
   reviewProductRevisionInDatabase,
+  getAuthHeaders,
 } from '@/lib/warehouseSync';
 import {
   extractPendingEditFromApiProduct,
@@ -142,7 +143,7 @@ export function MerchantProductsTab({
     reloadFromStorage();
 
     // Fetch products directly from PostgreSQL backend to stay in sync with /admin/products
-    fetch(`${API_BASE}/inventory/products`)
+    fetch(`${API_BASE}/inventory/products`, { headers: getAuthHeaders() })
       .then((res) => (res.ok ? res.json() : null))
       .then((backendProds) => {
         if (backendProds && Array.isArray(backendProds) && backendProds.length > 0) {
@@ -631,7 +632,7 @@ export function MerchantProductsTab({
 
     fetch(`${API_BASE}/inventory/products/${encodeURIComponent(productId)}/status`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify({ status: 'DRAFT' }),
     }).catch(() => {});
 
@@ -656,7 +657,7 @@ export function MerchantProductsTab({
 
     fetch(`${API_BASE}/inventory/products/${encodeURIComponent(productId)}/status`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify({ status: 'PENDING_APPROVAL' }),
     }).catch(() => {});
 

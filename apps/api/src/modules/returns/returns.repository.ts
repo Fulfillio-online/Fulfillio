@@ -23,12 +23,84 @@ export class ReturnsRepository {
     return found?.id;
   }
 
+  private async syncVariantStockAttrs(tx: any, variantId: string) {
+    if (typeof tx.inventoryItem?.findMany !== 'function' || typeof tx.productVariant?.findUnique !== 'function') {
+      return;
+    }
+    const allInvs = await tx.inventoryItem.findMany({
+      where: { variantId },
+      select: { quantityAvailable: true },
+    });
+    const totalAvail = (allInvs || []).reduce(
+      (sum: number, r: any) => sum + Math.max(0, Number(r.quantityAvailable) || 0),
+      0,
+    );
+    const variantRow = await tx.productVariant.findUnique({
+      where: { id: variantId },
+      select: { attributes: true },
+    });
+    if (variantRow) {
+      const existingAttrs =
+        variantRow.attributes && typeof variantRow.attributes === 'object'
+          ? { ...(variantRow.attributes as Record<string, any>) }
+          : {};
+      await tx.productVariant.update({
+        where: { id: variantId },
+        data: {
+          attributes: {
+            ...existingAttrs,
+            declaredStock: totalAvail,
+            stock: totalAvail,
+          },
+        },
+      });
+    }
+  }
+
+  async findOrderReturnProcessingState(orderId: string) {
+    const cleanId = (orderId || '').replace(/^#/, '').trim();
+    const order = await this.prisma.order.findFirst({
+      where: {
+        OR: [{ id: orderId }, { id: cleanId }, { externalOrderId: orderId }, { externalOrderId: cleanId }],
+      },
+      include: { items: true },
+    });
+    if (!order) {
+      throw new NotFoundException(`Order '${orderId}' not found.`);
+    }
+    const existingLog =
+      typeof (this.prisma as any).inventoryAuditLog?.findFirst === 'function'
+        ? await (this.prisma as any).inventoryAuditLog.findFirst({
+            where: {
+              referenceId: order.id,
+              reason: {
+                in: [StockMovementReason.RETURN_RESTOCK, StockMovementReason.DAMAGED_QUARANTINE],
+              },
+            },
+            select: { id: true },
+          })
+        : null;
+    return { order, alreadyProcessed: order.status === 'RETURNED' && Boolean(existingLog) };
+  }
+
   async markOrderReturned(orderId: string) {
-    return this.prisma.order.update({
-      where: { id: orderId },
+    const cleanId = (orderId || '').replace(/^#/, '').trim();
+    const existing = await this.prisma.order.findFirst({
+      where: {
+        OR: [{ id: orderId }, { id: cleanId }, { externalOrderId: orderId }, { externalOrderId: cleanId }],
+      },
+      select: { id: true, status: true },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Order '${orderId}' not found.`);
+    }
+    const previousStatus = existing.status;
+    const updated = await this.prisma.order.update({
+      where: { id: existing.id },
       data: { status: 'RETURNED', returnedAt: new Date() },
       include: { items: true },
     });
+    return { ...updated, previousStatus };
   }
 
   async listReturnedOrders(merchantId?: string) {
@@ -224,6 +296,9 @@ export class ReturnsRepository {
           },
         });
 
+        // Sync ProductVariant attributes stock snapshot
+        await this.syncVariantStockAttrs(tx, item.variantId);
+
         // Create immutable InventoryAuditLog entry
         await tx.inventoryAuditLog.create({
           data: {
@@ -317,7 +392,14 @@ export class ReturnsRepository {
 
     const totalDispatchedOrders = await this.prisma.order.count({
       where: {
-        status: { in: ['DISPATCHED', 'DELIVERED', 'RETURNED'] },
+        status: { in: ['DISPATCHED', 'DELIVERED', 'PARTIAL_DELIVERED', 'RETURNED'] },
+        ...(merchantId ? { merchantId } : {}),
+      },
+    });
+
+    const totalDeliveredTerminal = await this.prisma.order.count({
+      where: {
+        status: { in: ['DELIVERED', 'PARTIAL_DELIVERED'] },
         ...(merchantId ? { merchantId } : {}),
       },
     });
@@ -351,9 +433,10 @@ export class ReturnsRepository {
       .filter((l) => l.reason === StockMovementReason.DAMAGED_QUARANTINE)
       .reduce((sum, l) => sum + l.quantityDelta, 0);
 
+    const terminalOrdersCount = totalDeliveredTerminal + totalReturnedOrders;
     const returnRate =
-      totalDispatchedOrders > 0
-        ? Math.round((totalReturnedOrders / totalDispatchedOrders) * 100)
+      terminalOrdersCount > 0
+        ? Math.round((totalReturnedOrders / terminalOrdersCount) * 10000) / 100
         : 0;
 
     return {
@@ -373,20 +456,80 @@ export class ReturnsRepository {
     quantity: number,
     isUndamaged: boolean,
     reasonNotes?: string,
+    releaseReservedFirst: boolean = false,
   ) {
+    const qty = Math.max(0, Number(quantity) || 0);
+    if (qty <= 0) return;
+
     return this.prisma.$transaction(async (tx) => {
-      await tx.inventoryItem.updateMany({
+      const existingItems = await tx.inventoryItem.findMany({
         where: { variantId },
-        data: isUndamaged
-          ? { quantityAvailable: { increment: quantity } }
-          : { quantityDamaged: { increment: quantity } },
+        include: { location: true },
+        orderBy: { quantityAvailable: 'desc' },
       });
+
+      if (releaseReservedFirst) {
+        let remainingReserve = qty;
+        for (const inv of existingItems) {
+          if (remainingReserve <= 0) break;
+          const resAmt = Math.min(Math.max(0, Number(inv.quantityReserved) || 0), remainingReserve);
+          if (resAmt > 0) {
+            await tx.inventoryItem.update({
+              where: { id: inv.id },
+              data: { quantityReserved: { decrement: resAmt } },
+            });
+            remainingReserve -= resAmt;
+          }
+        }
+      }
+
+      if (existingItems.length > 0) {
+        // Choose a single bin (prefer non-damaged shelf for undamaged restock, or damaged bin for quarantine)
+        const targetItem = isUndamaged
+          ? existingItems.find((it: any) => !it.location?.isDamaged) || existingItems[0]
+          : existingItems.find((it: any) => it.location?.isDamaged) || existingItems[0];
+
+        await tx.inventoryItem.update({
+          where: { id: targetItem.id },
+          data: isUndamaged
+            ? { quantityAvailable: { increment: qty } }
+            : { quantityDamaged: { increment: qty } },
+        });
+      } else {
+        const binCode = isUndamaged ? 'A-01-01' : 'DMG-01';
+        const loc = await tx.inventoryLocation.upsert({
+          where: { binCode },
+          update: {},
+          create: {
+            zone: isUndamaged ? 'Z1' : 'DMG',
+            aisle: isUndamaged ? 'A01' : 'Q01',
+            rack: 'R01',
+            shelf: 'S01',
+            binCode,
+            isDamaged: !isUndamaged,
+          },
+        });
+        await tx.inventoryItem.create({
+          data: {
+            variantId,
+            locationId: loc.id,
+            quantityAvailable: isUndamaged ? qty : 0,
+            quantityReserved: 0,
+            quantityDamaged: isUndamaged ? 0 : qty,
+            reorderPoint: 10,
+          },
+        });
+      }
+
+      if (isUndamaged) {
+        await this.syncVariantStockAttrs(tx, variantId);
+      }
 
       await tx.inventoryAuditLog.create({
         data: {
           merchantId,
           variantId,
-          quantityDelta: quantity,
+          quantityDelta: qty,
           reason: isUndamaged
             ? StockMovementReason.RETURN_RESTOCK
             : StockMovementReason.DAMAGED_QUARANTINE,

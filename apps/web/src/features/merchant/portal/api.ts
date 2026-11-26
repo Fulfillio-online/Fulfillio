@@ -36,7 +36,10 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 
 function getAuthHeader(): Record<string, string> {
   if (typeof window === 'undefined') return {};
-  const token = localStorage.getItem('fulfillio_token') || localStorage.getItem('token');
+  const token =
+    localStorage.getItem('fulfillio_merchant_token') ||
+    localStorage.getItem('fulfillio_token') ||
+    localStorage.getItem('token');
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
@@ -316,11 +319,15 @@ export const merchantApi = {
         });
 
         const storedColors = variants[0]?.attributes?.allColors;
+        const validVariantColorKeys = new Set(
+          Array.from(colorMap.keys()).map((k) => k.trim().toLowerCase())
+        );
         const mergedColorMap = new Map<string, { id: string; name: string; hex: string; imageUrl?: string; sizes: string[] }>();
         if (Array.isArray(storedColors) && storedColors.length > 0) {
           for (const sc of storedColors) {
-            if (sc?.name) {
-              mergedColorMap.set(sc.name.toLowerCase(), {
+            const scKey = String(sc?.name || '').trim().toLowerCase();
+            if (sc?.name && (validVariantColorKeys.size === 0 || validVariantColorKeys.has(scKey))) {
+              mergedColorMap.set(scKey, {
                 id: sc.id || `c-${mergedColorMap.size + 1}`,
                 name: sc.name,
                 hex: sc.hex || '#111827',
@@ -1057,6 +1064,7 @@ export const merchantApi = {
     productId: string,
     payload: {
       operationType?: 'ADJUST' | 'RESTOCK' | 'RETURN';
+      scope?: 'VARIANT' | 'ALL_VARIANTS';
       requestedQty?: number;
       variantId?: string;
       variantSku?: string;

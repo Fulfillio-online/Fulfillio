@@ -43,10 +43,27 @@ export async function fetchApi<T = any>(
     }
   }
 
-  // Retrieve token from client storage if available
+  // Retrieve token from client storage scoped by active portal if available
   let token: string | null = null;
   if (typeof window !== 'undefined') {
-    token = localStorage.getItem('fulfillio_token');
+    const pathname = window.location?.pathname || '';
+    if (pathname.startsWith('/admin') || pathname.startsWith('/wms')) {
+      token =
+        localStorage.getItem('fulfillio_admin_token') ||
+        localStorage.getItem('fulfillio_token') ||
+        localStorage.getItem('token');
+    } else if (pathname.startsWith('/merchant')) {
+      token =
+        localStorage.getItem('fulfillio_merchant_token') ||
+        localStorage.getItem('fulfillio_token') ||
+        localStorage.getItem('token');
+    } else {
+      token =
+        localStorage.getItem('fulfillio_token') ||
+        localStorage.getItem('fulfillio_merchant_token') ||
+        localStorage.getItem('fulfillio_admin_token') ||
+        localStorage.getItem('token');
+    }
   }
 
   const finalHeaders: HeadersInit = {

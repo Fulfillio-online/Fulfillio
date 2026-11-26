@@ -247,6 +247,8 @@ export function MerchantHeader({
                     onClick={() => {
                       try {
                         localStorage.removeItem('fulfillio_active_merchant_session_v1');
+                        localStorage.removeItem('fulfillio_merchant_token');
+                        localStorage.removeItem('fulfillio_token');
                       } catch {}
                     }}
                     className="w-full px-4 py-2 text-left text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 flex items-center gap-2.5 font-semibold transition-colors"

@@ -6,8 +6,15 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Increase payload limit to 50MB to support high-res Base64 product images and variants without 413
-  app.use(json({ limit: '50mb' }));
+  // Increase payload limit to 50MB and capture rawBody for HMAC webhook signature verification
+  app.use(
+    json({
+      limit: '50mb',
+      verify: (req: any, _res, buf) => {
+        req.rawBody = buf;
+      },
+    }),
+  );
   app.use(urlencoded({ extended: true, limit: '50mb' }));
 
   app.setGlobalPrefix('api');

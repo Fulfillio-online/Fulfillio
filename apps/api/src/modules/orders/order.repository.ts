@@ -108,6 +108,9 @@ export class OrderRepository {
           select: {
             merchantCode: true,
             businessName: true,
+            phone: true,
+            location: true,
+            logoUrl: true,
           },
         },
         items: {

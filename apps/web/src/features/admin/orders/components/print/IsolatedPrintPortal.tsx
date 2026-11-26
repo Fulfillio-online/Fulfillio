@@ -21,39 +21,67 @@ export function IsolatedPrintPortal({
   return createPortal(
     <div id="fulfillio-print-invoice-root" className="hidden">
       {printMode === 'MEMOS' &&
-        orders.map((ord) => (
-          <div key={ord.id} className="fulfillio-thermal-page-break">
-            <UnifiedThermalSticker
-              orderId={ord.id}
-              memoCode={ord.memoCode}
-              resellerName={ord.resellerName}
-              resellerPhone={ord.resellerPhone}
-              resellerAddress={ord.resellerAddress}
-              logoUrl={ord.resellerLogo}
-              customerName={ord.customerName}
-              customerPhone={ord.customerPhone}
-              customerAddress={ord.customerAddress}
-              city={ord.city}
-              codAmount={ord.codAmount}
-              courierProvider={ord.courier.toUpperCase()}
-              consignmentId={`CN-${ord.id.replace(/\D/g, '')}`}
-              trackingCode={
-                ord.trackingCode ||
-                `TRK-${ord.courier.slice(0, 3).toUpperCase()}-${ord.id.replace(/\D/g, '')}`
-              }
-              items={[
-                {
-                  sku: ord.sku,
-                  title: ord.productTitle,
-                  color: ord.color,
-                  size: ord.size,
-                  qty: ord.qty,
-                  price: ord.codAmount,
-                },
-              ]}
-            />
-          </div>
-        ))}
+        orders.map((ord) => {
+          const courierLabel = (ord.courier || 'STANDARD').toUpperCase();
+          const stickerItems =
+            ord.items && ord.items.length > 0
+              ? ord.items.map((item) => ({
+                  sku: item.sku || ord.sku || 'SKU',
+                  title: (item.title || 'Ordered Product')
+                    .replace(/\s*\(\+\d+\s*more\)/gi, '')
+                    .replace(/\s*\+\s*\d+\s*more/gi, '')
+                    .trim(),
+                  color: item.color,
+                  size: item.size,
+                  qty: item.qty || 1,
+                  price: Number(item.unitPrice) || 0,
+                }))
+              : [
+                  {
+                    sku: ord.sku,
+                    title: ord.productTitle,
+                    color: ord.color,
+                    size: ord.size,
+                    qty: ord.qty || 1,
+                    price:
+                      ord.subtotal && ord.subtotal > 0
+                        ? Math.round(ord.subtotal / (ord.qty || 1))
+                        : Math.round((ord.totalAmount ?? ord.codAmount) / (ord.qty || 1)),
+                  },
+                ];
+
+          return (
+            <div key={ord.id} className="fulfillio-thermal-page-break">
+              <UnifiedThermalSticker
+                orderId={ord.id}
+                memoCode={ord.memoCode}
+                resellerName={ord.resellerName}
+                resellerPhone={ord.resellerPhone}
+                resellerAddress={ord.resellerAddress}
+                logoUrl={ord.resellerLogo}
+                customerName={ord.customerName}
+                customerPhone={ord.customerPhone}
+                customerAddress={ord.customerAddress}
+                city={ord.city}
+                codAmount={ord.codAmount}
+                subtotal={ord.subtotal}
+                deliveryFee={ord.deliveryFee}
+                discount={ord.discount}
+                totalAmount={ord.totalAmount}
+                advancePayment={ord.advancePayment}
+                advancePaymentMethod={ord.advancePaymentMethod}
+                paymentStatus={ord.paymentStatus}
+                courierProvider={courierLabel}
+                consignmentId={`CN-${ord.id.replace(/\D/g, '') || ord.id.slice(-6)}`}
+                trackingCode={
+                  ord.trackingCode ||
+                  `TRK-${courierLabel.slice(0, 3)}-${ord.id.replace(/\D/g, '') || ord.id.slice(-6)}`
+                }
+                items={stickerItems}
+              />
+            </div>
+          );
+        })}
 
       {printMode === 'PICK_SHEET' && (
         <div className="bg-white text-black p-6 font-sans text-xs max-w-2xl mx-auto">

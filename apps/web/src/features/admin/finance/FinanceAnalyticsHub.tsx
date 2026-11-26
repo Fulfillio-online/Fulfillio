@@ -202,7 +202,7 @@ export function FinanceAnalyticsHub() {
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-bold text-white shadow-md shadow-orange-500/20 transition-all cursor-pointer active:scale-95"
           >
             <Plus className="w-4 h-4" />
-            <span>+ Log Expense / Income</span>
+            <span>Log Expense / Income</span>
           </button>
 
           <button

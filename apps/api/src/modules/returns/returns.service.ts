@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { ReturnsRepository } from './returns.repository';
 import { BillingService } from '../billing/billing.service';
 import { StockMovementReason } from '@fulfillio/contracts';
@@ -120,6 +120,8 @@ export class ReturnsService {
     const resolvedId = await this.repository.resolveMerchantId(merchantIdOrCode);
     const logs = await this.repository.listRecoveryLedger(resolvedId);
 
+    const runningVariantStock = new Map<string, number>();
+
     return logs.map((log) => {
       const product = log.variant?.product;
       const merchant = product?.merchant;
@@ -127,10 +129,19 @@ export class ReturnsService {
         log.variant?.inventoryItems?.[0]?.location?.binCode ||
         log.variant?.defaultBinCode ||
         'A-01-01';
-      const totalStock = (log.variant?.inventoryItems || []).reduce(
+      const liveTotalStock = (log.variant?.inventoryItems || []).reduce(
         (sum, inv) => sum + (inv.quantityAvailable || 0),
         0,
       );
+
+      const vKey = log.variantId || log.id;
+      const newStock = runningVariantStock.has(vKey)
+        ? runningVariantStock.get(vKey)!
+        : liveTotalStock;
+      const deltaAppliedToSellable =
+        log.reason === StockMovementReason.DAMAGED_QUARANTINE ? 0 : log.quantityDelta;
+      const previousStock = Math.max(0, newStock - deltaAppliedToSellable);
+      runningVariantStock.set(vKey, previousStock);
 
       return {
         id: log.id,
@@ -157,8 +168,8 @@ export class ReturnsService {
         productTitle: product?.title || 'Product',
         fullSku: log.variant?.sku || 'SKU-N/A',
         qty: Math.abs(log.quantityDelta),
-        previousStock: Math.max(0, totalStock - log.quantityDelta),
-        newStock: totalStock,
+        previousStock,
+        newStock,
         binCode,
         operatorName: 'Warehouse Admin',
         notes: log.notes || 'Stock recovery logged in database',
@@ -176,7 +187,20 @@ export class ReturnsService {
   }
 
   async processInboundRTO(orderId: string, isUndamaged: boolean, reasonNotes?: string) {
+    const { alreadyProcessed } = await this.repository.findOrderReturnProcessingState(orderId);
+    if (alreadyProcessed) {
+      throw new BadRequestException(
+        `Return stock for order '${orderId}' has already been processed.`,
+      );
+    }
+
     const order = await this.repository.markOrderReturned(orderId);
+    const shouldReleaseReserved = [
+      'ALLOCATED',
+      'PICKING',
+      'PACKED',
+      'ON_HOLD_FRAUD',
+    ].includes((order as any).previousStatus || '');
 
     for (const item of order.items) {
       if (!item.variantId) continue;
@@ -187,6 +211,7 @@ export class ReturnsService {
         item.quantity,
         isUndamaged,
         reasonNotes,
+        shouldReleaseReserved,
       );
     }
 
@@ -200,7 +225,7 @@ export class ReturnsService {
     }
 
     return {
-      orderId,
+      orderId: order.id,
       status: 'RETURNED',
       restockedToSellable: isUndamaged,
       routedToDamagedQuarantine: !isUndamaged,
@@ -217,7 +242,20 @@ export class ReturnsService {
       notes?: string;
     }>,
   ) {
+    const { alreadyProcessed } = await this.repository.findOrderReturnProcessingState(orderId);
+    if (alreadyProcessed) {
+      throw new BadRequestException(
+        `Return stock for order '${orderId}' has already been processed.`,
+      );
+    }
+
     const order = await this.repository.markOrderReturned(orderId);
+    const shouldReleaseReserved = [
+      'ALLOCATED',
+      'PICKING',
+      'PACKED',
+      'ON_HOLD_FRAUD',
+    ].includes((order as any).previousStatus || '');
 
     for (const d of decisions) {
       if (d.restockGoodQty > 0) {
@@ -228,6 +266,7 @@ export class ReturnsService {
           d.restockGoodQty,
           true,
           d.notes || 'QC Passed: Restocked to shelf',
+          shouldReleaseReserved,
         );
       }
       if (d.quarantineDamageQty > 0) {
@@ -238,6 +277,7 @@ export class ReturnsService {
           d.quarantineDamageQty,
           false,
           d.notes || 'QC Failed: Routed to Quarantine Bin',
+          shouldReleaseReserved && d.restockGoodQty <= 0,
         );
       }
     }
@@ -252,7 +292,7 @@ export class ReturnsService {
     }
 
     return {
-      orderId,
+      orderId: order.id,
       status: 'RETURNED',
       qcCompleted: true,
       processedAt: new Date().toISOString(),

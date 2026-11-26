@@ -1,28 +1,22 @@
 'use client';
 
 import React, { useState } from 'react';
-import {
-  Eye,
-  EyeOff,
-  Copy,
-  Check,
-  Activity,
-  Settings,
-} from 'lucide-react';
+import { Copy, Check, Activity, Settings, Wallet, ShieldCheck, Loader2 } from 'lucide-react';
 import { CourierIntegrationItem } from '../types';
 
 interface CourierCardProps {
   courier: CourierIntegrationItem;
+  isTesting?: boolean;
   onTestConnection: (courier: CourierIntegrationItem) => void;
   onConfigure: (courier: CourierIntegrationItem) => void;
 }
 
 export function CourierCard({
   courier,
+  isTesting = false,
   onTestConnection,
   onConfigure,
 }: CourierCardProps) {
-  const [isRevealed, setIsRevealed] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   const handleCopy = (keyId: string, text: string) => {
@@ -59,9 +53,9 @@ export function CourierCard({
           <span
             className={`px-2.5 py-1 rounded-full text-xs font-bold border shrink-0 ${
               courier.status === 'CONNECTED'
-                ? 'bg-emerald-50 dark:bg-emerald-950/90 text-emerald-600 dark:text-emerald-400 border-emerald-800'
+                ? 'bg-emerald-50 dark:bg-emerald-950/90 text-emerald-600 dark:text-emerald-400 border-emerald-500/40'
                 : courier.status === 'SANDBOX'
-                ? 'bg-amber-50 dark:bg-amber-950/90 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800'
+                ? 'bg-amber-50 dark:bg-amber-950/90 text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-800'
                 : 'bg-slate-100 dark:bg-navy-800 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-white/15'
             }`}
           >
@@ -69,11 +63,22 @@ export function CourierCard({
           </span>
         </div>
 
-        {/* Store ID, Rates & Ping Info Grid */}
+        {/* Balance, Rates & Ping Info Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-xl bg-slate-50/90 dark:bg-navy-950/90 border border-slate-200/80 dark:border-white/10 text-xs">
           <div>
-            <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase block">Pickup Store ID</span>
-            <span className="tabular-nums font-bold text-indigo-700 dark:text-indigo-300">{courier.storeId}</span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase block">
+              {courier.code === 'STEADFAST' ? 'Withdrawable Balance' : 'Pickup Store ID'}
+            </span>
+            {courier.code === 'STEADFAST' ? (
+              <span className="tabular-nums font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                <Wallet className="w-3 h-3" />
+                {courier.lastBalance != null ? `৳${courier.lastBalance.toLocaleString()}` : '—'}
+              </span>
+            ) : (
+              <span className="tabular-nums font-bold text-indigo-700 dark:text-indigo-300">
+                {courier.storeId || 'Not set'}
+              </span>
+            )}
           </div>
           <div>
             <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase block">Inside / Outside</span>
@@ -89,56 +94,38 @@ export function CourierCard({
           </div>
           <div>
             <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase block">API Health</span>
-            <span className="tabular-nums text-xs text-slate-700 dark:text-slate-200">{courier.lastPing}</span>
+            <span
+              className={`tabular-nums text-xs font-semibold ${
+                courier.lastHealthStatus === 'OK'
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : courier.lastHealthStatus === 'ERROR'
+                  ? 'text-rose-600 dark:text-rose-400'
+                  : 'text-slate-600 dark:text-slate-300'
+              }`}
+            >
+              {courier.lastPing}
+            </span>
           </div>
         </div>
 
-        {/* API Key & Webhook Fields */}
+        {/* Masked Credentials & Webhook Fields */}
         <div className="space-y-3 text-xs">
           <div>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-slate-600 dark:text-slate-300 font-medium">API Key / Client Token:</span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsRevealed(!isRevealed)}
-                  className="text-slate-600 dark:text-slate-300 hover:text-navy-800 dark:hover:text-white flex items-center gap-1 cursor-pointer"
-                >
-                  {isRevealed ? (
-                    <>
-                      <EyeOff className="w-3.5 h-3.5" />
-                      <span>Hide</span>
-                    </>
-                  ) : (
-                    <>
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>Show</span>
-                    </>
-                  )}
-                </button>
-                {courier.apiKey && (
-                  <button
-                    type="button"
-                    onClick={() => handleCopy(`key-${courier.id}`, courier.apiKey)}
-                    className="text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 flex items-center gap-1 cursor-pointer"
-                  >
-                    {copiedField === `key-${courier.id}` ? (
-                      <>
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Copied</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5" />
-                        <span>Copy</span>
-                      </>
-                    )}
-                  </button>
-                )}
-              </div>
+              <span className="text-slate-600 dark:text-slate-300 font-medium">
+                {courier.code === 'STEADFAST'
+                  ? 'Encrypted Api-Key / Secret-Key:'
+                  : courier.code === 'PATHAO'
+                  ? 'Encrypted Client ID / Secret:'
+                  : 'Encrypted API Token:'}
+              </span>
+              <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                {courier.hasCredentials ? 'AES-256 Stored' : 'Not Configured'}
+              </span>
             </div>
             <input
-              type={isRevealed ? 'text' : 'password'}
+              type="text"
               value={courier.apiKey || 'Not configured — click Configure below'}
               readOnly
               className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-navy-800 dark:text-slate-100 tabular-nums text-xs focus:outline-none"
@@ -147,7 +134,9 @@ export function CourierCard({
 
           <div>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-slate-600 dark:text-slate-300 font-medium">Webhook Callback URL:</span>
+              <span className="text-slate-600 dark:text-slate-300 font-medium">
+                Webhook Callback URL {courier.hasWebhookSecret ? '(HMAC Verified)' : ''}:
+              </span>
               <button
                 type="button"
                 onClick={() => handleCopy(`wh-${courier.id}`, courier.webhookUrl)}
@@ -173,30 +162,37 @@ export function CourierCard({
               className="w-full px-3 py-2 bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 rounded-xl text-slate-600 dark:text-slate-300 tabular-nums text-xs focus:outline-none"
             />
           </div>
+
+          {courier.lastError && (
+            <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 text-[11px] leading-relaxed">
+              <strong>Last Error:</strong> {courier.lastError}
+            </div>
+          )}
         </div>
       </div>
 
       {/* Card Footer */}
       <div className="pt-3 border-t border-slate-200 dark:border-white/10 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
-          <span>Pipeline Override:</span>
-          <span
-            className={`font-bold ${
-              courier.allowPipelineOverride ? 'text-orange-600 dark:text-orange-400' : 'text-slate-500 dark:text-slate-400'
-            }`}
-          >
-            {courier.allowPipelineOverride ? 'Allowed' : 'Disabled'}
+          <span>Active Parcels:</span>
+          <span className="font-bold text-navy-800 dark:text-white tabular-nums">
+            {courier.activeConsignments}
           </span>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             type="button"
+            disabled={isTesting}
             onClick={() => onTestConnection(courier)}
-            className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-semibold text-navy-800 dark:text-slate-100 border border-slate-300 dark:border-white/15 flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-navy-800 hover:bg-slate-200 dark:hover:bg-navy-700 text-xs font-semibold text-navy-800 dark:text-slate-100 border border-slate-300 dark:border-white/15 flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-60"
           >
-            <Activity className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
-            <span>Test Connection</span>
+            {isTesting ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-orange-600" />
+            ) : (
+              <Activity className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
+            )}
+            <span>{isTesting ? 'Testing...' : 'Test Connection'}</span>
           </button>
 
           <button

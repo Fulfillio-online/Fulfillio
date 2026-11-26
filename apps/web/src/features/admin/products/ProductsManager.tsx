@@ -33,6 +33,7 @@ import { ProductsCatalogTab } from './components/tabs/ProductsCatalogTab';
 import { ProductsApprovalTab } from './components/tabs/ProductsApprovalTab';
 import { WarehouseBinsTab } from './components/tabs/WarehouseBinsTab';
 import { WarehouseStockLedgerTab } from './components/tabs/WarehouseStockLedgerTab';
+import { getAuthHeaders } from '@/lib/warehouseSync';
 import { StockAdjustModal } from './components/modals/StockAdjustModal';
 import { ApprovalActionModal } from './components/modals/ApprovalActionModal';
 import { AcceptStockModal } from './components/modals/AcceptStockModal';
@@ -373,7 +374,7 @@ export function ProductsManager({
         setProducts(reconciled);
 
         // Fetch products directly from PostgreSQL backend to ensure all merchant uploads are present
-        fetch(`${API_BASE}/inventory/products`)
+        fetch(`${API_BASE}/inventory/products`, { headers: getAuthHeaders() })
           .then((res) => (res.ok ? res.json() : null))
           .then((backendProds) => {
             if (backendProds && Array.isArray(backendProds) && backendProds.length > 0) {
@@ -462,20 +463,36 @@ export function ProductsManager({
                 const size = firstVariant?.attributes?.size || variantParts[1] || 'Standard';
                 const revInfo = extractPendingEditFromApiProduct(p);
                 const rawAllColors = (firstVariant?.attributes as any)?.allColors;
-                const derivedColors =
+                const variantColorNames = Array.from(
+                  new Set(
+                    variants
+                      .map((v: any) => v.attributes?.color || v.title?.split('/')[0]?.trim() || '')
+                      .filter((c: string) => Boolean(c && c.trim()))
+                  )
+                ) as string[];
+                const variantColorKeySet = new Set(
+                  variantColorNames.map((c) => c.trim().toLowerCase())
+                );
+                const filteredStoredColors =
                   Array.isArray(rawAllColors) && rawAllColors.length > 0
-                    ? rawAllColors
-                    : Array.from(
-                        new Set(
-                          variants
-                            .map((v: any) => v.attributes?.color || v.title?.split('/')[0]?.trim() || '')
-                            .filter((c: string) => Boolean(c && c.trim()))
-                        )
-                      ).map((cName: any, idx: number) => ({
-                        id: `c-${idx}`,
-                        name: String(cName),
-                        hex: '#64748b',
-                      }));
+                    ? rawAllColors.filter(
+                        (sc: any) =>
+                          sc?.name &&
+                          (variantColorKeySet.size === 0 ||
+                            variantColorKeySet.has(String(sc.name).trim().toLowerCase()))
+                      )
+                    : [];
+                const storedColorKeys = new Set(
+                  filteredStoredColors.map((sc: any) => String(sc.name).trim().toLowerCase())
+                );
+                const missingVariantColors = variantColorNames
+                  .filter((cName) => !storedColorKeys.has(cName.trim().toLowerCase()))
+                  .map((cName, idx) => ({
+                    id: `c-${filteredStoredColors.length + idx}`,
+                    name: cName,
+                    hex: '#64748b',
+                  }));
+                const derivedColors = [...filteredStoredColors, ...missingVariantColors];
 
                 return {
                   id: p.id,
@@ -1557,7 +1574,7 @@ syncAdminProductsToMerchant(next);
     // Sync to PostgreSQL (pgAdmin) database
     fetch(`${API_BASE}/inventory/products/${encodeURIComponent(productId)}/status`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify({ status: 'DRAFT' }),
     }).catch(() => {});
 
@@ -1589,7 +1606,7 @@ syncAdminProductsToMerchant(next);
     // Sync to PostgreSQL (pgAdmin) database — requires Admin Approval again
     fetch(`${API_BASE}/inventory/products/${encodeURIComponent(productId)}/status`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify({ status: 'PENDING_APPROVAL' }),
     }).catch(() => {});
 
@@ -1622,7 +1639,7 @@ syncAdminProductsToMerchant(next);
     productIds.forEach((id) => {
       fetch(`${API_BASE}/inventory/products/${encodeURIComponent(id)}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ status: 'DRAFT' }),
       }).catch(() => {});
     });
@@ -1654,7 +1671,7 @@ syncAdminProductsToMerchant(next);
     productIds.forEach((id) => {
       fetch(`${API_BASE}/inventory/products/${encodeURIComponent(id)}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ status: 'PENDING_APPROVAL' }),
       }).catch(() => {});
     });
@@ -1868,7 +1885,7 @@ syncAdminProductsToMerchant(next);
       : `${API_BASE}/inventory/products/${encodeURIComponent(productId)}/reactivate`;
     fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: willSuspend ? JSON.stringify({ reason: 'Suspended by warehouse admin' }) : undefined,
     }).catch(() => {});
 

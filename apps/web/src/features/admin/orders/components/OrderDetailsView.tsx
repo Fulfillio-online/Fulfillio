@@ -31,7 +31,9 @@ import {
   AlertCircle,
   MoreVertical,
   CheckCheck,
+  RefreshCw,
 } from 'lucide-react';
+import { shippingApi } from '@/lib/api/shippingApi';
 import {
   CourierPartner,
   OrderStage,
@@ -71,6 +73,8 @@ export function OrderDetailsView({ orderId }: OrderDetailsViewProps) {
   const [copiedTracking, setCopiedTracking] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isTimelineMobileExpanded, setIsTimelineMobileExpanded] = useState(false);
+  const [isSyncingCourier, setIsSyncingCourier] = useState(false);
+  const [liveCourierStatus, setLiveCourierStatus] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -248,6 +252,22 @@ export function OrderDetailsView({ orderId }: OrderDetailsViewProps) {
     setTimeout(() => setCopiedTracking(false), 2000);
   };
 
+  const handleSyncCourierStatus = async () => {
+    if (!order || isSyncingCourier) return;
+    setIsSyncingCourier(true);
+    try {
+      const res = await shippingApi.syncOrderStatus(order.id);
+      setLiveCourierStatus(res.rawStatus);
+      showToast(
+        `${res.provider} status synced: ${res.rawStatus}${res.orderStatusUpdated && res.mappedOrderStatus ? ` (Order → ${res.mappedOrderStatus})` : ''}`,
+      );
+    } catch (err: any) {
+      showToast(`Status sync failed: ${err?.message || 'Unable to reach courier API'}`);
+    } finally {
+      setIsSyncingCourier(false);
+    }
+  };
+
   const handleUpdateStage = (newStage: OrderStage) => {
     if (!order) return;
     const updated: WarehousePipelineOrder = {
@@ -345,8 +365,12 @@ export function OrderDetailsView({ orderId }: OrderDetailsViewProps) {
   const deliveryFee = order.deliveryFee ?? 80;
   const discount = order.discount ?? 0;
   const advancePayment = order.advancePayment ?? 0;
-  const orderTotal = order.codAmount ?? Math.max(0, subtotal + deliveryFee - discount);
-  const codAmount = order.codAmount ?? Math.max(0, orderTotal - (order.advancePayment || 0));
+  const orderTotal =
+    order.totalAmount ?? Math.max(0, subtotal + deliveryFee - discount);
+  const codAmount =
+    order.codAmount !== undefined && order.codAmount !== null
+      ? order.codAmount
+      : Math.max(0, orderTotal - advancePayment);
 
   // Customer initials
   const customerInitials =
@@ -1080,6 +1104,25 @@ export function OrderDetailsView({ orderId }: OrderDetailsViewProps) {
                   )}
                 </button>
               </div>
+
+              {liveCourierStatus && (
+                <div className="flex items-center justify-between pt-1 border-t border-slate-200/70 dark:border-white/10">
+                  <span className="text-[10px] text-slate-400">Live Courier Status</span>
+                  <span className="font-mono text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                    {liveCourierStatus}
+                  </span>
+                </div>
+              )}
+
+              <button
+                type="button"
+                disabled={isSyncingCourier}
+                onClick={handleSyncCourierStatus}
+                className="w-full mt-1 py-1.5 px-2.5 rounded-lg bg-white dark:bg-navy-900 hover:bg-slate-100 dark:hover:bg-navy-800 border border-slate-200 dark:border-white/10 text-[11px] font-semibold text-navy-800 dark:text-slate-200 flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`h-3 w-3 text-orange-500 ${isSyncingCourier ? 'animate-spin' : ''}`} />
+                <span>{isSyncingCourier ? 'Syncing with Courier...' : 'Sync Live Courier Status'}</span>
+              </button>
             </div>
           </div>
 

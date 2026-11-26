@@ -187,9 +187,21 @@ export const wmsApi = {
   },
 
   /**
-   * Step 3: Call courier API booking (Steadfast, Pathao, RedX)
+   * Step 3: Call synchronous courier API booking (Steadfast, Pathao, RedX)
+   * Throws exact backend / courier error on failure (Strict Real Mode)
    */
-  async bookCourier(orderId: string, courierName: string): Promise<{ trackingCode?: string } | null> {
+  async bookCourier(
+    orderId: string,
+    courierName: string,
+  ): Promise<{
+    orderId: string;
+    provider: string;
+    consignmentId: string;
+    trackingCode: string;
+    trackingLink?: string | null;
+    deliveryStatus?: string | null;
+    isSimulated: boolean;
+  }> {
     const provider =
       courierName.toUpperCase().includes('PATHAO')
         ? 'PATHAO'
@@ -197,12 +209,65 @@ export const wmsApi = {
         ? 'REDX'
         : 'STEADFAST';
 
-    const res = await safeFetch<{ trackingCode?: string; consignmentId?: string }>('/shipping/book', {
+    const res = await fetch(`${API_BASE}/shipping/book`, {
       method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
       body: JSON.stringify({ orderId, provider }),
     });
 
-    return res;
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(body?.message || `Courier booking failed (HTTP ${res.status})`);
+    }
+
+    return body;
+  },
+
+  /**
+   * Step 3 (Bulk): Call synchronous bulk courier API booking (Steadfast bulk-order/extended)
+   */
+  async bookBulkCouriers(
+    orderIds: string[],
+    courierName: string,
+  ): Promise<{
+    provider: string;
+    total: number;
+    succeeded: number;
+    failed: number;
+    results: Array<{
+      orderId: string;
+      invoice: string;
+      success: boolean;
+      consignmentId?: string | null;
+      trackingCode?: string | null;
+      error?: string | null;
+    }>;
+  }> {
+    const provider =
+      courierName.toUpperCase().includes('PATHAO')
+        ? 'PATHAO'
+        : courierName.toUpperCase().includes('REDX')
+        ? 'REDX'
+        : 'STEADFAST';
+
+    const res = await fetch(`${API_BASE}/shipping/book/bulk`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify({ orderIds, provider }),
+    });
+
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(body?.message || `Bulk courier booking failed (HTTP ${res.status})`);
+    }
+
+    return body;
   },
 
   /**

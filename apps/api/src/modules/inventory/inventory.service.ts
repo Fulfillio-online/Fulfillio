@@ -339,6 +339,7 @@ export class InventoryService {
     merchantId: string | undefined,
     payload: {
       operationType?: 'ADJUST' | 'RESTOCK' | 'RETURN';
+      scope?: 'VARIANT' | 'ALL_VARIANTS';
       requestedQty?: number;
       variantId?: string;
       variantSku?: string;
@@ -393,6 +394,17 @@ export class InventoryService {
     orderReference?: string,
   ) {
     return this.inventoryRepo.releaseReservedStock(items, merchantId, orderReference);
+  }
+
+  /**
+   * Consume reserved stock when a packed/allocated order leaves the warehouse (DISPATCHED/DELIVERED)
+   */
+  async consumeReservedStockForOrder(
+    items: Array<{ variantId: string; quantity: number }>,
+    merchantId?: string,
+    orderReference?: string,
+  ): Promise<boolean> {
+    return this.inventoryRepo.consumeReservedStockAtomically(items, merchantId, orderReference);
   }
 
   // ============================================================================

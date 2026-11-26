@@ -533,7 +533,7 @@ export function MerchantTable({
             <thead className="bg-slate-50/80 dark:bg-navy-950/80 text-slate-600 dark:text-slate-300 uppercase tracking-wider font-bold border-b border-slate-200 dark:border-white/10 text-xs">
               <tr>
                 {/* 1. Multiple Select Header */}
-                <th className="p-4 w-12 text-center">
+                <th className="py-3 px-2.5 lg:px-3 w-10 text-center">
                   <input
                     type="checkbox"
                     checked={isAllSelected}
@@ -545,12 +545,12 @@ export function MerchantTable({
                     title="Select all visible merchants"
                   />
                 </th>
-                <th className="p-4">Merchant &amp; Store</th>
-                <th className="p-4">Owner Contact</th>
-                <th className="p-4">Bank / COD Payout</th>
-                <th className="p-4">Status</th>
-                <th className="p-4 text-center">Active SKUs</th>
-                <th className="p-4 text-right">Actions</th>
+                <th className="py-3 px-2.5 lg:px-3">Merchant &amp; Store</th>
+                <th className="py-3 px-2.5 lg:px-3">Owner Contact</th>
+                <th className="py-3 px-2.5 lg:px-3">Bank / COD Payout</th>
+                <th className="py-3 px-2.5 lg:px-3">Status</th>
+                <th className="py-3 px-2.5 lg:px-3 text-center">Active SKUs</th>
+                <th className="py-3 px-2.5 lg:px-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200/80 dark:divide-white/10">
@@ -575,7 +575,7 @@ export function MerchantTable({
                       }`}
                     >
                       {/* Checkbox Cell */}
-                      <td className="p-4 w-12 text-center" onClick={(e) => e.stopPropagation()}>
+                      <td className="py-3 px-2.5 lg:px-3 w-10 text-center" onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           checked={isSelected}
@@ -585,7 +585,7 @@ export function MerchantTable({
                       </td>
 
                       {/* Merchant & Store Name */}
-                      <td className="p-4">
+                      <td className="py-3 px-2.5 lg:px-3">
                         <div className="flex items-center gap-3">
                           <div
                             className={`w-10 h-10 rounded-xl bg-gradient-to-br ${merchant.avatarBg} flex items-center justify-center text-white font-bold text-sm shadow-md shrink-0`}
@@ -619,7 +619,7 @@ export function MerchantTable({
                       </td>
 
                       {/* Owner Contact */}
-                      <td className="p-4">
+                      <td className="py-3 px-2.5 lg:px-3">
                         <div className="font-medium text-navy-800 dark:text-slate-100">
                           {merchant.ownerName}
                         </div>
@@ -633,7 +633,7 @@ export function MerchantTable({
                       </td>
 
                       {/* Bank / Payout Snapshot */}
-                      <td className="p-4">
+                      <td className="py-3 px-2.5 lg:px-3">
                         <div className="flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-200">
                           <Landmark className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400 shrink-0" />
                           <span className="truncate max-w-[150px]">
@@ -663,19 +663,19 @@ export function MerchantTable({
                       </td>
 
                       {/* Status */}
-                      <td className="p-4">
+                      <td className="py-3 px-2.5 lg:px-3">
                         <StatusBadge status={merchant.status} />
                       </td>
 
                       {/* SKU Count */}
-                      <td className="p-4 text-center">
+                      <td className="py-3 px-2.5 lg:px-3 text-center">
                         <span className="px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-navy-950 border border-slate-200 dark:border-white/10 tabular-nums font-bold text-navy-800 dark:text-slate-100">
                           {skuCount}
                         </span>
                       </td>
 
                       {/* Actions Dropdown */}
-                      <td className="p-4 text-right">
+                      <td className="py-3 px-2.5 lg:px-3 text-right">
                         <div className="relative inline-block text-left" data-dropdown-container>
                           <button
                             type="button"

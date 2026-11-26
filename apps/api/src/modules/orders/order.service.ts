@@ -134,21 +134,94 @@ export class OrderService {
   }
 
   /**
-   * Update order status
+   * Update order status with strict state-machine validation & reserved stock consumption
    */
   async updateOrderStatus(id: string, status: OrderStatus, merchantId?: string) {
     const order = await this.getOrderById(id, merchantId);
+    const prevStatus = order.status as OrderStatus;
+
+    if (prevStatus === status) {
+      return order;
+    }
+
+    const fulfillmentTargetStatuses: OrderStatus[] = [
+      OrderStatus.ALLOCATED,
+      OrderStatus.PICKING,
+      OrderStatus.PACKED,
+      OrderStatus.DISPATCHED,
+      OrderStatus.DELIVERED,
+      OrderStatus.PARTIAL_DELIVERED,
+    ];
+
+    if (
+      (prevStatus === OrderStatus.CANCELLED || prevStatus === OrderStatus.RETURNED) &&
+      fulfillmentTargetStatuses.includes(status)
+    ) {
+      throw new BadRequestException(
+        `Invalid status transition: Cannot move terminal order (${prevStatus}) back to '${status}'.`,
+      );
+    }
+
+    if (
+      prevStatus === OrderStatus.ON_HOLD_STOCK &&
+      [OrderStatus.DISPATCHED, OrderStatus.DELIVERED, OrderStatus.PARTIAL_DELIVERED].includes(
+        status,
+      )
+    ) {
+      throw new BadRequestException(
+        `Invalid status transition: Order is ON_HOLD_STOCK (unreserved) and cannot jump directly to '${status}'.`,
+      );
+    }
+
+    if (status === OrderStatus.CANCELLED) {
+      return this.cancelOrder(order.id, 'Cancelled from status update');
+    }
+
     const updated = await this.orderRepository.updateStatus(order.id, status);
+
+    const preDispatchReservedStatuses: OrderStatus[] = [
+      OrderStatus.ALLOCATED,
+      OrderStatus.PICKING,
+      OrderStatus.PACKED,
+      OrderStatus.ON_HOLD_FRAUD,
+    ];
+    const postDispatchStatuses: OrderStatus[] = [
+      OrderStatus.DISPATCHED,
+      OrderStatus.DELIVERED,
+      OrderStatus.PARTIAL_DELIVERED,
+    ];
+
+    if (preDispatchReservedStatuses.includes(prevStatus) && postDispatchStatuses.includes(status)) {
+      const reserveConsumeItems = (order.items || [])
+        .filter((it: any) => Boolean(it?.variantId))
+        .map((it: any) => ({
+          variantId: String(it.variantId),
+          quantity: Math.max(1, Number(it.quantity) || 1),
+        }));
+
+      if (
+        reserveConsumeItems.length > 0 &&
+        typeof (this.inventoryService as any)?.consumeReservedStockForOrder === 'function'
+      ) {
+        try {
+          await this.inventoryService.consumeReservedStockForOrder(
+            reserveConsumeItems,
+            order.merchantId,
+            order.id,
+          );
+        } catch (err: any) {
+          console.warn('[OrderService] Reserved stock consumption notice:', err?.message || err);
+        }
+      }
+    }
 
     try {
       if (status === OrderStatus.DELIVERED || status === OrderStatus.PARTIAL_DELIVERED) {
         await this.billingService.recordCompletedOrderEarning(updated.id);
-      } else if (status === OrderStatus.RETURNED || status === OrderStatus.CANCELLED) {
+      } else if (status === OrderStatus.RETURNED) {
         await this.billingService.reverseOrderEarning(
           updated.id,
-          status === OrderStatus.RETURNED
-            ? 'Customer returned product — earning refunded'
-            : 'Order cancelled — earning reversed',
+          'Customer returned product — earning refunded',
         );
       }
     } catch (err: any) {
@@ -738,6 +811,8 @@ export class OrderService {
     }
 
     const finalReason = (reason || '').trim() || 'Cancelled from Order Pipeline — Pending Warehouse Restock';
+    const hadNoReservedStock =
+      order.status === OrderStatus.ON_HOLD_STOCK || order.status === OrderStatus.PENDING;
     const existingTimeline = Array.isArray((order as any).timeline) ? (order as any).timeline : [];
     const nextTimeline = [
       ...existingTimeline,
@@ -756,16 +831,31 @@ export class OrderService {
       },
     });
 
+    const isRestockedFlag = hadNoReservedStock;
+    const restockedBinValue = hadNoReservedStock ? 'N/A (No Stock Reserved)' : null;
+
     // Persist cancel metadata columns directly (compatible even before prisma generate refresh)
-    await this.prisma.$executeRaw`
-      UPDATE "orders"
-      SET "cancelReason" = ${finalReason},
-          "cancelledAt" = NOW(),
-          "isRestocked" = false,
-          "restockedAt" = NULL,
-          "restockedBin" = NULL
-      WHERE "id" = ${order.id}
-    `;
+    if (hadNoReservedStock) {
+      await this.prisma.$executeRaw`
+        UPDATE "orders"
+        SET "cancelReason" = ${finalReason},
+            "cancelledAt" = NOW(),
+            "isRestocked" = true,
+            "restockedAt" = NOW(),
+            "restockedBin" = ${restockedBinValue}
+        WHERE "id" = ${order.id}
+      `;
+    } else {
+      await this.prisma.$executeRaw`
+        UPDATE "orders"
+        SET "cancelReason" = ${finalReason},
+            "cancelledAt" = NOW(),
+            "isRestocked" = false,
+            "restockedAt" = NULL,
+            "restockedBin" = NULL
+        WHERE "id" = ${order.id}
+      `;
+    }
 
     try {
       await this.billingService.reverseOrderEarning(order.id, finalReason);
@@ -777,9 +867,9 @@ export class OrderService {
       ...updated,
       cancelReason: finalReason,
       cancelledAt: new Date().toISOString(),
-      isRestocked: false,
-      restockedAt: null,
-      restockedBin: null,
+      isRestocked: isRestockedFlag,
+      restockedAt: isRestockedFlag ? new Date().toISOString() : null,
+      restockedBin: restockedBinValue,
     };
   }
 

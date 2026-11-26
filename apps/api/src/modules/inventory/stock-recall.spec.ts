@@ -262,4 +262,174 @@ describe('InventoryRepository Stock Recall / Return Approval Flow', () => {
     assert.equal(rejected.request.rejectionReason, 'Stock committed to pending orders');
     assert.equal(h.getStock(), 4);
   });
+
+  it('distributes full-product ALL_VARIANTS and unmatched-color recalls across all 5 variants (106 -> 0)', async () => {
+    const stockByVariant: Record<string, number> = {
+      'v-blue-m': 35,
+      'v-blue-l': 25,
+      'v-blue-xl': 20,
+      'v-brown': 6,
+      'v-pink': 20,
+    };
+
+    const makeVariant = (id: string, sku: string, color: string, size: string) => ({
+      id,
+      productId: 'prod-hat-prd640',
+      sku,
+      title: `${color} / ${size}`,
+      defaultBinCode: 'A-01-01',
+      price: 850,
+      wholesalePrice: 442,
+      attributes: {
+        color,
+        hex: '#111827',
+        size,
+        declaredStock: stockByVariant[id],
+        stock: stockByVariant[id],
+        ...(id === 'v-blue-m'
+          ? {
+              allColors: [
+                { id: 'c-stale', name: 'Jet Black', hex: '#000000' },
+                { id: 'c-blue', name: 'Blue', hex: '#2563eb' },
+                { id: 'c-brown', name: 'Brown', hex: '#78350f' },
+                { id: 'c-pink', name: 'Pink', hex: '#ec4899' },
+              ],
+            }
+          : {}),
+      },
+      get inventoryItems() {
+        return [
+          {
+            id: `inv-${id}`,
+            variantId: id,
+            locationId: 'loc-1',
+            quantityAvailable: stockByVariant[id],
+            quantityReserved: 0,
+            quantityDamaged: 0,
+          },
+        ];
+      },
+    });
+
+    const variants = [
+      makeVariant('v-blue-m', 'MC-107-PRD-640-JET-M', 'Blue', 'M'),
+      makeVariant('v-blue-l', 'MC-107-PRD-640-JET-L', 'Blue', 'L'),
+      makeVariant('v-blue-xl', 'MC-107-PRD-640-JET-XL', 'Blue', 'XL'),
+      makeVariant('v-brown', 'MC-107-PRD-640-BLUE-FREE-SIZE', 'Brown', 'Free Size'),
+      makeVariant('v-pink', 'MC-107-PRD-640-PINK-FREE-SIZE', 'Pink', 'Free Size'),
+    ];
+
+    const product: any = {
+      id: 'prod-hat-prd640',
+      merchantId: 'm-107',
+      title: 'Hat',
+      baseSku: 'PRD-640',
+      status: 'STOCK_STORED',
+      lifecycleStatus: 'ACTIVE',
+      sellingPrice: 850,
+      purchasePrice: 442,
+      isSuspended: false,
+      merchant: {
+        id: 'm-107',
+        merchantCode: 'MC-107',
+        businessName: 'Apex',
+      },
+      variants,
+    };
+
+    const requests = new Map<string, any>();
+    let seq = 1;
+
+    const mockPrisma: any = {
+      merchant: { findFirst: async () => product.merchant },
+      inventoryLocation: { upsert: async () => ({ id: 'loc-1', binCode: 'A-01-01' }) },
+      product: {
+        findFirst: async () => product,
+        findUnique: async () => product,
+        update: async ({ data }: any) => Object.assign(product, data),
+      },
+      productVariant: {
+        findMany: async () => variants,
+        update: async ({ where, data }: any) => {
+          const target = variants.find((v) => v.id === where.id);
+          if (target && data?.attributes) target.attributes = data.attributes;
+          return target;
+        },
+      },
+      inventoryItem: {
+        upsert: async ({ where, update, create }: any) => {
+          const vId = where.variantId_locationId.variantId;
+          stockByVariant[vId] = update?.quantityAvailable ?? create?.quantityAvailable ?? 0;
+          return { id: `inv-${vId}`, variantId: vId, quantityAvailable: stockByVariant[vId] };
+        },
+        update: async () => undefined,
+      },
+      inventoryAuditLog: { create: async () => undefined },
+      inventoryTransaction: { create: async () => undefined },
+      productEditRequest: {
+        create: async ({ data }: any) => {
+          const rec = { id: `req-multi-${seq++}`, createdAt: new Date(), ...data, product };
+          requests.set(rec.id, rec);
+          return rec;
+        },
+        findUnique: async ({ where }: any) => requests.get(where.id) || null,
+        update: async ({ where, data }: any) => {
+          const updated = { ...requests.get(where.id), ...data };
+          requests.set(where.id, updated);
+          return updated;
+        },
+      },
+    };
+    mockPrisma.$transaction = async (cb: any) => cb(mockPrisma);
+
+    const repo = new InventoryRepository(mockPrisma);
+
+    // 1. Test explicit ALL_VARIANTS recall of 106 units
+    const allVarReq = await repo.submitStockManageRequest('prod-hat-prd640', 'MC-107', {
+      operationType: 'RETURN',
+      scope: 'ALL_VARIANTS',
+      requestedQty: 106,
+      variantSku: 'PRD-640',
+      destination: 'Dhanmondi Branch',
+      reason: 'Full recall',
+    });
+
+    assert.equal((allVarReq.requestedChanges as any).scope, 'ALL_VARIANTS');
+    assert.equal((allVarReq.requestedChanges as any).adjustments.length, 5);
+
+    const res1 = await repo.reviewStockManageRequest(allVarReq.id, 'admin-1', 'APPROVE');
+    assert.equal(res1.request.status, 'APPROVED');
+    assert.deepEqual(stockByVariant, {
+      'v-blue-m': 0,
+      'v-blue-l': 0,
+      'v-blue-xl': 0,
+      'v-brown': 0,
+      'v-pink': 0,
+    });
+    // Also verifies stale "Jet Black" was cleaned out of allColors
+    const cleanedColors = (variants[0].attributes as any).allColors.map((c: any) => c.name);
+    assert.deepEqual(cleanedColors, ['Blue', 'Brown', 'Pink']);
+
+    // 2. Restore 106 and simulate legacy stale color ("Jet Black") + baseSku request
+    stockByVariant['v-blue-m'] = 35;
+    stockByVariant['v-blue-l'] = 25;
+    stockByVariant['v-blue-xl'] = 20;
+    stockByVariant['v-brown'] = 6;
+    stockByVariant['v-pink'] = 20;
+
+    const legacyReq = await repo.submitStockManageRequest('prod-hat-prd640', 'MC-107', {
+      operationType: 'RETURN',
+      requestedQty: 106,
+      variantSku: 'PRD-640',
+      color: 'Jet Black',
+      size: '',
+      destination: 'Dhanmondi Branch',
+      reason: 'Shop demand',
+    });
+
+    const res2 = await repo.reviewStockManageRequest(legacyReq.id, 'admin-1', 'APPROVE');
+    assert.equal(res2.request.status, 'APPROVED');
+    const remainingTotal = Object.values(stockByVariant).reduce((s, n) => s + n, 0);
+    assert.equal(remainingTotal, 0);
+  });
 });

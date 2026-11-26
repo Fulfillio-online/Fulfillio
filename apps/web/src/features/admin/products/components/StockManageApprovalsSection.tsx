@@ -23,7 +23,10 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 
 function getAuthHeader(): Record<string, string> {
   if (typeof window === 'undefined') return {};
-  const token = localStorage.getItem('fulfillio_token') || localStorage.getItem('token');
+  const token =
+    localStorage.getItem('fulfillio_admin_token') ||
+    localStorage.getItem('fulfillio_token') ||
+    localStorage.getItem('token');
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
@@ -559,10 +562,10 @@ export function StockManageApprovalsSection({
 
       {/* Data Table */}
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[980px] text-left text-xs">
+        <table className="w-full text-left text-xs">
           <thead className="bg-slate-50 dark:bg-navy-950/70 text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-200 dark:border-white/10">
             <tr>
-              <th className="py-3 px-4 w-10">
+              <th className="py-3 px-2.5 lg:px-3 w-9">
                 <input
                   type="checkbox"
                   checked={allPendingSelected}
@@ -578,14 +581,14 @@ export function StockManageApprovalsSection({
                   className="rounded border-slate-300 dark:border-white/20 cursor-pointer"
                 />
               </th>
-              <th className="py-3 px-4">Type</th>
-              <th className="py-3 px-4">Merchant</th>
-              <th className="py-3 px-4">Product &amp; SKU</th>
-              <th className="py-3 px-4">Variant / Photo</th>
-              <th className="py-3 px-4">Qty Adjustments</th>
-              <th className="py-3 px-4">Reason / Destination / Tracking</th>
-              <th className="py-3 px-4 text-center">Status</th>
-              <th className="py-3 px-4 text-right">Actions</th>
+              <th className="py-3 px-2.5 lg:px-3">Type</th>
+              <th className="py-3 px-2.5 lg:px-3">Merchant</th>
+              <th className="py-3 px-2.5 lg:px-3">Product &amp; SKU</th>
+              <th className="py-3 px-2.5 lg:px-3">Variant / Photo</th>
+              <th className="py-3 px-2.5 lg:px-3">Qty Adjustments</th>
+              <th className="py-3 px-2.5 lg:px-3">Reason / Destination</th>
+              <th className="py-3 px-2.5 lg:px-3 text-center">Status</th>
+              <th className="py-3 px-2.5 lg:px-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-white/5">

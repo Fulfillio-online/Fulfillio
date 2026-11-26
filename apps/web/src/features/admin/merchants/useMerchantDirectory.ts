@@ -25,6 +25,7 @@ import {
   getStoredMerchantDirectory,
   rejectAdminProductSubmission,
   syncMerchantDirectoryToProfiles,
+  getAuthHeaders,
 } from '@/lib/warehouseSync';
 
 function hasPayoutCoords(p?: MerchantRecord['payoutAccount'] | null): boolean {
@@ -251,7 +252,9 @@ export function useMerchantDirectory() {
       fetchInFlightRef.current = true;
       lastFetchAtRef.current = now;
 
-      const merchantsReq = fetch(`${API_BASE}/merchants/public-directory`)
+      const merchantsReq = fetch(`${API_BASE}/merchants/public-directory`, {
+        headers: getAuthHeaders(),
+      })
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
           if (!data?.items || !Array.isArray(data.items)) return;
@@ -323,7 +326,9 @@ export function useMerchantDirectory() {
         })
         .catch(() => {});
 
-      const productsReq = fetch(`${API_BASE}/inventory/products`)
+      const productsReq = fetch(`${API_BASE}/inventory/products`, {
+        headers: getAuthHeaders(),
+      })
         .then((res) => (res.ok ? res.json() : null))
         .then((backendProds) => {
           if (!backendProds || !Array.isArray(backendProds) || backendProds.length === 0) return;
@@ -442,7 +447,7 @@ export function useMerchantDirectory() {
     const targetIdentifier = target?.merchantCode || target?.id || merchantId;
     fetch(`${API_BASE}/merchants/${encodeURIComponent(targetIdentifier)}/status`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify({ status: nextStatus === 'Active' ? 'APPROVED' : 'SUSPENDED' }),
     }).catch(() => {});
     triggerToast(`Status changed to ${nextStatus}`);
@@ -484,7 +489,7 @@ export function useMerchantDirectory() {
     const targetIdentifier = updatedMerchant.merchantCode || updatedMerchant.id;
     fetch(`${API_BASE}/merchants/${encodeURIComponent(targetIdentifier)}/status`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify({
         status: updatedMerchant.status === 'Active' ? 'APPROVED' : 'SUSPENDED',
       }),
@@ -492,7 +497,7 @@ export function useMerchantDirectory() {
 
     fetch(`${API_BASE}/merchants/profile?merchantCode=${encodeURIComponent(targetIdentifier)}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify({
         merchantCode: targetIdentifier,
         businessName: updatedMerchant.storeName,
@@ -611,7 +616,7 @@ export function useMerchantDirectory() {
     for (const targetIdentifier of identifiers) {
       fetch(`${API_BASE}/merchants/${encodeURIComponent(targetIdentifier)}/payout-status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           status: nextStatus,
           ...(resolvedReason ? { rejectionReason: resolvedReason } : {}),
@@ -691,7 +696,7 @@ export function useMerchantDirectory() {
     const targetIdentifier = target?.merchantCode || target?.id || merchantId;
     fetch(`${API_BASE}/merchants/${encodeURIComponent(targetIdentifier)}/kyc-status`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify({
         status: nextStatus,
         ...(resolvedReason ? { rejectionReason: resolvedReason } : {}),
@@ -704,7 +709,7 @@ export function useMerchantDirectory() {
             `${API_BASE}/merchants/profile?merchantCode=${encodeURIComponent(targetIdentifier)}`,
             {
               method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
               body: JSON.stringify({
                 merchantCode: targetIdentifier,
                 kycData: target.kycData,
@@ -713,7 +718,7 @@ export function useMerchantDirectory() {
           );
           await fetch(`${API_BASE}/merchants/${encodeURIComponent(targetIdentifier)}/kyc-status`, {
             method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
             body: JSON.stringify({
               status: nextStatus,
               ...(resolvedReason ? { rejectionReason: resolvedReason } : {}),

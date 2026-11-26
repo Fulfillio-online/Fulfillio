@@ -29,6 +29,7 @@ import { compressImage, compressThumbnail } from '@/features/merchant/portal/pro
 import {
   getStoredMerchantDirectory,
   syncAdminProductsToMerchant,
+  getAuthHeaders,
 } from '@/lib/warehouseSync';
 import { MerchantRecord } from '@/features/admin/merchants/types';
 
@@ -420,6 +421,7 @@ export function AdminProductForm() {
         headers: {
           'Content-Type': 'application/json',
           'x-merchant-code': selectedMerchantCode,
+          ...getAuthHeaders(),
         },
         body: JSON.stringify({
           merchantCode: selectedMerchantCode,

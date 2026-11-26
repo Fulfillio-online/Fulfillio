@@ -76,7 +76,7 @@ export class BillingRepository {
     return tx.orderEarning.findMany({
       where: {
         ...(merchantId ? { merchantId } : {}),
-        status: { in: ['PENDING', 'READY_TO_CLAIM'] },
+        status: { in: ['PENDING', 'READY_TO_CLAIM', 'CLAIMED'] },
         order: {
           status: { in: ['RETURNED', 'CANCELLED'] },
         },
@@ -546,6 +546,10 @@ export class BillingRepository {
         .filter((e) => e.status === 'READY_TO_CLAIM')
         .reduce((sum, e) => sum + Number(e.netAmount), 0);
       const mPaidSum = mPaid.reduce((sum, r) => sum + Number(r.amount), 0);
+      const mLegacyPaidSum = settlements
+        .filter((s) => s.merchantId === m.id && s.isPaid && !s.payoutRequestId)
+        .reduce((sum, s) => sum + Number(s.netPayout), 0);
+      const mTotalPaid = mPaidSum + mLegacyPaidSum;
       const mPendingReqSum = mRequests
         .filter((r) => r.status === 'PENDING' || r.status === 'ACCEPTED')
         .reduce((sum, r) => sum + Number(r.amount), 0);
@@ -559,8 +563,8 @@ export class BillingRepository {
         phone: m.phone || '',
         totalCodEarned: mActive.reduce((sum, e) => sum + Number(e.grossAmount), 0),
         totalNetEarned: mActive.reduce((sum, e) => sum + Number(e.netAmount), 0),
-        totalPaid: mPaidSum,
-        unpaidBalance: Math.max(0, mClaimed + mReady - mPaidSum - mPendingReqSum),
+        totalPaid: mTotalPaid,
+        unpaidBalance: Math.max(0, mClaimed + mReady - mTotalPaid - mPendingReqSum),
         withdrawalsCount: mPaid.length,
         returnWindowDays: m.returnWindowDays,
         minPayoutAmount: Number(m.minPayoutAmount),
@@ -724,13 +728,19 @@ export class BillingRepository {
   }
 
   async getOperationsDashboardRawData() {
+    const hasProductEditReq =
+      typeof (this.prisma as any).productEditRequest?.findMany === 'function';
+    const hasProductCount =
+      typeof (this.prisma as any).product?.count === 'function';
+
     const [
       orders,
       pendingMerchantsCount,
       pendingProductApprovalsCount,
-      pendingRestockRequestsCount,
+      pendingStockEditRows,
+      legacyRestockCount,
       pendingPayouts,
-      pendingReturnRequestsCount,
+      legacyReturnCount,
       inventoryLocations,
       recentActivityLogs,
     ] = await Promise.all([
@@ -759,17 +769,25 @@ export class BillingRepository {
       typeof this.prisma.merchant?.count === 'function'
         ? this.prisma.merchant.count({ where: { status: 'PENDING' } })
         : Promise.resolve(0),
-      typeof (this.prisma as any).productApprovalRequest?.count === 'function'
-        ? (this.prisma as any).productApprovalRequest.count({ where: { status: 'PENDING' } })
-        : Promise.resolve(0),
-      typeof (this.prisma as any).restockRequest?.count === 'function'
+      hasProductEditReq && hasProductCount
+        ? (this.prisma as any).product.count({ where: { status: 'PENDING_APPROVAL' } })
+        : typeof (this.prisma as any).productApprovalRequest?.count === 'function'
+          ? (this.prisma as any).productApprovalRequest.count({ where: { status: 'PENDING' } })
+          : Promise.resolve(0),
+      hasProductEditReq
+        ? (this.prisma as any).productEditRequest.findMany({
+            where: { status: 'PENDING' },
+            select: { requestedChanges: true },
+          })
+        : Promise.resolve([]),
+      !hasProductEditReq && typeof (this.prisma as any).restockRequest?.count === 'function'
         ? (this.prisma as any).restockRequest.count({ where: { status: 'REQUESTED' } })
         : Promise.resolve(0),
       this.prisma.payoutRequest.findMany({
         where: { status: { in: ['PENDING', 'ACCEPTED'] } },
         select: { id: true, amount: true, status: true },
       }),
-      typeof (this.prisma as any).returnRequest?.count === 'function'
+      !hasProductEditReq && typeof (this.prisma as any).returnRequest?.count === 'function'
         ? (this.prisma as any).returnRequest.count({ where: { status: 'REQUESTED' } })
         : Promise.resolve(0),
       typeof (this.prisma as any).inventoryLocation?.findMany === 'function'
@@ -795,6 +813,24 @@ export class BillingRepository {
           })
         : Promise.resolve([]),
     ]);
+
+    const pendingRestockRequestsCount = hasProductEditReq
+      ? (pendingStockEditRows || []).filter(
+          (r: any) =>
+            r?.requestedChanges?.kind === 'STOCK_MANAGE' &&
+            (r?.requestedChanges?.operationType === 'RESTOCK' ||
+              r?.requestedChanges?.operationType === 'ADJUST' ||
+              !r?.requestedChanges?.operationType),
+        ).length
+      : legacyRestockCount;
+
+    const pendingReturnRequestsCount = hasProductEditReq
+      ? (pendingStockEditRows || []).filter(
+          (r: any) =>
+            r?.requestedChanges?.kind === 'STOCK_MANAGE' &&
+            r?.requestedChanges?.operationType === 'RETURN',
+        ).length
+      : legacyReturnCount;
 
     return {
       orders,

@@ -1206,6 +1206,57 @@ export class InventoryRepository {
     });
   }
 
+  async consumeReservedStockAtomically(
+    items: Array<{ variantId: string; quantity: number }>,
+    merchantId?: string,
+    orderReference?: string,
+  ): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      for (const item of items) {
+        if (!item?.variantId || (Number(item.quantity) || 0) <= 0) continue;
+        const rows = await tx.$queryRaw<Array<{ id: string; quantity_reserved: number }>>`
+          SELECT id, "quantityReserved" as quantity_reserved
+          FROM inventory_items
+          WHERE "variantId" = ${item.variantId}
+            AND "quantityReserved" > 0
+          ORDER BY "quantityReserved" DESC
+          FOR UPDATE
+        `;
+
+        let remaining = Math.max(0, Number(item.quantity) || 0);
+        let consumedTotal = 0;
+        for (const row of rows) {
+          if (remaining <= 0) break;
+          const resQty = Math.max(0, Number(row.quantity_reserved) || 0);
+          if (resQty <= 0) continue;
+          const take = Math.min(resQty, remaining);
+          await tx.$executeRaw`
+            UPDATE inventory_items
+            SET "quantityReserved" = GREATEST(0, "quantityReserved" - ${take}),
+                "updatedAt" = NOW()
+            WHERE id = ${row.id}
+          `;
+          remaining -= take;
+          consumedTotal += take;
+        }
+
+        if (merchantId && consumedTotal > 0) {
+          await tx.inventoryAuditLog.create({
+            data: {
+              merchantId,
+              variantId: item.variantId,
+              quantityDelta: 0,
+              reason: StockMovementReason.MANUAL_ADJUSTMENT,
+              referenceId: orderReference,
+              notes: `Consumed ${consumedTotal} reserved unit(s) on parcel dispatch/handover`,
+            },
+          });
+        }
+      }
+      return true;
+    });
+  }
+
   async releaseReservedStock(
     items: Array<{ variantId: string; quantity: number }>,
     merchantId?: string,
@@ -1213,13 +1264,67 @@ export class InventoryRepository {
   ) {
     return this.prisma.$transaction(async (tx) => {
       for (const item of items) {
+        if (!item?.variantId || (Number(item.quantity) || 0) <= 0) continue;
+        const rows = await tx.$queryRaw<
+          Array<{ id: string; quantity_available: number; quantity_reserved: number }>
+        >`
+          SELECT id, "quantityAvailable" as quantity_available, "quantityReserved" as quantity_reserved
+          FROM inventory_items
+          WHERE "variantId" = ${item.variantId}
+          ORDER BY "quantityReserved" DESC, "quantityAvailable" DESC
+          FOR UPDATE
+        `;
+
+        if (!rows || rows.length === 0) continue;
+
+        let remainingToRelease = Math.max(0, Number(item.quantity) || 0);
+        for (const row of rows) {
+          if (remainingToRelease <= 0) break;
+          const resQty = Math.max(0, Number(row.quantity_reserved) || 0);
+          if (resQty <= 0) continue;
+          const releaseAmt = Math.min(resQty, remainingToRelease);
+          await tx.$executeRaw`
+            UPDATE inventory_items
+            SET "quantityReserved" = GREATEST(0, "quantityReserved" - ${releaseAmt}),
+                "updatedAt" = NOW()
+            WHERE id = ${row.id}
+          `;
+          remainingToRelease -= releaseAmt;
+        }
+
+        // Increment available stock on ONLY the primary row (avoid multiplying stock across multiple bins)
         await tx.$executeRaw`
           UPDATE inventory_items
           SET "quantityAvailable" = "quantityAvailable" + ${item.quantity},
-              "quantityReserved" = GREATEST(0, "quantityReserved" - ${item.quantity}),
               "updatedAt" = NOW()
-          WHERE "variantId" = ${item.variantId}
+          WHERE id = ${rows[0].id}
         `;
+
+        const newAvailable =
+          rows.reduce((sum, r) => sum + (Number(r.quantity_available) || 0), 0) + item.quantity;
+
+        if (typeof (tx as any).productVariant?.findUnique === 'function') {
+          const variantRow = await (tx as any).productVariant.findUnique({
+            where: { id: item.variantId },
+            select: { attributes: true },
+          });
+          if (variantRow) {
+            const existingAttrs =
+              variantRow.attributes && typeof variantRow.attributes === 'object'
+                ? { ...(variantRow.attributes as Record<string, any>) }
+                : {};
+            await (tx as any).productVariant.update({
+              where: { id: item.variantId },
+              data: {
+                attributes: {
+                  ...existingAttrs,
+                  declaredStock: newAvailable,
+                  stock: newAvailable,
+                },
+              },
+            });
+          }
+        }
 
         if (merchantId) {
           await tx.inventoryAuditLog.create({
@@ -3169,29 +3274,27 @@ export class InventoryRepository {
       if (refreshedVariants.length > 0) {
         const first = refreshedVariants[0];
         const firstAttrs = (first.attributes as Record<string, any>) || {};
-        const colorMap = new Map<
+        const prevColorMeta = new Map<
           string,
-          { id: string; name: string; hex: string; imageUrl?: string; sizes: string[] }
+          { id?: string; hex?: string; imageUrl?: string }
         >();
-        const sizeSet = new Set<string>(
-          Array.isArray(firstAttrs.sizes)
-            ? firstAttrs.sizes.filter((s: any) => typeof s === 'string' && s.trim())
-            : [],
-        );
-
         if (Array.isArray(firstAttrs.allColors)) {
           for (const existingC of firstAttrs.allColors) {
             if (existingC?.name) {
-              colorMap.set(existingC.name.toLowerCase(), {
-                id: existingC.id || `c-${colorMap.size + 1}`,
-                name: existingC.name,
-                hex: existingC.hex || '#111827',
+              prevColorMeta.set(String(existingC.name).trim().toLowerCase(), {
+                id: existingC.id,
+                hex: existingC.hex,
                 imageUrl: existingC.imageUrl,
-                sizes: Array.isArray(existingC.sizes) ? [...existingC.sizes] : [],
               });
             }
           }
         }
+
+        const colorMap = new Map<
+          string,
+          { id: string; name: string; hex: string; imageUrl?: string; sizes: string[] }
+        >();
+        const sizeSet = new Set<string>();
 
         for (const rv of refreshedVariants) {
           const attrs = (rv.attributes as Record<string, any>) || {};
@@ -3200,12 +3303,13 @@ export class InventoryRepository {
           if (sName) sizeSet.add(sName);
           if (cName) {
             const key = cName.toLowerCase();
+            const prevMeta = prevColorMeta.get(key);
             if (!colorMap.has(key)) {
               colorMap.set(key, {
-                id: `c-${colorMap.size + 1}`,
+                id: prevMeta?.id || `c-${colorMap.size + 1}`,
                 name: cName,
-                hex: attrs.hex || '#111827',
-                imageUrl: rv.imageUrl || attrs.imageUrl,
+                hex: attrs.hex || prevMeta?.hex || '#111827',
+                imageUrl: rv.imageUrl || attrs.imageUrl || prevMeta?.imageUrl,
                 sizes: sName ? [sName] : [],
               });
             } else {
@@ -3213,18 +3317,34 @@ export class InventoryRepository {
               if (sName && !entry.sizes.includes(sName)) {
                 entry.sizes.push(sName);
               }
+              if (!entry.imageUrl && (rv.imageUrl || attrs.imageUrl)) {
+                entry.imageUrl = rv.imageUrl || attrs.imageUrl;
+              }
             }
           }
         }
 
-        if (colorMap.size > 0 || sizeSet.size > 0) {
+        const nextAllColors =
+          colorMap.size > 0
+            ? Array.from(colorMap.values())
+            : Array.isArray(firstAttrs.allColors)
+            ? firstAttrs.allColors
+            : undefined;
+        const nextSizes =
+          sizeSet.size > 0
+            ? Array.from(sizeSet)
+            : Array.isArray(firstAttrs.sizes)
+            ? firstAttrs.sizes
+            : undefined;
+
+        if (nextAllColors || nextSizes) {
           await tx.productVariant.update({
             where: { id: first.id },
             data: {
               attributes: {
                 ...firstAttrs,
-                ...(colorMap.size > 0 ? { allColors: Array.from(colorMap.values()) } : {}),
-                ...(sizeSet.size > 0 ? { sizes: Array.from(sizeSet) } : {}),
+                ...(nextAllColors ? { allColors: nextAllColors } : {}),
+                ...(nextSizes ? { sizes: nextSizes } : {}),
               },
             },
           });
@@ -3389,6 +3509,182 @@ export class InventoryRepository {
     return undefined;
   }
 
+  private buildRecallAdjustmentsForVariants(
+    variants: any[],
+    isStocked: boolean,
+    requestedQty: number,
+    reason?: string,
+    plannedAdjustments?: any[],
+  ): Array<any> {
+    const deductByVarId = new Map<string, number>();
+    let remaining = Math.max(0, Math.round(Number(requestedQty) || 0));
+
+    // Pass 1: Honor any explicit per-variant planned deductions if present
+    if (Array.isArray(plannedAdjustments) && plannedAdjustments.length > 0) {
+      for (const adj of plannedAdjustments) {
+        if (remaining <= 0) break;
+        if (!adj?.variantId) continue;
+        const v = variants.find((cand) => cand.id === adj.variantId);
+        if (!v) continue;
+        const planned = Math.max(
+          0,
+          (Number(adj.previousQuantity) || 0) - (Number(adj.newQuantity) || 0),
+        );
+        const avail =
+          this.computeVariantLiveStock(v, isStocked) - (deductByVarId.get(v.id) || 0);
+        const take = Math.min(avail, planned > 0 ? planned : avail, remaining);
+        if (take > 0) {
+          deductByVarId.set(v.id, (deductByVarId.get(v.id) || 0) + take);
+          remaining -= take;
+        }
+      }
+    }
+
+    // Pass 2: Distribute any remaining recall quantity across stocked variants in order
+    for (const v of variants) {
+      if (remaining <= 0) break;
+      const avail =
+        this.computeVariantLiveStock(v, isStocked) - (deductByVarId.get(v.id) || 0);
+      const take = Math.min(avail, remaining);
+      if (take > 0) {
+        deductByVarId.set(v.id, (deductByVarId.get(v.id) || 0) + take);
+        remaining -= take;
+      }
+    }
+
+    const result: Array<any> = [];
+    for (const v of variants) {
+      const deduct = deductByVarId.get(v.id) || 0;
+      if (deduct <= 0) continue;
+      const vLive = this.computeVariantLiveStock(v, isStocked);
+      const attrs = (v.attributes as Record<string, any>) || {};
+      result.push({
+        variantId: v.id,
+        variantSku: v.sku,
+        color: attrs.color || '',
+        size: attrs.size || '',
+        previousQuantity: vLive,
+        newQuantity: Math.max(0, vLive - deduct),
+        reason: reason || 'Product recall / return to merchant',
+      });
+    }
+    return result;
+  }
+
+  private async reconcileMissedApprovedRecalls(records: any[]): Promise<void> {
+    if (
+      !Array.isArray(records) ||
+      records.length === 0 ||
+      typeof this.prisma.product?.findFirst !== 'function' ||
+      typeof this.prisma.productEditRequest?.update !== 'function'
+    ) {
+      return;
+    }
+
+    for (const r of records) {
+      const changes = (r?.requestedChanges as Record<string, any>) || {};
+      const adjs = Array.isArray(changes.adjustments) ? changes.adjustments : [];
+      const needsReconcile =
+        r?.status === 'APPROVED' &&
+        changes.operationType === 'RETURN' &&
+        changes.reconciledApplied !== true &&
+        (adjs.length === 0 || adjs.some((a: any) => !a?.variantId));
+
+      if (!needsReconcile || !r.productId) continue;
+
+      try {
+        const liveProduct = await this.prisma.product.findFirst({
+          where: { id: r.productId },
+          include: {
+            variants: {
+              include: { inventoryItems: true },
+              orderBy: { createdAt: 'asc' },
+            },
+          },
+        });
+        if (!liveProduct || !liveProduct.variants || liveProduct.variants.length === 0) continue;
+
+        const isStocked = this.isProductStocked(liveProduct);
+        const totalLiveStock = liveProduct.variants.reduce(
+          (sum, v) => sum + this.computeVariantLiveStock(v, isStocked),
+          0,
+        );
+        const firstAdj = adjs[0];
+        const opQty = Math.round(
+          Number(changes.requestedQty) ||
+            Math.abs(
+              (Number(firstAdj?.newQuantity) || 0) -
+                (Number(firstAdj?.previousQuantity) || 0),
+            ),
+        );
+        if (opQty <= 0 || totalLiveStock < opQty) continue;
+
+        const matchedSingle = this.matchVariantForStockOp(liveProduct.variants, {
+          variantId: changes.variantId || firstAdj?.variantId,
+          variantSku: changes.variantSku || firstAdj?.variantSku,
+          color: changes.color || firstAdj?.color,
+          size: changes.size || firstAdj?.size,
+        });
+
+        let liveAdjustments: Array<any>;
+        let resolvedScope: 'VARIANT' | 'ALL_VARIANTS' = 'ALL_VARIANTS';
+        if (matchedSingle && changes.scope !== 'ALL_VARIANTS') {
+          const singleLive = this.computeVariantLiveStock(matchedSingle, isStocked);
+          if (singleLive >= opQty) {
+            const matchedAttrs = (matchedSingle.attributes as Record<string, any>) || {};
+            resolvedScope = 'VARIANT';
+            liveAdjustments = [
+              {
+                variantId: matchedSingle.id,
+                variantSku: matchedSingle.sku,
+                color: changes.color || matchedAttrs.color || '',
+                size: changes.size || matchedAttrs.size || '',
+                previousQuantity: singleLive,
+                newQuantity: singleLive - opQty,
+                reason: changes.reason || changes.note,
+              },
+            ];
+          } else {
+            liveAdjustments = this.buildRecallAdjustmentsForVariants(
+              liveProduct.variants,
+              isStocked,
+              opQty,
+              changes.reason || changes.note,
+            );
+          }
+        } else {
+          liveAdjustments = this.buildRecallAdjustmentsForVariants(
+            liveProduct.variants,
+            isStocked,
+            opQty,
+            changes.reason || changes.note,
+          );
+        }
+
+        if (liveAdjustments.length === 0) continue;
+
+        await this.manageProductStock(r.productId, r.merchantId, {
+          newVariants: [],
+          adjustments: liveAdjustments,
+        });
+
+        const nextChanges = {
+          ...changes,
+          scope: resolvedScope,
+          adjustments: liveAdjustments,
+          reconciledApplied: true,
+        };
+        await this.prisma.productEditRequest.update({
+          where: { id: r.id },
+          data: { requestedChanges: nextChanges as any },
+        });
+        r.requestedChanges = nextChanges;
+      } catch {
+        // Leave record untouched if reconciliation fails for any reason
+      }
+    }
+  }
+
   /**
    * Submit a Stock, Variant, Recall/Return, or Inbound Restock request for Admin approval (does NOT mutate live stock).
    */
@@ -3397,6 +3693,7 @@ export class InventoryRepository {
     merchantIdOrCode: string | undefined,
     payload: {
       operationType?: 'ADJUST' | 'RESTOCK' | 'RETURN';
+      scope?: 'VARIANT' | 'ALL_VARIANTS';
       requestedQty?: number;
       variantId?: string;
       variantSku?: string;
@@ -3472,6 +3769,7 @@ export class InventoryRepository {
     const newVariants = payload.newVariants || [];
     let matchedVariant: any = undefined;
     let resolvedRequestedQty: number | undefined = payload.requestedQty;
+    let resolvedScope: 'VARIANT' | 'ALL_VARIANTS' | undefined = payload.scope;
     let adjustments: Array<any>;
 
     if (operationType === 'RETURN' || operationType === 'RESTOCK') {
@@ -3483,46 +3781,79 @@ export class InventoryRepository {
       }
       resolvedRequestedQty = requestedQty;
 
-      matchedVariant = this.matchVariantForStockOp(product.variants, {
-        variantId: payload.variantId,
-        variantSku: payload.variantSku,
-        color: payload.color,
-        size: payload.size,
-      });
-
-      const targetCurrentQty = matchedVariant
-        ? this.computeVariantLiveStock(matchedVariant, isStocked)
-        : originalTotalStock;
-
-      if (operationType === 'RETURN' && requestedQty > targetCurrentQty) {
-        throw new BadRequestException(
-          `Cannot recall ${requestedQty} units: only ${targetCurrentQty} units available in warehouse.`,
-        );
+      if (payload.scope !== 'ALL_VARIANTS') {
+        matchedVariant = this.matchVariantForStockOp(product.variants, {
+          variantId: payload.variantId,
+          variantSku: payload.variantSku,
+          color: payload.color,
+          size: payload.size,
+        });
       }
 
-      if (payload.adjustments && payload.adjustments.length > 0) {
-        adjustments = payload.adjustments;
+      if (
+        operationType === 'RETURN' &&
+        (payload.scope === 'ALL_VARIANTS' ||
+          (!payload.variantId && !matchedVariant && product.variants.length > 0))
+      ) {
+        resolvedScope = 'ALL_VARIANTS';
+        if (requestedQty > originalTotalStock) {
+          throw new BadRequestException(
+            `Cannot recall ${requestedQty} units: only ${originalTotalStock} units available in warehouse.`,
+          );
+        }
+        adjustments =
+          payload.adjustments && payload.adjustments.length > 0
+            ? payload.adjustments
+            : this.buildRecallAdjustmentsForVariants(
+                product.variants,
+                isStocked,
+                requestedQty,
+                payload.reason || payload.note,
+              );
       } else {
-        const matchedAttrs = (matchedVariant?.attributes as Record<string, any>) || {};
-        adjustments = [
-          {
-            variantId: matchedVariant?.id,
-            variantSku: matchedVariant?.sku || payload.variantSku,
-            color: payload.color || matchedAttrs.color || '',
-            size: payload.size || matchedAttrs.size || '',
-            previousQuantity: targetCurrentQty,
-            newQuantity:
-              operationType === 'RETURN'
-                ? Math.max(0, targetCurrentQty - requestedQty)
-                : targetCurrentQty + requestedQty,
-            reason:
-              payload.reason ||
-              payload.note ||
-              (operationType === 'RETURN'
-                ? 'Product recall / return to merchant'
-                : 'Inbound restock request'),
-          },
-        ];
+        if (
+          operationType === 'RETURN' &&
+          payload.variantId &&
+          !matchedVariant &&
+          product.variants.length > 0
+        ) {
+          throw new BadRequestException('Selected variant not found for recall.');
+        }
+
+        const targetCurrentQty = matchedVariant
+          ? this.computeVariantLiveStock(matchedVariant, isStocked)
+          : originalTotalStock;
+
+        if (operationType === 'RETURN' && requestedQty > targetCurrentQty) {
+          throw new BadRequestException(
+            `Cannot recall ${requestedQty} units: only ${targetCurrentQty} units available in warehouse.`,
+          );
+        }
+
+        if (payload.adjustments && payload.adjustments.length > 0) {
+          adjustments = payload.adjustments;
+        } else {
+          const matchedAttrs = (matchedVariant?.attributes as Record<string, any>) || {};
+          adjustments = [
+            {
+              variantId: matchedVariant?.id,
+              variantSku: matchedVariant?.sku || payload.variantSku,
+              color: payload.color || matchedAttrs.color || '',
+              size: payload.size || matchedAttrs.size || '',
+              previousQuantity: targetCurrentQty,
+              newQuantity:
+                operationType === 'RETURN'
+                  ? Math.max(0, targetCurrentQty - requestedQty)
+                  : targetCurrentQty + requestedQty,
+              reason:
+                payload.reason ||
+                payload.note ||
+                (operationType === 'RETURN'
+                  ? 'Product recall / return to merchant'
+                  : 'Inbound restock request'),
+            },
+          ];
+        }
       }
     } else {
       adjustments = (payload.adjustments || []).map((adj) => {
@@ -3556,15 +3887,16 @@ export class InventoryRepository {
         requestedChanges: {
           kind: 'STOCK_MANAGE',
           operationType,
+          ...(resolvedScope ? { scope: resolvedScope } : {}),
           ...(resolvedRequestedQty !== undefined ? { requestedQty: resolvedRequestedQty } : {}),
-          ...(matchedVariant?.id || payload.variantId
+          ...(resolvedScope !== 'ALL_VARIANTS' && (matchedVariant?.id || payload.variantId)
             ? { variantId: matchedVariant?.id || payload.variantId }
             : {}),
           ...(matchedVariant?.sku || payload.variantSku
             ? { variantSku: matchedVariant?.sku || payload.variantSku }
             : {}),
-          ...(payload.color ? { color: payload.color } : {}),
-          ...(payload.size ? { size: payload.size } : {}),
+          ...(resolvedScope !== 'ALL_VARIANTS' && payload.color ? { color: payload.color } : {}),
+          ...(resolvedScope !== 'ALL_VARIANTS' && payload.size ? { size: payload.size } : {}),
           ...(payload.destination ? { destination: payload.destination } : {}),
           ...(payload.carrier ? { carrier: payload.carrier } : {}),
           ...(payload.trackingRef ? { trackingRef: payload.trackingRef } : {}),
@@ -3579,6 +3911,7 @@ export class InventoryRepository {
         } as any,
         proposedSnapshot: {
           operationType,
+          ...(resolvedScope ? { scope: resolvedScope } : {}),
           ...(resolvedRequestedQty !== undefined ? { requestedQty: resolvedRequestedQty } : {}),
           newVariantsCount: newVariants.length,
           adjustmentsCount: adjustments.length,
@@ -3615,7 +3948,7 @@ export class InventoryRepository {
     if (resolvedMerchantId) where.merchantId = resolvedMerchantId;
     if (status) where.status = status;
 
-    return this.prisma.productEditRequest.findMany({
+    const records = await this.prisma.productEditRequest.findMany({
       where,
       include: {
         product: {
@@ -3626,6 +3959,9 @@ export class InventoryRepository {
       },
       orderBy: { createdAt: 'desc' },
     });
+
+    await this.reconcileMissedApprovedRecalls(records);
+    return records;
   }
 
   /**
@@ -3671,20 +4007,26 @@ export class InventoryRepository {
         }
 
         const isStocked = this.isProductStocked(liveProduct);
+        const variants = liveProduct.variants || [];
         const firstAdj = Array.isArray(changes.adjustments) ? changes.adjustments[0] : undefined;
-        const matched = this.matchVariantForStockOp(liveProduct.variants || [], {
-          variantId: changes.variantId || firstAdj?.variantId,
-          variantSku: changes.variantSku || firstAdj?.variantSku,
-          color: changes.color || firstAdj?.color,
-          size: changes.size || firstAdj?.size,
-        });
+        let matched =
+          changes.scope !== 'ALL_VARIANTS'
+            ? this.matchVariantForStockOp(variants, {
+                variantId: changes.variantId || firstAdj?.variantId,
+                variantSku: changes.variantSku || firstAdj?.variantSku,
+                color: changes.color || firstAdj?.color,
+                size: changes.size || firstAdj?.size,
+              })
+            : undefined;
 
-        const liveQty = matched
-          ? this.computeVariantLiveStock(matched, isStocked)
-          : (liveProduct.variants || []).reduce(
-              (s: number, v: any) => s + this.computeVariantLiveStock(v, isStocked),
-              0,
-            );
+        if (opType === 'RESTOCK' && !matched && variants.length > 0) {
+          matched = variants[0];
+        }
+
+        const totalLiveStock = variants.reduce(
+          (s: number, v: any) => s + this.computeVariantLiveStock(v, isStocked),
+          0,
+        );
 
         const opQty = Math.round(
           Number(changes.requestedQty) ||
@@ -3698,25 +4040,50 @@ export class InventoryRepository {
           throw new BadRequestException('Invalid request quantity for approval.');
         }
 
-        if (opType === 'RETURN' && liveQty < opQty) {
-          throw new BadRequestException(
-            `Insufficient live warehouse stock to approve recall: requested ${opQty} pcs, currently available ${liveQty} pcs.`,
-          );
-        }
+        const isMultiVariantRecall =
+          opType === 'RETURN' &&
+          (changes.scope === 'ALL_VARIANTS' ||
+            (Array.isArray(changes.adjustments) && changes.adjustments.length > 1) ||
+            (!matched && variants.length > 0));
 
-        const matchedAttrs = (matched?.attributes as Record<string, any>) || {};
-        const liveAdjustments = [
-          {
-            ...(firstAdj || {}),
-            variantId: matched?.id || changes.variantId,
-            variantSku: matched?.sku || changes.variantSku,
-            color: changes.color || matchedAttrs.color || firstAdj?.color || '',
-            size: changes.size || matchedAttrs.size || firstAdj?.size || '',
-            previousQuantity: liveQty,
-            newQuantity: opType === 'RETURN' ? liveQty - opQty : liveQty + opQty,
-            reason: changes.reason || changes.note,
-          },
-        ];
+        let liveAdjustments: Array<any>;
+        let resolvedScope: 'VARIANT' | 'ALL_VARIANTS' | undefined = changes.scope;
+
+        if (isMultiVariantRecall) {
+          resolvedScope = 'ALL_VARIANTS';
+          if (totalLiveStock < opQty) {
+            throw new BadRequestException(
+              `Insufficient live warehouse stock to approve recall: requested ${opQty} pcs, currently available ${totalLiveStock} pcs.`,
+            );
+          }
+          liveAdjustments = this.buildRecallAdjustmentsForVariants(
+            variants,
+            isStocked,
+            opQty,
+            changes.reason || changes.note,
+            changes.adjustments,
+          );
+        } else {
+          const liveQty = matched ? this.computeVariantLiveStock(matched, isStocked) : totalLiveStock;
+          if (opType === 'RETURN' && liveQty < opQty) {
+            throw new BadRequestException(
+              `Insufficient live warehouse stock to approve recall: requested ${opQty} pcs, currently available ${liveQty} pcs.`,
+            );
+          }
+          const matchedAttrs = (matched?.attributes as Record<string, any>) || {};
+          liveAdjustments = [
+            {
+              ...(firstAdj || {}),
+              variantId: matched?.id || changes.variantId,
+              variantSku: matched?.sku || changes.variantSku,
+              color: changes.color || matchedAttrs.color || firstAdj?.color || '',
+              size: changes.size || matchedAttrs.size || firstAdj?.size || '',
+              previousQuantity: liveQty,
+              newQuantity: opType === 'RETURN' ? liveQty - opQty : liveQty + opQty,
+              reason: changes.reason || changes.note,
+            },
+          ];
+        }
 
         updatedProduct = await this.manageProductStock(
           reqRecord.productId,
@@ -3757,8 +4124,10 @@ export class InventoryRepository {
 
         updatedRequestedChanges = {
           ...changes,
+          ...(resolvedScope ? { scope: resolvedScope } : {}),
           ...(gatePassNo ? { gatePassNo } : {}),
           adjustments: liveAdjustments,
+          reconciledApplied: true,
         };
       } else {
         updatedProduct = await this.manageProductStock(

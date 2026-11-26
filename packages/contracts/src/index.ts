@@ -101,6 +101,93 @@ export enum CourierProvider {
   CUSTOM = 'CUSTOM',
 }
 
+export enum CourierConnectionStatus {
+  CONNECTED = 'CONNECTED',
+  SANDBOX = 'SANDBOX',
+  DISCONNECTED = 'DISCONNECTED',
+}
+
+export interface CourierIntegrationSummaryDto {
+  id: string;
+  provider: CourierProvider;
+  displayName: string;
+  status: CourierConnectionStatus;
+  isSandbox: boolean;
+  baseUrl: string;
+  storeId?: string | null;
+  webhookUrl: string;
+  hasWebhookSecret: boolean;
+  webhookSecretMasked?: string | null;
+  hasCredentials: boolean;
+  credentialsMasked: Record<string, string>;
+  codChargePercent: number;
+  insideDhakaRate: number;
+  outsideDhakaRate: number;
+  autoBookingEnabled: boolean;
+  allowPipelineOverride: boolean;
+  activeConsignments: number;
+  lastHealthStatus?: string | null;
+  lastLatencyMs?: number | null;
+  lastBalance?: number | null;
+  lastCheckedAt?: string | null;
+  lastError?: string | null;
+  updatedAt: string;
+}
+
+export interface CourierTestConnectionResponse {
+  provider: CourierProvider;
+  success: boolean;
+  reachable: boolean;
+  authenticated: boolean;
+  latencyMs: number;
+  balance?: number | null;
+  currency?: string;
+  statusCode?: number;
+  message: string;
+  checkedAt: string;
+}
+
+export interface CourierBookingResultDto {
+  orderId: string;
+  provider: CourierProvider;
+  consignmentId: string;
+  trackingCode: string;
+  trackingLink?: string | null;
+  deliveryStatus?: string | null;
+  isSimulated: boolean;
+}
+
+export interface CourierBulkBookingItemDto {
+  orderId: string;
+  invoice: string;
+  success: boolean;
+  consignmentId?: string | null;
+  trackingCode?: string | null;
+  trackingLink?: string | null;
+  deliveryStatus?: string | null;
+  error?: string | null;
+  isSimulated?: boolean;
+}
+
+export interface CourierBulkBookingResponseDto {
+  provider: CourierProvider;
+  total: number;
+  succeeded: number;
+  failed: number;
+  results: CourierBulkBookingItemDto[];
+}
+
+export interface CourierStatusSyncResponseDto {
+  orderId: string;
+  provider: CourierProvider;
+  consignmentId?: string | null;
+  trackingCode?: string | null;
+  rawStatus: string;
+  mappedOrderStatus?: OrderStatus | null;
+  orderStatusUpdated: boolean;
+  syncedAt: string;
+}
+
 export enum MemoPaperSize {
   A4 = 'A4',
   A5 = 'A5',
