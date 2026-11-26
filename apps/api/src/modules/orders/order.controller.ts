@@ -112,6 +112,7 @@ export class OrderController {
     @Request() req: any,
     @Param('id') id: string,
     @Body('status') status: OrderStatus,
+    @Body('isMemoPrinted') isMemoPrinted?: boolean,
   ) {
     const headerMerchant = req.headers?.['x-merchant-code'];
     const rawMerchant =
@@ -123,7 +124,12 @@ export class OrderController {
       const merchant = await this.orderService.resolveMerchant(rawMerchant);
       if (merchant) effectiveMerchantId = merchant.id;
     }
-    return this.orderService.updateOrderStatus(id, status, effectiveMerchantId);
+    return this.orderService.updateOrderStatus(
+      id,
+      status,
+      effectiveMerchantId,
+      isMemoPrinted !== undefined ? { isMemoPrinted: Boolean(isMemoPrinted) } : undefined,
+    );
   }
 
   /**

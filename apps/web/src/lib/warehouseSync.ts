@@ -3444,18 +3444,23 @@ export async function acceptStockInDatabase(
  */
 export async function updateOrderStatusInDatabase(
   orderId: string,
-  status: string
+  status: string,
+  options?: { isMemoPrinted?: boolean }
 ): Promise<boolean> {
   if (!orderId) return false;
   const cleanId = orderId.replace(/^#/, '').trim();
   try {
+    const payload: Record<string, any> = { status };
+    if (options?.isMemoPrinted !== undefined) {
+      payload.isMemoPrinted = options.isMemoPrinted;
+    }
     const res = await fetch(`${API_BASE}/orders/${encodeURIComponent(cleanId)}/status`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
         ...getAuthHeaders(),
       },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify(payload),
     });
     return res.ok;
   } catch (err) {
@@ -3643,7 +3648,10 @@ export function mapDbOrderToWarehouseOrder(o: any): WarehousePipelineOrder {
       return '';
     })() as CourierPartner,
     trackingCode: o.trackingCode || undefined,
-    stage: DB_STAGE_MAP[o.status] || 'PICK',
+    stage:
+      o.status === 'PACKED' && o.isMemoPrinted
+        ? 'DISPATCH'
+        : DB_STAGE_MAP[o.status] || 'PICK',
     isMemoPrinted: Boolean(o.isMemoPrinted),
     isCourierBooked: Boolean(o.trackingCode),
   };

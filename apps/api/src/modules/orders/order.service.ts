@@ -136,11 +136,16 @@ export class OrderService {
   /**
    * Update order status with strict state-machine validation & reserved stock consumption
    */
-  async updateOrderStatus(id: string, status: OrderStatus, merchantId?: string) {
+  async updateOrderStatus(
+    id: string,
+    status: OrderStatus,
+    merchantId?: string,
+    options?: { isMemoPrinted?: boolean },
+  ) {
     const order = await this.getOrderById(id, merchantId);
     const prevStatus = order.status as OrderStatus;
 
-    if (prevStatus === status) {
+    if (prevStatus === status && !options?.isMemoPrinted) {
       return order;
     }
 
@@ -177,7 +182,7 @@ export class OrderService {
       return this.cancelOrder(order.id, 'Cancelled from status update');
     }
 
-    const updated = await this.orderRepository.updateStatus(order.id, status);
+    const updated = await this.orderRepository.updateStatus(order.id, status, options);
 
     const preDispatchReservedStatuses: OrderStatus[] = [
       OrderStatus.ALLOCATED,

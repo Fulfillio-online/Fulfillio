@@ -52,6 +52,7 @@ import {
   getStoredMerchantProfileForCode,
   getStoredAdminProducts,
   fetchOrderByIdFromDatabase,
+  updateOrderStatusInDatabase,
 } from '@/lib/warehouseSync';
 
 interface OrderDetailsViewProps {
@@ -270,9 +271,27 @@ export function OrderDetailsView({ orderId }: OrderDetailsViewProps) {
 
   const handleUpdateStage = (newStage: OrderStage) => {
     if (!order) return;
+    const stageToDbStatus: Record<OrderStage, string> = {
+      PICK: 'ALLOCATED',
+      WAITING: 'ON_HOLD_STOCK',
+      PACK: 'PACKED',
+      DISPATCH: 'DISPATCHED',
+      HANDED_OVER: 'DELIVERED',
+      CANCELLED: 'CANCELLED',
+    };
+    const dbStatus = stageToDbStatus[newStage];
+    if (dbStatus) {
+      updateOrderStatusInDatabase(
+        order.id,
+        dbStatus,
+        newStage === 'DISPATCH' ? { isMemoPrinted: true } : undefined
+      ).catch(() => {});
+    }
+
     const updated: WarehousePipelineOrder = {
       ...order,
       stage: newStage,
+      isMemoPrinted: newStage === 'DISPATCH' ? true : order.isMemoPrinted,
       handedOverAt: newStage === 'HANDED_OVER' ? new Date().toLocaleString() : order.handedOverAt,
     };
     setOrder(updated);

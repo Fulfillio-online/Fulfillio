@@ -350,8 +350,9 @@ export function OrdersPipelineManager({
         break;
 
       case 'PRINT_AND_PACK':
-        ids.forEach((id) => updateOrderStatusInDatabase(id, 'PACKED').catch(() => {}));
-        triggerIsolatedPrint('MEMOS', action.orders);
+        ids.forEach((id) =>
+          updateOrderStatusInDatabase(id, 'DISPATCHED', { isMemoPrinted: true }).catch(() => {})
+        );
         updateOrdersAndPersist((prev) =>
           prev.map((o) =>
             ids.includes(o.id) ? { ...o, stage: 'DISPATCH', isMemoPrinted: true } : o
@@ -361,6 +362,7 @@ export function OrdersPipelineManager({
         showToast(
           `Printed ${action.orders.length} 4x6" Thermal Invoice(s) & moved to 3. Courier Dispatch!`
         );
+        triggerIsolatedPrint('MEMOS', action.orders);
         break;
 
       case 'BOOK_COURIER': {
@@ -655,7 +657,25 @@ export function OrdersPipelineManager({
         isOpen={Boolean(previewMemoOrder)}
         onClose={() => setPreviewMemoOrder(null)}
         order={previewMemoOrder}
-        onPrint={() => window.print()}
+        onPrint={() => {
+          if (!previewMemoOrder) return;
+          const targetOrder = previewMemoOrder;
+          setPreviewMemoOrder(null);
+          if (targetOrder.stage === 'PACK') {
+            updateOrderStatusInDatabase(targetOrder.id, 'DISPATCHED', {
+              isMemoPrinted: true,
+            }).catch(() => {});
+            updateOrdersAndPersist((prev) =>
+              prev.map((o) =>
+                o.id === targetOrder.id ? { ...o, stage: 'DISPATCH', isMemoPrinted: true } : o
+              )
+            );
+            showToast(
+              `Printed 4x6" Thermal Invoice for ${targetOrder.id} & moved to 3. Courier Dispatch!`
+            );
+          }
+          triggerIsolatedPrint('MEMOS', [targetOrder]);
+        }}
       />
 
       <IsolatedPrintPortal

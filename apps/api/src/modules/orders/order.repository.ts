@@ -317,12 +317,20 @@ export class OrderRepository {
     }
   }
 
-  async updateStatus(id: string, status: OrderStatus) {
+  async updateStatus(
+    id: string,
+    status: OrderStatus,
+    options?: { isMemoPrinted?: boolean },
+  ) {
     const data: any = { status };
     if (status === OrderStatus.DELIVERED || status === OrderStatus.PARTIAL_DELIVERED) {
       data.deliveredAt = new Date();
     } else if (status === OrderStatus.RETURNED) {
       data.returnedAt = new Date();
+    }
+    if (options?.isMemoPrinted) {
+      data.isMemoPrinted = true;
+      data.memoPrintedAt = new Date();
     }
 
     return this.prisma.order.update({
